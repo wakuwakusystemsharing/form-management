@@ -63,12 +63,21 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
       // 静的HTMLを再デプロイ
       const deployResponse = await fetch(`/api/forms/${editingForm.id}/deploy`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          storeId: storeId,
+          formId: editingForm.id 
+        }),
       });
       
       if (deployResponse.ok) {
-        alert('更新しました！');
+        const result = await deployResponse.json();
+        alert(`更新しました！\n${result.environment === 'local' ? 'ローカル' : 'Vercel Blob'}にデプロイされました。`);
       } else {
-        alert('デプロイに失敗しました');
+        const error = await deployResponse.json();
+        alert(`デプロイに失敗しました: ${error.error || '不明なエラー'}`);
       }
     } catch (error) {
       console.error('Deploy error:', error);
