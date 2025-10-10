@@ -133,6 +133,35 @@ export function getSupabaseAdminClient(): SupabaseClient<Database> | null {
 }
 
 /**
+ * アクセストークンから認証済みクライアントを作成
+ * ミドルウェアや Server Components で使用
+ */
+export function createAuthenticatedClient(accessToken: string): SupabaseClient<Database> | null {
+  if (isLocal()) {
+    return null;
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return null;
+  }
+
+  return createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
+}
+
+/**
  * ユーザーの店舗アクセス権限を確認
  * @param userId Supabase Auth の user_id
  * @param storeId 店舗 ID
@@ -162,11 +191,12 @@ export async function checkStoreAccess(userId: string, storeId: string): Promise
 
 /**
  * ユーザーがサービス管理者かどうかを確認
- * @param _userId Supabase Auth の user_id (将来実装用)
+ * @param userId Supabase Auth の user_id (将来実装用)
  * @returns サービス管理者の場合 true
  */
-export async function isServiceAdmin(_userId: string): Promise<boolean> {
+export async function isServiceAdmin(userId: string): Promise<boolean> {
   // TODO: サービス管理者テーブルまたは特定のロール判定ロジックを実装
   // 現状は固定で false を返す (後で実装)
+  console.log('[isServiceAdmin] Not implemented yet for user:', userId);
   return false;
 }

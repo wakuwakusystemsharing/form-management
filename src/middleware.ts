@@ -1,19 +1,11 @@
 /**
  * 認証ミドルウェア
  * 
- * 【現在の状態】
- * - 認証機能は未実装（開発中）
- * - 全てのルートがオープンアクセス
- * 
- * 【将来の実装予定】
- * - Supabase Authとの統合
- * - 店舗管理者の認証チェック
- * - Row Level Security適用
- * 
  * 保護対象ルート:
  * - /{storeId}/admin - 店舗管理者ダッシュボード
  * - /{storeId}/forms/* - フォーム編集画面
  * - /{storeId}/reservations - 予約一覧
+ * - /api/* - API ルート (一部除外あり)
  * 
  * 認証フロー:
  * 1. 未認証ユーザーが保護されたルートにアクセス
@@ -24,39 +16,69 @@
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { isLocal } from './lib/env';
+import { createAuthenticatedClient, checkStoreAccess } from './lib/supabase';
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // TODO: Supabase Authとの統合
-  // 現在は認証チェックをスキップ
-  
+  // ローカル開発環境では認証をスキップ
+  if (isLocal()) {
+    return NextResponse.next();
+  }
+
   // 店舗管理画面のパターン: /st0001/admin, /st0001/forms/*, etc.
   const storeAdminPattern = /^\/st\d{4}\/(admin|forms|reservations)/;
+  // API 保護パターン (公開 API は除外)
+  const protectedApiPattern = /^\/api\/(forms|stores|reservations)/;
   
-  if (storeAdminPattern.test(pathname)) {
-    // TODO: セッションチェック
-    // const supabase = createMiddlewareClient({ req: request });
-    // const { data: { session } } = await supabase.auth.getSession();
+  const isProtectedRoute = storeAdminPattern.test(pathname) || protectedApiPattern.test(pathname);
+  
+  if (!isProtectedRoute) {
+    return NextResponse.next();
+  }
+
+  // アクセストークン取得
+  const accessToken = request.cookies.get('sb-access-token')?.value;
+  
+  if (!accessToken) {
+    // 未認証 → ログインページへリダイレクト
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // 認証済みクライアント作成
+  const supabase = createAuthenticatedClient(accessToken);
+  
+  if (!supabase) {
+    // Supabase 接続エラー
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // ユーザー情報取得
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  
+  if (userError || !user) {
+    // セッション無効 → ログインページへ
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // 店舗 ID 抽出
+  const storeIdMatch = pathname.match(/\/st(\d{4})/);
+  const storeId = storeIdMatch ? `st${storeIdMatch[1]}` : null;
+  
+  if (storeId) {
+    // 店舗アクセス権限チェック
+    const hasAccess = await checkStoreAccess(user.id, storeId);
     
-    // if (!session) {
-    //   // 未認証 → ログインページへリダイレクト
-    //   return NextResponse.redirect(
-    //     new URL(`/login?redirect=${pathname}`, request.url)
-    //   );
-    // }
-    
-    // TODO: store_id のアクセス権限チェック
-    // const storeId = pathname.match(/^\/st\d{4}/)?.[0].slice(1);
-    // const userStoreId = session.user.user_metadata.store_id;
-    
-    // if (userStoreId !== storeId) {
-    //   // 他店舗へのアクセス試行 → 403
-    //   return NextResponse.json(
-    //     { error: 'この店舗へのアクセス権限がありません' },
-    //     { status: 403 }
-    //   );
-    // }
+    if (!hasAccess) {
+      // アクセス権限なし → 403
+      return new NextResponse(
+        JSON.stringify({ error: 'この店舗へのアクセス権限がありません' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
   }
 
   return NextResponse.next();

@@ -1,13 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm run build",
-  "outputDirectory": ".next",
-  "installCommand": "pnpm install",
+  "buildCommand": "pnpm build",
+  "installCommand": "pnpm install --frozen-lockfile",
   "framework": "nextjs",
   "regions": ["nrt1"],
   "functions": {
-    "src/app/api/**/*.ts": {
-      "maxDuration": 10
+    "app/**/*.{js,ts,tsx}": {
+      "maxDuration": 30,
+      "memory": 1024
     }
   },
   "git": {
