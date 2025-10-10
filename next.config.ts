@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
   
+  // ワークスペースルート設定（pnpm対応）
+  output: 'standalone',
+  outputFileTracingRoot: __dirname,
+  
   // 画像最適化
   images: {
     remotePatterns: [

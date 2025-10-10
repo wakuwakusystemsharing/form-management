@@ -9,7 +9,7 @@
 		"lint": "next lint",
 		"type-check": "tsc --noEmit",
 		"clean": "rm -rf .next",
-		"vercel:build": "npm run build"
+		"vercel:build": "pnpm run build"
 	},
 	"dependencies": {
 		"@headlessui/react": "^2.2.8",
