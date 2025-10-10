@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { StaticFormGenerator } from '@/lib/static-generator';
 import { VercelBlobDeployer } from '@/lib/vercel-blob-deployer';
-import { normalizeForm } from '../route';
+import { normalizeForm } from '@/lib/form-normalizer';
 
 export async function POST(
   request: NextRequest,

@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { Store } from '@/types/store';
 import { Form } from '@/types/form';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
+import MenuStructureEditor from '@/components/FormEditor/MenuStructureEditor';
+import BusinessRulesEditor from '@/components/FormEditor/BusinessRulesEditor';
 
 // テンプレート定義
 const FORM_TEMPLATES = {

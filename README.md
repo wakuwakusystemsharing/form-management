@@ -89,9 +89,13 @@ data/                           # データファイル (開発用)
 
 ## 🚀 開発環境セットアップ
 
+> **📖 詳細なセットアップガイド**: [`SETUP.md`](SETUP.md) を参照
+> 
+> **📋 日常的な開発フロー**: [`WORKFLOW.md`](WORKFLOW.md) を参照 ⭐ **開発者必読**
+
 ### 前提条件
-- Node.js 18以上
-- npm または yarn
+- Node.js 20以上
+- **pnpm 9以上** (npm/yarn 使用禁止)
 
 #### 初回セットアップの方（Node.jsがまだインストールされていない場合）
 
@@ -116,34 +120,48 @@ data/                           # データファイル (開発用)
   - Tailwind CSS IntelliSense
   - Prettier - Code formatter
 
-### インストール手順
+### クイックスタート（ローカル開発）
 
-1. **リポジトリのクローン**
 ```bash
-git clone <repository-url>
-cd line_schedule_app/booking-forms
-```
+# 1. リポジトリのクローン
+git clone https://github.com/wakuwakusystemsharing/form-management.git
+cd form-management
 
-2. **依存関係のインストール**
-```bash
-npm install
-```
+# 2. 依存関係のインストール (pnpm 必須)
+pnpm install
 
-3. **環境変数の設定**
-```bash
+# 3. 環境変数の設定
 cp .env.local.example .env.local
-# .env.localファイルを編集して必要な環境変数を設定
+# NEXT_PUBLIC_APP_ENV=local のまま (JSON ファイルモード)
+
+# 4. 開発サーバーの起動
+pnpm dev
 ```
 
-4. **開発サーバーの起動**
+ブラウザで http://localhost:3000 にアクセス
+
+### 開発フロー（実際の作業）
+
 ```bash
-npm run dev
+# 1. 新機能の開発開始
+git checkout staging
+git pull origin staging
+git checkout -b feature/your-feature
+
+# 2. 開発
+pnpm dev  # ローカルで開発
+
+# 3. Staging で確認
+git add .
+git commit -m "feat: 新機能追加"
+git push origin feature/your-feature
+# → staging にマージして確認
+
+# 4. 本番デプロイ
+# staging → main の Pull Request を作成してマージ
 ```
 
-5. **ブラウザでアクセス**
-```
-http://localhost:3000
-```
+詳細は [`WORKFLOW.md`](WORKFLOW.md) を参照
 
 ### 利用可能なコマンド
 

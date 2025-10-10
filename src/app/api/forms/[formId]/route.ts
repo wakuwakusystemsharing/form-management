@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { Form } from '@/types/form';
+import { normalizeForm } from '@/lib/form-normalizer';
 
 // 一時的なJSONファイルでのデータ保存（開発用）
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -48,94 +49,6 @@ function readAllStoreForms(): Form[] {
   }
   
   return allForms;
-}
-
-// フォーム構造を正規化する関数
-export function normalizeForm(form: any): Form {
-  // 既にconfig構造を持っている場合はそのまま返す
-  if (form.config) {
-    return form;
-  }
-  
-  // 新しい簡易形式を従来のconfig形式に変換
-  const normalizedForm: Form = {
-    id: form.id,
-    store_id: form.store_id,
-    status: form.status || 'inactive',
-    draft_status: form.draft_status || 'draft',
-    created_at: form.created_at,
-    updated_at: form.updated_at,
-    last_published_at: form.last_published_at,
-    config: {
-      basic_info: {
-        form_name: form.form_name || 'フォーム',
-        store_name: form.basic_info?.store_name || '',
-        liff_id: form.basic_info?.liff_id || form.line_settings?.liff_id || '',
-        theme_color: form.basic_info?.theme_color || '#3B82F6'
-      },
-      visit_options: [],
-      gender_selection: {
-        enabled: form.basic_info?.show_gender_selection || false,
-        required: false,
-        options: [
-          { value: 'male', label: '男性' },
-          { value: 'female', label: '女性' }
-        ]
-      },
-      visit_count_selection: {
-        enabled: form.ui_settings?.show_visit_count || false,
-        required: false,
-        options: [
-          { value: 'first', label: '初回' },
-          { value: 'repeat', label: '2回目以降' }
-        ]
-      },
-      coupon_selection: {
-        enabled: form.ui_settings?.show_coupon_selection || false,
-        coupon_name: '',
-        options: [
-          { value: 'use', label: '利用する' },
-          { value: 'not_use', label: '利用しない' }
-        ]
-      },
-      menu_structure: {
-        structure_type: 'category_based',
-        categories: form.menu_structure?.categories || [],
-        display_options: {
-          show_price: true,
-          show_duration: true,
-          show_description: true,
-          show_treatment_info: false
-        }
-      },
-      calendar_settings: {
-        business_hours: form.business_rules?.business_hours || {
-          monday: { open: '09:00', close: '18:00', closed: false },
-          tuesday: { open: '09:00', close: '18:00', closed: false },
-          wednesday: { open: '09:00', close: '18:00', closed: false },
-          thursday: { open: '09:00', close: '18:00', closed: false },
-          friday: { open: '09:00', close: '18:00', closed: false },
-          saturday: { open: '09:00', close: '18:00', closed: false },
-          sunday: { open: '09:00', close: '18:00', closed: true }
-        },
-        advance_booking_days: form.business_rules?.advance_booking_days || 30
-      },
-      ui_settings: {
-        theme_color: form.basic_info?.theme_color || form.ui_settings?.theme_color || '#3B82F6',
-        button_style: form.ui_settings?.button_style || 'rounded',
-        show_repeat_booking: form.ui_settings?.show_repeat_booking || false,
-        show_side_nav: form.ui_settings?.show_side_nav || true
-      },
-      validation_rules: {
-        required_fields: ['name', 'phone'],
-        phone_format: 'japanese',
-        name_max_length: 50
-      },
-      gas_endpoint: form.gas_endpoint || ''
-    }
-  };
-  
-  return normalizedForm;
 }
 
 // フォームデータの保存

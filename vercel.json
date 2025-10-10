@@ -1,7 +1,8 @@
 {
-  "buildCommand": "npm run build",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm run build",
   "outputDirectory": ".next",
-  "installCommand": "npm install",
+  "installCommand": "pnpm install",
   "framework": "nextjs",
   "regions": ["nrt1"],
   "functions": {
@@ -9,7 +10,10 @@
       "maxDuration": 10
     }
   },
-  "env": {
-    "NODE_ENV": "production"
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "staging": true
+    }
   }
 }

@@ -70,7 +70,7 @@ export class VercelBlobDeployer {
       const blob = await put(blobPath, html, {
         access: 'public',
         token: this.blobToken,
-        contentType: 'text/html',
+        contentType: 'text/html; charset=utf-8',
         addRandomSuffix: false,
       });
 
