@@ -3,6 +3,19 @@ import fs from 'fs';
 import path from 'path';
 
 // 予約データの型定義
+interface SelectedMenu {
+  menu_id: string;
+  menu_name: string;
+  submenu_id?: string;
+  submenu_name?: string;
+}
+
+interface SelectedOption {
+  option_id: string;
+  option_name: string;
+  value: string;
+}
+
 interface Reservation {
   id: string;
   form_id: string;
@@ -10,11 +23,11 @@ interface Reservation {
   customer_name: string;
   customer_phone: string;
   customer_email?: string;
-  selected_menus: any[];
-  selected_options?: any[];
+  selected_menus: SelectedMenu[];
+  selected_options?: SelectedOption[];
   reservation_date: string;
   reservation_time: string;
-  customer_info?: any;
+  customer_info?: Record<string, string>;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
   created_at: string;
   updated_at: string;

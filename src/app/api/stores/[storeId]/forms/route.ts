@@ -27,12 +27,6 @@ function readForms(): Form[] {
   return JSON.parse(data);
 }
 
-// フォームデータの保存
-function writeForms(forms: Form[]) {
-  initializeDataFile();
-  fs.writeFileSync(FORMS_FILE, JSON.stringify(forms, null, 2));
-}
-
 // GET /api/stores/[storeId]/forms - 店舗のフォーム一覧取得
 export async function GET(
   request: Request,
@@ -105,11 +99,9 @@ export async function POST(
       },
       ui_settings: {
         theme_color: '#3B82F6',
-        button_style: 'rounded',
+        button_style: 'rounded' as const,
         show_repeat_booking: template.config?.ui_settings?.show_repeat_booking || false,
         show_side_nav: true,
-        show_visit_count: template.config?.ui_settings?.show_visit_count || false,
-        show_coupon_selection: template.config?.ui_settings?.show_coupon_selection || false,
         custom_css: undefined
       },
       gas_endpoint: gas_endpoint || ''
@@ -128,37 +120,59 @@ export async function POST(
       },
       ui_settings: {
         theme_color: '#3B82F6',
-        button_style: 'rounded',
+        button_style: 'rounded' as const,
         show_repeat_booking: false,
         show_side_nav: true,
-        show_visit_count: false,
-        show_coupon_selection: false,
         custom_css: undefined
       },
       gas_endpoint: gas_endpoint || ''
     };
 
-    const newForm = {
+    const newForm: Form = {
       id: newFormId,
       store_id: storeId,
-      form_name: form_name || 'フォーム',
-      ...baseConfig,
-      line_settings: {
-        liff_id: liff_id || ''
-      },
-      business_rules: {
-        business_hours: {
-          monday: { open: '09:00', close: '18:00', closed: false },
-          tuesday: { open: '09:00', close: '18:00', closed: false },
-          wednesday: { open: '09:00', close: '18:00', closed: false },
-          thursday: { open: '09:00', close: '18:00', closed: false },
-          friday: { open: '09:00', close: '18:00', closed: false },
-          saturday: { open: '09:00', close: '18:00', closed: false },
-          sunday: { open: '09:00', close: '18:00', closed: true }
+      config: {
+        ...baseConfig,
+        calendar_settings: {
+          business_hours: {
+            monday: { open: '09:00', close: '18:00', closed: false },
+            tuesday: { open: '09:00', close: '18:00', closed: false },
+            wednesday: { open: '09:00', close: '18:00', closed: false },
+            thursday: { open: '09:00', close: '18:00', closed: false },
+            friday: { open: '09:00', close: '18:00', closed: false },
+            saturday: { open: '09:00', close: '18:00', closed: false },
+            sunday: { open: '09:00', close: '18:00', closed: true }
+          },
+          advance_booking_days: 30
         },
-        advance_booking_days: 30
+        visit_options: [],
+        gender_selection: { enabled: false, required: false, options: [] },
+        visit_count_selection: { enabled: false, required: false, options: [] },
+        coupon_selection: { enabled: false, options: [] },
+        menu_structure: {
+          ...baseConfig.menu_structure,
+          display_options: {
+            show_price: true,
+            show_duration: true,
+            show_description: true,
+            show_treatment_info: false
+          }
+        },
+        ui_settings: {
+          theme_color: baseConfig.ui_settings.theme_color,
+          button_style: baseConfig.ui_settings.button_style as 'rounded' | 'square',
+          show_repeat_booking: baseConfig.ui_settings.show_repeat_booking,
+          show_side_nav: baseConfig.ui_settings.show_side_nav,
+          custom_css: baseConfig.ui_settings.custom_css
+        },
+        validation_rules: {
+          required_fields: ['name', 'phone'],
+          phone_format: 'japanese',
+          name_max_length: 50
+        }
       },
       status: 'inactive',
+      draft_status: 'none',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -193,7 +207,7 @@ export async function POST(
           ]
         },
         visit_count_selection: {
-          enabled: baseConfig.ui_settings.show_visit_count || false,
+          enabled: false,
           required: false,
           options: [
             { value: 'first', label: '初回' },
@@ -201,7 +215,7 @@ export async function POST(
           ]
         },
         coupon_selection: {
-          enabled: baseConfig.ui_settings.show_coupon_selection || false,
+          enabled: false,
           options: [
             { value: 'use' as const, label: '利用する' },
             { value: 'not_use' as const, label: '利用しない' }
@@ -217,8 +231,8 @@ export async function POST(
           }
         },
         calendar_settings: {
-          business_hours: newForm.business_rules.business_hours,
-          advance_booking_days: newForm.business_rules.advance_booking_days
+          business_hours: newForm.config.calendar_settings.business_hours,
+          advance_booking_days: newForm.config.calendar_settings.advance_booking_days
         },
         ui_settings: {
           ...baseConfig.ui_settings,
@@ -238,12 +252,10 @@ export async function POST(
       console.log(`✅ フォーム作成と同時にBlobにデプロイ: ${deployResult.blob_url || deployResult.url}`);
       
       // デプロイ情報をフォームに追加
-      (newForm as any).static_deploy = {
+      newForm.static_deploy = {
         deployed_at: new Date().toISOString(),
         deploy_url: deployResult.url,
-        blob_url: deployResult.blob_url,
-        status: 'deployed',
-        environment: deployResult.environment
+        status: 'deployed'
       };
       
       // 更新を保存

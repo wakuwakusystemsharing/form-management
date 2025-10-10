@@ -101,10 +101,11 @@ export default function CustomerFormPage() {
   }, [formId]);
 
   // フォームデータ正規化関数
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function normalizeFormData(form: any): Form {
     // configが存在しない場合は作成
     if (!form.config) {
-      form.config = {};
+      form.config = {} as Form['config'];
     }
     
     // basic_infoの正規化

@@ -22,7 +22,6 @@ interface FormEditorTabsProps {
 const FormEditorTabs: React.FC<FormEditorTabsProps> = ({
   activeTab,
   onTabChange,
-  userRole,
   theme = 'dark'
 }) => {
   const themeClasses = getThemeClasses(theme);

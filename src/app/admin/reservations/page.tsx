@@ -25,6 +25,7 @@ export default function AllReservationsPage() {
 
   useEffect(() => {
     fetchReservations();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterStatus, filterStoreId]);
 
   const fetchReservations = async () => {
