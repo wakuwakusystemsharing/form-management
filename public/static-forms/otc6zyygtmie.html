@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>予約フォーム</title>
+    <script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
+    <style>
+        
+        :root {
+            --theme-color: #3B82F6;
+            --theme-color-dark: #3B82F6;
+            --theme-color-light: #f0f03B82F6;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f9fafb;
+            color: #111827;
+            line-height: 1.5;
+        }
+        
+        .form-container {
+            max-width: 640px;
+            margin: 0 auto;
+            background: white;
+            min-height: 100vh;
+        }
+        
+        .form-header {
+            background: linear-gradient(135deg, var(--theme-color) 0%, var(--theme-color-dark) 100%);
+            color: white;
+            padding: 2rem 1.5rem;
+            text-align: center;
+        }
+        
+        .form-header .logo {
+            max-width: 120px;
+            margin-bottom: 1rem;
+        }
+        
+        .form-header h1 {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .form-header h2 {
+            font-size: 1.125rem;
+            opacity: 0.9;
+        }
+        
+        #form-content {
+            padding: 1.5rem;
+        }
+        
+        .section {
+            margin-bottom: 2rem;
+        }
+        
+        .section-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #374151;
+        }
+        
+        .button {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            background-color: var(--theme-color);
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .button:hover {
+            background-color: var(--theme-color-dark);
+        }
+        
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .input:focus {
+            outline: none;
+            border-color: var(--theme-color);
+            box-shadow: 0 0 0 3px var(--theme-color-light);
+        }
+        
+        .menu-card {
+            border: 2px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .menu-card:hover {
+            border-color: var(--theme-color);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .menu-card.selected {
+            border-color: var(--theme-color);
+            background-color: var(--theme-color-light);
+        }
+        
+        .menu-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 0.375rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .calendar {
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        
+        .calendar-header {
+            background-color: #f3f4f6;
+            padding: 1rem;
+            text-align: center;
+            font-weight: 600;
+        }
+        
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+        }
+        
+        .calendar-day {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e5e7eb;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .calendar-day:hover {
+            background-color: var(--theme-color-light);
+        }
+        
+        .calendar-day.selected {
+            background-color: var(--theme-color);
+            color: white;
+            font-weight: bold;
+        }
+        
+        .calendar-day.disabled {
+            color: #9ca3af;
+            cursor: not-allowed;
+            background-color: #f9fafb;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #6b7280;
+        }
+        
+        .error {
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            margin-bottom: 1rem;
+        }
+        
+        .success {
+            background-color: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            text-align: center;
+        }
+    
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="form-container">
+            <header class="form-header">
+                
+                <h1></h1>
+                <h2>予約フォーム</h2>
+            </header>
+            
+            <main id="form-content">
+                <div class="loading">読み込み中...</div>
+            </main>
+        </div>
+    </div>
+    
+    <script>
+        // フォーム設定をインライン化
+        const FORM_CONFIG = {
+  "basic_info": {
+    "form_name": "予約フォーム",
+    "store_name": "",
+    "liff_id": "2008098784-5ZQ1LRn3",
+    "theme_color": "#3B82F6",
+    "show_gender_selection": true
+  },
+  "visit_options": [],
+  "gender_selection": {
+    "enabled": true,
+    "required": false,
+    "options": [
+      {
+        "value": "male",
+        "label": "男性"
+      },
+      {
+        "value": "female",
+        "label": "女性"
+      }
+    ]
+  },
+  "visit_count_selection": {
+    "enabled": true,
+    "required": false,
+    "options": [
+      {
+        "value": "first",
+        "label": "初回"
+      },
+      {
+        "value": "repeat",
+        "label": "2回目以降"
+      }
+    ]
+  },
+  "coupon_selection": {
+    "enabled": true,
+    "options": [
+      {
+        "value": "use",
+        "label": "利用する"
+      },
+      {
+        "value": "not_use",
+        "label": "利用しない"
+      }
+    ]
+  },
+  "menu_structure": {
+    "structure_type": "simple",
+    "categories": [
+      {
+        "id": "cat1",
+        "name": "メニュー",
+        "menus": [
+          {
+            "id": "menu1",
+            "name": "カット",
+            "price": 3000,
+            "duration": 60,
+            "description": "スタンダードカット",
+            "target_gender": [
+              "male",
+              "female"
+            ]
+          }
+        ]
+      }
+    ],
+    "display_options": {
+      "show_price": true,
+      "show_duration": true,
+      "show_description": true,
+      "show_treatment_info": false
+    }
+  },
+  "calendar_settings": {
+    "business_hours": {
+      "monday": {
+        "open": "09:00",
+        "close": "18:00",
+        "closed": false
+      },
+      "tuesday": {
+        "open": "09:00",
+        "close": "18:00",
+        "closed": false
+      },
+      "wednesday": {
+        "open": "09:00",
+        "close": "18:00",
+        "closed": false
+      },
+      "thursday": {
+        "open": "09:00",
+        "close": "18:00",
+        "closed": false
+      },
+      "friday": {
+        "open": "09:00",
+        "close": "18:00",
+        "closed": false
+      },
+      "saturday": {
+        "open": "09:00",
+        "close": "18:00",
+        "closed": false
+      },
+      "sunday": {
+        "open": "09:00",
+        "close": "18:00",
+        "closed": true
+      }
+    },
+    "advance_booking_days": 30
+  },
+  "ui_settings": {
+    "theme_color": "#3B82F6",
+    "button_style": "rounded",
+    "show_repeat_booking": false,
+    "show_side_nav": true,
+    "show_visit_count": true,
+    "show_coupon_selection": true
+  },
+  "validation_rules": {
+    "required_fields": [
+      "name",
+      "phone"
+    ],
+    "phone_format": "japanese",
+    "name_max_length": 50
+  },
+  "gas_endpoint": "https://script.google.com/macros/s/AKfycby3QfS2E892nXbS-fnfBVrJX8KyJWTSsisKpe9zVz5QGWzvTH7Zc3PlOay9j60aSQLp/exec"
+};
+        
+        
+        class BookingForm {
+            constructor(config) {
+                this.config = config;
+                this.formData = {
+                    gender: null,
+                    visitCount: null,
+                    couponUsage: null,
+                    selectedMenus: [],
+                    selectedOptions: [],
+                    selectedDateTime: null,
+                    customerInfo: {
+                        name: '',
+                        phone: '',
+                        email: '',
+                        message: ''
+                    }
+                };
+                this.currentStep = 1;
+                this.liffInitialized = false;
+                
+                this.init();
+            }
+            
+            async init() {
+                try {
+                    await this.initializeLIFF();
+                    this.render();
+                    this.attachEventListeners();
+                } catch (error) {
+                    console.error('Initialization error:', error);
+                    this.showError('初期化に失敗しました');
+                }
+            }
+            
+            async initializeLIFF() {
+                if (!this.config.basic_info.liff_id) {
+                    console.warn('LIFF ID is not configured');
+                    return;
+                }
+                
+                try {
+                    await liff.init({ liffId: this.config.basic_info.liff_id });
+                    this.liffInitialized = true;
+                    
+                    if (liff.isLoggedIn()) {
+                        const profile = await liff.getProfile();
+                        this.formData.customerInfo.name = profile.displayName || '';
+                    }
+                } catch (error) {
+                    console.error('LIFF initialization failed:', error);
+                }
+            }
+            
+            render() {
+                const content = document.getElementById('form-content');
+                let html = '';
+                
+                // 性別選択
+                if (this.config.gender_selection.enabled) {
+                    html += this.renderGenderSelection();
+                }
+                
+                // 来店回数選択
+                if (this.config.visit_count_selection.enabled) {
+                    html += this.renderVisitCountSelection();
+                }
+                
+                // クーポン選択
+                if (this.config.coupon_selection.enabled) {
+                    html += this.renderCouponSelection();
+                }
+                
+                // メニュー選択
+                html += this.renderMenuSelection();
+                
+                // カレンダー
+                html += this.renderCalendar();
+                
+                // 顧客情報入力
+                html += this.renderCustomerInfo();
+                
+                // 送信ボタン
+                html += this.renderSubmitButton();
+                
+                content.innerHTML = html;
+            }
+            
+            renderGenderSelection() {
+                return `
+                    <div class="section">
+                        <h3 class="section-title">性別を選択してください</h3>
+                        <div class="gender-buttons">
+                            ${this.config.gender_selection.options.map(opt => `
+                                <button class="button" data-gender="${opt.value}">
+                                    ${opt.label}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            renderMenuSelection() {
+                const categories = this.config.menu_structure.categories || [];
+                let html = '<div class="section"><h3 class="section-title">メニューを選択してください</h3>';
+                
+                categories.forEach(category => {
+                    const filteredMenus = this.filterMenusByGender(category.menus);
+                    
+                    if (filteredMenus.length > 0) {
+                        html += `<h4>${category.name}</h4>`;
+                        
+                        filteredMenus.forEach(menu => {
+                            html += `
+                                <div class="menu-card" data-menu-id="${menu.id}">
+                                    ${menu.image ? `<img src="${menu.image}" class="menu-image" alt="${menu.name}">` : ''}
+                                    <h5>${menu.name}</h5>
+                                    <p>${menu.price ? `¥${menu.price.toLocaleString()}` : ''}</p>
+                                    ${menu.description ? `<p>${menu.description}</p>` : ''}
+                                </div>
+                            `;
+                        });
+                    }
+                });
+                
+                html += '</div>';
+                return html;
+            }
+            
+            filterMenusByGender(menus) {
+                if (!this.formData.gender) return menus;
+                
+                return menus.filter(menu => {
+                    if (!menu.gender_filter || menu.gender_filter === 'both') return true;
+                    return menu.gender_filter === this.formData.gender;
+                });
+            }
+            
+            renderCalendar() {
+                return `
+                    <div class="section">
+                        <h3 class="section-title">予約日時を選択してください</h3>
+                        <div class="calendar" id="calendar">
+                            <div class="calendar-header">
+                                <button id="prev-month">&lt;</button>
+                                <span id="current-month"></span>
+                                <button id="next-month">&gt;</button>
+                            </div>
+                            <div class="calendar-grid" id="calendar-grid"></div>
+                        </div>
+                        <div id="time-slots"></div>
+                    </div>
+                `;
+            }
+            
+            renderCustomerInfo() {
+                return `
+                    <div class="section">
+                        <h3 class="section-title">お客様情報</h3>
+                        <input type="text" class="input" id="customer-name" placeholder="お名前" value="${this.formData.customerInfo.name}">
+                        <input type="tel" class="input" id="customer-phone" placeholder="電話番号">
+                        <input type="email" class="input" id="customer-email" placeholder="メールアドレス">
+                        <textarea class="input" id="customer-message" placeholder="ご要望・ご質問" rows="3"></textarea>
+                    </div>
+                `;
+            }
+            
+            renderSubmitButton() {
+                return `
+                    <div class="section">
+                        <button class="button" id="submit-button">予約を確定する</button>
+                    </div>
+                `;
+            }
+            
+            attachEventListeners() {
+                // イベントリスナーを追加
+                document.getElementById('submit-button')?.addEventListener('click', () => this.handleSubmit());
+            }
+            
+            async handleSubmit() {
+                try {
+                    // バリデーション
+                    if (!this.validate()) {
+                        return;
+                    }
+                    
+                    // GASエンドポイントに送信
+                    if (this.config.gas_endpoint) {
+                        const response = await fetch(this.config.gas_endpoint, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                formData: this.formData,
+                                submittedAt: new Date().toISOString()
+                            })
+                        });
+                    }
+                    
+                    // LIFF メッセージ送信
+                    if (this.liffInitialized && liff.isLoggedIn()) {
+                        await liff.sendMessages([{
+                            type: 'text',
+                            text: this.formatReservationMessage()
+                        }]);
+                    }
+                    
+                    this.showSuccess();
+                } catch (error) {
+                    console.error('Submission error:', error);
+                    this.showError('送信に失敗しました');
+                }
+            }
+            
+            validate() {
+                const name = document.getElementById('customer-name').value;
+                const phone = document.getElementById('customer-phone').value;
+                
+                if (!name || !phone) {
+                    this.showError('お名前と電話番号を入力してください');
+                    return false;
+                }
+                
+                if (this.formData.selectedMenus.length === 0) {
+                    this.showError('メニューを選択してください');
+                    return false;
+                }
+                
+                if (!this.formData.selectedDateTime) {
+                    this.showError('予約日時を選択してください');
+                    return false;
+                }
+                
+                return true;
+            }
+            
+            formatReservationMessage() {
+                return `【予約確認】
+店舗: ${this.config.basic_info.store_name}
+日時: ${this.formData.selectedDateTime}
+お名前: ${this.formData.customerInfo.name}
+電話番号: ${this.formData.customerInfo.phone}
+
+ご予約ありがとうございます。`;
+            }
+            
+            showSuccess() {
+                const content = document.getElementById('form-content');
+                content.innerHTML = '<div class="success"><h3>予約が完了しました！</h3><p>ご予約ありがとうございます。</p></div>';
+            }
+            
+            showError(message) {
+                alert(message);
+            }
+        }
+        
+        // 初期化
+        document.addEventListener('DOMContentLoaded', () => {
+            new BookingForm(FORM_CONFIG);
+        });
+    
+    </script>
+</body>
+</html>

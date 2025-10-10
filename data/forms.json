@@ -1,0 +1,607 @@
+[
+  {
+    "id": "589s31q41nfi",
+    "store_id": "st0002",
+    "config": {
+      "basic_info": {
+        "form_name": "dddd",
+        "store_name": "",
+        "liff_id": "ddddddddddd",
+        "theme_color": "#3B82F6"
+      },
+      "visit_options": [],
+      "gender_selection": {
+        "enabled": false,
+        "required": false,
+        "options": [
+          {
+            "value": "male",
+            "label": "男性"
+          },
+          {
+            "value": "female",
+            "label": "女性"
+          }
+        ]
+      },
+      "menu_structure": {
+        "structure_type": "category_based",
+        "categories": [
+          {
+            "id": "category_1758341632723",
+            "name": "新しいカテゴリーkjijijij",
+            "display_name": "新しいカテゴリーkjijijij",
+            "menus": [
+              {
+                "id": "menu_1758341656989",
+                "name": "yutatata",
+                "price": 3000,
+                "duration": 60,
+                "category_id": "category_1758341632723"
+              }
+            ],
+            "options": [],
+            "selection_mode": "single",
+            "gender_condition": "all"
+          },
+          {
+            "id": "category_1758341667923",
+            "name": "新しいカテゴリーmmkmkm",
+            "display_name": "新しいカテゴリーmmkmkm",
+            "menus": [
+              {
+                "id": "menu_1758341693154",
+                "name": "qqqqq",
+                "price": 3000,
+                "duration": 60,
+                "category_id": "category_1758341667923"
+              }
+            ],
+            "options": [],
+            "selection_mode": "single",
+            "gender_condition": "all"
+          },
+          {
+            "id": "category_1758344330383",
+            "name": "新しいカテゴリー",
+            "display_name": "新しいカテゴリー",
+            "menus": [
+              {
+                "id": "menu_1758344338366",
+                "name": "x",
+                "price": 1,
+                "duration": 1,
+                "category_id": "category_1758344330383"
+              }
+            ],
+            "options": [],
+            "selection_mode": "single",
+            "gender_condition": "all"
+          }
+        ],
+        "display_options": {
+          "show_price": true,
+          "show_duration": true,
+          "show_description": true,
+          "show_treatment_info": false
+        }
+      },
+      "calendar_settings": {
+        "business_hours": {
+          "monday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "tuesday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "wednesday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "thursday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "friday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "saturday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "sunday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": true
+          }
+        },
+        "advance_booking_days": 30
+      },
+      "ui_settings": {
+        "theme_color": "#3B82F6",
+        "button_style": "rounded",
+        "show_repeat_booking": false,
+        "show_side_nav": true
+      },
+      "validation_rules": {
+        "required_fields": [
+          "name",
+          "phone"
+        ],
+        "phone_format": "japanese",
+        "name_max_length": 50
+      },
+      "gas_endpoint": "d"
+    },
+    "status": "active",
+    "draft_status": "published",
+    "created_at": "2025-09-20T04:12:42.885Z",
+    "updated_at": "2025-09-20T05:12:02.026Z",
+    "last_published_at": "2025-09-20T04:54:27.312Z"
+  },
+  {
+    "id": "wojaw7wu0amu",
+    "store_id": "st0003",
+    "config": {
+      "basic_info": {
+        "form_name": "CCC1",
+        "store_name": "",
+        "liff_id": "ccc",
+        "theme_color": "#3B82F6"
+      },
+      "visit_options": [],
+      "gender_selection": {
+        "enabled": true,
+        "required": false,
+        "options": [
+          {
+            "value": "male",
+            "label": "男性"
+          },
+          {
+            "value": "female",
+            "label": "女性"
+          }
+        ]
+      },
+      "visit_count_selection": {
+        "enabled": false,
+        "required": false,
+        "options": [
+          {
+            "value": "first",
+            "label": "初回"
+          },
+          {
+            "value": "repeat",
+            "label": "2回目以降"
+          }
+        ]
+      },
+      "coupon_selection": {
+        "enabled": false,
+        "coupon_name": "",
+        "options": [
+          {
+            "value": "use",
+            "label": "利用する"
+          },
+          {
+            "value": "not_use",
+            "label": "利用しない"
+          }
+        ]
+      },
+      "menu_structure": {
+        "structure_type": "category_based",
+        "categories": [
+          {
+            "id": "category_1758700307300",
+            "name": "新しいカテゴリー",
+            "display_name": "新しいカテゴリー",
+            "menus": [
+              {
+                "id": "menu_1758700329743",
+                "name": "A",
+                "description": "ddecvev verp",
+                "category_id": "category_1758700307300",
+                "gender_filter": "male",
+                "has_submenu": true,
+                "sub_menu_items": [
+                  {
+                    "id": "submenu_1758700328572",
+                    "name": "NONewnco",
+                    "price": 3000,
+                    "duration": 30
+                  }
+                ]
+              }
+            ],
+            "options": [],
+            "selection_mode": "single",
+            "gender_condition": "all"
+          }
+        ],
+        "display_options": {
+          "show_price": true,
+          "show_duration": true,
+          "show_description": true,
+          "show_treatment_info": false
+        }
+      },
+      "calendar_settings": {
+        "business_hours": {
+          "monday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "tuesday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "wednesday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "thursday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "friday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "saturday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "sunday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": true
+          }
+        },
+        "advance_booking_days": 30
+      },
+      "ui_settings": {
+        "theme_color": "#3B82F6",
+        "button_style": "rounded",
+        "show_repeat_booking": false,
+        "show_side_nav": true
+      },
+      "validation_rules": {
+        "required_fields": [
+          "name",
+          "phone"
+        ],
+        "phone_format": "japanese",
+        "name_max_length": 50
+      },
+      "gas_endpoint": "ccc"
+    },
+    "status": "active",
+    "draft_status": "draft",
+    "created_at": "2025-09-24T07:36:48.586Z",
+    "updated_at": "2025-09-24T07:52:13.876Z"
+  },
+  {
+    "id": "p402k84xjx39",
+    "store_id": "st0001",
+    "config": {
+      "basic_info": {
+        "form_name": "Test3",
+        "store_name": "",
+        "liff_id": "2008098784-5ZQ1LRn3",
+        "theme_color": "#c53bf7"
+      },
+      "visit_options": [],
+      "gender_selection": {
+        "enabled": true,
+        "required": false,
+        "options": [
+          {
+            "value": "male",
+            "label": "男性"
+          },
+          {
+            "value": "female",
+            "label": "女性"
+          }
+        ]
+      },
+      "visit_count_selection": {
+        "enabled": false,
+        "required": false,
+        "options": [
+          {
+            "value": "first",
+            "label": "初回"
+          },
+          {
+            "value": "repeat",
+            "label": "2回目以降"
+          }
+        ]
+      },
+      "coupon_selection": {
+        "enabled": false,
+        "coupon_name": "",
+        "options": [
+          {
+            "value": "use",
+            "label": "利用する"
+          },
+          {
+            "value": "not_use",
+            "label": "利用しない"
+          }
+        ]
+      },
+      "menu_structure": {
+        "structure_type": "category_based",
+        "categories": [
+          {
+            "id": "default",
+            "name": "メニュー",
+            "display_name": "メニュー",
+            "menus": [
+              {
+                "id": "menu_1758841081338",
+                "name": "カット",
+                "description": "男性カットです",
+                "category_id": "default",
+                "gender_filter": "male",
+                "has_submenu": true,
+                "sub_menu_items": [
+                  {
+                    "id": "submenu_1758841059255",
+                    "name": "カラー＋カット",
+                    "price": 10000,
+                    "duration": 60,
+                    "description": "カラー＋カットです",
+                    "image": "https://www.dropbox.com/scl/fi/rp6b5xcnbnt5d03ommeb4/.png?rlkey=y6hhwc2ubinzpavldh3fgzl6p&st=d0cbcp3s&raw=1"
+                  },
+                  {
+                    "id": "submenu_1758841078423",
+                    "name": "カラー＋パーマ",
+                    "price": 20000,
+                    "duration": 60,
+                    "description": "カラー＋パーマです",
+                    "image": "https://www.dropbox.com/scl/fi/rp6b5xcnbnt5d03ommeb4/.png?rlkey=y6hhwc2ubinzpavldh3fgzl6p&st=d0cbcp3s&raw=1"
+                  }
+                ]
+              },
+              {
+                "id": "menu_1758851159983",
+                "name": "Women A",
+                "price": 10000,
+                "duration": 40,
+                "description": "ckdnwlcn",
+                "image": "https://www.dropbox.com/scl/fi/su141b49bkpnspprslc17/.png?rlkey=guaknyrjpgta2nve3hf9nagkz&st=jyx7zxcn&raw=1",
+                "category_id": "default",
+                "gender_filter": "female",
+                "options": [
+                  {
+                    "id": "option_1758851158633",
+                    "name": "シャンプー",
+                    "price": 2000,
+                    "duration": 20,
+                    "is_default": false
+                  }
+                ],
+                "has_submenu": false
+              }
+            ],
+            "options": [],
+            "selection_mode": "single",
+            "gender_condition": "all"
+          }
+        ],
+        "display_options": {
+          "show_price": true,
+          "show_duration": true,
+          "show_description": true,
+          "show_treatment_info": false
+        }
+      },
+      "calendar_settings": {
+        "business_hours": {
+          "monday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "tuesday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "wednesday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "thursday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "friday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "saturday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "sunday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": true
+          }
+        },
+        "advance_booking_days": 30
+      },
+      "ui_settings": {
+        "theme_color": "#3B82F6",
+        "button_style": "rounded",
+        "show_repeat_booking": false,
+        "show_side_nav": true
+      },
+      "validation_rules": {
+        "required_fields": [
+          "name",
+          "phone"
+        ],
+        "phone_format": "japanese",
+        "name_max_length": 50
+      },
+      "gas_endpoint": "https://script.google.com/macros/s/AKfycby3QfS2E892nXbS-fnfBVrJX8KyJWTSsisKpe9zVz5QGWzvTH7Zc3PlOay9j60aSQLp/exec"
+    },
+    "status": "active",
+    "draft_status": "draft",
+    "created_at": "2025-09-25T22:53:21.225Z",
+    "updated_at": "2025-09-26T01:46:06.533Z"
+  },
+  {
+    "id": "jfohy5e9tbx7",
+    "store_id": "st0004",
+    "config": {
+      "basic_info": {
+        "form_name": "form",
+        "store_name": "",
+        "liff_id": "aaaa",
+        "theme_color": "#3B82F6"
+      },
+      "visit_options": [],
+      "gender_selection": {
+        "enabled": false,
+        "required": false,
+        "options": [
+          {
+            "value": "male",
+            "label": "男性"
+          },
+          {
+            "value": "female",
+            "label": "女性"
+          }
+        ]
+      },
+      "visit_count_selection": {
+        "enabled": false,
+        "required": false,
+        "options": [
+          {
+            "value": "first",
+            "label": "初回"
+          },
+          {
+            "value": "repeat",
+            "label": "2回目以降"
+          }
+        ]
+      },
+      "coupon_selection": {
+        "enabled": false,
+        "coupon_name": "",
+        "options": [
+          {
+            "value": "use",
+            "label": "利用する"
+          },
+          {
+            "value": "not_use",
+            "label": "利用しない"
+          }
+        ]
+      },
+      "menu_structure": {
+        "structure_type": "category_based",
+        "categories": [],
+        "display_options": {
+          "show_price": true,
+          "show_duration": true,
+          "show_description": true,
+          "show_treatment_info": false
+        }
+      },
+      "calendar_settings": {
+        "business_hours": {
+          "monday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "tuesday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "wednesday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "thursday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "friday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "saturday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "sunday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": true
+          }
+        },
+        "advance_booking_days": 30
+      },
+      "ui_settings": {
+        "theme_color": "#3B82F6",
+        "button_style": "rounded",
+        "show_repeat_booking": false,
+        "show_side_nav": true
+      },
+      "validation_rules": {
+        "required_fields": [
+          "name",
+          "phone"
+        ],
+        "phone_format": "japanese",
+        "name_max_length": 50
+      },
+      "gas_endpoint": "aaaa"
+    },
+    "status": "inactive",
+    "draft_status": "draft",
+    "created_at": "2025-09-26T02:26:53.704Z",
+    "updated_at": "2025-09-26T02:26:53.704Z"
+  }
+]

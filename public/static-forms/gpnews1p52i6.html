@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>test</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            line-height: 1.6;
+        }
+        
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: white;
+            min-height: 100vh;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            background: #f73b3b;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .form-content {
+            padding: 20px;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border-left: 4px solid #f73b3b;
+        }
+        
+        .section h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 1.1em;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .form-input, .form-select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: #f73b3b;
+        }
+        
+        .menu-sections {
+            margin: 20px 0;
+        }
+        
+        .menu-section {
+            display: none;
+            margin: 15px 0;
+        }
+        
+        .menu-section.active {
+            display: block;
+        }
+        
+        .menu-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .menu-buttons button {
+            flex: 1;
+            min-width: 120px;
+            padding: 12px;
+            background: #f0f0f0;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .menu-buttons button:hover {
+            background: #e0e0e0;
+        }
+        
+        .menu-buttons button.active {
+            background: #f73b3b;
+            color: white;
+            border-color: #f73b3b;
+        }
+        
+        .treatment-button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            background: #f8f8f8;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: left;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        .treatment-button:hover {
+            background: #f0f0f0;
+            border-color: #f73b3b;
+        }
+        
+        .treatment-button.active {
+            background: #f73b3b;
+            color: white;
+            border-color: #f73b3b;
+        }
+        
+        .treatment-details {
+            display: none;
+            margin: 15px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .treatment-details.show {
+            display: block;
+        }
+        
+        .treatment-image {
+            width: 100%;
+            max-width: 300px;
+            height: auto;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        
+        .treatment-info {
+            margin: 15px 0;
+        }
+        
+        .treatment-price {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #f73b3b;
+        }
+        
+        .treatment-time {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .submit-btn {
+            width: 100%;
+            padding: 16px;
+            background: #f73b3b;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        
+        .submit-btn:hover {
+            opacity: 0.9;
+        }
+        
+        .submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .calendar-section {
+            margin: 20px 0;
+        }
+        
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+            background: #e1e5e9;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .calendar-day {
+            background: white;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            min-height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .calendar-day:hover {
+            background: #f8f9fa;
+        }
+        
+        .calendar-day.available {
+            background: #f73b3b10;
+        }
+        
+        .calendar-day.selected {
+            background: #f73b3b;
+            color: white;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            background: #efe;
+            color: #373;
+            padding: 12px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>test</h1>
+            <p>静的デプロイ版</p>
+        </div>
+        
+        <div class="form-content">
+            <div id="loading" class="loading">
+                <p>Loading...</p>
+            </div>
+            
+            <div id="form-container" style="display: none;">
+                <form id="booking-form">
+                    <!-- お客様情報 -->
+                    <div class="section">
+                        <h3>👤 お客様情報</h3>
+                        <div class="form-group">
+                            <label class="form-label">お名前 *</label>
+                            <input type="text" name="name" class="form-input" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">電話番号 *</label>
+                            <input type="tel" name="phone" class="form-input" required>
+                        </div>
+                        
+                        <!-- 性別選択（設定されている場合） -->
+                        
+                    </div>
+                    
+                    <!-- 来店回数選択（設定されている場合） -->
+                    
+                    
+                    <!-- クーポン選択（設定されている場合） -->
+                    
+                    
+                    <!-- メニュー選択 -->
+                    <div class="section">
+                        <h3>💄 メニュー選択</h3>
+                        
+                        <!-- メニューカテゴリーボタン -->
+                        <div class="menu-buttons">
+                            
+                                <button type="button" onclick="showMenu('menu1')" class="active">
+                                    新しいカテゴリー
+                                </button>
+                            
+                        </div>
+                        
+                        <!-- メニュー詳細セクション -->
+                        <div class="menu-sections">
+                            
+                                <div id="menu1" class="menu-section active">
+                                    
+                                                <button type="button" class="treatment-button" 
+                                                        onclick="selectTreatment(this, 'menu1_menu0')"
+                                                        data-price="3000"
+                                                        data-duration="30">
+                                                    <div style="font-weight: bold;">カット</div>
+                                                    <div class="treatment-price">¥3,000</div>
+                                                    <div class="treatment-time">30分</div>
+                                                </button>
+                                                
+                                                <div id="treatment-details-menu1_menu0" class="treatment-details">
+                                                    
+                                                    <div class="treatment-info">
+                                                        <h4>カット</h4>
+                                                        
+                                                        <div class="treatment-price">¥3,000</div>
+                                                        <div class="treatment-time">30分</div>
+                                                    </div>
+                                                </div>
+                                            
+                                </div>
+                            
+                        </div>
+                    </div>
+                    
+                    <!-- カレンダー -->
+                    <div class="calendar-section">
+                        <h2>日程を選択</h2>
+                        <div id="calendar-container">
+                            <div class="calendar-grid" id="calendar-grid">
+                                <!-- カレンダーはJavaScriptで生成 -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 時間選択 -->
+                    <div class="form-group">
+                        <label class="form-label">時間 *</label>
+                        <select name="time" class="form-input" required>
+                            <option value="">まず日程を選択してください</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="submit-btn">予約する</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // LIFF初期化とフォーム機能
+        const FORM_CONFIG = {"basic_info":{"form_name":"test","store_name":"","liff_id":"2008098784-5ZQ1LRn3","theme_color":"#f73b3b"},"visit_options":[],"gender_selection":{"enabled":false,"required":false,"options":[{"value":"male","label":"男性"},{"value":"female","label":"女性"}]},"visit_count_selection":{"enabled":false,"required":false,"options":[{"value":"first","label":"初回"},{"value":"repeat","label":"2回目以降"}]},"coupon_selection":{"enabled":false,"coupon_name":"","options":[{"value":"use","label":"利用する"},{"value":"not_use","label":"利用しない"}]},"menu_structure":{"structure_type":"category_based","categories":[{"id":"category_1758774353423","name":"新しいカテゴリー","display_name":"新しいカテゴリー","menus":[{"id":"menu_1758774400839","name":"カット","price":3000,"duration":30,"category_id":"category_1758774353423","options":[{"id":"option_1758774399281","name":"シャンプー","price":1000,"duration":10,"is_default":false}],"has_submenu":false}],"options":[],"selection_mode":"single","gender_condition":"all"}],"display_options":{"show_price":true,"show_duration":true,"show_description":true,"show_treatment_info":false}},"calendar_settings":{"business_hours":{"monday":{"open":"09:00","close":"18:00","closed":false},"tuesday":{"open":"09:00","close":"18:00","closed":false},"wednesday":{"open":"09:00","close":"18:00","closed":false},"thursday":{"open":"09:00","close":"18:00","closed":false},"friday":{"open":"09:00","close":"18:00","closed":false},"saturday":{"open":"09:00","close":"18:00","closed":false},"sunday":{"open":"09:00","close":"18:00","closed":true}},"advance_booking_days":30},"ui_settings":{"theme_color":"#3B82F6","button_style":"rounded","show_repeat_booking":false,"show_side_nav":true},"validation_rules":{"required_fields":["name","phone"],"phone_format":"japanese","name_max_length":50},"gas_endpoint":"https://script.google.com/macros/s/AKfycby3QfS2E892nXbS-fnfBVrJX8KyJWTSsisKpe9zVz5QGWzvTH7Zc3PlOay9j60aSQLp/exec"};
+        const FORM_ID = "gpnews1p52i6";
+        
+        // LIFF初期化
+        liff.init({
+            liffId: "2008098784-5ZQ1LRn3"
+        }).then(() => {
+            console.log('LIFF initialized');
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('form-container').style.display = 'block';
+            initializeForm();
+        }).catch((err) => {
+            console.error('LIFF initialization failed', err);
+            document.getElementById('loading').innerHTML = '<p style="color: red;">LIFFの初期化に失敗しました</p>';
+        });
+        
+        function initializeForm() {
+            // カレンダーの初期化
+            initializeCalendar();
+            
+            // フォーム送信の処理
+            document.getElementById('booking-form').addEventListener('submit', handleSubmit);
+        }
+        
+        // メニュー表示切り替え
+        function showMenu(menuId) {
+            // 全てのメニューセクションを非表示
+            document.querySelectorAll('.menu-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            // 全てのメニューボタンの選択状態をリセット
+            document.querySelectorAll('.menu-buttons button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // 指定されたメニューセクションを表示
+            document.getElementById(menuId).classList.add('active');
+            
+            // 対応するボタンを選択状態にする
+            event.target.classList.add('active');
+            
+            // 治療詳細を非表示
+            document.querySelectorAll('.treatment-details').forEach(detail => {
+                detail.classList.remove('show');
+            });
+        }
+        
+        // 治療選択
+        let selectedTreatment = null;
+        let selectedPrice = 0;
+        
+        function selectTreatment(button, treatmentId) {
+            // 既存の選択をクリア
+            document.querySelectorAll('.treatment-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // 既存の詳細表示をクリア
+            document.querySelectorAll('.treatment-details').forEach(detail => {
+                detail.classList.remove('show');
+            });
+            
+            // 新しい選択を設定
+            button.classList.add('active');
+            selectedTreatment = button.textContent.trim();
+            selectedPrice = parseInt(button.getAttribute('data-price')) || 0;
+            
+            // 対応する詳細を表示
+            const detailElement = document.getElementById('treatment-details-' + treatmentId);
+            if (detailElement) {
+                detailElement.classList.add('show');
+                // ボタンの直後に詳細を移動
+                button.parentNode.insertBefore(detailElement, button.nextSibling);
+            }
+            
+            // 合計金額を更新
+            updateTotalDisplay();
+        }
+        
+        function initializeCalendar() {
+            const calendar = document.getElementById('calendar-grid');
+            const today = new Date();
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            
+            // 簡単なカレンダー表示（実際はより複雑な実装が必要）
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+            const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+            
+            let calendarHTML = '';
+            
+            // 曜日ヘッダー
+            const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+            dayNames.forEach(day => {
+                calendarHTML += `<div class="calendar-day" style="background: #f8f9fa; font-weight: bold;">${day}</div>`;
+            });
+            
+            // 前月の空白
+            for (let i = 0; i < firstDay; i++) {
+                calendarHTML += '<div class="calendar-day"></div>';
+            }
+            
+            // 日付
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(currentYear, currentMonth, day);
+                const isToday = date.toDateString() === today.toDateString();
+                const isFuture = date > today;
+                
+                calendarHTML += `<div class="calendar-day ${isFuture ? 'available' : ''}" data-date="${date.toISOString().split('T')[0]}" ${isFuture ? 'onclick="selectDate(this)"' : ''}>${day}</div>`;
+            }
+            
+            calendar.innerHTML = calendarHTML;
+        }
+        
+        function selectDate(element) {
+            // 既存の選択をクリア
+            document.querySelectorAll('.calendar-day.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            
+            // 新しい日付を選択
+            element.classList.add('selected');
+            
+            // 時間選択を更新（簡略化）
+            const timeSelect = document.querySelector('select[name="time"]');
+            timeSelect.innerHTML = `
+                <option value="">時間を選択してください</option>
+                <option value="09:00">9:00</option>
+                <option value="10:00">10:00</option>
+                <option value="11:00">11:00</option>
+                <option value="13:00">13:00</option>
+                <option value="14:00">14:00</option>
+                <option value="15:00">15:00</option>
+                <option value="16:00">16:00</option>
+                <option value="17:00">17:00</option>
+            `;
+        }
+        
+        // 来店回数選択
+        function selectVisit(button) {
+            document.querySelectorAll('.menu-buttons button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            button.classList.add('active');
+        }
+        
+        // クーポン選択
+        function selectCoupon(button) {
+            document.querySelectorAll('.menu-buttons button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            button.classList.add('active');
+        }
+        
+        // 合計表示更新
+        function updateTotalDisplay() {
+            // 価格表示ロジック（必要に応じて実装）
+        }
+        
+        function handleSubmit(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const selectedDate = document.querySelector('.calendar-day.selected')?.dataset.date;
+            
+            if (!selectedTreatment) {
+                alert('メニューを選択してください');
+                return;
+            }
+            
+            if (!selectedDate) {
+                alert('日程を選択してください');
+                return;
+            }
+            
+            const bookingData = {
+                name: formData.get('name'),
+                phone: formData.get('phone'),
+                gender: formData.get('gender') || null,
+                treatment: selectedTreatment,
+                date: selectedDate,
+                time: formData.get('time'),
+                message: formData.get('message') || '',
+                form_id: FORM_ID
+            };
+            
+            // LIFF経由でLINEトークに送信
+            if (typeof liff !== 'undefined') {
+                const message = `【予約フォーム】
+お名前：${bookingData.name}
+電話番号：${bookingData.phone}
+メニュー：${bookingData.treatment}
+希望日時：${bookingData.date} ${bookingData.time}
+メッセージ：${bookingData.message}`;
+
+                liff.sendMessages([{
+                    type: 'text',
+                    text: message
+                }]).then(() => {
+                    alert('予約申し込みを送信しました');
+                    liff.closeWindow();
+                }).catch((err) => {
+                    console.error('メッセージ送信エラー:', err);
+                    alert('送信に失敗しました');
+                });
+            } else {
+                // 開発環境用
+                console.log('Booking data:', bookingData);
+                alert('予約データ（開発版）:\n' + JSON.stringify(bookingData, null, 2));
+            }
+        }
+    </script>
+</body>
+</html>

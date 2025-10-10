@@ -1,0 +1,223 @@
+[
+  {
+    "id": "42la8deuxo9j",
+    "store_id": "st0001",
+    "form_name": "Test A",
+    "basic_info": {
+      "form_name": "Test A",
+      "store_name": "",
+      "liff_id": "あ",
+      "theme_color": "#3B82F6",
+      "show_gender_selection": false
+    },
+    "menu_structure": {
+      "structure_type": "simple",
+      "categories": [
+        {
+          "id": "cat1",
+          "name": "メニュー",
+          "menus": [
+            {
+              "id": "menu1",
+              "name": "カット",
+              "price": 3000,
+              "duration": 60,
+              "description": "スタンダードカット"
+            }
+          ]
+        }
+      ]
+    },
+    "ui_settings": {
+      "theme_color": "#3B82F6",
+      "button_style": "rounded",
+      "show_repeat_booking": false,
+      "show_side_nav": true,
+      "show_visit_count": false,
+      "show_coupon_selection": false
+    },
+    "gas_endpoint": "あ",
+    "line_settings": {
+      "liff_id": "あ"
+    },
+    "business_rules": {
+      "business_hours": {
+        "monday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": false
+        },
+        "tuesday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": false
+        },
+        "wednesday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": false
+        },
+        "thursday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": false
+        },
+        "friday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": false
+        },
+        "saturday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": false
+        },
+        "sunday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": true
+        }
+      },
+      "advance_booking_days": 30
+    },
+    "status": "inactive",
+    "created_at": "2025-10-08T07:15:33.307Z",
+    "updated_at": "2025-10-08T07:15:33.307Z",
+    "static_deploy": {
+      "deployed_at": "2025-10-08T07:15:33.318Z",
+      "deploy_url": "/static-forms/42la8deuxo9j.html",
+      "status": "deployed",
+      "environment": "local"
+    }
+  },
+  {
+    "id": "h6scgl3eg4ot",
+    "store_id": "st0001",
+    "form_name": "dd",
+    "basic_info": {
+      "form_name": "dd",
+      "store_name": "",
+      "liff_id": "d",
+      "theme_color": "#0b8b09",
+      "show_gender_selection": true
+    },
+    "menu_structure": {
+      "structure_type": "category",
+      "categories": [
+        {
+          "id": "cat1",
+          "name": "カット",
+          "menus": [
+            {
+              "id": "menu1",
+              "name": "スタンダードカット",
+              "price": 3000,
+              "duration": 60,
+              "description": "基本的なカット",
+              "target_gender": [
+                "male",
+                "female"
+              ],
+              "has_submenu": true,
+              "sub_menu_items": [
+                {
+                  "name": "ショート",
+                  "price": 3000,
+                  "duration": 60
+                },
+                {
+                  "name": "ミディアム",
+                  "price": 3500,
+                  "duration": 70
+                },
+                {
+                  "name": "ロング",
+                  "price": 4000,
+                  "duration": 80
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "cat2",
+          "name": "オプション",
+          "menus": [
+            {
+              "id": "option1",
+              "name": "シャンプー",
+              "price": 500,
+              "duration": 15,
+              "description": "基本シャンプー",
+              "target_gender": [
+                "male",
+                "female"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "ui_settings": {
+      "theme_color": "#861a8e",
+      "button_style": "rounded",
+      "show_repeat_booking": false,
+      "show_side_nav": true,
+      "show_visit_count": true,
+      "show_coupon_selection": true
+    },
+    "gas_endpoint": "d",
+    "line_settings": {
+      "liff_id": "d"
+    },
+    "business_rules": {
+      "business_hours": {
+        "monday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": false
+        },
+        "tuesday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": false
+        },
+        "wednesday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": false
+        },
+        "thursday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": false
+        },
+        "friday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": false
+        },
+        "saturday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": false
+        },
+        "sunday": {
+          "open": "09:00",
+          "close": "18:00",
+          "closed": true
+        }
+      },
+      "advance_booking_days": 30
+    },
+    "status": "inactive",
+    "created_at": "2025-10-08T07:23:16.559Z",
+    "updated_at": "2025-10-08T07:31:25.665Z",
+    "static_deploy": {
+      "deployed_at": "2025-10-08T07:23:16.602Z",
+      "deploy_url": "/static-forms/h6scgl3eg4ot.html",
+      "status": "deployed",
+      "environment": "local"
+    }
+  }
+]
