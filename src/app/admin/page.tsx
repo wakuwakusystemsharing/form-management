@@ -2,11 +2,24 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { getSupabaseClient } from '@/lib/supabase';
+import { User } from '@supabase/supabase-js';
+import Link from 'next/link';
 import type { Store } from '@/types/store';
+
+const ADMIN_EMAILS = [
+  'wakuwakusystemsharing@gmail.com',
+  'admin@wakuwakusystemsharing.com',
+  'manager@wakuwakusystemsharing.com'
+];
 
 export default function AdminPage() {
   const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showAddStore, setShowAddStore] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -22,9 +35,166 @@ export default function AdminPage() {
     website_url: ''
   });
 
+  // 認証チェック
   useEffect(() => {
-    loadStores();
+    checkAuth();
   }, []);
+
+  const checkAuth = async () => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const currentUser = session?.user ?? null;
+    
+    // 管理者アカウント以外はログアウト
+    if (currentUser && !ADMIN_EMAILS.includes(currentUser.email || '')) {
+      await supabase.auth.signOut();
+      setUser(null);
+    } else {
+      setUser(currentUser);
+      if (currentUser) {
+        loadStores();
+      }
+    }
+    setLoading(false);
+
+    // 認証状態の変更を監視
+    supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user ?? null;
+      if (user && !ADMIN_EMAILS.includes(user.email || '')) {
+        supabase.auth.signOut();
+        setUser(null);
+      } else {
+        setUser(user);
+        if (user && !stores.length) {
+          loadStores();
+        }
+      }
+    });
+  };
+
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setLoginError('');
+
+    if (!ADMIN_EMAILS.includes(loginForm.email)) {
+      setLoginError('このアカウントにはアクセス権限がありません');
+      setIsLoggingIn(false);
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setLoginError('認証サービスに接続できません');
+      setIsLoggingIn(false);
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginForm.email,
+      password: loginForm.password,
+    });
+
+    if (error) {
+      setLoginError('メールアドレスまたはパスワードが正しくありません');
+    }
+    setIsLoggingIn(false);
+  };
+
+  const handleSignOut = async () => {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      loadStores();
+    }
+  }, [user]);
+
+  // ローディング画面
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg">読み込み中...</div>
+      </div>
+    );
+  }
+
+  // 未認証時のログイン画面
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+        <div className="max-w-md mx-auto px-4 py-16">
+          <div className="bg-white rounded-lg shadow-lg p-8">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">サービス管理者ログイン</h1>
+              <p className="text-gray-600">LINE予約フォーム管理システム</p>
+            </div>
+
+            <form onSubmit={handleSignIn} className="space-y-6">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                  メールアドレス
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  value={loginForm.email}
+                  onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="wakuwakusystemsharing@gmail.com"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                  パスワード
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  required
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {loginError && (
+                <div className="text-red-600 text-sm text-center">{loginError}</div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isLoggingIn}
+                className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoggingIn ? 'ログイン中...' : 'ログイン'}
+              </button>
+            </form>
+
+            <div className="mt-6 text-xs text-gray-500 text-center">
+              <p>許可されたアカウントのみアクセス可能</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const loadStores = async () => {
     try {
@@ -113,11 +283,15 @@ export default function AdminPage() {
               <p className="text-gray-400">
                 店舗の管理を行います。店舗をクリックして詳細管理ページに移動できます。
               </p>
+              <p className="text-gray-500 text-sm mt-1">
+                ログイン中: {user?.email}
+              </p>
             </div>
-            <button
-              onClick={() => router.push('/admin/reservations')}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium"
-            >
+            <div className="flex gap-3">
+              <button
+                onClick={() => router.push('/admin/reservations')}
+                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium"
+              >
               全予約一覧
             </button>
           </div>
