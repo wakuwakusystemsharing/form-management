@@ -1,16 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
-import Link from 'next/link';
 import type { Store } from '@/types/store';
 
 const ADMIN_EMAILS = [
   'wakuwakusystemsharing@gmail.com',
-  'admin@wakuwakusystemsharing.com',
-  'manager@wakuwakusystemsharing.com'
+  // 'admin@wakuwakusystemsharing.com',
+  // 'manager@wakuwakusystemsharing.com'
 ];
 
 export default function AdminPage() {
@@ -35,47 +34,81 @@ export default function AdminPage() {
     website_url: ''
   });
 
-  // 認証チェック
-  useEffect(() => {
-    checkAuth();
+  const loadStores = useCallback(async () => {
+    try {
+      const response = await fetch('/api/stores');
+      if (response.ok) {
+        const data = await response.json();
+        setStores(data);
+      } else {
+        console.error('Failed to load stores');
+      }
+    } catch (error) {
+      console.error('Error loading stores:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const checkAuth = async () => {
+  // 認証チェック
+  useEffect(() => {
     const supabase = getSupabaseClient();
     if (!supabase) {
       setLoading(false);
       return;
     }
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const currentUser = session?.user ?? null;
-    
-    // 管理者アカウント以外はログアウト
-    if (currentUser && !ADMIN_EMAILS.includes(currentUser.email || '')) {
-      await supabase.auth.signOut();
-      setUser(null);
-    } else {
-      setUser(currentUser);
-      if (currentUser) {
-        loadStores();
-      }
-    }
-    setLoading(false);
+    let isMounted = true;
 
-    // 認証状態の変更を監視
-    supabase.auth.onAuthStateChange((_event, session) => {
-      const user = session?.user ?? null;
-      if (user && !ADMIN_EMAILS.includes(user.email || '')) {
+    const initialize = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const currentUser = session?.user ?? null;
+
+        if (currentUser && !ADMIN_EMAILS.includes(currentUser.email || '')) {
+          await supabase.auth.signOut();
+          if (isMounted) {
+            setUser(null);
+          }
+        } else {
+          if (isMounted) {
+            setUser(currentUser);
+          }
+          if (currentUser) {
+            await loadStores();
+          } else if (isMounted) {
+            setLoading(false);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking authentication:', error);
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    initialize();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const nextUser = session?.user ?? null;
+
+      if (nextUser && !ADMIN_EMAILS.includes(nextUser.email || '')) {
         supabase.auth.signOut();
         setUser(null);
       } else {
-        setUser(user);
-        if (user && !stores.length) {
+        setUser(nextUser);
+        if (nextUser) {
           loadStores();
         }
       }
     });
-  };
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [loadStores]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +150,7 @@ export default function AdminPage() {
     if (user) {
       loadStores();
     }
-  }, [user]);
+  }, [user, loadStores]);
 
   // ローディング画面
   if (loading) {
@@ -196,22 +229,6 @@ export default function AdminPage() {
     );
   }
 
-  const loadStores = async () => {
-    try {
-      const response = await fetch('/api/stores');
-      if (response.ok) {
-        const data = await response.json();
-        setStores(data);
-      } else {
-        console.error('Failed to load stores');
-      }
-    } catch (error) {
-      console.error('Error loading stores:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const resetNewStore = () => {
     setNewStore({
       name: '',
@@ -262,14 +279,6 @@ export default function AdminPage() {
     router.push(`/admin/${storeId}`);
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-lg text-gray-400">読み込み中...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-900 py-8 px-4">
       <div className="max-w-6xl mx-auto">
@@ -292,8 +301,15 @@ export default function AdminPage() {
                 onClick={() => router.push('/admin/reservations')}
                 className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors font-medium"
               >
-              全予約一覧
-            </button>
+                全予約一覧
+              </button>
+              <button
+                onClick={handleSignOut}
+                className="bg-gray-700 text-gray-100 px-4 py-2 rounded-md hover:bg-gray-600 transition-colors font-medium border border-gray-500"
+              >
+                ログアウト
+              </button>
+            </div>
           </div>
         </div>
 
