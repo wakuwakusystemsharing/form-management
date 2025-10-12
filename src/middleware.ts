@@ -19,6 +19,12 @@ import type { NextRequest } from 'next/server';
 import { isLocal } from './lib/env';
 import { createAuthenticatedClient, checkStoreAccess } from './lib/supabase';
 
+const ADMIN_EMAILS = [
+  'wakuwakusystemsharing@gmail.com',
+  'admin@wakuwakusystemsharing.com',
+  'manager@wakuwakusystemsharing.com'
+];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -27,14 +33,23 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // /admin パスの保護（サービス管理者）
+  const isServiceAdminRoute = pathname.startsWith('/admin');
+  
   // 店舗管理画面のパターン: /st0001/admin, /st0001/forms/*, etc.
   const storeAdminPattern = /^\/st\d{4}\/(admin|forms|reservations)/;
+  
   // API 保護パターン (公開 API は除外)
   const protectedApiPattern = /^\/api\/(forms|stores|reservations)/;
   
-  const isProtectedRoute = storeAdminPattern.test(pathname) || protectedApiPattern.test(pathname);
+  const isProtectedRoute = isServiceAdminRoute || storeAdminPattern.test(pathname) || protectedApiPattern.test(pathname);
   
   if (!isProtectedRoute) {
+    return NextResponse.next();
+  }
+
+  // /admin ルート自体では認証チェックをスキップ（ページ内でログイン画面表示）
+  if (pathname === '/admin') {
     return NextResponse.next();
   }
 
@@ -42,10 +57,8 @@ export async function middleware(request: NextRequest) {
   const accessToken = request.cookies.get('sb-access-token')?.value;
   
   if (!accessToken) {
-    // 未認証 → ログインページへリダイレクト
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+    // 未認証 → /admin にリダイレクト
+    return NextResponse.redirect(new URL('/admin', request.url));
   }
 
   // 認証済みクライアント作成
@@ -53,15 +66,20 @@ export async function middleware(request: NextRequest) {
   
   if (!supabase) {
     // Supabase 接続エラー
-    return NextResponse.redirect(new URL('/login', request.url));
+    return NextResponse.redirect(new URL('/admin', request.url));
   }
 
   // ユーザー情報取得
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   
   if (userError || !user) {
-    // セッション無効 → ログインページへ
-    return NextResponse.redirect(new URL('/login', request.url));
+    // セッション無効 → /admin にリダイレクト
+    return NextResponse.redirect(new URL('/admin', request.url));
+  }
+
+  // サービス管理者ルートの場合は管理者アカウント確認
+  if (isServiceAdminRoute && !ADMIN_EMAILS.includes(user.email || '')) {
+    return NextResponse.redirect(new URL('/admin', request.url));
   }
 
   // 店舗 ID 抽出
@@ -84,17 +102,6 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// ミドルウェアを適用するパス
 export const config = {
-  matcher: [
-    /*
-     * 以下のパスを除く全てのパスにマッチ:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public フォルダ内のファイル
-     */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  matcher: ['/admin/:path*', '/st:storeId*/(admin|forms|reservations)/:path*', '/api/(forms|stores|reservations)/:path*']
 };
