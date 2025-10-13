@@ -5,9 +5,9 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   compress: true,
   
-  // ワークスペースルート設定（pnpm対応）
-  output: 'standalone',
-  outputFileTracingRoot: __dirname,
+  // trailing slash を無効化（307リダイレクト防止）
+  trailingSlash: false,
+  skipTrailingSlashRedirect: true,
   
   // 画像最適化
   images: {
