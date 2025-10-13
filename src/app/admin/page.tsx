@@ -352,6 +352,7 @@ export default function AdminPage() {
           {showAddStore && (
             <div className="bg-gray-700 rounded-lg shadow-sm p-6 mb-6 border border-gray-500">
               <h3 className="text-lg font-semibold mb-4 text-gray-100">新しい店舗を追加</h3>
+              <form onSubmit={(e) => { e.preventDefault(); handleCreateStore(); }}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -439,19 +440,21 @@ export default function AdminPage() {
               </div>
               <div className="flex gap-3 mt-6">
                 <button 
-                  onClick={handleCreateStore}
+                  type="submit"
                   disabled={submitting}
                   className="px-6 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-gray-700"
                 >
                   {submitting ? '作成中...' : '店舗を作成'}
                 </button>
                 <button 
+                  type="button"
                   onClick={() => setShowAddStore(false)}
                   className="px-6 py-2 bg-gray-600 text-gray-200 rounded-md hover:bg-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-700"
                 >
                   キャンセル
                 </button>
               </div>
+              </form>
             </div>
           )}
 
