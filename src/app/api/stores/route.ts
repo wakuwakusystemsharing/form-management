@@ -4,6 +4,10 @@ import { getSupabaseClient, createAdminClient, isServiceAdmin } from '../../../l
 import { promises as fs } from 'fs'
 import path from 'path'
 
+// Edge Runtime ではなく Node.js Runtime を使用
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 const DATA_DIR = path.join(process.cwd(), 'data')
 
 interface Store {
@@ -95,10 +99,12 @@ export async function GET() {
 // POST /api/stores - 店舗新規作成
 export async function POST(request: NextRequest) {
   const env = getAppEnvironment()
+  console.log('[API] POST /api/stores - Environment:', env)
 
   try {
     const body = await request.json()
     const { name, owner_name, owner_email, phone, address, description, website_url } = body
+    console.log('[API] POST /api/stores - Body:', { name, owner_name, owner_email })
 
     // バリデーション
     if (!name || !owner_name || !owner_email) {
@@ -133,8 +139,10 @@ export async function POST(request: NextRequest) {
     }
 
     // staging/production: Supabase に保存
+    console.log('[API] Creating admin client...')
     const adminClient = createAdminClient()
     if (!adminClient) {
+      console.error('[API] Admin client initialization failed')
       return NextResponse.json(
         { error: 'Supabase 管理クライアント初期化エラー' },
         { status: 500 }
@@ -144,6 +152,7 @@ export async function POST(request: NextRequest) {
     // 認証確認（サービス管理者のみ店舗作成可能）
     const authHeader = request.headers.get('authorization')
     const token = authHeader?.replace('Bearer ', '')
+    console.log('[API] Auth token present:', !!token)
 
     if (!token) {
       return NextResponse.json(
@@ -162,8 +171,10 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+    console.log('[API] User fetch result:', { user: user?.email, error: userError?.message })
     
     if (userError || !user) {
+      console.error('[API] User authentication failed:', userError)
       return NextResponse.json(
         { error: '認証が無効です' },
         { status: 401 }
@@ -171,7 +182,10 @@ export async function POST(request: NextRequest) {
     }
 
     // サービス管理者チェック
-    if (!isServiceAdmin(user.email || '')) {
+    const isAdmin = isServiceAdmin(user.email || '')
+    console.log('[API] Admin check:', { email: user.email, isAdmin })
+    
+    if (!isAdmin) {
       return NextResponse.json(
         { error: '店舗作成権限がありません' },
         { status: 403 }
@@ -179,6 +193,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Supabase に挿入（RLS をバイパスするため adminClient 使用）
+    console.log('[API] Inserting store to Supabase:', newStore.id)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (adminClient as any)
       .from('stores')
@@ -205,6 +220,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log('[API] Store created successfully:', data.id)
     return NextResponse.json({ success: true, store: data })
   } catch (err) {
     console.error('[API] Store POST error:', err)
