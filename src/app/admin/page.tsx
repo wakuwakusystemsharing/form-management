@@ -266,6 +266,7 @@ export default function AdminPage() {
         }
       }
 
+      console.log('[Client] Sending POST to /api/stores');
       const response = await fetch('/api/stores', {
         method: 'POST',
         headers: {
@@ -275,8 +276,11 @@ export default function AdminPage() {
         body: JSON.stringify(newStore),
       });
 
+      console.log('[Client] Response:', response.status, response.url);
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: '不明なエラー' }));
+        console.error('[Client] Error response:', errorData);
         throw new Error(errorData.error || `店舗の追加に失敗しました (${response.status})`);
       }
 
@@ -352,7 +356,14 @@ export default function AdminPage() {
           {showAddStore && (
             <div className="bg-gray-700 rounded-lg shadow-sm p-6 mb-6 border border-gray-500">
               <h3 className="text-lg font-semibold mb-4 text-gray-100">新しい店舗を追加</h3>
-              <form onSubmit={(e) => { e.preventDefault(); handleCreateStore(); }}>
+              <form 
+                action="/api/stores"
+                method="POST"
+                onSubmit={(e) => { 
+                  e.preventDefault(); 
+                  handleCreateStore(); 
+                }}
+              >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
