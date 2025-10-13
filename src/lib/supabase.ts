@@ -190,13 +190,22 @@ export async function checkStoreAccess(userId: string, storeId: string): Promise
 }
 
 /**
+ * 管理者クライアントのエイリアス（後方互換性のため）
+ */
+export function createAdminClient() {
+  return getSupabaseAdminClient()
+}
+
+/**
  * ユーザーがサービス管理者かどうかを確認
- * @param userId Supabase Auth の user_id (将来実装用)
+ * @param email ユーザーのメールアドレス
  * @returns サービス管理者の場合 true
  */
-export async function isServiceAdmin(userId: string): Promise<boolean> {
-  // TODO: サービス管理者テーブルまたは特定のロール判定ロジックを実装
-  // 現状は固定で false を返す (後で実装)
-  console.log('[isServiceAdmin] Not implemented yet for user:', userId);
-  return false;
+export function isServiceAdmin(email: string): boolean {
+  const adminEmails = [
+    'wakuwakusystemsharing@gmail.com',
+    'admin@wakuwakusystemsharing.com',
+    'manager@wakuwakusystemsharing.com'
+  ]
+  return adminEmails.includes(email)
 }

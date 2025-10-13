@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
+import { getAppEnvironment } from '@/lib/env';
 import type { Store } from '@/types/store';
 
 const ADMIN_EMAILS = [
@@ -249,27 +250,50 @@ export default function AdminPage() {
 
     setSubmitting(true);
     try {
+      const supabase = getSupabaseClient();
+      const env = getAppEnvironment();
+      let token = '';
+
+      // staging/production 環境では認証トークン取得
+      if (env !== 'local' && supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        token = session?.access_token || '';
+        
+        if (!token) {
+          alert('セッションが切れています。再ログインしてください。');
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const response = await fetch('/api/stores', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
         },
         body: JSON.stringify(newStore),
       });
 
-      if (response.ok) {
-        const store = await response.json();
-        alert(`店舗「${store.name}」を作成しました（ID: ${store.id}）`);
-        loadStores();
-        resetNewStore();
-        setShowAddStore(false);
-      } else {
-        const error = await response.json();
-        alert(`エラー: ${error.error}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: '不明なエラー' }));
+        throw new Error(errorData.error || `店舗の追加に失敗しました (${response.status})`);
       }
+
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || '店舗の追加に失敗しました');
+      }
+
+      // 成功: 店舗リストを再読み込み
+      await loadStores();
+      resetNewStore();
+      setShowAddStore(false);
+      alert(`店舗「${result.store.name}」を作成しました`);
     } catch (error) {
-      console.error('Error creating store:', error);
-      alert('店舗作成に失敗しました');
+      console.error('店舗追加エラー:', error);
+      alert(error instanceof Error ? error.message : '店舗の追加に失敗しました');
     } finally {
       setSubmitting(false);
     }

@@ -1,98 +1,216 @@
-import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-import { Store } from '@/types/store';
+import { NextRequest, NextResponse } from 'next/server'
+import { getAppEnvironment } from '../../../lib/env'
+import { getSupabaseClient, createAdminClient, isServiceAdmin } from '../../../lib/supabase'
+import { promises as fs } from 'fs'
+import path from 'path'
 
-// 一時的なJSONファイルでのデータ保存（開発用）
-const DATA_DIR = path.join(process.cwd(), 'data');
-const STORES_FILE = path.join(DATA_DIR, 'stores.json');
+const DATA_DIR = path.join(process.cwd(), 'data')
 
-// データディレクトリとファイルの初期化
-function initializeDataFile() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+interface Store {
+  id: string
+  name: string
+  owner_name: string
+  owner_email: string
+  phone?: string
+  address?: string
+  description?: string
+  website_url?: string
+  created_at: string
+  updated_at: string
+}
+
+// data ディレクトリ初期化
+async function ensureDataDir() {
+  try {
+    await fs.access(DATA_DIR)
+  } catch {
+    await fs.mkdir(DATA_DIR, { recursive: true })
   }
+}
+
+// JSON ファイルから店舗読み込み（local 環境用）
+async function loadStoresFromJSON(): Promise<Store[]> {
+  await ensureDataDir()
+  const filePath = path.join(DATA_DIR, 'stores.json')
   
-  if (!fs.existsSync(STORES_FILE)) {
-    fs.writeFileSync(STORES_FILE, JSON.stringify([], null, 2));
+  try {
+    const data = await fs.readFile(filePath, 'utf-8')
+    return JSON.parse(data)
+  } catch {
+    return []
   }
 }
 
-// 店舗データの読み込み
-function readStores(): Store[] {
-  initializeDataFile();
-  const data = fs.readFileSync(STORES_FILE, 'utf-8');
-  return JSON.parse(data);
-}
-
-// 店舗データの保存
-function writeStores(stores: Store[]) {
-  initializeDataFile();
-  fs.writeFileSync(STORES_FILE, JSON.stringify(stores, null, 2));
+// JSON ファイルに店舗保存（local 環境用）
+async function saveStoresToJSON(stores: Store[]): Promise<void> {
+  await ensureDataDir()
+  const filePath = path.join(DATA_DIR, 'stores.json')
+  await fs.writeFile(filePath, JSON.stringify(stores, null, 2), 'utf-8')
 }
 
 // GET /api/stores - 店舗一覧取得
 export async function GET() {
+  const env = getAppEnvironment()
+
+  // ローカル環境: JSON から読み込み
+  if (env === 'local') {
+    const stores = await loadStoresFromJSON()
+    return NextResponse.json({ stores })
+  }
+
+  // staging/production: Supabase から取得
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    return NextResponse.json(
+      { error: 'Supabase 接続エラー' },
+      { status: 500 }
+    )
+  }
+
   try {
-    const stores = readStores();
-    return NextResponse.json(stores);
-  } catch (error) {
-    console.error('Store fetch error:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      details: error instanceof Error ? error.stack : String(error),
-      hint: 'Failed to read stores from JSON file',
-      code: 'FILE_READ_ERROR'
-    });
-    return NextResponse.json({ error: 'Failed to fetch stores' }, { status: 500 });
+    // サービス管理者の場合は全店舗取得
+    const { data: stores, error } = await supabase
+      .from('stores')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('[API] Stores fetch error:', error)
+      return NextResponse.json(
+        { error: 'データ取得に失敗しました' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ stores: stores || [] })
+  } catch (err) {
+    console.error('[API] Stores GET error:', err)
+    return NextResponse.json(
+      { error: 'サーバーエラーが発生しました' },
+      { status: 500 }
+    )
   }
 }
 
-// POST /api/stores - 新しい店舗作成
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const { name, phone, email, address, description, owner_name } = body;
+// POST /api/stores - 店舗新規作成
+export async function POST(request: NextRequest) {
+  const env = getAppEnvironment()
 
-    const stores = readStores();
-    
-    // 店舗ID生成（st0001形式）
-    let newStoreId = 'st0001';
-    if (stores.length > 0) {
-      const lastStore = stores
-        .filter((store: Store) => store.id.startsWith('st'))
-        .sort((a: Store, b: Store) => b.id.localeCompare(a.id))[0];
-      
-      if (lastStore) {
-        const lastNumber = parseInt(lastStore.id.replace('st', '')) || 0;
-        newStoreId = `st${(lastNumber + 1).toString().padStart(4, '0')}`;
-      }
+  try {
+    const body = await request.json()
+    const { name, owner_name, owner_email, phone, address, description, website_url } = body
+
+    // バリデーション
+    if (!name || !owner_name || !owner_email) {
+      return NextResponse.json(
+        { error: '必須項目が不足しています' },
+        { status: 400 }
+      )
     }
 
+    const now = new Date().toISOString()
+    const storeId = `st${Date.now()}`
+
     const newStore: Store = {
-      id: newStoreId,
+      id: storeId,
       name,
-      description: description || undefined,
-      owner_name: owner_name || name,
-      owner_email: email || '',
-      phone: phone || undefined,
-      address: address || undefined,
-      website_url: undefined,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      status: 'active'
-    };
+      owner_name,
+      owner_email,
+      phone: phone || '',
+      address: address || '',
+      description: description || '',
+      website_url: website_url || '',
+      created_at: now,
+      updated_at: now
+    }
 
-    stores.push(newStore);
-    writeStores(stores);
+    // ローカル環境: JSON に保存
+    if (env === 'local') {
+      const stores = await loadStoresFromJSON()
+      stores.push(newStore)
+      await saveStoresToJSON(stores)
+      return NextResponse.json({ success: true, store: newStore })
+    }
 
-    return NextResponse.json(newStore, { status: 201 });
-  } catch (error) {
-    console.error('Store creation error:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      details: error instanceof Error ? error.stack : String(error),
-      hint: 'Failed to create store',
-      code: 'STORE_CREATE_ERROR'
-    });
-    return NextResponse.json({ error: 'Failed to create store' }, { status: 500 });
+    // staging/production: Supabase に保存
+    const adminClient = createAdminClient()
+    if (!adminClient) {
+      return NextResponse.json(
+        { error: 'Supabase 管理クライアント初期化エラー' },
+        { status: 500 }
+      )
+    }
+
+    // 認証確認（サービス管理者のみ店舗作成可能）
+    const authHeader = request.headers.get('authorization')
+    const token = authHeader?.replace('Bearer ', '')
+
+    if (!token) {
+      return NextResponse.json(
+        { error: '認証が必要です' },
+        { status: 401 }
+      )
+    }
+
+    // トークンからユーザー情報取得
+    const supabase = getSupabaseClient()
+    if (!supabase) {
+      return NextResponse.json(
+        { error: 'Supabase 接続エラー' },
+        { status: 500 }
+      )
+    }
+
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+    
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: '認証が無効です' },
+        { status: 401 }
+      )
+    }
+
+    // サービス管理者チェック
+    if (!isServiceAdmin(user.email || '')) {
+      return NextResponse.json(
+        { error: '店舗作成権限がありません' },
+        { status: 403 }
+      )
+    }
+
+    // Supabase に挿入（RLS をバイパスするため adminClient 使用）
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (adminClient as any)
+      .from('stores')
+      .insert([{
+        id: newStore.id,
+        name: newStore.name,
+        owner_name: newStore.owner_name,
+        owner_email: newStore.owner_email,
+        phone: newStore.phone,
+        address: newStore.address,
+        description: newStore.description,
+        website_url: newStore.website_url,
+        created_at: newStore.created_at,
+        updated_at: newStore.updated_at
+      }])
+      .select()
+      .single()
+
+    if (error) {
+      console.error('[API] Store insert error:', error)
+      return NextResponse.json(
+        { error: `店舗作成に失敗しました: ${error.message}` },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ success: true, store: data })
+  } catch (err) {
+    console.error('[API] Store POST error:', err)
+    return NextResponse.json(
+      { error: 'サーバーエラーが発生しました' },
+      { status: 500 }
+    )
   }
 }
