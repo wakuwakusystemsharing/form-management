@@ -40,9 +40,11 @@ export async function middleware(request: NextRequest) {
   const storeAdminPattern = /^\/st\d{4}\/(admin|forms|reservations)/;
   
   // API 保護パターン (公開 API は除外)
-  const protectedApiPattern = /^\/api\/(forms|stores|reservations)/;
+  // GET /api/stores は認証不要（店舗一覧取得）、POST は保護
+  const protectedApiPattern = /^\/api\/(forms|reservations)/;
+  const isProtectedApiStores = pathname.startsWith('/api/stores') && request.method !== 'GET';
   
-  const isProtectedRoute = isServiceAdminRoute || storeAdminPattern.test(pathname) || protectedApiPattern.test(pathname);
+  const isProtectedRoute = isServiceAdminRoute || storeAdminPattern.test(pathname) || protectedApiPattern.test(pathname) || isProtectedApiStores;
   
   if (!isProtectedRoute) {
     return NextResponse.next();
