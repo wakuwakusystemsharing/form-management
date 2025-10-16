@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { getAppEnvironment } from '@/lib/env';
+import { createAdminClient } from '@/lib/supabase';
 
 // 予約データの型定義（簡易版）
 interface Reservation {
@@ -61,33 +63,80 @@ export async function GET(
     const status = searchParams.get('status');
     const dateFrom = searchParams.get('date_from');
     const dateTo = searchParams.get('date_to');
+    const env = getAppEnvironment();
 
-    let reservations = readReservations();
+    // ローカル環境: JSON から読み込み
+    if (env === 'local') {
+      let reservations = readReservations();
 
-    // 店舗IDでフィルタ（必須）
-    reservations = reservations.filter(r => r.store_id === storeId);
+      // 店舗IDでフィルタ（必須）
+      reservations = reservations.filter(r => r.store_id === storeId);
 
-    // 追加フィルタ
+      // 追加フィルタ
+      if (status) {
+        reservations = reservations.filter(r => r.status === status);
+      }
+
+      if (dateFrom) {
+        reservations = reservations.filter(r => r.reservation_date >= dateFrom);
+      }
+
+      if (dateTo) {
+        reservations = reservations.filter(r => r.reservation_date <= dateTo);
+      }
+
+      // 予約日時でソート（新しい順）
+      reservations.sort((a, b) => {
+        const dateA = new Date(`${a.reservation_date}T${a.reservation_time}`);
+        const dateB = new Date(`${b.reservation_date}T${b.reservation_time}`);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      return NextResponse.json(reservations);
+    }
+
+    // staging/production: Supabase から取得
+    const adminClient = createAdminClient();
+    if (!adminClient) {
+      return NextResponse.json(
+        { error: 'Supabase 接続エラー' },
+        { status: 500 }
+      );
+    }
+
+    // クエリビルド
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query = (adminClient as any)
+      .from('reservations')
+      .select('*')
+      .eq('store_id', storeId);
+
     if (status) {
-      reservations = reservations.filter(r => r.status === status);
+      query = query.eq('status', status);
     }
 
     if (dateFrom) {
-      reservations = reservations.filter(r => r.reservation_date >= dateFrom);
+      query = query.gte('reservation_date', dateFrom);
     }
 
     if (dateTo) {
-      reservations = reservations.filter(r => r.reservation_date <= dateTo);
+      query = query.lte('reservation_date', dateTo);
     }
 
-    // 予約日時でソート（新しい順）
-    reservations.sort((a, b) => {
-      const dateA = new Date(`${a.reservation_date}T${a.reservation_time}`);
-      const dateB = new Date(`${b.reservation_date}T${b.reservation_time}`);
-      return dateB.getTime() - dateA.getTime();
-    });
+    query = query.order('reservation_date', { ascending: false })
+                 .order('reservation_time', { ascending: false });
 
-    return NextResponse.json(reservations);
+    const { data: reservations, error } = await query;
+
+    if (error) {
+      console.error('[API] Store reservations fetch error:', error);
+      return NextResponse.json(
+        { error: '予約データの取得に失敗しました' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(reservations || []);
   } catch (error) {
     console.error('Store reservations fetch error:', error);
     return NextResponse.json(
