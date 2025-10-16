@@ -11,44 +11,92 @@ export class StaticFormGenerator {
    * プレビュー画面と完全一致
    */
   generateHTML(config: FormConfig): string {
-    // config の必須フィールドを確認
-    if (!config.gender_selection) {
-      config = {
-        ...config,
-        gender_selection: {
-          enabled: false,
-          required: false,
-          options: [
-            { value: 'male', label: '男性' },
-            { value: 'female', label: '女性' }
-          ]
-        }
-      } as FormConfig;
+    // config は immutable に扱うため、深くコピーして修正
+    const safeConfig: FormConfig = JSON.parse(JSON.stringify(config));
+
+    // 必須フィールドの初期化
+    if (!safeConfig.basic_info) {
+      safeConfig.basic_info = {
+        form_name: 'フォーム',
+        store_name: '',
+        liff_id: '',
+        theme_color: '#3B82F6'
+      };
     }
-    if (!config.visit_count_selection) {
-      config = {
-        ...config,
-        visit_count_selection: {
-          enabled: false,
-          required: false,
-          options: [
-            { value: 'first', label: '初回' },
-            { value: 'repeat', label: '2回目以降' }
-          ]
-        }
-      } as FormConfig;
+    
+    if (!safeConfig.gender_selection) {
+      safeConfig.gender_selection = {
+        enabled: false,
+        required: false,
+        options: [
+          { value: 'male', label: '男性' },
+          { value: 'female', label: '女性' }
+        ]
+      };
+    } else {
+      safeConfig.gender_selection.enabled = safeConfig.gender_selection.enabled ?? false;
     }
-    if (!config.coupon_selection) {
-      config = {
-        ...config,
-        coupon_selection: {
-          enabled: false,
-          options: [
-            { value: 'use', label: '利用する' },
-            { value: 'not_use', label: '利用しない' }
-          ]
+    
+    if (!safeConfig.visit_count_selection) {
+      safeConfig.visit_count_selection = {
+        enabled: false,
+        required: false,
+        options: [
+          { value: 'first', label: '初回' },
+          { value: 'repeat', label: '2回目以降' }
+        ]
+      };
+    } else {
+      safeConfig.visit_count_selection.enabled = safeConfig.visit_count_selection.enabled ?? false;
+    }
+    
+    if (!safeConfig.coupon_selection) {
+      safeConfig.coupon_selection = {
+        enabled: false,
+        options: [
+          { value: 'use', label: '利用する' },
+          { value: 'not_use', label: '利用しない' }
+        ]
+      };
+    } else {
+      safeConfig.coupon_selection.enabled = safeConfig.coupon_selection.enabled ?? false;
+    }
+    
+    if (!safeConfig.menu_structure) {
+      safeConfig.menu_structure = {
+        structure_type: 'category_based',
+        categories: [],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
         }
-      } as FormConfig;
+      };
+    }
+    
+    if (!safeConfig.calendar_settings) {
+      safeConfig.calendar_settings = {
+        business_hours: {
+          monday: { open: '09:00', close: '18:00', closed: false },
+          tuesday: { open: '09:00', close: '18:00', closed: false },
+          wednesday: { open: '09:00', close: '18:00', closed: false },
+          thursday: { open: '09:00', close: '18:00', closed: false },
+          friday: { open: '09:00', close: '18:00', closed: false },
+          saturday: { open: '09:00', close: '18:00', closed: false },
+          sunday: { open: '09:00', close: '18:00', closed: true }
+        },
+        advance_booking_days: 30
+      };
+    }
+    
+    if (!safeConfig.ui_settings) {
+      safeConfig.ui_settings = {
+        theme_color: '#3B82F6',
+        button_style: 'rounded',
+        show_repeat_booking: false,
+        show_side_nav: true
+      };
     }
 
     return `<!DOCTYPE html>
@@ -56,15 +104,15 @@ export class StaticFormGenerator {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${this.escapeHtml(config.basic_info.form_name)}</title>
+    <title>${this.escapeHtml(safeConfig.basic_info.form_name)}</title>
     <script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
-    <style>${this.generateCSS(config)}</style>
+    <style>${this.generateCSS(safeConfig)}</style>
 </head>
 <body>
     <div class="form-container">
         <div class="form-header">
-            <h1>${this.escapeHtml(config.basic_info.form_name)}</h1>
-            <p>${this.escapeHtml(config.basic_info.store_name || 'ご予約フォーム')}</p>
+            <h1>${this.escapeHtml(safeConfig.basic_info.form_name)}</h1>
+            <p>${this.escapeHtml(safeConfig.basic_info.store_name || 'ご予約フォーム')}</p>
         </div>
         
         <div class="form-content">
@@ -82,10 +130,10 @@ export class StaticFormGenerator {
                 <input type="tel" id="customer-phone" class="input" placeholder="090-1234-5678">
             </div>
             
-            ${config.gender_selection?.enabled ? this.renderGenderField(config) : ''}
-            ${config.visit_count_selection?.enabled ? this.renderVisitCountField(config) : ''}
-            ${config.coupon_selection?.enabled ? this.renderCouponField(config) : ''}
-            ${this.renderMenuField(config)}
+            ${safeConfig.gender_selection.enabled ? this.renderGenderField(safeConfig) : ''}
+            ${safeConfig.visit_count_selection.enabled ? this.renderVisitCountField(safeConfig) : ''}
+            ${safeConfig.coupon_selection.enabled ? this.renderCouponField(safeConfig) : ''}
+            ${this.renderMenuField(safeConfig)}
             ${this.renderDateTimeField()}
             ${this.renderMessageField()}
             ${this.renderSummary()}
@@ -95,7 +143,7 @@ export class StaticFormGenerator {
     </div>
     
     <script>
-const FORM_CONFIG = ${JSON.stringify(config, null, 2)};
+const FORM_CONFIG = ${JSON.stringify(safeConfig, null, 2)};
 
 class BookingForm {
     constructor(config) {
@@ -544,43 +592,47 @@ window.bookingForm = new BookingForm(FORM_CONFIG);
   }
 
   private renderGenderField(config: FormConfig): string {
+    if (!config.gender_selection) return '';
+    const genderSel = config.gender_selection;
     return `
             <!-- 性別選択 -->
             <div class="field" id="gender-field">
-                <label class="field-label">性別 ${config.gender_selection.required ? '<span class="required">*</span>' : ''}</label>
+                <label class="field-label">性別 ${genderSel.required ? '<span class="required">*</span>' : ''}</label>
                 <div class="button-group">
-                    ${config.gender_selection.options.map(opt => 
+                    ${genderSel.options?.map(opt => 
                         `<button type="button" class="choice-button gender-button" data-value="${opt.value}">${opt.label}</button>`
-                    ).join('')}
+                    ).join('') || ''}
                 </div>
             </div>`;
   }
 
   private renderVisitCountField(config: FormConfig): string {
     if (!config.visit_count_selection) return '';
+    const visitSel = config.visit_count_selection;
     return `
             <!-- 来店回数選択 -->
             <div class="field" id="visit-count-field">
-                <label class="field-label">ご来店回数 ${config.visit_count_selection.required ? '<span class="required">*</span>' : ''}</label>
+                <label class="field-label">ご来店回数 ${visitSel.required ? '<span class="required">*</span>' : ''}</label>
                 <div class="button-group">
-                    ${config.visit_count_selection.options.map(opt =>
+                    ${visitSel.options?.map(opt =>
                         `<button type="button" class="choice-button visit-count-button" data-value="${opt.value}">${opt.label}</button>`
-                    ).join('')}
+                    ).join('') || ''}
                 </div>
             </div>`;
   }
 
   private renderCouponField(config: FormConfig): string {
     if (!config.coupon_selection) return '';
-    const couponName = config.coupon_selection.coupon_name ? `${config.coupon_selection.coupon_name}クーポン利用有無` : 'クーポン利用有無';
+    const couponSel = config.coupon_selection;
+    const couponName = couponSel.coupon_name ? `${couponSel.coupon_name}クーポン利用有無` : 'クーポン利用有無';
     return `
             <!-- クーポン選択 -->
             <div class="field" id="coupon-field">
                 <label class="field-label">${couponName}</label>
                 <div class="button-group">
-                    ${config.coupon_selection.options.map(opt =>
+                    ${couponSel.options?.map(opt =>
                         `<button type="button" class="choice-button coupon-button" data-value="${opt.value}">${opt.label}</button>`
-                    ).join('')}
+                    ).join('') || ''}
                 </div>
             </div>`;
   }
