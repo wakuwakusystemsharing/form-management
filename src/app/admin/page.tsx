@@ -40,7 +40,7 @@ export default function AdminPage() {
       const response = await fetch('/api/stores');
       if (response.ok) {
         const data = await response.json();
-        setStores(data);
+        setStores(data.stores || []);
       } else {
         console.error('Failed to load stores');
       }
