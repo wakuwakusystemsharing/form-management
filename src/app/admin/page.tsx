@@ -376,8 +376,6 @@ export default function AdminPage() {
             <div className="bg-gray-700 rounded-lg shadow-sm p-6 mb-6 border border-gray-500">
               <h3 className="text-lg font-semibold mb-4 text-gray-100">新しい店舗を追加</h3>
               <form 
-                action="/api/stores"
-                method="POST"
                 onSubmit={(e) => { 
                   e.preventDefault(); 
                   handleCreateStore(); 
