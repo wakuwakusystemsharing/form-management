@@ -4,6 +4,8 @@ import path from 'path';
 import { Form } from '@/types/form';
 import { StaticFormGenerator } from '@/lib/static-generator';
 import { VercelBlobDeployer } from '@/lib/vercel-blob-deployer';
+import { getAppEnvironment } from '@/lib/env';
+import { createAdminClient } from '@/lib/supabase';
 
 // 一時的なJSONファイルでのデータ保存（開発用）
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -34,18 +36,48 @@ export async function GET(
 ) {
   try {
     const { storeId } = await params;
-    
-    // 新しい形式のフォームファイルを読み込み
-    const formsPath = path.join(DATA_DIR, `forms_${storeId}.json`);
-    
-    if (!fs.existsSync(formsPath)) {
-      return NextResponse.json([]);
+    const env = getAppEnvironment();
+
+    // ローカル環境: JSON から読み込み
+    if (env === 'local') {
+      // 新しい形式のフォームファイルを読み込み
+      const formsPath = path.join(DATA_DIR, `forms_${storeId}.json`);
+      
+      if (!fs.existsSync(formsPath)) {
+        return NextResponse.json([]);
+      }
+      
+      const data = fs.readFileSync(formsPath, 'utf-8');
+      const storeForms = JSON.parse(data);
+      
+      return NextResponse.json(storeForms);
     }
-    
-    const data = fs.readFileSync(formsPath, 'utf-8');
-    const storeForms = JSON.parse(data);
-    
-    return NextResponse.json(storeForms);
+
+    // staging/production: Supabase から取得
+    const adminClient = createAdminClient();
+    if (!adminClient) {
+      return NextResponse.json(
+        { error: 'Supabase 接続エラー' },
+        { status: 500 }
+      );
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: forms, error } = await (adminClient as any)
+      .from('forms')
+      .select('*')
+      .eq('store_id', storeId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[API] Forms fetch error:', error);
+      return NextResponse.json(
+        { error: 'フォームの取得に失敗しました' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(forms || []);
   } catch (error) {
     console.error('Forms fetch error:', error);
     return NextResponse.json(
