@@ -1232,6 +1232,12 @@ export default function StoreDetailPage() {
                       const deployResponse = await fetch(`/api/forms/${editingForm.id}/deploy`, {
                         method: 'POST',
                         credentials: 'include',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          storeId: storeId,
+                        }),
                       });
                       
                       if (deployResponse.ok) {
