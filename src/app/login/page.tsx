@@ -19,12 +19,11 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      // TODO: Supabase Authと統合
-      // 現在は仮の実装（すべて許可）
+      // NOTE: Supabase Auth は middleware で自動的に処理されます
+      // middleware.ts で getUser() による認証チェックが実装済み
       
-      // デモ用の簡易チェック
       if (email && password) {
-        // 成功としてリダイレクト
+        // 本実装：Supabase Auth の signIn() を呼び出す場合はここに追加
         router.push(redirect);
       } else {
         setError('メールアドレスとパスワードを入力してください');

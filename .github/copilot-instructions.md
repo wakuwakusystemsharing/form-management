@@ -29,8 +29,9 @@
   - RLS (Row Level Security) で店舗別アクセス制御
   - `store_admins.store_id` で自店舗のみ CRUD 可能
   - サービス管理者は全店舗アクセス可
-- **互換性**: 旧「フラット形式」(`form_name` 等) と新 `config.*` 形式共存 → `normalizeForm(form)` が API GET で統一
+- **互換性**: 旧「フラット形式」(`form_name` 等) と新 `config.*` 形式共存 → `normalizeForm(form)` が常に全フィールド補完
 - 保存系 API は全体上書き + `updated_at` 更新 (差分マージなし)
+- **API 認証**: middleware では UI ページのアクセス制御のみ実施、API ルート内で独立認証処理
 
 ### 3. 型とフォーム構造
 - 代表型: `types/form.ts` (`Form`, `FormConfig`) – 新機能追加時はここを最初に拡張
@@ -88,5 +89,24 @@
   - 個人アクセストークンは `.cursor/mcp.json` にハードコードしない、環境変数で管理
   - 開発環境のみ接続、本番環境接続は厳禁
 - **その他 MCP サーバ**: Firecrawl MCP も同ファイルで設定可能 (`FIRECRAWL_API_KEY` 使用)
+
+### 13. Git ワークフロー＆ PR ベースマージ
+- **ブランチ保護**: `main` ブランチは PR なしマージ禁止（GitHub branch protection rules 設定済み）
+- **開発フロー**:
+  1. `staging` ブランチで開発・修正
+  2. `git add . && git commit && git push origin staging`
+  3. GitHub で PR を作成（staging → main）
+  4. 自動チェック実行: ESLint, TypeScript type-check, Build テスト
+  5. レビュー＆承認後にマージ可能
+  6. main への merge 自動で本番環境（form-management-seven）に Vercel デプロイ
+- **注意**: 直接 `git push origin main` や `git merge staging` は GitHub がブロック
+
+### 14. コード整理ポリシー
+- **古いコード削除**:
+  - `deprecated` メソッド: コメント付きで 1-2 リリース後に削除
+  - 古いルートファイル: `*-old.ts`, `new-route.ts`, `*-preview.ts` など命名されたファイルは直ちに削除
+  - レガシー実装: `TODO:` コメント確認して、実装完了後にコメント更新 or 削除
+- **バージョン追跡**: 削除前に関連ドキュメント更新して、削除理由を記載
+- **保守性**: `normalizeForm()` 等の互換性関数は保持（旧データとの互換性維持のため）
 
 不足/不明点があればこのファイルを更新する形で質問を追記してください。

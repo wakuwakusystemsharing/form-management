@@ -323,12 +323,15 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 
 ### 実装状況
 - ✅ ログインページ作成（`/login`）
-- ✅ 認証ミドルウェア（`src/middleware.ts`）
-- ✅ Supabase Auth統合
+- ✅ 認証ミドルウェア（`src/middleware.ts`）- UI ページアクセス制御のみ
+- ✅ API 認証 - 各 API ルート内で独立処理
+- ✅ Supabase Auth統合（middleware.ts で getUser() チェック）
 - ✅ Admin Client（RLSバイパス）でサービス管理者権限実装
 - ✅ 予約管理API（店舗別・全体）
 - ✅ ローカル環境は認証スキップ（開発効率化）
-- ⏳ Row Level Security適用（部分実装）
+- ✅ Row Level Security適用
+- ✅ credentials: 'include' で Cookie 自動送信（本番環境対応）
+- ✅ PR ベースマージ - GitHub branch protection rules で main 保護
 
 ## 📦 データベース設計（Supabase）
 

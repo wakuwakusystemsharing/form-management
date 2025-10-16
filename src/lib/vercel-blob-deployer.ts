@@ -88,19 +88,6 @@ export class VercelBlobDeployer {
   }
 
   /**
-   * 旧バージョン互換メソッド（DeployResultのurlのみ返す）
-   * @deprecated deployForm() を使用してください
-   */
-  async deployFormLegacy(
-    storeId: string,
-    formId: string,
-    html: string
-  ): Promise<string> {
-    const result = await this.deployForm(storeId, formId, html);
-    return result.blob_url || result.url;
-  }
-
-  /**
    * フォームをVercel Blobから削除
    * @param storeId 店舗ID
    * @param formId フォームID
