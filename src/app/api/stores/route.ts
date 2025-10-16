@@ -115,28 +115,29 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date().toISOString()
-    const storeId = `st${Date.now()}`
-
-    const newStore: Store = {
-      id: storeId,
-      name,
-      owner_name,
-      owner_email,
-      phone: phone || '',
-      address: address || '',
-      description: description || '',
-      website_url: website_url || '',
-      created_at: now,
-      updated_at: now
-    }
-
-    // ローカル環境: JSON に保存
+    
+    // ローカル環境: JSON に保存（st形式のID）
     if (env === 'local') {
+      const storeId = `st${Date.now()}`
+      const newStore: Store = {
+        id: storeId,
+        name,
+        owner_name,
+        owner_email,
+        phone: phone || '',
+        address: address || '',
+        description: description || '',
+        website_url: website_url || '',
+        created_at: now,
+        updated_at: now
+      }
       const stores = await loadStoresFromJSON()
       stores.push(newStore)
       await saveStoresToJSON(stores)
       return NextResponse.json({ success: true, store: newStore })
     }
+
+    // staging/production: UUID形式のIDを使用（Supabase が自動生成）
 
     // staging/production: Supabase に保存
     console.log('[API] Creating admin client...')
@@ -193,21 +194,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Supabase に挿入（RLS をバイパスするため adminClient 使用）
-    console.log('[API] Inserting store to Supabase:', newStore.id)
+    // id は Supabase が UUID として自動生成
+    console.log('[API] Inserting store to Supabase')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (adminClient as any)
       .from('stores')
       .insert([{
-        id: newStore.id,
-        name: newStore.name,
-        owner_name: newStore.owner_name,
-        owner_email: newStore.owner_email,
-        phone: newStore.phone,
-        address: newStore.address,
-        description: newStore.description,
-        website_url: newStore.website_url,
-        created_at: newStore.created_at,
-        updated_at: newStore.updated_at
+        name,
+        owner_name,
+        owner_email,
+        phone: phone || '',
+        address: address || '',
+        description: description || '',
+        website_url: website_url || ''
       }])
       .select()
       .single()
