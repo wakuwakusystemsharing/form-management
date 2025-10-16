@@ -106,14 +106,17 @@ export async function POST(
     const { storeId } = await params;
     const body = await request.json();
     const { form_name, liff_id, gas_endpoint, template } = body;
+    const env = getAppEnvironment();
 
-    const forms = readForms();
-    
-    // ランダムなフォームID生成（重複チェック付き）
-    let newFormId: string;
-    do {
-      newFormId = generateRandomFormId();
-    } while (forms.some((form: Form) => form.id === newFormId));
+    // ローカル環境: JSON に保存
+    if (env === 'local') {
+      const forms = readForms();
+      
+      // ランダムなフォームID生成（重複チェック付き）
+      let newFormId: string;
+      do {
+        newFormId = generateRandomFormId();
+      } while (forms.some((form: Form) => form.id === newFormId));
 
     // テンプレートから基本設定を作成
     const baseConfig = template ? {
@@ -292,10 +295,79 @@ export async function POST(
       
       // 更新を保存
       fs.writeFileSync(formsPath, JSON.stringify(storeForms, null, 2));
-    } catch (deployError) {
-      console.error('⚠️ Blobデプロイに失敗しましたが、フォーム作成は成功しました:', deployError);
-      // デプロイ失敗してもフォーム作成は成功とする
+      } catch (deployError) {
+        console.error('⚠️ Blobデプロイに失敗しましたが、フォーム作成は成功しました:', deployError);
+        // デプロイ失敗してもフォーム作成は成功とする
+      }
+
+      return NextResponse.json(newForm, { status: 201 });
     }
+
+    // staging/production: Supabase に保存
+    const adminClient = createAdminClient();
+    if (!adminClient) {
+      return NextResponse.json(
+        { error: 'Supabase 接続エラー' },
+        { status: 500 }
+      );
+    }
+
+    // 新形式のフォームデータを作成（Supabase用）
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const newFormData: any = {
+      store_id: storeId,
+      form_name: form_name || 'フォーム',
+      line_settings: {
+        liff_id: liff_id || ''
+      },
+      gas_endpoint: gas_endpoint || '',
+      config: template?.config || {
+        basic_info: {
+          show_gender_selection: false
+        },
+        menu_structure: {
+          structure_type: 'simple',
+          categories: []
+        },
+        calendar_settings: {
+          business_hours: {
+            monday: { open: '09:00', close: '18:00', closed: false },
+            tuesday: { open: '09:00', close: '18:00', closed: false },
+            wednesday: { open: '09:00', close: '18:00', closed: false },
+            thursday: { open: '09:00', close: '18:00', closed: false },
+            friday: { open: '09:00', close: '18:00', closed: false },
+            saturday: { open: '09:00', close: '18:00', closed: false },
+            sunday: { open: '09:00', close: '18:00', closed: true }
+          },
+          advance_booking_days: 30
+        }
+      },
+      ui_settings: template?.config?.ui_settings || {
+        theme_color: '#3B82F6',
+        button_style: 'rounded',
+        show_repeat_booking: false,
+        show_side_nav: true
+      },
+      status: 'inactive',
+      draft_status: 'none'
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: newForm, error } = await (adminClient as any)
+      .from('forms')
+      .insert([newFormData])
+      .select()
+      .single();
+
+    if (error || !newForm) {
+      console.error('[API] Form creation error:', error);
+      return NextResponse.json(
+        { error: 'フォームの作成に失敗しました' },
+        { status: 500 }
+      );
+    }
+
+    // TODO: Vercel Blobデプロイも staging/production で対応する場合はここに追加
 
     return NextResponse.json(newForm, { status: 201 });
   } catch (error) {
