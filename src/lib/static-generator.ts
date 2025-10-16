@@ -1002,7 +1002,8 @@ window.bookingForm = new BookingForm(FORM_CONFIG);
     `;
   }
 
-  private escapeHtml(text: string): string {
+  private escapeHtml(text: string | undefined | null): string {
+    if (!text) return '';
     const map: { [key: string]: string } = {
       '&': '&amp;',
       '<': '&lt;',
@@ -1010,6 +1011,6 @@ window.bookingForm = new BookingForm(FORM_CONFIG);
       '"': '&quot;',
       "'": '&#039;'
     };
-    return text.replace(/[&<>"']/g, (m) => map[m]);
+    return String(text).replace(/[&<>"']/g, (m) => map[m]);
   }
 }
