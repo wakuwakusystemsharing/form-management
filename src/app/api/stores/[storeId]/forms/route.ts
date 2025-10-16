@@ -315,42 +315,21 @@ export async function POST(
     }
 
     // 新形式のフォームデータを作成（Supabase用）
-    const newFormData: any = {
+    const newFormData = {
       store_id: storeId,
       form_name: form_name || 'フォーム',
       line_settings: {
         liff_id: liff_id || ''
       },
       gas_endpoint: gas_endpoint || '',
-      config: template?.config || {
-        basic_info: {
-          show_gender_selection: false
-        },
-        menu_structure: {
-          structure_type: 'simple',
-          categories: []
-        },
-        calendar_settings: {
-          business_hours: {
-            monday: { open: '09:00', close: '18:00', closed: false },
-            tuesday: { open: '09:00', close: '18:00', closed: false },
-            wednesday: { open: '09:00', close: '18:00', closed: false },
-            thursday: { open: '09:00', close: '18:00', closed: false },
-            friday: { open: '09:00', close: '18:00', closed: false },
-            saturday: { open: '09:00', close: '18:00', closed: false },
-            sunday: { open: '09:00', close: '18:00', closed: true }
-          },
-          advance_booking_days: 30
-        }
+      config: {
+        ...baseConfig,
+        sections: template.sections
       },
-      ui_settings: template?.config?.ui_settings || {
-        theme_color: '#3B82F6',
-        button_style: 'rounded',
-        show_repeat_booking: false,
-        show_side_nav: true
-      },
-      status: 'inactive',
-      draft_status: 'none'
+      status: 'inactive' as const,
+      draft_status: 'none' as const,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
 
     const { data: newForm, error } = await adminClient
