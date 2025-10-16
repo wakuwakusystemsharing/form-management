@@ -63,8 +63,9 @@ export async function GET() {
   }
 
   // staging/production: Supabase から取得
-  const supabase = getSupabaseClient()
-  if (!supabase) {
+  // Admin Client を使用してRLSをバイパス（サービス管理者が全店舗を閲覧）
+  const adminClient = createAdminClient()
+  if (!adminClient) {
     return NextResponse.json(
       { error: 'Supabase 接続エラー' },
       { status: 500 }
@@ -73,7 +74,8 @@ export async function GET() {
 
   try {
     // サービス管理者の場合は全店舗取得
-    const { data: stores, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: stores, error } = await (adminClient as any)
       .from('stores')
       .select('*')
       .order('created_at', { ascending: false })
