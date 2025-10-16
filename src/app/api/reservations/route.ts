@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { getAppEnvironment } from '@/lib/env';
+import { createAdminClient } from '@/lib/supabase';
 
 // 予約データの型定義
 interface SelectedMenu {
@@ -78,34 +80,84 @@ export async function GET(request: Request) {
     const status = searchParams.get('status');
     const dateFrom = searchParams.get('date_from');
     const dateTo = searchParams.get('date_to');
+    const env = getAppEnvironment();
 
-    let reservations = readReservations();
+    // ローカル環境: JSON から読み込み
+    if (env === 'local') {
+      let reservations = readReservations();
 
-    // フィルタリング
+      // フィルタリング
+      if (storeId) {
+        reservations = reservations.filter(r => r.store_id === storeId);
+      }
+
+      if (status) {
+        reservations = reservations.filter(r => r.status === status);
+      }
+
+      if (dateFrom) {
+        reservations = reservations.filter(r => r.reservation_date >= dateFrom);
+      }
+
+      if (dateTo) {
+        reservations = reservations.filter(r => r.reservation_date <= dateTo);
+      }
+
+      // 予約日時でソート（新しい順）
+      reservations.sort((a, b) => {
+        const dateA = new Date(`${a.reservation_date}T${a.reservation_time}`);
+        const dateB = new Date(`${b.reservation_date}T${b.reservation_time}`);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      return NextResponse.json(reservations);
+    }
+
+    // staging/production: Supabase から取得
+    const adminClient = createAdminClient();
+    if (!adminClient) {
+      return NextResponse.json(
+        { error: 'Supabase 接続エラー' },
+        { status: 500 }
+      );
+    }
+
+    // クエリビルド
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query = (adminClient as any)
+      .from('reservations')
+      .select('*');
+
     if (storeId) {
-      reservations = reservations.filter(r => r.store_id === storeId);
+      query = query.eq('store_id', storeId);
     }
 
     if (status) {
-      reservations = reservations.filter(r => r.status === status);
+      query = query.eq('status', status);
     }
 
     if (dateFrom) {
-      reservations = reservations.filter(r => r.reservation_date >= dateFrom);
+      query = query.gte('reservation_date', dateFrom);
     }
 
     if (dateTo) {
-      reservations = reservations.filter(r => r.reservation_date <= dateTo);
+      query = query.lte('reservation_date', dateTo);
     }
 
-    // 予約日時でソート（新しい順）
-    reservations.sort((a, b) => {
-      const dateA = new Date(`${a.reservation_date}T${a.reservation_time}`);
-      const dateB = new Date(`${b.reservation_date}T${b.reservation_time}`);
-      return dateB.getTime() - dateA.getTime();
-    });
+    query = query.order('reservation_date', { ascending: false })
+                 .order('reservation_time', { ascending: false });
 
-    return NextResponse.json(reservations);
+    const { data: reservations, error } = await query;
+
+    if (error) {
+      console.error('[API] Reservations fetch error:', error);
+      return NextResponse.json(
+        { error: '予約データの取得に失敗しました' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(reservations || []);
   } catch (error) {
     console.error('Reservations fetch error:', error);
     return NextResponse.json(
@@ -145,31 +197,76 @@ export async function POST(request: Request) {
       );
     }
 
-    // 予約ID生成
-    const reservationId = `rsv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const env = getAppEnvironment();
 
-    const newReservation: Reservation = {
-      id: reservationId,
+    // ローカル環境: JSON に保存
+    if (env === 'local') {
+      // 予約ID生成
+      const reservationId = `rsv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      const newReservation: Reservation = {
+        id: reservationId,
+        form_id: body.form_id,
+        store_id: body.store_id,
+        customer_name: body.customer_name,
+        customer_phone: body.customer_phone,
+        customer_email: body.customer_email,
+        selected_menus: body.selected_menus || [],
+        selected_options: body.selected_options,
+        reservation_date: body.reservation_date,
+        reservation_time: body.reservation_time,
+        customer_info: body.customer_info,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      const reservations = readReservations();
+      reservations.push(newReservation);
+      writeReservations(reservations);
+
+      return NextResponse.json(newReservation, { status: 201 });
+    }
+
+    // staging/production: Supabase に保存
+    const adminClient = createAdminClient();
+    if (!adminClient) {
+      return NextResponse.json(
+        { error: 'Supabase 接続エラー' },
+        { status: 500 }
+      );
+    }
+
+    const newReservation = {
       form_id: body.form_id,
       store_id: body.store_id,
       customer_name: body.customer_name,
       customer_phone: body.customer_phone,
       customer_email: body.customer_email,
       selected_menus: body.selected_menus || [],
-      selected_options: body.selected_options,
+      selected_options: body.selected_options || [],
       reservation_date: body.reservation_date,
       reservation_time: body.reservation_time,
-      customer_info: body.customer_info,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      customer_info: body.customer_info || {},
+      status: 'pending'
     };
 
-    const reservations = readReservations();
-    reservations.push(newReservation);
-    writeReservations(reservations);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: reservation, error } = await (adminClient as any)
+      .from('reservations')
+      .insert([newReservation])
+      .select()
+      .single();
 
-    return NextResponse.json(newReservation, { status: 201 });
+    if (error || !reservation) {
+      console.error('[API] Reservation creation error:', error);
+      return NextResponse.json(
+        { error: '予約の作成に失敗しました' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json(reservation, { status: 201 });
   } catch (error) {
     console.error('Reservation creation error:', error);
     return NextResponse.json(
