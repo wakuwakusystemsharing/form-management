@@ -123,7 +123,6 @@ export async function POST(
       basic_info: {
         form_name: form_name || 'フォーム',
         store_name: '', // TODO: 店舗名を取得
-        liff_id: liff_id || '',
         theme_color: '#3B82F6',
         logo_url: undefined,
         show_gender_selection: template.config?.basic_info?.show_gender_selection || false
@@ -144,7 +143,6 @@ export async function POST(
       basic_info: {
         form_name: form_name || 'フォーム',
         store_name: '', // TODO: 店舗名を取得
-        liff_id: liff_id || '',
         theme_color: '#3B82F6',
         logo_url: undefined,
         show_gender_selection: false
@@ -166,6 +164,11 @@ export async function POST(
     const newForm: Form = {
       id: newFormId,
       store_id: storeId,
+      form_name: form_name || 'フォーム',
+      line_settings: {
+        liff_id: liff_id || ''
+      },
+      gas_endpoint: gas_endpoint || '',
       config: {
         ...baseConfig,
         calendar_settings: {
@@ -210,7 +213,7 @@ export async function POST(
       draft_status: 'none',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
-    };
+    } as any;
 
     // 新しいフォーム形式で保存
     const formsPath = path.join(DATA_DIR, `forms_${storeId}.json`);
