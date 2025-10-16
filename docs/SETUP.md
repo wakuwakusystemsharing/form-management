@@ -64,7 +64,11 @@ pnpm dev
 
 1. [Supabase Dashboard](https://supabase.com/dashboard) でプロジェクト作成
 2. `staging-form-management` などの名前を推奨
-3. SQL Editor で `supabase/migrations/20250101000000_initial_schema.sql` を実行
+3. SQL Editor で以下のマイグレーションを順番に実行:
+   - `supabase/migrations/20250101000000_initial_schema.sql` - 初期スキーマ
+   - `supabase/migrations/20250116000000_update_draft_status.sql` - draft_status フィールド更新（自動実行済みの場合はスキップ）
+
+**注意**: Supabase MCPを使用している場合、マイグレーションは自動適用されています。
 
 ### 2. Vercel プロジェクト設定
 
