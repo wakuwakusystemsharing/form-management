@@ -42,10 +42,13 @@ export async function middleware(request: NextRequest) {
   const storeAdminPattern = /^\/(st\d{4}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(admin|forms|reservations)/;
   
   // API 保護パターン (公開 API は除外)
-  // /api/stores は API route 内で認証チェックされるため middleware では保護しない
+  // - GET /api/forms/{formId} は公開（顧客向け）
+  // - その他の /api/(forms|reservations) は保護
+  const isGetFormApi = pathname.match(/^\/api\/forms\/[^/]+$/) && request.method === 'GET';
   const protectedApiPattern = /^\/api\/(forms|reservations)/;
+  const isProtectedApi = !isGetFormApi && protectedApiPattern.test(pathname);
   
-  const isProtectedRoute = isServiceAdminRoute || storeAdminPattern.test(pathname) || protectedApiPattern.test(pathname);
+  const isProtectedRoute = isServiceAdminRoute || storeAdminPattern.test(pathname) || isProtectedApi;
   
   if (!isProtectedRoute) {
     return NextResponse.next();

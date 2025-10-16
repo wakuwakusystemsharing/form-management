@@ -187,6 +187,16 @@ export async function PUT(
           
           return NextResponse.json(updatedForm);
         }
+      } else {
+        // ファイルが存在しない場合は作成
+        const updatedForm: Form = {
+          ...storeForm,
+          ...updatedFormData,
+          updated_at: new Date().toISOString()
+        };
+        
+        fs.writeFileSync(storeFormFile, JSON.stringify([updatedForm], null, 2));
+        return NextResponse.json(updatedForm);
       }
       
       return NextResponse.json(
