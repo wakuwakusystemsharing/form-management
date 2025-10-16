@@ -23,7 +23,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
     id: rawForm.id,
     store_id: rawForm.store_id,
     status: rawForm.status || 'inactive',
-    draft_status: rawForm.draft_status || 'draft',
+    draft_status: rawForm.draft_status || 'none',
     created_at: rawForm.created_at,
     updated_at: rawForm.updated_at,
     last_published_at: rawForm.last_published_at,

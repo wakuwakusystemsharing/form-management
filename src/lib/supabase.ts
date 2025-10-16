@@ -25,7 +25,7 @@ export type Database = {
           id: string;
           store_id: string;
           status: 'active' | 'inactive';
-          draft_status: 'draft' | 'published';
+          draft_status: 'none' | 'draft' | 'ready_to_publish';
           config: Record<string, unknown>; // FormConfig 型 (後で types/form.ts から import 予定)
           static_deploy: Record<string, unknown> | null;
           created_at: string;
