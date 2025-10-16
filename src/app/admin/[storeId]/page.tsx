@@ -268,7 +268,9 @@ export default function StoreDetailPage() {
         setLoading(true);
         
         // 店舗情報取得
-        const storeResponse = await fetch(`/api/stores/${storeId}`);
+        const storeResponse = await fetch(`/api/stores/${storeId}`, {
+          credentials: 'include',
+        });
         if (!storeResponse.ok) {
           if (storeResponse.status === 404) {
             setError('店舗が見つかりません');
@@ -281,7 +283,9 @@ export default function StoreDetailPage() {
         setStore(storeData);
         
         // フォーム一覧取得
-        const formsResponse = await fetch(`/api/stores/${storeId}/forms`);
+        const formsResponse = await fetch(`/api/stores/${storeId}/forms`, {
+          credentials: 'include',
+        });
         if (formsResponse.ok) {
           const formsData = await formsResponse.json();
           setForms(formsData);
@@ -326,6 +330,7 @@ export default function StoreDetailPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           form_name: newFormData.form_name.trim(),
           liff_id: newFormData.liff_id.trim(),
@@ -367,6 +372,7 @@ export default function StoreDetailPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(editingForm),
       });
 
@@ -408,6 +414,7 @@ export default function StoreDetailPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(editingStore),
       });
 
@@ -438,6 +445,7 @@ export default function StoreDetailPage() {
     try {
       const response = await fetch(`/api/forms/${deletingFormId}`, {
         method: 'DELETE',
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -465,6 +473,7 @@ export default function StoreDetailPage() {
     try {
       const response = await fetch(`/api/stores/${storeId}`, {
         method: 'DELETE',
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -1222,6 +1231,7 @@ export default function StoreDetailPage() {
                       // 静的HTMLを再デプロイ
                       const deployResponse = await fetch(`/api/forms/${editingForm.id}/deploy`, {
                         method: 'POST',
+                        credentials: 'include',
                       });
                       
                       if (deployResponse.ok) {
@@ -1406,6 +1416,7 @@ export default function StoreDetailPage() {
               headers: {
                 'Content-Type': 'application/json',
               },
+              credentials: 'include',
               body: JSON.stringify(updatedForm),
             });
 
