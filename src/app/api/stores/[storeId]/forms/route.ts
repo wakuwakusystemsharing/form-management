@@ -62,8 +62,7 @@ export async function GET(
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: forms, error } = await (adminClient as any)
+    const { data: forms, error } = await adminClient
       .from('forms')
       .select('*')
       .eq('store_id', storeId)
@@ -213,7 +212,7 @@ export async function POST(
       draft_status: 'none',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
-    } as any;
+    };
 
     // 新しいフォーム形式で保存
     const formsPath = path.join(DATA_DIR, `forms_${storeId}.json`);
@@ -316,7 +315,6 @@ export async function POST(
     }
 
     // 新形式のフォームデータを作成（Supabase用）
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const newFormData: any = {
       store_id: storeId,
       form_name: form_name || 'フォーム',
@@ -355,8 +353,7 @@ export async function POST(
       draft_status: 'none'
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: newForm, error } = await (adminClient as any)
+    const { data: newForm, error } = await adminClient
       .from('forms')
       .insert([newFormData])
       .select()
