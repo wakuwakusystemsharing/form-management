@@ -36,8 +36,10 @@ export async function middleware(request: NextRequest) {
   // /admin パスの保護（サービス管理者）
   const isServiceAdminRoute = pathname.startsWith('/admin');
   
-  // 店舗管理画面のパターン: /st0001/admin, /st0001/forms/*, etc.
-  const storeAdminPattern = /^\/st\d{4}\/(admin|forms|reservations)/;
+  // 店舗管理画面のパターン
+  // - 旧形式: /st0001/admin, /st0001/forms/*, etc.
+  // - UUID形式: /[uuid]/admin, /[uuid]/forms/*, etc.
+  const storeAdminPattern = /^\/(st\d{4}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(admin|forms|reservations)/;
   
   // API 保護パターン (公開 API は除外)
   // /api/stores は API route 内で認証チェックされるため middleware では保護しない
@@ -50,7 +52,8 @@ export async function middleware(request: NextRequest) {
   }
 
   // /admin ルート自体では認証チェックをスキップ（ページ内でログイン画面表示）
-  if (pathname === '/admin') {
+  // /admin/[storeId] も許可（サービス管理者の店舗詳細ページ）
+  if (pathname === '/admin' || pathname.match(/^\/admin\/[0-9a-f-]+$/)) {
     return NextResponse.next();
   }
 
