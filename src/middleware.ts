@@ -43,12 +43,13 @@ export async function middleware(request: NextRequest) {
   
   // API 保護パターン (公開 API は除外)
   // - GET /api/forms/{formId} は公開（顧客向け）
-  // - その他の /api/(forms|reservations) は保護
+  // - その他の /api/(forms|reservations) は保護されない（API ルート内で認証を行う）
   const isGetFormApi = pathname.match(/^\/api\/forms\/[^/]+$/) && request.method === 'GET';
   const protectedApiPattern = /^\/api\/(forms|reservations)/;
-  const isProtectedApi = !isGetFormApi && protectedApiPattern.test(pathname);
+  // API ルートの認証チェックは削除（API ルート内で行う）
+  const isProtectedApi = false;
   
-  const isProtectedRoute = isServiceAdminRoute || storeAdminPattern.test(pathname) || isProtectedApi;
+  const isProtectedRoute = isServiceAdminRoute || storeAdminPattern.test(pathname);
   
   if (!isProtectedRoute) {
     return NextResponse.next();
