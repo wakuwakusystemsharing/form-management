@@ -122,6 +122,7 @@ export async function POST(
       basic_info: {
         form_name: form_name || 'フォーム',
         store_name: '', // TODO: 店舗名を取得
+        liff_id: liff_id || '',
         theme_color: '#3B82F6',
         logo_url: undefined,
         show_gender_selection: template.config?.basic_info?.show_gender_selection || false
@@ -141,13 +142,14 @@ export async function POST(
     } : {
       basic_info: {
         form_name: form_name || 'フォーム',
-        store_name: '', // TODO: 店舗名を取得
+        store_name: '',
+        liff_id: liff_id || '',
         theme_color: '#3B82F6',
         logo_url: undefined,
         show_gender_selection: false
       },
       menu_structure: {
-        structure_type: 'simple',
+        structure_type: 'simple' as const,
         categories: []
       },
       ui_settings: {
@@ -163,11 +165,6 @@ export async function POST(
     const newForm: Form = {
       id: newFormId,
       store_id: storeId,
-      form_name: form_name || 'フォーム',
-      line_settings: {
-        liff_id: liff_id || ''
-      },
-      gas_endpoint: gas_endpoint || '',
       config: {
         ...baseConfig,
         calendar_settings: {
@@ -315,17 +312,62 @@ export async function POST(
     }
 
     // 新形式のフォームデータを作成（Supabase用）
+    const supabaseConfig = template ? {
+      basic_info: {
+        form_name: form_name || 'フォーム',
+        store_name: '',
+        liff_id: liff_id || '',
+        theme_color: '#3B82F6',
+        logo_url: undefined,
+        show_gender_selection: template.config?.basic_info?.show_gender_selection || false
+      },
+      menu_structure: template.config?.menu_structure || {
+        structure_type: 'simple' as const,
+        categories: []
+      },
+      ui_settings: {
+        theme_color: '#3B82F6',
+        button_style: 'rounded' as const,
+        show_repeat_booking: template.config?.ui_settings?.show_repeat_booking || false,
+        show_side_nav: true,
+        custom_css: undefined
+      },
+      validation_rules: {
+        required_fields: ['name', 'phone'],
+        phone_format: 'japanese' as const,
+        name_max_length: 50
+      }
+    } : {
+      basic_info: {
+        form_name: form_name || 'フォーム',
+        store_name: '',
+        liff_id: liff_id || '',
+        theme_color: '#3B82F6',
+        logo_url: undefined,
+        show_gender_selection: false
+      },
+      menu_structure: {
+        structure_type: 'simple' as const,
+        categories: []
+      },
+      ui_settings: {
+        theme_color: '#3B82F6',
+        button_style: 'rounded' as const,
+        show_repeat_booking: false,
+        show_side_nav: true,
+        custom_css: undefined
+      },
+      validation_rules: {
+        required_fields: ['name', 'phone'],
+        phone_format: 'japanese' as const,
+        name_max_length: 50
+      }
+    };
+
+    // 新形式のフォームデータを作成（Supabase用）
     const newFormData = {
       store_id: storeId,
-      form_name: form_name || 'フォーム',
-      line_settings: {
-        liff_id: liff_id || ''
-      },
-      gas_endpoint: gas_endpoint || '',
-      config: {
-        ...baseConfig,
-        sections: template.sections
-      },
+      config: supabaseConfig,
       status: 'inactive' as const,
       draft_status: 'none' as const,
       created_at: new Date().toISOString(),
@@ -334,7 +376,8 @@ export async function POST(
 
     const { data: newForm, error } = await adminClient
       .from('forms')
-      .insert([newFormData])
+      // @ts-expect-error Supabase型の制限をバイパス
+      .insert([newFormData as Record<string, unknown>])
       .select()
       .single();
 
