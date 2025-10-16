@@ -77,4 +77,16 @@
 - `BLOB_READ_WRITE_TOKEN` 無しで本番/ステージング Deploy ロジックを誤実行しない (条件分岐維持)
 - 日本語メッセージ定型を英語に置換しない (ユーザ表示整合性)
 
+### 12. MCP (Model Context Protocol) 設定
+- **mcp.json の役割**: `.cursor/mcp.json` に MCP サーバ設定を記載
+- **Supabase MCP の利用**: 開発時に AI アシスタント (Cursor など) から Supabase と連携
+  - 設定ファイル: `.cursor/mcp.json` で Supabase MCP サーバをセットアップ
+  - コマンド: `npx @supabase/mcp-server-supabase@latest --read-only --project-ref=<project-ref>`
+  - 認証: `SUPABASE_ACCESS_TOKEN` は個人アクセストークン (Supabase Dashboard で作成)
+- **セキュリティ考慮**:
+  - `--read-only` フラグで読み取り専用モードを強制 (本番データ保護)
+  - 個人アクセストークンは `.cursor/mcp.json` にハードコードしない、環境変数で管理
+  - 開発環境のみ接続、本番環境接続は厳禁
+- **その他 MCP サーバ**: Firecrawl MCP も同ファイルで設定可能 (`FIRECRAWL_API_KEY` 使用)
+
 不足/不明点があればこのファイルを更新する形で質問を追記してください。
