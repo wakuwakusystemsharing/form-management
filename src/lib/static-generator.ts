@@ -11,6 +11,46 @@ export class StaticFormGenerator {
    * プレビュー画面と完全一致
    */
   generateHTML(config: FormConfig): string {
+    // config の必須フィールドを確認
+    if (!config.gender_selection) {
+      config = {
+        ...config,
+        gender_selection: {
+          enabled: false,
+          required: false,
+          options: [
+            { value: 'male', label: '男性' },
+            { value: 'female', label: '女性' }
+          ]
+        }
+      } as FormConfig;
+    }
+    if (!config.visit_count_selection) {
+      config = {
+        ...config,
+        visit_count_selection: {
+          enabled: false,
+          required: false,
+          options: [
+            { value: 'first', label: '初回' },
+            { value: 'repeat', label: '2回目以降' }
+          ]
+        }
+      } as FormConfig;
+    }
+    if (!config.coupon_selection) {
+      config = {
+        ...config,
+        coupon_selection: {
+          enabled: false,
+          options: [
+            { value: 'use', label: '利用する' },
+            { value: 'not_use', label: '利用しない' }
+          ]
+        }
+      } as FormConfig;
+    }
+
     return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -42,7 +82,7 @@ export class StaticFormGenerator {
                 <input type="tel" id="customer-phone" class="input" placeholder="090-1234-5678">
             </div>
             
-            ${config.gender_selection.enabled ? this.renderGenderField(config) : ''}
+            ${config.gender_selection?.enabled ? this.renderGenderField(config) : ''}
             ${config.visit_count_selection?.enabled ? this.renderVisitCountField(config) : ''}
             ${config.coupon_selection?.enabled ? this.renderCouponField(config) : ''}
             ${this.renderMenuField(config)}

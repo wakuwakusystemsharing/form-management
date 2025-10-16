@@ -79,6 +79,11 @@ export async function POST(
     const normalizedForm = normalizeForm(form);
     const formConfig = normalizedForm.config;
 
+    // フォームConfig の必須フィールドを検証
+    if (!formConfig.gender_selection || formConfig.gender_selection.enabled === undefined) {
+      console.warn('[Deploy] Incomplete config detected, applying defaults');
+    }
+
     // 静的HTMLを生成
     const generator = new StaticFormGenerator();
     const staticHtml = generator.generateHTML(formConfig);

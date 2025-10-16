@@ -13,8 +13,15 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rawForm = form as any;
   
-  // 既存の config がある場合はそれを基に、不足しているフィールドを補完
-  const existingConfig = rawForm.config;
+  // Supabase からの JSONB は string になることがあるのでパース
+  let existingConfig = rawForm.config;
+  if (typeof existingConfig === 'string') {
+    try {
+      existingConfig = JSON.parse(existingConfig);
+    } catch {
+      existingConfig = undefined;
+    }
+  }
   
   // デフォルト config 構造
   const defaultConfig = {
