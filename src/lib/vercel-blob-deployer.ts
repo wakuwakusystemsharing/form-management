@@ -141,7 +141,7 @@ export class VercelBlobDeployer {
   /**
    * 画像をVercel Blobにアップロード
    * @param file ファイル（Buffer or Blob）
-   * @param path 保存先パス（例: menu_images/st0001/menu_123.jpg）
+   * @param path 保存先パス（例: menu_images/{storeId}/menu_123.jpg）
    * @returns Blob URL
    */
   async uploadImage(file: Buffer | Blob, path: string): Promise<string> {
