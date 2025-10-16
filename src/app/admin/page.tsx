@@ -53,6 +53,25 @@ export default function AdminPage() {
 
   // 認証チェック
   useEffect(() => {
+    const env = getAppEnvironment();
+    
+    // ローカル環境では認証をスキップ
+    if (env === 'local') {
+      const dummyUser = {
+        id: 'local-dev-user',
+        email: 'dev@localhost',
+        aud: 'authenticated',
+        role: 'authenticated',
+        created_at: new Date().toISOString(),
+        app_metadata: {},
+        user_metadata: {}
+      } as User;
+      
+      setUser(dummyUser);
+      loadStores();
+      return;
+    }
+
     const supabase = getSupabaseClient();
     if (!supabase) {
       setLoading(false);
