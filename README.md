@@ -41,12 +41,12 @@ LINE LIFFを活用した予約フォーム管理システムです。サービ�
 - **Framework**: Next.js 15.5.3 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS v4
-- **Data Storage**: JSON ファイル (開発用) → Supabase移行予定
+- **Database**: Supabase (Staging/Production), JSON ファイル (Local開発)
+- **Authentication**: Supabase Auth
 - **Image Hosting**: Vercel Blob Storage
 - **Static Deployment**: Vercel Blob（顧客向けフォーム）
 - **Backend Integration**: Google Apps Script
-- **Authentication**: Supabase Auth（実装予定）
-- **Package Manager**: npm
+- **Package Manager**: pnpm
 
 ## 📁 プロジェクト構成
 
@@ -263,10 +263,13 @@ npm run start
 ### 環境変数
 `.env.local`ファイルで以下の設定：
 ```bash
+# アプリケーション環境
+NEXT_PUBLIC_APP_ENV=local  # local | staging | production
+
 # Vercel Blob Storage（画像・静的デプロイ）
 BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
 
-# Supabase（データベース・認証）※未接続
+# Supabase（データベース・認証）
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
@@ -274,6 +277,11 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 # その他
 NEXT_PUBLIC_APP_URL=https://your-domain.com
 ```
+
+**環境の自動切り替え**:
+- `NEXT_PUBLIC_APP_ENV=local`: JSON ファイルベース（ローカル開発）
+- `NEXT_PUBLIC_APP_ENV=staging/production`: Supabase（本番環境）
+- 環境変数未設定時: URLから自動判定（localhost → local, vercel.app → staging/production）
 
 ### Vercel Blob Storageの設定
 1. Vercelプロジェクトで「Storage」タブを開く
@@ -306,7 +314,7 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 - GAS連携問題 → エンドポイントURL設定を確認
 - 認証エラー → ミドルウェアとSupabase設定を確認
 
-## 🔐 認証システム（実装予定）
+## 🔐 認証システム
 
 ### ユーザー役割
 - **サービス管理者**: 全店舗・全予約へのアクセス権限
@@ -315,21 +323,53 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 
 ### 実装状況
 - ✅ ログインページ作成（`/login`）
-- ✅ 認証ミドルウェア基盤（`src/middleware.ts`）
+- ✅ 認証ミドルウェア（`src/middleware.ts`）
+- ✅ Supabase Auth統合
+- ✅ Admin Client（RLSバイパス）でサービス管理者権限実装
 - ✅ 予約管理API（店舗別・全体）
-- ⏳ Supabase Auth統合（未接続）
-- ⏳ Row Level Security適用（未実装）
+- ✅ ローカル環境は認証スキップ（開発効率化）
+- ⏳ Row Level Security適用（部分実装）
 
-## 📦 データベース設計（Supabase移行予定）
+## 📦 データベース設計（Supabase）
 
 ### 主要テーブル
-- `stores` - 店舗情報
-- `forms` - フォーム設定（config, draft_config）
-- `reservations` - 予約データ（全店舗共通、store_idで分離）
-- `store_admins` - 店舗管理者アカウント
 
-### 予約データのアクセス制御
-- サービス管理者: 全予約閲覧可能
-- 店舗管理者: `store_id`で自店舗のみ閲覧
-- Row Level Securityで強制
+#### `stores` テーブル
+- `id` (uuid) - 店舗ID（自動生成）
+- `name` (text) - 店舗名
+- `owner_name`, `owner_email` - オーナー情報
+- `phone`, `address`, `website_url`, `description` - 店舗詳細
+- `created_at`, `updated_at` (timestamptz)
+
+#### `forms` テーブル
+- `id` (uuid) - フォームID（自動生成）
+- `store_id` (uuid) - 店舗ID（外部キー）
+- `form_name` (text) - フォーム名
+- `status` (text) - 'active' | 'inactive'
+- `draft_status` (text) - 'none' | 'draft' | 'ready_to_publish'
+- `config` (jsonb) - フォーム設定
+- `static_deploy` (jsonb) - デプロイ情報
+- `line_settings` (jsonb) - LINE設定（LIFF ID等）
+- `gas_endpoint` (text) - Google Apps Script URL
+- `ui_settings` (jsonb) - UI設定
+- `created_at`, `updated_at`, `last_published_at` (timestamptz)
+
+#### `reservations` テーブル
+- `id` (uuid) - 予約ID（自動生成）
+- `form_id`, `store_id` (uuid) - 関連ID
+- `customer_name`, `customer_phone`, `customer_email` - 顧客情報
+- `selected_menus`, `selected_options` (jsonb) - 選択内容
+- `reservation_date` (date), `reservation_time` (time)
+- `customer_info` (jsonb) - その他情報
+- `status` (text) - 'pending' | 'confirmed' | 'cancelled' | 'completed'
+- `created_at`, `updated_at` (timestamptz)
+
+### データアクセス制御
+- **サービス管理者**: Admin Client（RLSバイパス）で全データアクセス
+- **店舗管理者**: RLSで `store_id` による制限（実装予定）
+- **顧客**: 予約作成のみ（公開API）
+
+### ID形式
+- **Staging/Production**: UUID（Supabase自動生成）
+- **Local開発**: `st{timestamp}` 形式（JSON互換性維持）
 
