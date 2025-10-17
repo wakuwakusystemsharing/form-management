@@ -376,3 +376,63 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 - **Staging/Production**: UUID（Supabase自動生成）
 - **Local開発**: `st{timestamp}` 形式（JSON互換性維持）
 
+## 🌍 環境別設定
+
+### 環境の種類
+
+| 環境 | URL | ブランチ | 用途 | データベース | Blob Storage |
+|------|-----|---------|------|-------------|--------------|
+| **Production（本番）** | https://form-management-seven.vercel.app | `main` | 商用・実運用 | Supabase Production | Blob Production |
+| **Staging（プレビュー）** | https://form-management-staging.vercel.app | `staging` | テスト・検証 | Supabase Staging | Blob Staging |
+| **Local（開発）** | http://localhost:3000 | `staging` | ローカル開発 | JSON ファイル | Mock (Blob Mock) |
+
+### 環境別の主な違い
+
+#### 🟢 Production（form-management-seven.vercel.app）
+- **用途**: 商用・実運用環境
+- **認証**: Supabase Auth 本番環境
+- **データベース**: Supabase Production プロジェクト
+- **ストレージ**: Vercel Blob Production (`prod/forms/{storeId}/{formId}.html`)
+- **デプロイ**: `main` ブランチへマージ時に自動デプロイ
+- **RLS**: Row Level Security 有効
+- **特徴**: 本番データが保存される、実際のユーザーが利用
+
+#### 🟡 Staging（form-management-staging.vercel.app）
+- **用途**: テスト・検証・デモ
+- **認証**: Supabase Auth ステージング環境（テスト用アカウント）
+- **データベース**: Supabase Staging プロジェクト
+- **ストレージ**: Vercel Blob Staging (`staging/forms/{storeId}/{formId}.html`)
+- **デプロイ**: `staging` ブランチへプッシュ時に自動デプロイ
+- **RLS**: Row Level Security 有効
+- **特徴**: 開発チーム向け、新機能テスト、PR レビュー用
+
+#### 🔵 Local（localhost:3000）
+- **用途**: ローカル開発・デバッグ
+- **認証**: スキップ（全機能アクセス可能）
+- **データベース**: `data/` フォルダの JSON ファイル
+- **ストレージ**: Mock（`public/static-forms/` に出力）
+- **デプロイ**: なし（`pnpm dev` で実行）
+- **RLS**: 適用なし
+- **特徴**: 認証不要、高速開発、オフライン対応可能
+
+### 環境変数の管理
+
+```bash
+# Local 開発環境（.env.local）
+NEXT_PUBLIC_APP_ENV=local
+
+# Staging 環境（Vercel Environment Variables）
+NEXT_PUBLIC_APP_ENV=staging
+NEXT_PUBLIC_SUPABASE_URL=<staging-url>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<staging-key>
+SUPABASE_SERVICE_ROLE_KEY=<staging-service-key>
+BLOB_READ_WRITE_TOKEN=<staging-blob-token>
+
+# Production 環境（Vercel Environment Variables）
+NEXT_PUBLIC_APP_ENV=production
+NEXT_PUBLIC_SUPABASE_URL=<production-url>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<production-key>
+SUPABASE_SERVICE_ROLE_KEY=<production-service-key>
+BLOB_READ_WRITE_TOKEN=<production-blob-token>
+```
+
