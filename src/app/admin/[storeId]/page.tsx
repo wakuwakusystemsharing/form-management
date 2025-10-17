@@ -499,12 +499,13 @@ export default function StoreDetailPage() {
         const deployInfo = (form as any).static_deploy;
         let formUrl = '';
         
-        if (deployInfo) {
-          // Blob URLがある場合はそれを使用、なければ deploy_url にベースURLを付与
-          formUrl = deployInfo.blob_url || `${baseUrl}${deployInfo.deploy_url}`;
+        if (deployInfo?.blob_url) {
+          // Blob URLがある場合はそれを使用
+          formUrl = deployInfo.blob_url;
         } else {
-          // デプロイ情報がない場合はプレビューURL（非推奨）
-          formUrl = `${baseUrl}/form/${form.id}?preview=true`;
+          // Blob URLがない場合は本番URLを生成
+          // 本番環境: https://form-management-seven.vercel.app/prod/forms/{storeId}/{formId}.html
+          formUrl = `https://form-management-seven.vercel.app/prod/forms/${form.store_id}/${form.id}.html`;
         }
         
         return {
@@ -512,7 +513,7 @@ export default function StoreDetailPage() {
           name: (form as any).form_name || form.config?.basic_info?.form_name,
           url: formUrl,
           status: form.status,
-          environment: deployInfo?.environment || 'unknown'
+          environment: deployInfo?.environment || 'production'
         };
       })
     };
