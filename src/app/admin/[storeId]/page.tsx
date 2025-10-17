@@ -8,6 +8,7 @@ import { Form } from '@/types/form';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
 import MenuStructureEditor from '@/components/FormEditor/MenuStructureEditor';
 import BusinessRulesEditor from '@/components/FormEditor/BusinessRulesEditor';
+import { getPublicFormUrl, getPreviewUrl } from '@/lib/form-url-helper';
 
 // テンプレート定義
 const FORM_TEMPLATES = {

@@ -205,7 +205,7 @@ export async function POST(
           name_max_length: 50
         }
       },
-      status: 'inactive',
+      status: 'active',
       draft_status: 'none',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -368,7 +368,7 @@ export async function POST(
     const newFormData = {
       store_id: storeId,
       config: supabaseConfig,
-      status: 'inactive' as const,
+      status: 'active' as const,
       draft_status: 'none' as const,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
