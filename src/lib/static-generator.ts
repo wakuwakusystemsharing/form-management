@@ -166,18 +166,23 @@ class BookingForm {
     }
     
     async init() {
-        // カレンダーの初期設定
-        const today = new Date();
-        this.state.currentWeekStart = this.getWeekStart(today);
-        this.state.selectedDate = '';
-        this.state.selectedTime = '';
-        
-        await this.initializeLIFF();
-        
-        // カレンダーを初期レンダリング
-        this.renderCalendar();
-        
-        this.attachEventListeners();
+        try {
+            // カレンダーの初期設定
+            const today = new Date();
+            this.state.currentWeekStart = this.getWeekStart(today);
+            this.state.selectedDate = '';
+            this.state.selectedTime = '';
+            
+            await this.initializeLIFF();
+            
+            // カレンダーを初期レンダリング
+            this.renderCalendar();
+        } catch (error) {
+            console.error('Init error:', error);
+        } finally {
+            // エラーが発生してもイベントリスナーは必ず設定する
+            this.attachEventListeners();
+        }
     }
     
     async initializeLIFF() {
@@ -417,7 +422,7 @@ class BookingForm {
                 const bgColor = isSelected ? '#10b981' : (isAvailable && !isPast ? '#fff' : '#f3f4f6');
                 const textColor = isSelected ? '#fff' : (isAvailable && !isPast ? '#111827' : '#9ca3af');
                 const cursor = isAvailable && !isPast ? 'pointer' : 'not-allowed';
-                const hoverStyle = isAvailable && !isPast ? 'onmouseover="this.style.backgroundColor=\'#e5e7eb\'" onmouseout="if(!this.classList.contains(\'selected\')){this.style.backgroundColor=\'#fff\'}"' : '';
+                const hoverStyle = isAvailable && !isPast ? 'onmouseover="this.style.backgroundColor=&quot;#e5e7eb&quot;" onmouseout="if(!this.classList.contains(&quot;selected&quot;)){this.style.backgroundColor=&quot;#fff&quot;}"' : '';
                 
                 bodyHTML += \`<td 
                     data-date="\${dateStr}" 
@@ -585,7 +590,13 @@ class BookingForm {
 }
 
 // 初期化
-window.bookingForm = new BookingForm(FORM_CONFIG);
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        window.bookingForm = new BookingForm(FORM_CONFIG);
+    });
+} else {
+    window.bookingForm = new BookingForm(FORM_CONFIG);
+}
     </script>
 </body>
 </html>`;
