@@ -499,17 +499,15 @@ export default function StoreDetailPage() {
         const deployInfo = (form as any).static_deploy;
         let formUrl = '';
         
-        if (deployInfo?.storage_url) {
-          // Storage URLがある場合はそれを使用（最優先）
+        if (deployInfo?.deploy_url) {
+          // deploy_url（プロキシURL）を最優先で使用
+          formUrl = deployInfo.deploy_url;
+        } else if (deployInfo?.storage_url) {
+          // Storage URL（直接URL）
           formUrl = deployInfo.storage_url;
         } else if (deployInfo?.blob_url) {
-          // Blob URLがある場合はそれを使用
+          // Blob URL（旧URL）
           formUrl = deployInfo.blob_url;
-        } else if (deployInfo?.deploy_url) {
-          // deploy_urlがある場合
-          formUrl = deployInfo.deploy_url.startsWith('http') 
-            ? deployInfo.deploy_url 
-            : `${baseUrl}${deployInfo.deploy_url}`;
         } else {
           // デプロイ情報がない場合はプレビューURL
           formUrl = `${baseUrl}/form/${form.id}?preview=true`;

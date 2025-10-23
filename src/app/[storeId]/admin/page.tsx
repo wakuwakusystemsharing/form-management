@@ -199,10 +199,8 @@ export default function StoreAdminPage() {
                             <div className="text-sm flex-1">
                               <span className="font-medium text-green-800">顧客向け本番URL:</span>
                               <div className="text-xs text-green-600 mt-1 break-all">
-                                {/* Storage URLがある場合はそれを優先、次にBlob URL、なければ deploy_url にoriginを付与 */}
-                                {(form as any).static_deploy.storage_url || 
-                                 (form as any).static_deploy.blob_url || 
-                                 (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000') + (form as any).static_deploy.deploy_url}
+                                {/* deploy_url（プロキシURL）を最優先で表示 */}
+                                {(form as any).static_deploy.deploy_url}
                               </div>
                               <div className="text-xs text-gray-500 mt-1">
                                 最終更新: {new Date((form as any).static_deploy.deployed_at).toLocaleString('ja-JP')}
@@ -217,9 +215,7 @@ export default function StoreAdminPage() {
                             </div>
                             <button
                               onClick={() => {
-                                const urlToCopy = (form as any).static_deploy.storage_url || 
-                                                 (form as any).static_deploy.blob_url || 
-                                                 (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000') + (form as any).static_deploy.deploy_url;
+                                const urlToCopy = (form as any).static_deploy.deploy_url;
                                 navigator.clipboard.writeText(urlToCopy);
                                 alert('URLをコピーしました');
                               }}

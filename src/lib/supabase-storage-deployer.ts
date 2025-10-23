@@ -77,18 +77,27 @@ export class SupabaseStorageDeployer {
         throw new Error(`Supabase Storage upload failed: ${error.message}`);
       }
 
-      // 公開URLを取得
+      // 公開URLを取得（直接アクセス用）
       const { data: publicUrlData } = supabase.storage
         .from('forms')
         .getPublicUrl(storagePath);
 
-      const publicUrl = publicUrlData.publicUrl;
+      const directUrl = publicUrlData.publicUrl;
+      
+      // プロキシURL（Next.jsのAPIルート経由）を生成
+      // これにより正しいContent-Typeヘッダーで配信される
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+                      process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
+                      'http://localhost:3000';
+      const proxyUrl = `${baseUrl}/api/public-form/${storagePath}`;
 
-      console.log(`✅ [${env.toUpperCase()}] Form deployed to Supabase Storage: ${publicUrl}`);
+      console.log(`✅ [${env.toUpperCase()}] Form deployed to Supabase Storage`);
+      console.log(`   Direct URL: ${directUrl}`);
+      console.log(`   Proxy URL: ${proxyUrl}`);
       
       return {
-        url: publicUrl,
-        storage_url: publicUrl,
+        url: proxyUrl,
+        storage_url: directUrl,
         environment: env as 'staging' | 'production'
       };
     } catch (error) {

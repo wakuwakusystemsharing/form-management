@@ -278,16 +278,16 @@ export default function FormEditPage() {
                   </div>
                   <div className="flex items-center space-x-2">
                     <a 
-                      href={form.static_deploy.storage_url || form.static_deploy.blob_url || form.static_deploy.deploy_url}
+                      href={form.static_deploy.deploy_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-600 hover:text-blue-800 text-sm underline break-all"
                     >
-                      {form.static_deploy.storage_url || form.static_deploy.blob_url || form.static_deploy.deploy_url}
+                      {form.static_deploy.deploy_url}
                     </a>
                     <button
                       onClick={() => {
-                        const url = form.static_deploy?.storage_url || form.static_deploy?.blob_url || form.static_deploy?.deploy_url;
+                        const url = form.static_deploy?.deploy_url;
                         if (url) {
                           navigator.clipboard.writeText(url);
                           alert('URLをコピーしました');
