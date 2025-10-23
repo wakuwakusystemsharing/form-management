@@ -499,13 +499,20 @@ export default function StoreDetailPage() {
         const deployInfo = (form as any).static_deploy;
         let formUrl = '';
         
-        if (deployInfo?.blob_url) {
+        if (deployInfo?.storage_url) {
+          // Storage URLがある場合はそれを使用（最優先）
+          formUrl = deployInfo.storage_url;
+        } else if (deployInfo?.blob_url) {
           // Blob URLがある場合はそれを使用
           formUrl = deployInfo.blob_url;
+        } else if (deployInfo?.deploy_url) {
+          // deploy_urlがある場合
+          formUrl = deployInfo.deploy_url.startsWith('http') 
+            ? deployInfo.deploy_url 
+            : `${baseUrl}${deployInfo.deploy_url}`;
         } else {
-          // Blob URLがない場合は本番URLを生成
-          // 本番環境: https://form-management-seven.vercel.app/prod/forms/{storeId}/{formId}.html
-          formUrl = `https://form-management-seven.vercel.app/prod/forms/${form.store_id}/${form.id}.html`;
+          // デプロイ情報がない場合はプレビューURL
+          formUrl = `${baseUrl}/form/${form.id}?preview=true`;
         }
         
         return {
