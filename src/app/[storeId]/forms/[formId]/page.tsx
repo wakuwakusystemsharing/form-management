@@ -137,7 +137,7 @@ export default function FormEditPage() {
   const handleVercelDeploy = async () => {
     if (!form) return;
     
-    if (window.confirm('本番フォームを更新しますか？\n\n編集内容が顧客向けフォーム（Vercel Blob）に反映されます。')) {
+    if (window.confirm('本番フォームを更新しますか？\n\n編集内容が顧客向けフォームに反映されます。')) {
       setSaveStatus('saving');
       try {
         const response = await fetch(`/api/forms/${formId}/deploy`, {

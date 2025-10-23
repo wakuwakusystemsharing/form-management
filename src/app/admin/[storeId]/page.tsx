@@ -1072,24 +1072,15 @@ export default function StoreDetailPage() {
                     </label>
                     <input
                       type="url"
-                      value={(editingForm as any).gas_endpoint || editingForm.config?.gas_endpoint || ''}
+                      value={editingForm.config?.gas_endpoint || ''}
                       onChange={(e) => {
-                        if ((editingForm as any).gas_endpoint !== undefined) {
-                          // 新形式
-                          setEditingForm({
-                            ...editingForm,
+                        setEditingForm({
+                          ...editingForm,
+                          config: {
+                            ...editingForm.config,
                             gas_endpoint: e.target.value
-                          } as any);
-                        } else {
-                          // 旧形式
-                          setEditingForm({
-                            ...editingForm,
-                            config: {
-                              ...editingForm.config,
-                              gas_endpoint: e.target.value
-                            }
-                          });
-                        }
+                          }
+                        });
                       }}
                       className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-gray-100"
                       placeholder="例：https://script.google.com/macros/s/xxx/exec"
