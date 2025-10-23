@@ -74,7 +74,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
       
       if (deployResponse.ok) {
         const result = await deployResponse.json();
-        alert(`更新しました！\n${result.environment === 'local' ? 'ローカル' : 'Vercel Blob'}にデプロイされました。`);
+        alert(`更新しました！\n${result.environment === 'local' ? 'ローカル' : '本番環境'}にデプロイされました。`);
       } else {
         const error = await deployResponse.json();
         alert(`デプロイに失敗しました: ${error.error || '不明なエラー'}`);
