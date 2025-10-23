@@ -19,7 +19,7 @@ LINE LIFFを活用した予約フォーム管理システムです。サービ�
 ### 📋 店舗管理者機能
 - **フォーム基本情報設定**: 店舗名、フォーム名、LIFF ID、テーマカラーの設定
 - **メニュー・カテゴリ管理**: メニューの追加・編集・削除、カテゴリの作成・管理
-- **画像アップロード**: メニューに画像を添付（Vercel Blob統合）
+- **画像アップロード**: メニューに画像を添付（Supabase Storage統合）
 - **性別フィルタリング**: 性別によるメニュー表示制御
 - **営業時間設定**: 曜日別営業時間・定休日の設定
 - **プレビュー機能**: 変更内容をリアルタイムで確認
@@ -43,8 +43,8 @@ LINE LIFFを活用した予約フォーム管理システムです。サービ�
 - **Styling**: Tailwind CSS v4
 - **Database**: Supabase (Staging/Production), JSON ファイル (Local開発)
 - **Authentication**: Supabase Auth
-- **Image Hosting**: Vercel Blob Storage
-- **Static Deployment**: Vercel Blob（顧客向けフォーム）
+- **Storage**: Supabase Storage（画像・フォームHTML）
+- **Static Deployment**: Supabase Storage（顧客向けフォーム）
 - **Backend Integration**: Google Apps Script
 - **Package Manager**: pnpm
 

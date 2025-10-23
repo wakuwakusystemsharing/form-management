@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { Form } from '@/types/form';
 import { StaticFormGenerator } from '@/lib/static-generator';
-import { VercelBlobDeployer } from '@/lib/vercel-blob-deployer';
+import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 
@@ -223,10 +223,10 @@ export async function POST(
     storeForms.push(newForm);
     fs.writeFileSync(formsPath, JSON.stringify(storeForms, null, 2));
 
-    // 🚀 自動的にVercel Blobに初期テンプレートHTMLをデプロイ（公開ステータス）
+    // 🚀 自動的にSupabase Storageに初期テンプレートHTMLをデプロイ（公開ステータス）
     try {
       const generator = new StaticFormGenerator();
-      const deployer = new VercelBlobDeployer();
+      const deployer = new SupabaseStorageDeployer();
       
       // FormConfigに正規化
       const formConfig = {
@@ -283,19 +283,20 @@ export async function POST(
       const html = generator.generateHTML(formConfig);
       const deployResult = await deployer.deployForm(storeId, newFormId, html);
       
-      console.log(`✅ フォーム作成と同時にBlobにデプロイ: ${deployResult.blob_url || deployResult.url}`);
+      console.log(`✅ フォーム作成と同時にStorageにデプロイ: ${deployResult.storage_url || deployResult.url}`);
       
       // デプロイ情報をフォームに追加
       newForm.static_deploy = {
         deployed_at: new Date().toISOString(),
         deploy_url: deployResult.url,
+        storage_url: deployResult.storage_url,
         status: 'deployed'
       };
       
       // 更新を保存
       fs.writeFileSync(formsPath, JSON.stringify(storeForms, null, 2));
       } catch (deployError) {
-        console.error('⚠️ Blobデプロイに失敗しましたが、フォーム作成は成功しました:', deployError);
+        console.error('⚠️ Storageデプロイに失敗しましたが、フォーム作成は成功しました:', deployError);
         // デプロイ失敗してもフォーム作成は成功とする
       }
 

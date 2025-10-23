@@ -48,11 +48,20 @@
 - 出力 HTML は LIFF SDK script 埋め込み + インライン CSS (テーマ色 `config.basic_info.theme_color` 適用)
 - メニュー/オプション有無は `config.*.enabled` フラグで条件レンダリング
 
-### 6. Blob デプロイ仕様 (`VercelBlobDeployer`)
-- **環境別 prefix**: staging → `staging/forms/{storeId}/{formId}.html`, production → `prod/forms/{storeId}/{formId}.html`
-- **Blob ストレージ分離**: Vercel Dashboard で staging 用・prod 用の Blob トークンを別々に設定推奨
-- エラーハンドリング: Blob 失敗時は throw → 呼び出し側でユーザ通知必須 (再試行ロジック未実装: 追加する際は指数バックオフ推奨)
+### 6. Supabase Storage デプロイ仕様 (`SupabaseStorageDeployer`)
+- **環境別パス構造**: 
+  - staging → `staging/forms/{storeId}/{formId}/config/current.html`
+  - production → `prod/forms/{storeId}/{formId}/config/current.html`
+- **公開URL形式**: `{project-ref}.supabase.co/storage/v1/object/public/forms/{path}`
+- **Content-Type設定**: `text/html; charset=utf-8` で正しくブラウザ表示可能
+- **バケット設定**: 
+  - バケット名: `forms`
+  - パブリック読み取り: 有効（匿名ユーザーがアクセス可能）
+  - 書き込み権限: サービスロールのみ
+- **キャッシュ制御**: HTMLは1時間、画像は1年キャッシュ
+- エラーハンドリング: Storage 失敗時は throw → 呼び出し側でユーザ通知必須
 - 画像アップロード API で同クラス `uploadImage()` 利用 (パス命名一貫: `menu_images/{storeId}/{menuId}.{ext}`)
+- **旧Vercel Blob**: `vercel-blob-deployer.ts` は非推奨、1-2リリース後に削除予定
 
 ### 7. API パターン (例: `api/forms/[formId]/route.ts`)
 - GET: 正規化して単一返却 (404 メッセージは日本語固定)

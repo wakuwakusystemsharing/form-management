@@ -1,6 +1,14 @@
 /**
+ * @deprecated このファイルは非推奨です。代わりに supabase-storage-deployer.ts を使用してください。
+ * 
  * Vercel Blob Storageへのデプロイメント管理
  * フォームの静的HTMLをVercel Blobにアップロード
+ * 
+ * 理由: Vercel BlobはHTMLファイルをダウンロードとして扱うため、
+ * ブラウザで直接表示できない問題があります。
+ * Supabase Storageは正しいContent-Typeで配信できます。
+ * 
+ * 削除予定: 1-2リリース後
  */
 
 import { put, del, list } from '@vercel/blob';

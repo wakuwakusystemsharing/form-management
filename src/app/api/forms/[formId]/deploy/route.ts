@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { StaticFormGenerator } from '@/lib/static-generator';
-import { VercelBlobDeployer } from '@/lib/vercel-blob-deployer';
+import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
@@ -88,17 +88,17 @@ export async function POST(
     const generator = new StaticFormGenerator();
     const staticHtml = generator.generateHTML(formConfig);
     
-    // Vercel Blobにデプロイ（環境に応じて自動判定）
-    const deployer = new VercelBlobDeployer();
+    // Supabase Storageにデプロイ（環境に応じて自動判定）
+    const deployer = new SupabaseStorageDeployer();
     const deployResult = await deployer.deployForm(storeId, formId, staticHtml);
     
-    console.log(`✅ フォーム再デプロイ完了: ${deployResult.blob_url || deployResult.url}`);
+    console.log(`✅ フォーム再デプロイ完了: ${deployResult.storage_url || deployResult.url}`);
 
     // デプロイ情報をフォームに記録（環境に応じて）
     const deployInfo = {
       deployed_at: new Date().toISOString(),
       deploy_url: deployResult.url,
-      blob_url: deployResult.blob_url,
+      storage_url: deployResult.storage_url,
       status: 'deployed',
       environment: deployResult.environment
     };
@@ -135,7 +135,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      deployUrl: deployResult.blob_url || 
+      deployUrl: deployResult.storage_url || 
                  `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}${deployResult.url}`,
       deployedAt: deployInfo.deployed_at,
       environment: deployResult.environment
