@@ -80,7 +80,6 @@ export class VercelBlobDeployer {
         token: this.blobToken,
         contentType: 'text/html; charset=utf-8',
         addRandomSuffix: false,
-        disposition: 'inline',
       });
 
       console.log(`✅ [${env.toUpperCase()}] Form deployed to Blob: ${blob.url}`);
