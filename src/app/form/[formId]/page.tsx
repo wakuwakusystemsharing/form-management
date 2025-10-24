@@ -156,6 +156,67 @@ export default function CustomerFormPage() {
       };
     }
     
+    // business_hoursの構造を正規化（古い形式から新しい形式へ）
+    if (form.config.calendar_settings.business_hours) {
+      const hours = form.config.calendar_settings.business_hours as any;
+      
+      // 古い形式 {start: '09:00', end: '18:00'} を検出
+      if (hours.start && hours.end && !hours.monday) {
+        // 新しい形式に変換
+        const defaultHours = {
+          open: hours.start || '09:00',
+          close: hours.end || '18:00',
+          closed: false
+        };
+        
+        form.config.calendar_settings.business_hours = {
+          monday: { ...defaultHours },
+          tuesday: { ...defaultHours },
+          wednesday: { ...defaultHours },
+          thursday: { ...defaultHours },
+          friday: { ...defaultHours },
+          saturday: { ...defaultHours },
+          sunday: { ...defaultHours, closed: true }
+        } as any;
+      }
+      
+      // business_hoursが存在しない場合はデフォルト値を設定
+      if (!hours.monday) {
+        const defaultHours = {
+          open: '09:00',
+          close: '18:00',
+          closed: false
+        };
+        
+        form.config.calendar_settings.business_hours = {
+          monday: { ...defaultHours },
+          tuesday: { ...defaultHours },
+          wednesday: { ...defaultHours },
+          thursday: { ...defaultHours },
+          friday: { ...defaultHours },
+          saturday: { ...defaultHours },
+          sunday: { ...defaultHours, closed: true }
+        } as any;
+      }
+    } else {
+      // business_hoursが完全に存在しない場合
+      const defaultHours = {
+        open: '09:00',
+        close: '18:00',
+        closed: false
+      };
+      
+      form.config.calendar_settings.business_hours = {
+        monday: { ...defaultHours },
+        tuesday: { ...defaultHours },
+        wednesday: { ...defaultHours },
+        thursday: { ...defaultHours },
+        friday: { ...defaultHours },
+        saturday: { ...defaultHours },
+        sunday: { ...defaultHours, closed: true }
+      } as any;
+    }
+    
     return form as Form;
   }
 
