@@ -337,6 +337,15 @@ export async function POST(
         required_fields: ['name', 'phone'],
         phone_format: 'japanese' as const,
         name_max_length: 50
+      },
+      gas_endpoint: gas_endpoint || '',
+      calendar_settings: {
+        business_hours: {
+          start: '09:00',
+          end: '18:00'
+        },
+        advance_booking_days: 30,
+        google_calendar_url: ''
       }
     } : {
       basic_info: {
@@ -362,6 +371,15 @@ export async function POST(
         required_fields: ['name', 'phone'],
         phone_format: 'japanese' as const,
         name_max_length: 50
+      },
+      gas_endpoint: gas_endpoint || '',
+      calendar_settings: {
+        business_hours: {
+          start: '09:00',
+          end: '18:00'
+        },
+        advance_booking_days: 30,
+        google_calendar_url: ''
       }
     };
 
