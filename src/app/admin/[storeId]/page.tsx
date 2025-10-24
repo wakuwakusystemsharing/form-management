@@ -631,7 +631,7 @@ export default function StoreDetailPage() {
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => window.open(form.url, '_blank')}
-                        className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center"
+                        className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-center"
                         title="新しいタブで開く"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -657,13 +657,11 @@ export default function StoreDetailPage() {
                   {form.storageUrl && (
                     <div className="pt-2 border-t border-gray-600">
                       <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(form.storageUrl);
-                          alert('Storage URLをコピーしました');
-                        }}
+                        onClick={() => window.open(form.storageUrl!, '_blank')}
                         className="text-xs text-gray-400 hover:text-gray-300 underline"
+                        title="Storage URL を開く"
                       >
-                        Storage URL をコピー
+                        Storage URL を開く
                       </button>
                     </div>
                   )}

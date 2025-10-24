@@ -231,13 +231,10 @@ export default function StoreAdminPage() {
                           {(form as any).static_deploy.storage_url && (
                             <div className="pt-2 border-t border-green-200">
                               <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText((form as any).static_deploy.storage_url);
-                                  alert('Storage URLをコピーしました');
-                                }}
+                                onClick={() => window.open((form as any).static_deploy.storage_url, '_blank')}
                                 className="text-xs text-gray-600 hover:text-gray-800 underline"
                               >
-                                Storage URL をコピー
+                                Storage URL を開く
                               </button>
                             </div>
                           )}
