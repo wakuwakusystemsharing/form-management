@@ -341,8 +341,13 @@ export async function POST(
       gas_endpoint: gas_endpoint || '',
       calendar_settings: {
         business_hours: {
-          start: '09:00',
-          end: '18:00'
+          monday: { open: '09:00', close: '18:00', closed: false },
+          tuesday: { open: '09:00', close: '18:00', closed: false },
+          wednesday: { open: '09:00', close: '18:00', closed: false },
+          thursday: { open: '09:00', close: '18:00', closed: false },
+          friday: { open: '09:00', close: '18:00', closed: false },
+          saturday: { open: '09:00', close: '18:00', closed: false },
+          sunday: { open: '09:00', close: '18:00', closed: true }
         },
         advance_booking_days: 30,
         google_calendar_url: ''
@@ -375,8 +380,13 @@ export async function POST(
       gas_endpoint: gas_endpoint || '',
       calendar_settings: {
         business_hours: {
-          start: '09:00',
-          end: '18:00'
+          monday: { open: '09:00', close: '18:00', closed: false },
+          tuesday: { open: '09:00', close: '18:00', closed: false },
+          wednesday: { open: '09:00', close: '18:00', closed: false },
+          thursday: { open: '09:00', close: '18:00', closed: false },
+          friday: { open: '09:00', close: '18:00', closed: false },
+          saturday: { open: '09:00', close: '18:00', closed: false },
+          sunday: { open: '09:00', close: '18:00', closed: true }
         },
         advance_booking_days: 30,
         google_calendar_url: ''
