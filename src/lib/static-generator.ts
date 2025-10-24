@@ -156,7 +156,7 @@ class BookingForm {
             coupon: '',
             selectedMenu: null,
             selectedSubmenu: null,
-            selectedOptions: [],
+            selectedOptions: {}, // メニューIDをキーとしたオプションID配列
             selectedDate: '',
             selectedTime: '',
             message: ''
@@ -257,6 +257,9 @@ class BookingForm {
                         m.classList.remove('selected', 'has-submenu');
                     });
                     
+                    // オプションコンテナを全て非表示
+                    document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
+                    
                     if (!wasSelected) {
                         item.classList.add('selected', 'has-submenu');
                         this.state.selectedMenu = menu;
@@ -268,12 +271,61 @@ class BookingForm {
                     }
                 } else {
                     // 通常メニュー
+                    const wasSelected = item.classList.contains('selected');
                     document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('selected'));
-                    item.classList.add('selected');
-                    this.state.selectedMenu = menu;
-                    this.state.selectedSubmenu = null;
-                    this.hideSubmenu();
+                    
+                    // 全てのオプションコンテナを非表示
+                    document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
+                    
+                    if (!wasSelected) {
+                        item.classList.add('selected');
+                        this.state.selectedMenu = menu;
+                        this.state.selectedSubmenu = null;
+                        this.hideSubmenu();
+                        
+                        // このメニューのオプションコンテナを表示
+                        const optionsContainer = document.getElementById(\`options-\${menuId}\`);
+                        if (optionsContainer) {
+                            optionsContainer.style.display = 'block';
+                        }
+                    } else {
+                        this.state.selectedMenu = null;
+                    }
                 }
+                
+                // カレンダーの表示/非表示を切り替え
+                this.toggleCalendarVisibility();
+                this.updateSummary();
+            });
+        });
+        
+        // メニューオプション選択
+        document.querySelectorAll('.menu-option-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const menuId = item.dataset.menuId;
+                const optionId = item.dataset.optionId;
+                
+                // 現在のメニューのオプション配列を取得
+                const currentOptions = this.state.selectedOptions[menuId] || [];
+                
+                // オプションがすでに選択されているかチェック
+                const isSelected = currentOptions.includes(optionId);
+                
+                if (isSelected) {
+                    // 選択解除
+                    this.state.selectedOptions[menuId] = currentOptions.filter(id => id !== optionId);
+                    item.style.borderColor = '#d1d5db';
+                    item.style.backgroundColor = 'white';
+                    item.style.color = '#374151';
+                } else {
+                    // 選択
+                    this.state.selectedOptions[menuId] = [...currentOptions, optionId];
+                    item.style.borderColor = '#3b82f6';
+                    item.style.backgroundColor = '#eff6ff';
+                    item.style.color = '#1e40af';
+                }
+                
                 this.updateSummary();
             });
         });
@@ -348,6 +400,7 @@ class BookingForm {
                 document.querySelectorAll('.submenu-item').forEach(s => s.classList.remove('selected'));
                 sub.classList.add('selected');
                 this.state.selectedSubmenu = menu.sub_menu_items[idx];
+                this.toggleCalendarVisibility();
                 this.updateSummary();
             });
         });
@@ -356,6 +409,18 @@ class BookingForm {
     hideSubmenu() {
         const container = document.getElementById('submenu-container');
         if (container) container.remove();
+    }
+    
+    toggleCalendarVisibility() {
+        const calendarField = document.getElementById('datetime-field');
+        if (!calendarField) return;
+        
+        // メニューまたはサブメニューが選択されている場合のみカレンダーを表示
+        if (this.state.selectedMenu || this.state.selectedSubmenu) {
+            calendarField.style.display = 'block';
+        } else {
+            calendarField.style.display = 'none';
+        }
     }
     
     // 週の開始日を取得（月曜日）
@@ -526,6 +591,22 @@ class BookingForm {
                     \${this.state.selectedMenu.price ? \`<div style="font-size:0.875rem;color:#6b7280;">¥\${this.state.selectedMenu.price.toLocaleString()} / \${this.state.selectedMenu.duration}分</div>\` : ''}
                 \`;
             }
+            
+            // オプションを追加
+            const menuId = this.state.selectedMenu?.id;
+            if (menuId && this.state.selectedOptions[menuId] && this.state.selectedOptions[menuId].length > 0) {
+                const menu = this.state.selectedMenu;
+                const selectedOptionIds = this.state.selectedOptions[menuId];
+                const optionTexts = selectedOptionIds.map(optionId => {
+                    const option = menu.options?.find(o => o.id === optionId);
+                    if (option) {
+                        return \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ \${option.name}\${option.price > 0 ? \` (+¥\${option.price.toLocaleString()})\` : ''}</div>\`;
+                    }
+                    return '';
+                }).join('');
+                menuText += optionTexts;
+            }
+            
             items.push(\`<div class="summary-item" style="align-items:flex-start;"><div><strong>メニュー:</strong><div style="margin-top:0.25rem;">\${menuText}</div></div><button class="summary-edit-button" data-field="menu-field">修正</button></div>\`);
         }
         if (this.state.selectedDate || this.state.selectedTime) {
@@ -668,18 +749,42 @@ if (document.readyState === 'loading') {
                 ${config.menu_structure.categories.map(category => `
                     <div class="menu-list">
                         ${category.menus.map(menu => `
-                            <button type="button" class="menu-item" data-menu-id="${menu.id}" data-category-id="${category.id}">
-                                <div class="menu-item-content">
-                                    <div class="menu-item-name">${menu.name}${menu.has_submenu ? ' ▶' : ''}</div>
-                                    ${menu.description ? `<div class="menu-item-desc">${menu.description}</div>` : ''}
-                                </div>
-                                ${!menu.has_submenu && menu.price !== undefined ? `
-                                    <div class="menu-item-info">
-                                        ${config.menu_structure.display_options.show_price ? `<div class="menu-item-price">¥${menu.price.toLocaleString()}</div>` : ''}
-                                        ${config.menu_structure.display_options.show_duration && menu.duration ? `<div class="menu-item-duration">${menu.duration}分</div>` : ''}
+                            <div>
+                                <button type="button" class="menu-item" data-menu-id="${menu.id}" data-category-id="${category.id}">
+                                    <div class="menu-item-content">
+                                        <div class="menu-item-name">${menu.name}${menu.has_submenu ? ' ▶' : ''}</div>
+                                        ${menu.description ? `<div class="menu-item-desc">${menu.description}</div>` : ''}
                                     </div>
-                                ` : `<div class="menu-item-info"><div class="menu-item-desc">サブメニューを選択</div></div>`}
-                            </button>
+                                    ${!menu.has_submenu && menu.price !== undefined ? `
+                                        <div class="menu-item-info">
+                                            ${config.menu_structure.display_options.show_price ? `<div class="menu-item-price">¥${menu.price.toLocaleString()}</div>` : ''}
+                                            ${config.menu_structure.display_options.show_duration && menu.duration ? `<div class="menu-item-duration">${menu.duration}分</div>` : ''}
+                                        </div>
+                                    ` : `<div class="menu-item-info"><div class="menu-item-desc">サブメニューを選択</div></div>`}
+                                </button>
+                                ${!menu.has_submenu && menu.options && menu.options.length > 0 ? `
+                                    <div id="options-${menu.id}" class="menu-options-container" style="display:none;margin-left:1.5rem;padding-left:1rem;border-left:2px solid #bbf7d0;margin-top:0.75rem;margin-bottom:0.75rem;">
+                                        <div style="font-size:0.875rem;font-weight:500;color:#374151;margin-bottom:0.75rem;">オプション</div>
+                                        ${menu.options.map((option, optionIndex) => `
+                                            <button type="button" class="menu-option-item" data-menu-id="${menu.id}" data-option-id="${option.id || `option-${optionIndex}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
+                                                <div style="display:flex;align-items:center;">
+                                                    <div>
+                                                        <div style="text-align:left;font-size:0.875rem;font-weight:500;">
+                                                            ${this.escapeHtml(option.name)}
+                                                            ${option.is_default ? '<span style="margin-left:0.5rem;padding:0.25rem 0.5rem;font-size:0.75rem;background:#fed7aa;color:#9a3412;border-radius:0.25rem;">おすすめ</span>' : ''}
+                                                        </div>
+                                                        ${option.description ? `<div style="font-size:0.75rem;opacity:0.7;text-align:left;margin-top:0.125rem;">${this.escapeHtml(option.description)}</div>` : ''}
+                                                    </div>
+                                                </div>
+                                                <div style="text-align:right;margin-left:0.5rem;">
+                                                    ${config.menu_structure.display_options.show_price ? `<div style="font-weight:500;font-size:0.875rem;">${option.price > 0 ? `+¥${option.price.toLocaleString()}` : '無料'}</div>` : ''}
+                                                    ${config.menu_structure.display_options.show_duration && option.duration > 0 ? `<div style="font-size:0.75rem;opacity:0.7;">+${option.duration}分</div>` : ''}
+                                                </div>
+                                            </button>
+                                        `).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
                         `).join('')}
                     </div>
                 `).join('')}
@@ -689,7 +794,7 @@ if (document.readyState === 'loading') {
   private renderDateTimeField(): string {
     return `
             <!-- 日時選択 -->
-            <div class="field" id="datetime-field">
+            <div class="field" id="datetime-field" style="display:none;">
                 <label class="field-label">希望日時 <span class="required">*</span></label>
                 <div style="font-size:0.875rem;color:#6b7280;margin-bottom:1rem;">
                     ※メニューを選択すると空き状況のカレンダーが表示されます
