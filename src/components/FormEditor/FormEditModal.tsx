@@ -88,7 +88,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
   };
 
   const handlePreview = () => {
-    const previewUrl = `/form/${editingForm.id}?preview=true`;
+    const previewUrl = `/preview/${storeId}/forms/${editingForm.id}`;
     window.open(previewUrl, '_blank');
   };
 

@@ -128,7 +128,7 @@ export default function FormEditPage() {
     // まず保存してからプレビューを開く
     handleSave().then(() => {
       // 新しいウィンドウでプレビューを開く（統一テンプレート経由）
-      window.open(`/form/${formId}?preview=true`, '_blank');
+      window.open(`/preview/${storeId}/forms/${formId}`, '_blank');
     });
   };
 

@@ -498,6 +498,7 @@ export default function StoreDetailPage() {
         // static_deploy情報からURLを取得
         const deployInfo = (form as any).static_deploy;
         let formUrl = '';
+        let storageUrl = '';
         
         if (deployInfo?.deploy_url) {
           // deploy_url（プロキシURL）を最優先で使用
@@ -510,13 +511,19 @@ export default function StoreDetailPage() {
           formUrl = deployInfo.blob_url;
         } else {
           // デプロイ情報がない場合はプレビューURL
-          formUrl = `${baseUrl}/form/${form.id}?preview=true`;
+          formUrl = `${baseUrl}/preview/${storeId}/forms/${form.id}`;
+        }
+        
+        // storage_urlを別途保存
+        if (deployInfo?.storage_url) {
+          storageUrl = deployInfo.storage_url;
         }
         
         return {
           id: form.id,
           name: (form as any).form_name || form.config?.basic_info?.form_name,
           url: formUrl,
+          storageUrl: storageUrl,
           status: form.status,
           environment: deployInfo?.environment || 'production'
         };
@@ -601,52 +608,61 @@ export default function StoreDetailPage() {
             📎 お客様向けURL（LINEリッチメニュー用）
           </h2>
           
-          {/* 店舗管理者ページURL */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-cyan-300 mb-2">
-              店舗管理者ページ
-            </label>
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={urls.storeManagementUrl}
-                readOnly
-                className="flex-1 px-3 py-2 bg-gray-700 border border-gray-500 rounded-md text-sm text-gray-100 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
-              />
-              <button
-                onClick={() => navigator.clipboard.writeText(urls.storeManagementUrl)}
-                className="bg-cyan-600 text-white px-3 py-2 rounded-md hover:bg-cyan-500 text-sm transition-colors"
-              >
-                コピー
-              </button>
-            </div>
-          </div>
-
-          {/* フォームURL一覧 */}
+          {/* フォームURLカード（グリッドレイアウト） */}
           {urls.formUrls.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-cyan-300 mb-2">
-                予約フォーム
-              </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {urls.formUrls.map((form) => (
-                <div key={form.id} className="mb-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-cyan-300 min-w-0 flex-shrink-0">
-                      {form.name} ({form.status === 'active' ? '公開中' : '非公開'})
+                <div key={form.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                  {/* フォーム名とステータス */}
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-cyan-300 font-medium">{form.name}</h3>
+                    <span className={`px-2 py-1 rounded-full text-xs ${
+                      form.status === 'active' 
+                        ? 'bg-green-600 text-green-100' 
+                        : 'bg-gray-600 text-gray-300'
+                    }`}>
+                      {form.status === 'active' ? '公開中' : '非公開'}
                     </span>
-                    <input
-                      type="text"
-                      value={form.url}
-                      readOnly
-                      className="flex-1 px-3 py-1 bg-gray-700 border border-gray-500 rounded-md text-sm text-gray-100 focus:border-cyan-400"
-                    />
-                    <button
-                      onClick={() => navigator.clipboard.writeText(form.url)}
-                      className="bg-cyan-600 text-white px-3 py-1 rounded-md hover:bg-cyan-500 text-sm transition-colors"
-                    >
-                      コピー
-                    </button>
                   </div>
+                  
+                  {/* 本番URL（deploy_url）- 目立つ表示 */}
+                  <div className="mb-3">
+                    <label className="block text-xs text-gray-400 mb-2">顧客向け本番URL</label>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => window.open(form.url, '_blank')}
+                        className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center space-x-2"
+                      >
+                        <span>🔗</span>
+                        <span>開く</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(form.url);
+                          alert('URLをコピーしました');
+                        }}
+                        className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md text-sm transition-colors"
+                        title="URLをコピー"
+                      >
+                        📋
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Storage URL - 控えめな表示 */}
+                  {form.storageUrl && (
+                    <div className="pt-2 border-t border-gray-600">
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(form.storageUrl);
+                          alert('Storage URLをコピーしました');
+                        }}
+                        className="text-xs text-gray-400 hover:text-gray-300 underline"
+                      >
+                        Storage URL をコピー
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1206,7 +1222,7 @@ export default function StoreDetailPage() {
                 <button
                   onClick={async () => {
                     // プレビューを開く
-                    const previewUrl = `/form/${editingForm.id}?preview=true`;
+                    const previewUrl = `/preview/${storeId}/forms/${editingForm.id}`;
                     window.open(previewUrl, '_blank');
                   }}
                   className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors"

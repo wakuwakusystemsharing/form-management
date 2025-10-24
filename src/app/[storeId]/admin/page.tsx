@@ -192,38 +192,51 @@ export default function StoreAdminPage() {
                         </div>
                       </div>
                       
-                      {/* デプロイ情報 */}
+                      {/* デプロイ情報 - カードベース */}
                       {(form as any).static_deploy?.deploy_url ? (
-                        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                          <div className="flex items-center justify-between">
-                            <div className="text-sm flex-1">
-                              <span className="font-medium text-green-800">顧客向け本番URL:</span>
-                              <div className="text-xs text-green-600 mt-1 break-all">
-                                {/* deploy_url（プロキシURL）を最優先で表示 */}
-                                {(form as any).static_deploy.deploy_url}
-                              </div>
-                              <div className="text-xs text-gray-500 mt-1">
-                                最終更新: {new Date((form as any).static_deploy.deployed_at).toLocaleString('ja-JP')}
-                              </div>
-                              {(form as any).static_deploy.environment && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  環境: {(form as any).static_deploy.environment === 'local' ? '🔧 ローカル開発' : 
-                                         (form as any).static_deploy.environment === 'staging' ? '🧪 ステージング' : 
-                                         '✅ 本番環境'}
-                                </div>
-                              )}
+                        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="mb-3">
+                            <span className="text-sm font-medium text-green-800">顧客向け本番URL</span>
+                            <div className="text-xs text-gray-500 mt-1">
+                              最終更新: {new Date((form as any).static_deploy.deployed_at).toLocaleString('ja-JP')}
                             </div>
+                          </div>
+                          
+                          {/* 本番URL（deploy_url）- 目立つ表示 */}
+                          <div className="flex items-center space-x-2 mb-3">
+                            <button
+                              onClick={() => window.open((form as any).static_deploy.deploy_url, '_blank')}
+                              className="flex-1 bg-green-600 hover:bg-green-500 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center space-x-2"
+                            >
+                              <span>🔗</span>
+                              <span>開く</span>
+                            </button>
                             <button
                               onClick={() => {
-                                const urlToCopy = (form as any).static_deploy.deploy_url;
-                                navigator.clipboard.writeText(urlToCopy);
+                                navigator.clipboard.writeText((form as any).static_deploy.deploy_url);
                                 alert('URLをコピーしました');
                               }}
-                              className="ml-2 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 flex-shrink-0"
+                              className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md text-sm transition-colors"
+                              title="URLをコピー"
                             >
-                              コピー
+                              📋
                             </button>
                           </div>
+                          
+                          {/* Storage URL - 控えめな表示 */}
+                          {(form as any).static_deploy.storage_url && (
+                            <div className="pt-2 border-t border-green-200">
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText((form as any).static_deploy.storage_url);
+                                  alert('Storage URLをコピーしました');
+                                }}
+                                className="text-xs text-gray-600 hover:text-gray-800 underline"
+                              >
+                                Storage URL をコピー
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
@@ -249,7 +262,7 @@ export default function StoreAdminPage() {
                         編集
                       </button>
                       <button
-                        onClick={() => window.open(`/form/${form.id}?preview=true`, '_blank')}
+                        onClick={() => window.open(`/preview/${storeId}/forms/${form.id}`, '_blank')}
                         className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 text-sm"
                       >
                         プレビュー

@@ -20,7 +20,7 @@ export function getProductionBlobUrl(storeId: string, formId: string): string {
  * @returns プレビュー URL
  */
 export function getPreviewUrl(storeId: string, formId: string): string {
-  return `/form/${formId}?preview=true`;
+  return `/preview/${storeId}/forms/${formId}`;
 }
 
 /**
