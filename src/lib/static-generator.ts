@@ -382,6 +382,14 @@ class BookingForm {
         const table = document.getElementById('calendar-table');
         if (!table) return;
         
+    // 事前予約可能日数の上限日を算出
+    const days = (this.config?.calendar_settings?.advance_booking_days ?? 30);
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const max = new Date(today);
+    max.setDate(today.getDate() + days);
+    max.setHours(23,59,59,999);
+
         const weekDates = this.getWeekDates(this.state.currentWeekStart);
         const timeSlots = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30',
                           '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'];
@@ -413,8 +421,10 @@ class BookingForm {
             bodyHTML += \`<td style="text-align:center;padding:0.25rem;border:2px solid #696969;font-size:0.75rem;background:#f9fafb;font-weight:500;">\${time}</td>\`;
             
             weekDates.forEach((date, dateIndex) => {
-                const dateStr = date.toISOString().split('T')[0];
-                const isAvailable = Math.random() > 0.3; // 空き状況（後でAPI連携）
+        const dateStr = date.toISOString().split('T')[0];
+        // 予約可能期間の判定
+        const withinWindow = date.getTime() <= max.getTime();
+        const isAvailable = withinWindow && (Math.random() > 0.3); // 空き状況（後でAPI連携）
                 const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
                 const isPast = new Date() > new Date(date.getFullYear(), date.getMonth(), date.getDate(), 
                     parseInt(time.split(':')[0]), parseInt(time.split(':')[1]));

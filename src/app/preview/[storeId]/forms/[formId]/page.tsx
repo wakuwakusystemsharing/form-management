@@ -52,6 +52,22 @@ export default function PreviewFormPage() {
     return new Date(d.setDate(diff));
   }
 
+  // 事前予約可能日数の上限日を取得（当日を含め advance_booking_days 日先の23:59:59 まで）
+  const getMaxBookingDate = () => {
+    const days = form?.config?.calendar_settings?.advance_booking_days ?? 30;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const max = new Date(today);
+    max.setDate(today.getDate() + days);
+    max.setHours(23, 59, 59, 999);
+    return max;
+  };
+
+  const isWithinAdvanceWindow = (date: Date) => {
+    const max = getMaxBookingDate();
+    return date.getTime() <= max.getTime();
+  };
+
   // プレビューモード検出とフォーム取得（統合）
   useEffect(() => {
     const fetchForm = async () => {
@@ -534,6 +550,8 @@ export default function PreviewFormPage() {
     if (!form || (!formData.selectedDate && !date)) return [];
     
     const targetDate = date || new Date(formData.selectedDate);
+    // 予約可能期間外は空枠なし
+    if (!isWithinAdvanceWindow(targetDate)) return [];
     const selectedDayOfWeek = targetDate.getDay();
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const dayName = dayNames[selectedDayOfWeek] as keyof typeof form.config.calendar_settings.business_hours;
@@ -573,6 +591,12 @@ export default function PreviewFormPage() {
   const navigateWeek = (direction: 'prev' | 'next') => {
     const newWeekStart = new Date(currentWeekStart);
     newWeekStart.setDate(currentWeekStart.getDate() + (direction === 'next' ? 7 : -7));
+    // 上限週を越えないようにクランプ
+    const maxWeekStart = getWeekStart(getMaxBookingDate());
+    if (direction === 'next' && newWeekStart > maxWeekStart) {
+      setCurrentWeekStart(maxWeekStart);
+      return;
+    }
     setCurrentWeekStart(newWeekStart);
   };
 
@@ -580,7 +604,12 @@ export default function PreviewFormPage() {
   const navigateMonth = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentWeekStart);
     newDate.setMonth(currentWeekStart.getMonth() + (direction === 'next' ? 1 : -1));
-    setCurrentWeekStart(getWeekStart(newDate));
+    let nextWeekStart = getWeekStart(newDate);
+    const maxWeekStart = getWeekStart(getMaxBookingDate());
+    if (direction === 'next' && nextWeekStart > maxWeekStart) {
+      nextWeekStart = maxWeekStart;
+    }
+    setCurrentWeekStart(nextWeekStart);
   };
 
   // メニューが選択されているかチェック
