@@ -181,9 +181,6 @@ export default function PreviewFormPage() {
     return form as Form;
   }
 
-  // 残りのロジックは既存のフォームページと同じため、
-  // 簡略化のため、プレビューモードのバナーとエラー表示のみ実装
-  
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -211,7 +208,7 @@ export default function PreviewFormPage() {
   }
 
   // プレビューモードでは、既存のフォームページと同じUIを表示
-  // 実際の実装では、/form/[formId]/page.tsx のコンポーネントをインポートして再利用
+  // 実際のフォーム表示は /form/[formId]?preview=true にリダイレクト
   return (
     <div className="min-h-screen bg-gray-50">
       {/* プレビューモードバナー */}
@@ -258,10 +255,21 @@ export default function PreviewFormPage() {
         </div>
 
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <p className="text-gray-600 text-center">
-            プレビュー機能は現在開発中です。<br />
-            実際のフォーム表示は /form/{formId}?preview=true でご確認ください。
-          </p>
+          <div className="text-center">
+            <p className="text-gray-600 mb-4">
+              プレビュー機能は現在開発中です。<br />
+              実際のフォーム表示は以下のURLでご確認ください。
+            </p>
+            <button
+              onClick={() => {
+                const previewUrl = `/form/${formId}?preview=true`;
+                window.location.href = previewUrl;
+              }}
+              className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition-colors"
+            >
+              完全なプレビューを表示
+            </button>
+          </div>
         </div>
       </div>
     </div>
