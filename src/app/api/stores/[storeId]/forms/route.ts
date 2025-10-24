@@ -418,7 +418,42 @@ export async function POST(
       );
     }
 
-    // TODO: Vercel Blobデプロイも staging/production で対応する場合はここに追加
+    // 🚀 Supabase Storageに初期テンプレートHTMLをデプロイ（staging/production）
+    try {
+      const generator = new StaticFormGenerator();
+      const deployer = new SupabaseStorageDeployer();
+
+      // FormConfigをそのまま使用してHTMLを生成
+      // supabaseConfig は FormConfig 互換の形で構築済み
+      const html = generator.generateHTML(supabaseConfig as unknown as any);
+      const createdFormId = (newForm as any).id as string;
+      const deployResult = await deployer.deployForm(storeId, createdFormId, html);
+
+      console.log(`✅ [${env}] フォーム作成と同時にStorageにデプロイ: ${deployResult.storage_url || deployResult.url}`);
+
+      // デプロイ情報をフォームに反映
+      const staticDeploy = {
+        deployed_at: new Date().toISOString(),
+        deploy_url: deployResult.url,
+        storage_url: deployResult.storage_url,
+        status: 'deployed' as const
+      };
+
+      const { error: updateError } = await (adminClient as any)
+        .from('forms')
+        .update({ static_deploy: staticDeploy })
+        .eq('id', createdFormId);
+
+      if (updateError) {
+        console.error('⚠️ デプロイ情報の更新に失敗:', updateError);
+      } else {
+        // レスポンスに反映して返す
+        (newForm as any).static_deploy = staticDeploy;
+      }
+    } catch (deployError) {
+      console.error('⚠️ Storageデプロイに失敗しましたが、フォーム作成は成功しました:', deployError);
+      // デプロイ失敗してもフォーム作成は成功とする
+    }
 
     return NextResponse.json(newForm, { status: 201 });
   } catch (error) {
