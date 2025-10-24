@@ -175,8 +175,8 @@ class BookingForm {
             
             await this.initializeLIFF();
             
-            // カレンダーを初期レンダリング
-            this.renderCalendar();
+            // カレンダーは初期表示しない（メニュー選択後に表示）
+            // this.renderCalendar();
         } catch (error) {
             console.error('Init error:', error);
         } finally {
@@ -245,7 +245,12 @@ class BookingForm {
         
         // メニュー選択
         document.querySelectorAll('.menu-item').forEach(item => {
-            item.addEventListener('click', () => {
+            item.addEventListener('click', (e) => {
+                // オプションボタンからのイベント伝播を防ぐ
+                if (e.target.closest('.menu-option-item')) {
+                    return;
+                }
+                
                 const menuId = item.dataset.menuId;
                 const categoryId = item.dataset.categoryId;
                 const menu = this.findMenu(categoryId, menuId);
@@ -418,6 +423,8 @@ class BookingForm {
         // メニューまたはサブメニューが選択されている場合のみカレンダーを表示
         if (this.state.selectedMenu || this.state.selectedSubmenu) {
             calendarField.style.display = 'block';
+            // カレンダーを初めて表示する際にレンダリング
+            this.renderCalendar();
         } else {
             calendarField.style.display = 'none';
         }
