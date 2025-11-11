@@ -652,17 +652,74 @@ class BookingForm {
         }
         
         try {
-            // GASエンドポイントに送信
-            if (this.config.gas_endpoint) {
-                await fetch(this.config.gas_endpoint, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        formData: this.state,
-                        submittedAt: new Date().toISOString()
-                    })
-                });
+            // 日時を日本語形式に変換
+            const dateObj = new Date(this.state.selectedDate);
+            const formattedDate = \`\${dateObj.getFullYear()}年\${String(dateObj.getMonth() + 1).padStart(2, '0')}月\${String(dateObj.getDate()).padStart(2, '0')}日 \${this.state.selectedTime}\`;
+            
+            // メッセージ本文を構築
+            let messageText = '【予約フォーム】\\n';
+            messageText += \`お名前：\${this.state.name}\\n\`;
+            messageText += \`電話番号：\${this.state.phone}\\n\`;
+            
+            // 性別（有効な場合）
+            if (this.config.gender_selection?.enabled && this.state.gender) {
+                const genderLabel = this.config.gender_selection.options.find(o => o.value === this.state.gender)?.label;
+                if (genderLabel) {
+                    messageText += \`性別：\${genderLabel}\\n\`;
+                }
+            }
+            
+            // ご来店回数（有効な場合）
+            if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
+                const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
+                if (visitLabel) {
+                    messageText += \`ご来店回数：\${visitLabel}\\n\`;
+                }
+            }
+            
+            // クーポン（有効な場合）
+            if (this.config.coupon_selection?.enabled && this.state.coupon) {
+                const couponLabel = this.config.coupon_selection.options.find(o => o.value === this.state.coupon)?.label;
+                if (couponLabel) {
+                    messageText += \`クーポン：\${couponLabel}\\n\`;
+                }
+            }
+            
+            // コース/カテゴリー
+            if (this.state.selectedMenu) {
+                const category = this.config.menu_structure.categories.find(c => 
+                    c.menus.some(m => m.id === this.state.selectedMenu.id)
+                );
+                if (category) {
+                    messageText += \`コース：\${category.name}\\n\`;
+                }
+            }
+            
+            // メニュー
+            let menuText = '';
+            if (this.state.selectedSubmenu) {
+                menuText = \`\${this.state.selectedMenu.name} > \${this.state.selectedSubmenu.name}\`;
+            } else if (this.state.selectedMenu) {
+                menuText = this.state.selectedMenu.name;
+            }
+            
+            // オプション
+            const menuId = this.state.selectedMenu?.id;
+            if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
+                const optionNames = this.state.selectedOptions[menuId].map(optionId => {
+                    const option = this.state.selectedMenu.options?.find(o => o.id === optionId);
+                    return option?.name || '';
+                }).filter(Boolean);
+                if (optionNames.length > 0) {
+                    menuText += ', ' + optionNames.join(', ');
+                }
+            }
+            
+            messageText += \`メニュー：\${menuText}\\n\`;
+            messageText += \`希望日時：\\n \${formattedDate}\\n\`;
+            
+            if (this.state.message) {
+                messageText += \`メッセージ：\${this.state.message}\`;
             }
             
             // 成功画面を表示
@@ -677,8 +734,14 @@ class BookingForm {
             if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
                 liff.sendMessages([{
                     type: 'text',
-                    text: \`【予約確認】\\n店舗: \${this.config.basic_info.store_name}\\n日時: \${this.state.selectedDate} \${this.state.selectedTime}\\nお名前: \${this.state.name}\\n電話番号: \${this.state.phone}\\n\\nご予約ありがとうございます。\`
-                }]);
+                    text: messageText
+                }]).then(() => {
+                    // メッセージ送信成功後にウィンドウを閉じる
+                    alert('当日キャンセルは無いようにお願いいたします。');
+                    liff.closeWindow();
+                }).catch((err) => {
+                    console.error('メッセージの送信に失敗しました', err);
+                });
             }
         } catch (error) {
             console.error('Submit error:', error);
