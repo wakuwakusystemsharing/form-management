@@ -1257,9 +1257,29 @@ export default function StoreDetailPage() {
                       });
                       
                       if (deployResponse.ok) {
-                        alert('静的HTMLを更新しました！');
+                        const result = await deployResponse.json();
+                        
+                        // フォーム一覧を再フェッチしてstatic_deploy情報を更新
+                        try {
+                          const formsResponse = await fetch(`/api/stores/${storeId}/forms`, {
+                            credentials: 'include',
+                          });
+                          if (formsResponse.ok) {
+                            const formsData = await formsResponse.json();
+                            setForms(formsData);
+                          }
+                        } catch (error) {
+                          console.error('Forms refresh error:', error);
+                        }
+                        
+                        // モーダルを閉じる
+                        setShowEditModal(false);
+                        setEditingForm(null);
+                        
+                        alert(`静的HTMLを更新しました！\n\n顧客向けURL: ${result.deployUrl}\n\n※ ブラウザのキャッシュをクリアするか、数分後に再読み込みしてください。`);
                       } else {
-                        alert('デプロイに失敗しました');
+                        const error = await deployResponse.json();
+                        alert(`デプロイに失敗しました: ${error.error || '不明なエラー'}`);
                       }
                     } catch (error) {
                       console.error('Deploy error:', error);
