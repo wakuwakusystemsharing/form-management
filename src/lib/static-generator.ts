@@ -741,11 +741,13 @@ class BookingForm {
                     menuText = menuParts.join(' > ');
                 }
                 
-                // オプションを追加
+                // オプションを追加（サブメニューが選択されている場合でも親メニューのオプションを表示）
                 const menuId = this.state.selectedMenu.id;
                 if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
-                    const optionNames = this.state.selectedOptions[menuId].map(optionId => {
-                        const option = this.state.selectedMenu.options?.find(o => o.id === optionId);
+                    const menu = this.state.selectedMenu;
+                    const selectedOptionIds = this.state.selectedOptions[menuId];
+                    const optionNames = selectedOptionIds.map(optionId => {
+                        const option = menu.options?.find(o => o.id === optionId);
                         return option?.name || '';
                     }).filter(Boolean);
                     if (optionNames.length > 0) {

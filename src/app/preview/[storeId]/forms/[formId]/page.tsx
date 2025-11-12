@@ -690,10 +690,72 @@ export default function PreviewFormPage() {
                           <div key={categoryId}>
                             {menuIds.map(menuId => {
                               const menu = category?.menus.find(m => m.id === menuId);
-                              return menu ? (
-                                <div key={menuId}>• {menu.name} {menu.price ? `(¥${menu.price.toLocaleString()})` : ''}</div>
-                              ) : null;
+                              if (!menu) return null;
+                              
+                              // オプション情報を取得
+                              const selectedOptions = formData.selectedMenuOptions[menuId] || [];
+                              const optionTexts = selectedOptions.map(optionId => {
+                                const option = menu.options?.find(o => o.id === optionId);
+                                return option ? option.name : '';
+                              }).filter(Boolean);
+                              
+                              return (
+                                <div key={menuId}>
+                                  • {menu.name} {menu.price ? `(¥${menu.price.toLocaleString()})` : ''}
+                                  {optionTexts.length > 0 && (
+                                    <div className="ml-4 text-xs text-gray-500">
+                                      + {optionTexts.join(', ')}
+                                    </div>
+                                  )}
+                                </div>
+                              );
                             })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {Object.entries(formData.selectedSubMenus).some(([, subMenuId]) => subMenuId !== '') && (
+                  <div>
+                    <span className="font-medium">選択サブメニュー:</span>
+                    <div className="ml-4">
+                      {Object.entries(formData.selectedSubMenus).map(([menuId, subMenuId]) => {
+                        if (!subMenuId) return null;
+                        
+                        // メニューを探す
+                        let parentMenu = null;
+                        let subMenu = null;
+                        
+                        for (const category of form.config.menu_structure.categories) {
+                          const foundMenu = category.menus.find(m => m.id === menuId);
+                          if (foundMenu && foundMenu.sub_menu_items) {
+                            parentMenu = foundMenu;
+                            subMenu = foundMenu.sub_menu_items.find((sm, idx) => {
+                              const smId = sm.id || `submenu-${idx}`;
+                              return smId === subMenuId;
+                            });
+                            break;
+                          }
+                        }
+                        
+                        if (!subMenu || !parentMenu) return null;
+                        
+                        // オプション情報を取得
+                        const selectedOptions = formData.selectedMenuOptions[menuId] || [];
+                        const optionTexts = selectedOptions.map(optionId => {
+                          const option = parentMenu.options?.find(o => o.id === optionId);
+                          return option ? option.name : '';
+                        }).filter(Boolean);
+                        
+                        return (
+                          <div key={`${menuId}-${subMenuId}`}>
+                            • {parentMenu.name} - {subMenu.name} {subMenu.price ? `(¥${subMenu.price.toLocaleString()})` : ''}
+                            {optionTexts.length > 0 && (
+                              <div className="ml-4 text-xs text-gray-500">
+                                + {optionTexts.join(', ')}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -792,11 +854,25 @@ export default function PreviewFormPage() {
                             <div key={categoryId} className="ml-4">
                               {menuIds.map(menuId => {
                                 const menu = category?.menus.find(m => m.id === menuId);
-                                return menu ? (
+                                if (!menu) return null;
+                                
+                                // オプション情報を取得
+                                const selectedOptions = formData.selectedMenuOptions[menuId] || [];
+                                const optionTexts = selectedOptions.map(optionId => {
+                                  const option = menu.options?.find(o => o.id === optionId);
+                                  return option ? option.name : '';
+                                }).filter(Boolean);
+                                
+                                return (
                                   <div key={menuId} className="text-sm font-medium">
                                     • {menu.name} {menu.price ? `(¥${menu.price.toLocaleString()})` : ''}
+                                    {optionTexts.length > 0 && (
+                                      <div className="ml-4 text-xs text-gray-500">
+                                        + {optionTexts.join(', ')}
+                                      </div>
+                                    )}
                                   </div>
-                                ) : null;
+                                );
                               })}
                             </div>
                           );
@@ -1475,13 +1551,27 @@ export default function PreviewFormPage() {
                           <div key={categoryId}>
                             {menuIds.map(menuId => {
                               const menu = category?.menus.find(m => m.id === menuId);
-                              return menu ? (
+                              if (!menu) return null;
+                              
+                              // オプション情報を取得
+                              const selectedOptions = formData.selectedMenuOptions[menuId] || [];
+                              const optionTexts = selectedOptions.map(optionId => {
+                                const option = menu.options?.find(o => o.id === optionId);
+                                return option ? option.name : '';
+                              }).filter(Boolean);
+                              
+                              return (
                                 <div key={menuId} className="text-sm">
                                   • {menu.name} 
                                   {menu.price ? ` (¥${menu.price.toLocaleString()})` : ''}
                                   {menu.duration ? ` • ${menu.duration}分` : ''}
+                                  {optionTexts.length > 0 && (
+                                    <div className="ml-4 text-xs text-gray-500">
+                                      + {optionTexts.join(', ')}
+                                    </div>
+                                  )}
                                 </div>
-                              ) : null;
+                              );
                             })}
                           </div>
                         );
@@ -1515,13 +1605,27 @@ export default function PreviewFormPage() {
                           }
                         }
                         
-                        return subMenu ? (
+                        if (!subMenu || !parentMenu) return null;
+                        
+                        // オプション情報を取得
+                        const selectedOptions = formData.selectedMenuOptions[menuId] || [];
+                        const optionTexts = selectedOptions.map(optionId => {
+                          const option = parentMenu.options?.find(o => o.id === optionId);
+                          return option ? option.name : '';
+                        }).filter(Boolean);
+                        
+                        return (
                           <div key={`${menuId}-${subMenuId}`} className="text-sm">
-                            • {parentMenu?.name} - {subMenu.name}
+                            • {parentMenu.name} - {subMenu.name}
                             {subMenu.price ? ` (¥${subMenu.price.toLocaleString()})` : ''}
                             {subMenu.duration ? ` • ${subMenu.duration}分` : ''}
+                            {optionTexts.length > 0 && (
+                              <div className="ml-4 text-xs text-gray-500">
+                                + {optionTexts.join(', ')}
+                              </div>
+                            )}
                           </div>
-                        ) : null;
+                        );
                       })}
                     </div>
                   </div>
