@@ -155,7 +155,9 @@ export async function POST(
         button_style: 'rounded' as const,
         show_repeat_booking: template.config?.ui_settings?.show_repeat_booking || false,
         show_side_nav: true,
-        custom_css: undefined
+        custom_css: undefined,
+        show_visit_count: template.config?.ui_settings?.show_visit_count || false,
+        show_coupon_selection: template.config?.ui_settings?.show_coupon_selection || false
       },
       gas_endpoint: (template as FormTemplate)?.gas_endpoint || gas_endpoint || ''
     } : {
@@ -176,7 +178,9 @@ export async function POST(
         button_style: 'rounded' as const,
         show_repeat_booking: false,
         show_side_nav: true,
-        custom_css: undefined
+        custom_css: undefined,
+        show_visit_count: false,
+        show_coupon_selection: false
       },
       gas_endpoint: gas_endpoint || ''
     };
