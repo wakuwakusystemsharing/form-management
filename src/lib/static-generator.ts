@@ -706,64 +706,45 @@ class BookingForm {
             }
             messageText += \`ご来店回数：\${visitCountText}\\n\`;
             
-            // コース/カテゴリー（old_index.htmlでは常に表示、booking.gsも期待している）
-            let courseText = '';
+            // メニュー（詳細な予約内容を含める：カテゴリー名 > メニュー名 > サブメニュー名, オプション名）
+            let menuText = '';
+            
             if (this.state.selectedMenu) {
+                // カテゴリー名を取得
                 const category = this.config.menu_structure.categories.find(c => 
                     c.menus.some(m => m.id === this.state.selectedMenu.id)
                 );
-                courseText = category?.name || '';
-            }
-            messageText += \`コース：\${courseText}\\n\`;
-            
-            // メニュー（常に表示、old_index.htmlと同じ形式：配列として扱う）
-            let selectedSymptomArray = [];
-            // デバッグ: メニュー選択状態を確認
-            console.log('Selected menu state:', {
-                selectedMenu: this.state.selectedMenu,
-                selectedSubmenu: this.state.selectedSubmenu,
-                selectedOptions: this.state.selectedOptions
-            });
-            
-            if (this.state.selectedSubmenu && this.state.selectedMenu) {
-                // サブメニューが選択されている場合
-                const menuName = this.state.selectedMenu?.name || '';
-                const submenuName = this.state.selectedSubmenu?.name || '';
-                if (menuName && submenuName) {
-                    selectedSymptomArray.push(\`\${menuName} > \${submenuName}\`);
+                
+                // メニュー詳細を構築：カテゴリー > メニュー > サブメニュー
+                const menuParts = [];
+                if (category?.name) {
+                    menuParts.push(category.name);
                 }
-            } else if (this.state.selectedMenu) {
-                // 通常メニューが選択されている場合
-                const menuName = this.state.selectedMenu?.name || '';
-                if (menuName) {
-                    selectedSymptomArray.push(menuName);
-                } else {
-                    // メニューオブジェクトはあるがnameプロパティがない場合のフォールバック
-                    console.warn('Menu selected but name is missing:', this.state.selectedMenu);
+                if (this.state.selectedMenu.name) {
+                    menuParts.push(this.state.selectedMenu.name);
                 }
-            } else {
-                // メニューが選択されていない場合
-                console.warn('No menu selected at submit time');
-            }
-            
-            // オプション（old_index.htmlと同じ形式：カンマ区切りの文字列）
-            let irradiationsCount = '';
-            const menuId = this.state.selectedMenu?.id;
-            if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
-                const optionNames = this.state.selectedOptions[menuId].map(optionId => {
-                    const option = this.state.selectedMenu?.options?.find(o => o.id === optionId);
-                    return option?.name || '';
-                }).filter(Boolean);
-                if (optionNames.length > 0) {
-                    irradiationsCount = optionNames.join(', ');
+                if (this.state.selectedSubmenu?.name) {
+                    menuParts.push(this.state.selectedSubmenu.name);
+                }
+                
+                if (menuParts.length > 0) {
+                    menuText = menuParts.join(' > ');
+                }
+                
+                // オプションを追加
+                const menuId = this.state.selectedMenu.id;
+                if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
+                    const optionNames = this.state.selectedOptions[menuId].map(optionId => {
+                        const option = this.state.selectedMenu.options?.find(o => o.id === optionId);
+                        return option?.name || '';
+                    }).filter(Boolean);
+                    if (optionNames.length > 0) {
+                        menuText += (menuText ? ', ' : '') + optionNames.join(', ');
+                    }
                 }
             }
             
-            // old_index.htmlと同じ形式：selectedSymptom（配列）とirradiationsCount（文字列）を結合
-            // booking.gsのparseReservationFormは「メニュー：」の後にカンマ区切りの文字列を期待
-            // 配列を文字列化するとカンマ区切りになる（例：["コースA"] → "コースA"）
-            const selectedSymptomText = selectedSymptomArray.length > 0 ? selectedSymptomArray.join(',') : '';
-            messageText += \`メニュー：\${selectedSymptomText}\${irradiationsCount ? ',' + irradiationsCount : ''}\\n\`;
+            messageText += \`メニュー：\${menuText}\\n\`;
             
             // 希望日時（常に表示、booking.gsは「希望日時：」の次の行を日時として解析）
             messageText += \`希望日時：\\n \${formattedDate}\\n\`;
