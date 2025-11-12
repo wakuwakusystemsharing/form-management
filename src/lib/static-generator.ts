@@ -695,15 +695,16 @@ class BookingForm {
                 }
             }
             
-            // メニュー
-            let menuText = '';
+            // メニュー（old_index.htmlと同じ形式：配列として扱う）
+            let selectedSymptomArray = [];
             if (this.state.selectedSubmenu) {
-                menuText = \`\${this.state.selectedMenu.name} > \${this.state.selectedSubmenu.name}\`;
+                selectedSymptomArray.push(\`\${this.state.selectedMenu.name} > \${this.state.selectedSubmenu.name}\`);
             } else if (this.state.selectedMenu) {
-                menuText = this.state.selectedMenu.name;
+                selectedSymptomArray.push(this.state.selectedMenu.name);
             }
             
-            // オプション
+            // オプション（old_index.htmlと同じ形式：カンマ区切りの文字列）
+            let irradiationsCount = '';
             const menuId = this.state.selectedMenu?.id;
             if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
                 const optionNames = this.state.selectedOptions[menuId].map(optionId => {
@@ -711,11 +712,14 @@ class BookingForm {
                     return option?.name || '';
                 }).filter(Boolean);
                 if (optionNames.length > 0) {
-                    menuText += ', ' + optionNames.join(', ');
+                    irradiationsCount = optionNames.join(', ');
                 }
             }
             
-            messageText += \`メニュー：\${menuText}\\n\`;
+            // old_index.htmlと同じ形式：selectedSymptom（配列）とirradiationsCount（文字列）を結合
+            // 配列を文字列化するとカンマ区切りになる（例：["コースA"] → "コースA"）
+            const selectedSymptomText = selectedSymptomArray.length > 0 ? selectedSymptomArray.join(',') : '';
+            messageText += \`メニュー：\${selectedSymptomText}\${irradiationsCount ? ',' + irradiationsCount : ''}\\n\`;
             messageText += \`希望日時：\\n \${formattedDate}\\n\`;
             
             if (this.state.message) {
