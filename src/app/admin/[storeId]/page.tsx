@@ -372,7 +372,14 @@ export default function StoreDetailPage() {
     : false;
 
   const handleSaveEditForm = async () => {
-    if (!editingForm) return;
+    if (!editingForm || !originalForm) return;
+    
+    // 変更がない場合は保存しない
+    const hasChangesCheck = JSON.stringify(editingForm) !== JSON.stringify(originalForm);
+    if (!hasChangesCheck) {
+      alert('変更がありません。');
+      return;
+    }
     
     try {
       const response = await fetch(`/api/forms/${editingForm.id}`, {
@@ -409,7 +416,14 @@ export default function StoreDetailPage() {
   };
   
   const handleDeployForm = async () => {
-    if (!editingForm) return;
+    if (!editingForm || !originalForm) return;
+    
+    // 変更がある場合はデプロイしない（まず保存が必要）
+    const hasChangesCheck = JSON.stringify(editingForm) !== JSON.stringify(originalForm);
+    if (hasChangesCheck) {
+      alert('変更があります。まず「保存」ボタンをクリックしてください。');
+      return;
+    }
     
     try {
       // 保存済みのフォームデータを取得（最新の状態を保証）
@@ -1305,23 +1319,36 @@ export default function StoreDetailPage() {
                   プレビュー
                 </button>
                 <button
-                  onClick={handleSaveEditForm}
+                  onClick={(e) => {
+                    if (!hasChanges) {
+                      e.preventDefault();
+                      return;
+                    }
+                    handleSaveEditForm();
+                  }}
                   disabled={!hasChanges}
                   className={`px-4 py-2 rounded-md transition-colors ${
                     hasChanges
                       ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                      : 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-50'
                   }`}
+                  title={!hasChanges ? '変更がありません' : '変更を保存します'}
                 >
                   保存
                 </button>
                 <button
-                  onClick={handleDeployForm}
+                  onClick={(e) => {
+                    if (hasChanges) {
+                      e.preventDefault();
+                      return;
+                    }
+                    handleDeployForm();
+                  }}
                   disabled={hasChanges}
                   className={`px-4 py-2 rounded-md transition-colors ${
                     !hasChanges
                       ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                      : 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                      : 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-50'
                   }`}
                   title={hasChanges ? 'まず「保存」ボタンをクリックしてください' : '保存済みの内容をデプロイします'}
                 >
