@@ -7,6 +7,25 @@ import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 
+// テンプレート型定義
+type FormTemplate = {
+  name?: string;
+  description?: string;
+  config?: {
+    basic_info?: {
+      show_gender_selection?: boolean;
+    };
+    menu_structure?: FormConfig['menu_structure'];
+    ui_settings?: {
+      show_visit_count?: boolean;
+      show_coupon_selection?: boolean;
+      show_repeat_booking?: boolean;
+    };
+  };
+  liff_id?: string;
+  gas_endpoint?: string;
+};
+
 // 一時的なJSONファイルでのデータ保存（開発用）
 const DATA_DIR = path.join(process.cwd(), 'data');
 const FORMS_FILE = path.join(DATA_DIR, 'forms.json');
@@ -122,7 +141,7 @@ export async function POST(
       basic_info: {
         form_name: form_name || 'フォーム',
         store_name: '', // TODO: 店舗名を取得
-        liff_id: (template as any).liff_id || liff_id || '',
+        liff_id: (template as FormTemplate)?.liff_id || liff_id || '',
         theme_color: '#3B82F6',
         logo_url: undefined,
         show_gender_selection: template.config?.basic_info?.show_gender_selection || false
@@ -138,7 +157,7 @@ export async function POST(
         show_side_nav: true,
         custom_css: undefined
       },
-      gas_endpoint: (template as any).gas_endpoint || gas_endpoint || ''
+      gas_endpoint: (template as FormTemplate)?.gas_endpoint || gas_endpoint || ''
     } : {
       basic_info: {
         form_name: form_name || 'フォーム',
@@ -337,8 +356,8 @@ export async function POST(
     const genderSelectionEnabled = baseTemplateConfig?.basic_info?.show_gender_selection || false;
     const visitCountEnabled = baseTemplateConfig?.ui_settings?.show_visit_count || false;
     const couponEnabled = baseTemplateConfig?.ui_settings?.show_coupon_selection || false;
-    const templateLiffId = (template as any)?.liff_id;
-    const templateGasEndpoint = (template as any)?.gas_endpoint;
+    const templateLiffId = (template as FormTemplate)?.liff_id;
+    const templateGasEndpoint = (template as FormTemplate)?.gas_endpoint;
     
     const supabaseConfig: FormConfig = {
       basic_info: {
