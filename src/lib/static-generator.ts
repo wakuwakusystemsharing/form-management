@@ -494,9 +494,43 @@ class BookingForm {
             
             weekDates.forEach((date, dateIndex) => {
         const dateStr = date.toISOString().split('T')[0];
+        const dayOfWeek = date.getDay();
+        
+        // 曜日名のマッピング（0=日曜日, 1=月曜日, ...）
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayName = dayNames[dayOfWeek];
+        
+        // 営業時間設定を取得
+        const businessHours = this.config?.calendar_settings?.business_hours;
+        const dayHours = businessHours?.[dayName];
+        
+        // 定休日チェック
+        const isClosed = dayHours?.closed === true;
+        
+        // 営業時間チェック
+        let isWithinBusinessHours = true;
+        if (!isClosed && dayHours) {
+            const timeHour = parseInt(time.split(':')[0]);
+            const timeMinute = parseInt(time.split(':')[1]);
+            const timeMinutes = timeHour * 60 + timeMinute;
+            
+            const openTime = dayHours.open || '09:00';
+            const closeTime = dayHours.close || '18:00';
+            const openHour = parseInt(openTime.split(':')[0]);
+            const openMinute = parseInt(openTime.split(':')[1]);
+            const openMinutes = openHour * 60 + openMinute;
+            
+            const closeHour = parseInt(closeTime.split(':')[0]);
+            const closeMinute = parseInt(closeTime.split(':')[1]);
+            const closeMinutes = closeHour * 60 + closeMinute;
+            
+            isWithinBusinessHours = timeMinutes >= openMinutes && timeMinutes < closeMinutes;
+        }
+        
         // 予約可能期間の判定
         const withinWindow = date.getTime() <= max.getTime();
-        const isAvailable = withinWindow && (Math.random() > 0.3); // 空き状況（後でAPI連携）
+        // 空き状況（後でAPI連携）と営業時間・定休日のチェックを組み合わせ
+        const isAvailable = withinWindow && !isClosed && isWithinBusinessHours && (Math.random() > 0.3);
                 const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
                 const isPast = new Date() > new Date(date.getFullYear(), date.getMonth(), date.getDate(), 
                     parseInt(time.split(':')[0]), parseInt(time.split(':')[1]));

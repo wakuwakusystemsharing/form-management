@@ -8,7 +8,6 @@ import { Form } from '@/types/form';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
 import MenuStructureEditor from '@/components/FormEditor/MenuStructureEditor';
 import BusinessRulesEditor from '@/components/FormEditor/BusinessRulesEditor';
-import { getPublicFormUrl, getPreviewUrl } from '@/lib/form-url-helper';
 
 // テンプレート定義
 const FORM_TEMPLATES = {
@@ -250,6 +249,7 @@ export default function StoreDetailPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editingForm, setEditingForm] = useState<Form | null>(null);
+  const [originalForm, setOriginalForm] = useState<Form | null>(null); // 編集開始時のフォームデータ
   const [showEditModal, setShowEditModal] = useState(false);
   const [editModalTab, setEditModalTab] = useState<'basic' | 'menu' | 'business'>('basic');
   const [newFormData, setNewFormData] = useState({
@@ -359,10 +359,17 @@ export default function StoreDetailPage() {
   };
 
   const handleEditForm = (form: Form) => {
+    // 編集開始時に元のフォームデータを保存
     setEditingForm(form);
+    setOriginalForm(JSON.parse(JSON.stringify(form))); // ディープコピー
     setEditModalTab('basic');
     setShowEditModal(true);
   };
+  
+  // 変更があるかどうかを判定
+  const hasChanges = editingForm && originalForm 
+    ? JSON.stringify(editingForm) !== JSON.stringify(originalForm)
+    : false;
 
   const handleSaveEditForm = async () => {
     if (!editingForm) return;
@@ -386,9 +393,11 @@ export default function StoreDetailPage() {
         );
         setForms(updatedForms);
         
-        setShowEditModal(false);
-        setEditingForm(null);
-        alert('フォームを保存しました');
+        // 保存済みのフォームデータを新しいoriginalFormとして設定
+        setOriginalForm(JSON.parse(JSON.stringify(updatedForm)));
+        setEditingForm(updatedForm);
+        
+        alert('フォームを保存しました。プレビューで確認してから「更新」ボタンでデプロイしてください。');
       } else {
         const error = await response.json();
         alert(`保存に失敗しました: ${error.error}`);
@@ -396,6 +405,62 @@ export default function StoreDetailPage() {
     } catch (error) {
       console.error('Save error:', error);
       alert('保存に失敗しました');
+    }
+  };
+  
+  const handleDeployForm = async () => {
+    if (!editingForm) return;
+    
+    try {
+      // 保存済みのフォームデータを取得（最新の状態を保証）
+      const formResponse = await fetch(`/api/forms/${editingForm.id}`, {
+        credentials: 'include',
+      });
+      
+      if (!formResponse.ok) {
+        alert('フォームデータの取得に失敗しました');
+        return;
+      }
+      
+      const savedForm = await formResponse.json();
+      
+      // 保存されたフォームデータを使って静的HTMLを再デプロイ
+      const deployResponse = await fetch(`/api/forms/${editingForm.id}/deploy`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          storeId: storeId,
+          formData: savedForm, // 保存された最新のフォームデータを渡す
+        }),
+      });
+      
+      if (deployResponse.ok) {
+        const result = await deployResponse.json();
+        
+        // フォーム一覧を再フェッチしてstatic_deploy情報を更新
+        try {
+          const formsResponse = await fetch(`/api/stores/${storeId}/forms`, {
+            credentials: 'include',
+          });
+          if (formsResponse.ok) {
+            const formsData = await formsResponse.json();
+            setForms(formsData);
+          }
+        } catch (error) {
+          console.error('Forms refresh error:', error);
+        }
+        
+        alert(`静的HTMLを更新しました！\n\n顧客向けURL: ${result.deployUrl}\n\n※ ブラウザのキャッシュをクリアするか、数分後に再読み込みしてください。`);
+      } else {
+        const error = await deployResponse.json();
+        alert(`デプロイに失敗しました: ${error.error || '不明なエラー'}`);
+      }
+    } catch (error) {
+      console.error('Deploy error:', error);
+      alert('デプロイに失敗しました');
     }
   };
 
@@ -946,7 +1011,11 @@ export default function StoreDetailPage() {
                   フォーム編集: {(editingForm as any).form_name || editingForm.config?.basic_info?.form_name || 'フォーム'}
                 </h2>
                 <button
-                  onClick={() => setShowEditModal(false)}
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingForm(null);
+                    setOriginalForm(null);
+                  }}
                   className="text-gray-400 hover:text-gray-200"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1214,16 +1283,20 @@ export default function StoreDetailPage() {
 
             {/* モーダルフッター */}
             <div className="flex items-center justify-between p-6 border-t border-gray-700">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="bg-gray-600 text-gray-200 px-4 py-2 rounded-md hover:bg-gray-500 transition-colors"
-              >
-                キャンセル
-              </button>
+                <button
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingForm(null);
+                    setOriginalForm(null);
+                  }}
+                  className="bg-gray-600 text-gray-200 px-4 py-2 rounded-md hover:bg-gray-500 transition-colors"
+                >
+                  キャンセル
+                </button>
               <div className="flex items-center space-x-3">
                 <button
                   onClick={async () => {
-                    // プレビューを開く
+                    // プレビューを開く（保存済みデータを表示）
                     const previewUrl = `/preview/${storeId}/forms/${editingForm.id}`;
                     window.open(previewUrl, '_blank');
                   }}
@@ -1233,62 +1306,26 @@ export default function StoreDetailPage() {
                 </button>
                 <button
                   onClick={handleSaveEditForm}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
+                  disabled={!hasChanges}
+                  className={`px-4 py-2 rounded-md transition-colors ${
+                    hasChanges
+                      ? 'bg-blue-600 text-white hover:bg-blue-700'
+                      : 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                  }`}
                 >
                   保存
                 </button>
                 <button
-                  onClick={async () => {
-                    if (!editingForm) return;
-                    try {
-                      // まず保存
-                      await handleSaveEditForm();
-                      
-                      // 静的HTMLを再デプロイ
-                      const deployResponse = await fetch(`/api/forms/${editingForm.id}/deploy`, {
-                        method: 'POST',
-                        credentials: 'include',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                          storeId: storeId,
-                        }),
-                      });
-                      
-                      if (deployResponse.ok) {
-                        const result = await deployResponse.json();
-                        
-                        // フォーム一覧を再フェッチしてstatic_deploy情報を更新
-                        try {
-                          const formsResponse = await fetch(`/api/stores/${storeId}/forms`, {
-                            credentials: 'include',
-                          });
-                          if (formsResponse.ok) {
-                            const formsData = await formsResponse.json();
-                            setForms(formsData);
-                          }
-                        } catch (error) {
-                          console.error('Forms refresh error:', error);
-                        }
-                        
-                        // モーダルを閉じる
-                        setShowEditModal(false);
-                        setEditingForm(null);
-                        
-                        alert(`静的HTMLを更新しました！\n\n顧客向けURL: ${result.deployUrl}\n\n※ ブラウザのキャッシュをクリアするか、数分後に再読み込みしてください。`);
-                      } else {
-                        const error = await deployResponse.json();
-                        alert(`デプロイに失敗しました: ${error.error || '不明なエラー'}`);
-                      }
-                    } catch (error) {
-                      console.error('Deploy error:', error);
-                      alert('デプロイに失敗しました');
-                    }
-                  }}
-                  className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition-colors"
+                  onClick={handleDeployForm}
+                  disabled={hasChanges}
+                  className={`px-4 py-2 rounded-md transition-colors ${
+                    !hasChanges
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'bg-gray-600 text-gray-300 cursor-not-allowed'
+                  }`}
+                  title={hasChanges ? 'まず「保存」ボタンをクリックしてください' : '保存済みの内容をデプロイします'}
                 >
-                  保存＆デプロイ
+                  更新
                 </button>
               </div>
             </div>
@@ -1449,6 +1486,7 @@ export default function StoreDetailPage() {
           onClose={() => {
             setShowEditModal(false);
             setEditingForm(null);
+            setOriginalForm(null);
           }}
           form={editingForm}
           storeId={storeId}
