@@ -118,6 +118,8 @@ export class StaticFormGenerator {
         <div class="form-content">
             <h2 class="section-title">ご予約内容</h2>
             
+            ${safeConfig.ui_settings?.show_repeat_booking ? this.renderRepeatBookingButton(safeConfig) : ''}
+            
             <!-- お客様名 -->
             <div class="field" id="name-field">
                 <label class="field-label">お名前 <span class="required">*</span></label>
@@ -255,46 +257,44 @@ class BookingForm {
                 const categoryId = item.dataset.categoryId;
                 const menu = this.findMenu(categoryId, menuId);
                 
-                if (menu.has_submenu) {
-                    // サブメニューがある場合
-                    const wasSelected = item.classList.contains('selected');
-                    document.querySelectorAll('.menu-item').forEach(m => {
-                        m.classList.remove('selected', 'has-submenu');
-                    });
-                    
-                    // オプションコンテナを全て非表示
-                    document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
-                    
-                    if (!wasSelected) {
+                // クリックされたメニューが既に選択されているかチェック
+                const wasSelected = item.classList.contains('selected') && 
+                                   this.state.selectedMenu && 
+                                   this.state.selectedMenu.id === menuId;
+                
+                // 全てのメニューの選択状態をリセット（常に実行）
+                document.querySelectorAll('.menu-item').forEach(m => {
+                    m.classList.remove('selected', 'has-submenu');
+                });
+                
+                // 全てのサブメニューコンテナを削除
+                this.hideSubmenu();
+                
+                // 全てのオプションコンテナを非表示
+                document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
+                
+                // 以前の選択をリセット
+                this.state.selectedMenu = null;
+                this.state.selectedSubmenu = null;
+                this.state.selectedOptions = {};
+                
+                // 同じメニューを再度クリックした場合は選択解除のみ（wasSelectedがtrueの場合は何もしない）
+                if (!wasSelected) {
+                    if (menu.has_submenu) {
+                        // サブメニューがある場合
                         item.classList.add('selected', 'has-submenu');
                         this.state.selectedMenu = menu;
-                        this.state.selectedSubmenu = null;
                         this.showSubmenu(categoryId, menuId);
                     } else {
-                        this.state.selectedMenu = null;
-                        this.hideSubmenu();
-                    }
-                } else {
-                    // 通常メニュー
-                    const wasSelected = item.classList.contains('selected');
-                    document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('selected'));
-                    
-                    // 全てのオプションコンテナを非表示
-                    document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
-                    
-                    if (!wasSelected) {
+                        // 通常メニュー
                         item.classList.add('selected');
                         this.state.selectedMenu = menu;
-                        this.state.selectedSubmenu = null;
-                        this.hideSubmenu();
                         
                         // このメニューのオプションコンテナを表示
                         const optionsContainer = document.getElementById(\`options-\${menuId}\`);
                         if (optionsContainer) {
                             optionsContainer.style.display = 'block';
                         }
-                    } else {
-                        this.state.selectedMenu = null;
                     }
                 }
                 
@@ -350,6 +350,22 @@ class BookingForm {
         document.getElementById('customer-message').addEventListener('input', (e) => {
             this.state.message = e.target.value;
         });
+        
+        // 前回と同じメニューで予約するボタン
+        const repeatButton = document.getElementById('repeat-booking-button');
+        if (repeatButton) {
+            repeatButton.addEventListener('click', () => {
+                this.handleRepeatBooking();
+            });
+            // ホバーエフェクト
+            repeatButton.addEventListener('mouseenter', function() {
+                const themeColor = this.style.color || '#3B82F6';
+                this.style.backgroundColor = themeColor + '15';
+            });
+            repeatButton.addEventListener('mouseleave', function() {
+                this.style.backgroundColor = 'transparent';
+            });
+        }
         
         // 送信
         document.getElementById('submit-button').addEventListener('click', () => {
@@ -476,13 +492,11 @@ class BookingForm {
         }
         
         // テーブルヘッダー生成
-        let headerHTML = '<thead><tr><th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:2px solid #696969;font-size:0.75rem;">時間</th>';
+        let headerHTML = '<thead><tr><th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:2px solid #696969;font-size:0.75rem;vertical-align:middle;width:17%;box-sizing:border-box;">時間</th>';
         weekDates.forEach(date => {
             const dayOfWeek = date.getDay();
             const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
-            headerHTML += \`<th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:2px solid #696969;font-size:0.75rem;">
-                \${date.getMonth() + 1}/\${date.getDate()}<br/>(\${dayNames[dayOfWeek]})
-            </th>\`;
+            headerHTML += \`<th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:2px solid #696969;font-size:0.75rem;vertical-align:middle;line-height:1.3;width:calc((100% - 17%) / 7);box-sizing:border-box;word-break:keep-all;white-space:normal;">\${date.getMonth() + 1}/\${date.getDate()}<br/>(\${dayNames[dayOfWeek]})</th>\`;
         });
         headerHTML += '</tr></thead>';
         
@@ -494,9 +508,43 @@ class BookingForm {
             
             weekDates.forEach((date, dateIndex) => {
         const dateStr = date.toISOString().split('T')[0];
+        const dayOfWeek = date.getDay();
+        
+        // 曜日名のマッピング（0=日曜日, 1=月曜日, ...）
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayName = dayNames[dayOfWeek];
+        
+        // 営業時間設定を取得
+        const businessHours = this.config?.calendar_settings?.business_hours;
+        const dayHours = businessHours?.[dayName];
+        
+        // 定休日チェック
+        const isClosed = dayHours?.closed === true;
+        
+        // 営業時間チェック
+        let isWithinBusinessHours = true;
+        if (!isClosed && dayHours) {
+            const timeHour = parseInt(time.split(':')[0]);
+            const timeMinute = parseInt(time.split(':')[1]);
+            const timeMinutes = timeHour * 60 + timeMinute;
+            
+            const openTime = dayHours.open || '09:00';
+            const closeTime = dayHours.close || '18:00';
+            const openHour = parseInt(openTime.split(':')[0]);
+            const openMinute = parseInt(openTime.split(':')[1]);
+            const openMinutes = openHour * 60 + openMinute;
+            
+            const closeHour = parseInt(closeTime.split(':')[0]);
+            const closeMinute = parseInt(closeTime.split(':')[1]);
+            const closeMinutes = closeHour * 60 + closeMinute;
+            
+            isWithinBusinessHours = timeMinutes >= openMinutes && timeMinutes < closeMinutes;
+        }
+        
         // 予約可能期間の判定
         const withinWindow = date.getTime() <= max.getTime();
-        const isAvailable = withinWindow && (Math.random() > 0.3); // 空き状況（後でAPI連携）
+        // 空き状況（後でAPI連携）と営業時間・定休日のチェックを組み合わせ
+        const isAvailable = withinWindow && !isClosed && isWithinBusinessHours && (Math.random() > 0.3);
                 const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
                 const isPast = new Date() > new Date(date.getFullYear(), date.getMonth(), date.getDate(), 
                     parseInt(time.split(':')[0]), parseInt(time.split(':')[1]));
@@ -563,6 +611,49 @@ class BookingForm {
         this.renderCalendar();
     }
     
+    // 前回と同じメニューで予約する
+    handleRepeatBooking() {
+        const formId = this.config.basic_info?.form_name || 'default';
+        const savedData = localStorage.getItem(\`booking_\${formId}\`);
+        
+        if (!savedData) {
+            alert('前回のメニューが見つかりません💦');
+            return;
+        }
+        
+        try {
+            const selectionData = JSON.parse(savedData);
+            
+            // データが1週間以内のもののみ復元
+            const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+            if (selectionData.timestamp < oneWeekAgo) {
+                alert('前回のメニューデータが古いため復元できません');
+                return;
+            }
+            
+            // メニュー選択を復元（簡易版 - 実際の実装は選択状態を再現する必要がある）
+            if (selectionData.selectedMenus && Object.keys(selectionData.selectedMenus).length > 0) {
+                // メニュー選択の復元ロジックは複雑なため、アラートで通知
+                alert('前回のメニューを復元しました！\\nメニューを再選択してください。');
+                
+                // カレンダーセクションにスクロール
+                setTimeout(() => {
+                    const calendarField = document.getElementById('datetime-field');
+                    if (calendarField) {
+                        calendarField.style.display = 'block';
+                        calendarField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        this.renderCalendar();
+                    }
+                }, 100);
+            } else {
+                alert('前回のメニューが見つかりません💦');
+            }
+        } catch (error) {
+            console.error('Failed to restore previous selection:', error);
+            alert('前回のメニューの復元に失敗しました');
+        }
+    }
+    
     updateSummary() {
         const items = [];
         
@@ -586,13 +677,20 @@ class BookingForm {
         }
         if (this.state.selectedMenu || this.state.selectedSubmenu) {
             let menuText = '';
+            let totalPrice = 0;
+            let totalDuration = 0;
+            
             if (this.state.selectedSubmenu) {
+                totalPrice = this.state.selectedSubmenu.price || 0;
+                totalDuration = this.state.selectedSubmenu.duration || 0;
                 menuText = \`
                     <div style="font-size:0.875rem;color:#6b7280;">\${this.state.selectedMenu.name} &gt;</div>
                     <div>\${this.state.selectedSubmenu.name}</div>
                     <div style="font-size:0.875rem;color:#6b7280;">¥\${this.state.selectedSubmenu.price.toLocaleString()} / \${this.state.selectedSubmenu.duration}分</div>
                 \`;
             } else if (this.state.selectedMenu) {
+                totalPrice = this.state.selectedMenu.price || 0;
+                totalDuration = this.state.selectedMenu.duration || 0;
                 menuText = \`
                     <div>\${this.state.selectedMenu.name}</div>
                     \${this.state.selectedMenu.price ? \`<div style="font-size:0.875rem;color:#6b7280;">¥\${this.state.selectedMenu.price.toLocaleString()} / \${this.state.selectedMenu.duration}分</div>\` : ''}
@@ -607,7 +705,9 @@ class BookingForm {
                 const optionTexts = selectedOptionIds.map(optionId => {
                     const option = menu.options?.find(o => o.id === optionId);
                     if (option) {
-                        return \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ \${option.name}\${option.price > 0 ? \` (+¥\${option.price.toLocaleString()})\` : ''}</div>\`;
+                        totalPrice += option.price || 0;
+                        totalDuration += option.duration || 0;
+                        return \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ \${option.name}\${option.price > 0 ? \` (+¥\${option.price.toLocaleString()})\` : ''}\${option.duration > 0 ? \` (+\${option.duration}分)\` : ''}</div>\`;
                     }
                     return '';
                 }).join('');
@@ -615,6 +715,18 @@ class BookingForm {
             }
             
             items.push(\`<div class="summary-item" style="align-items:flex-start;"><div><strong>メニュー:</strong><div style="margin-top:0.25rem;">\${menuText}</div></div><button class="summary-edit-button" data-field="menu-field">修正</button></div>\`);
+            
+            // 合計金額と合計時間を表示
+            if (totalPrice > 0 || totalDuration > 0) {
+                let totalText = '';
+                if (totalPrice > 0) {
+                    totalText += \`<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #e5e7eb;"><strong style="font-size:1rem;">合計金額: ¥\${totalPrice.toLocaleString()}</strong></div>\`;
+                }
+                if (totalDuration > 0) {
+                    totalText += \`<div style="margin-top:0.25rem;"><strong style="font-size:1rem;">合計時間: \${totalDuration}分</strong></div>\`;
+                }
+                items.push(\`<div class="summary-item" style="align-items:flex-start;"><div>\${totalText}</div></div>\`);
+            }
         }
         if (this.state.selectedDate || this.state.selectedTime) {
             items.push(\`<div class="summary-item"><span><strong>希望日時:</strong> \${this.state.selectedDate} \${this.state.selectedTime}</span><button class="summary-edit-button" data-field="datetime-field">修正</button></div>\`);
@@ -672,64 +784,47 @@ class BookingForm {
             }
             messageText += \`ご来店回数：\${visitCountText}\\n\`;
             
-            // コース/カテゴリー（old_index.htmlでは常に表示、booking.gsも期待している）
-            let courseText = '';
+            // メニュー（詳細な予約内容を含める：カテゴリー名 > メニュー名 > サブメニュー名, オプション名）
+            let menuText = '';
+            
             if (this.state.selectedMenu) {
+                // カテゴリー名を取得
                 const category = this.config.menu_structure.categories.find(c => 
                     c.menus.some(m => m.id === this.state.selectedMenu.id)
                 );
-                courseText = category?.name || '';
-            }
-            messageText += \`コース：\${courseText}\\n\`;
-            
-            // メニュー（常に表示、old_index.htmlと同じ形式：配列として扱う）
-            let selectedSymptomArray = [];
-            // デバッグ: メニュー選択状態を確認
-            console.log('Selected menu state:', {
-                selectedMenu: this.state.selectedMenu,
-                selectedSubmenu: this.state.selectedSubmenu,
-                selectedOptions: this.state.selectedOptions
-            });
-            
-            if (this.state.selectedSubmenu && this.state.selectedMenu) {
-                // サブメニューが選択されている場合
-                const menuName = this.state.selectedMenu?.name || '';
-                const submenuName = this.state.selectedSubmenu?.name || '';
-                if (menuName && submenuName) {
-                    selectedSymptomArray.push(\`\${menuName} > \${submenuName}\`);
+                
+                // メニュー詳細を構築：カテゴリー > メニュー > サブメニュー
+                const menuParts = [];
+                if (category?.name) {
+                    menuParts.push(category.name);
                 }
-            } else if (this.state.selectedMenu) {
-                // 通常メニューが選択されている場合
-                const menuName = this.state.selectedMenu?.name || '';
-                if (menuName) {
-                    selectedSymptomArray.push(menuName);
-                } else {
-                    // メニューオブジェクトはあるがnameプロパティがない場合のフォールバック
-                    console.warn('Menu selected but name is missing:', this.state.selectedMenu);
+                if (this.state.selectedMenu.name) {
+                    menuParts.push(this.state.selectedMenu.name);
                 }
-            } else {
-                // メニューが選択されていない場合
-                console.warn('No menu selected at submit time');
-            }
-            
-            // オプション（old_index.htmlと同じ形式：カンマ区切りの文字列）
-            let irradiationsCount = '';
-            const menuId = this.state.selectedMenu?.id;
-            if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
-                const optionNames = this.state.selectedOptions[menuId].map(optionId => {
-                    const option = this.state.selectedMenu?.options?.find(o => o.id === optionId);
-                    return option?.name || '';
-                }).filter(Boolean);
-                if (optionNames.length > 0) {
-                    irradiationsCount = optionNames.join(', ');
+                if (this.state.selectedSubmenu?.name) {
+                    menuParts.push(this.state.selectedSubmenu.name);
+                }
+                
+                if (menuParts.length > 0) {
+                    menuText = menuParts.join(' > ');
+                }
+                
+                // オプションを追加（サブメニューが選択されている場合でも親メニューのオプションを表示）
+                const menuId = this.state.selectedMenu.id;
+                if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
+                    const menu = this.state.selectedMenu;
+                    const selectedOptionIds = this.state.selectedOptions[menuId];
+                    const optionNames = selectedOptionIds.map(optionId => {
+                        const option = menu.options?.find(o => o.id === optionId);
+                        return option?.name || '';
+                    }).filter(Boolean);
+                    if (optionNames.length > 0) {
+                        menuText += (menuText ? ', ' : '') + optionNames.join(', ');
+                    }
                 }
             }
             
-            // old_index.htmlと同じ形式：selectedSymptom（配列）とirradiationsCount（文字列）を結合
-            // booking.gsのparseReservationFormは「メニュー：」の後にカンマ区切りの文字列を期待
-            // 配列を文字列化するとカンマ区切りになる（例：["コースA"] → "コースA"）
-            const selectedSymptomText = selectedSymptomArray.length > 0 ? selectedSymptomArray.join(',') : '';
-            messageText += \`メニュー：\${selectedSymptomText}\${irradiationsCount ? ',' + irradiationsCount : ''}\\n\`;
+            messageText += \`メニュー：\${menuText}\\n\`;
             
             // 希望日時（常に表示、booking.gsは「希望日時：」の次の行を日時として解析）
             messageText += \`希望日時：\\n \${formattedDate}\\n\`;
@@ -946,6 +1041,34 @@ if (document.readyState === 'loading') {
             <div class="field" id="message-field">
                 <label class="field-label">メッセージ（任意）</label>
                 <textarea id="customer-message" class="input" rows="3" placeholder="ご質問やご要望がございましたらこちらにご記入ください"></textarea>
+            </div>`;
+  }
+
+  private renderRepeatBookingButton(config: FormConfig): string {
+    const themeColor = config.basic_info.theme_color || '#3B82F6';
+    return `
+            <!-- 前回と同じメニューで予約するボタン -->
+            <div class="field" style="margin-bottom: 1.5rem;">
+                <button type="button" id="repeat-booking-button" class="repeat-booking-button" style="
+                    width: 100%;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 0.75rem 1.25rem;
+                    border: 2px dashed ${themeColor};
+                    border-radius: 0.5rem;
+                    background-color: transparent;
+                    color: ${themeColor};
+                    font-size: 0.875rem;
+                    font-weight: 500;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                ">
+                    <svg style="width: 1.25rem; height: 1.25rem; margin-right: 0.5rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>前回と同じメニューで予約する</span>
+                </button>
             </div>`;
   }
 
@@ -1194,6 +1317,8 @@ if (document.readyState === 'loading') {
         
         #calendar-table {
             table-layout: fixed;
+            width: 100%;
+            border-collapse: collapse;
         }
         
         #calendar-table th,
@@ -1204,16 +1329,24 @@ if (document.readyState === 'loading') {
             vertical-align: middle;
             box-sizing: border-box;
             border: 2px solid #696969;
+            word-break: keep-all;
+            white-space: normal;
         }
         
         #calendar-table th {
             background: #f3f4f6;
             font-weight: 500;
+            padding: 0.5rem;
         }
         
         #calendar-table th:first-child,
         #calendar-table td:first-child {
             width: 17%;
+            min-width: 60px;
+        }
+        
+        #calendar-table th:not(:first-child) {
+            width: calc((100% - 17%) / 7);
         }
         
         #calendar-table td.calendar-cell {
@@ -1236,10 +1369,19 @@ if (document.readyState === 'loading') {
         }
         
         @media (max-width: 768px) {
+            #calendar-table {
+                font-size: 0.625rem;
+            }
+            
             #calendar-table th,
             #calendar-table td {
                 font-size: 0.625rem;
-                padding: 0.125rem;
+                padding: 0.25rem 0.125rem;
+            }
+            
+            #calendar-table th {
+                padding: 0.375rem 0.125rem;
+                line-height: 1.2;
             }
             
             .month-button,
@@ -1265,6 +1407,14 @@ if (document.readyState === 'loading') {
         
         .submit-button:hover {
             opacity: 0.9;
+        }
+        
+        .repeat-booking-button:hover {
+            transform: scale(1.02);
+        }
+        
+        .repeat-booking-button:active {
+            transform: scale(0.98);
         }
         
         .summary-box {

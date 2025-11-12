@@ -29,17 +29,25 @@ export class SupabaseStorageDeployer {
   ): Promise<DeployResult> {
     const env = getAppEnvironment();
     
-    // ローカルモック: public/static-forms/ にHTMLを保存
-    if (shouldUseMockBlob()) {
-      const staticDir = path.join(process.cwd(), 'public', 'static-forms');
-      if (!fs.existsSync(staticDir)) {
-        fs.mkdirSync(staticDir, { recursive: true });
+    // ローカル環境: data/forms_html/ にHTMLを保存（Supabaseへのアクセス不要）
+    if (env === 'local') {
+      const dataDir = path.join(process.cwd(), 'data', 'forms_html');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
       }
       
-      const filePath = path.join(staticDir, `${formId}.html`);
+      const filePath = path.join(dataDir, `${formId}.html`);
       fs.writeFileSync(filePath, html, 'utf-8');
       
       console.log(`[LOCAL MODE] Static HTML saved to: ${filePath}`);
+      
+      // public/static-forms/ にもコピー（既存のアクセスパスを維持）
+      const publicDir = path.join(process.cwd(), 'public', 'static-forms');
+      if (!fs.existsSync(publicDir)) {
+        fs.mkdirSync(publicDir, { recursive: true });
+      }
+      const publicFilePath = path.join(publicDir, `${formId}.html`);
+      fs.writeFileSync(publicFilePath, html, 'utf-8');
       
       return {
         url: `/static-forms/${formId}.html`,
@@ -64,7 +72,7 @@ export class SupabaseStorageDeployer {
       const htmlBuffer = Buffer.from(html, 'utf-8');
       
       // Supabase Storageにアップロード（upsert: trueで上書き）
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('forms')
         .upload(storagePath, htmlBuffer, {
           contentType: 'text/html; charset=utf-8',
@@ -86,10 +94,12 @@ export class SupabaseStorageDeployer {
       
       // プロキシURL（Next.jsのAPIルート経由）を生成
       // これにより正しいContent-Typeヘッダーで配信される
+      // キャッシュバスティングのため、タイムスタンプをクエリパラメータに追加
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
                       process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
                       'http://localhost:3000';
-      const proxyUrl = `${baseUrl}/api/public-form/${storagePath}`;
+      const timestamp = Date.now();
+      const proxyUrl = `${baseUrl}/api/public-form/${storagePath}?v=${timestamp}`;
 
       console.log(`✅ [${env.toUpperCase()}] Form deployed to Supabase Storage`);
       console.log(`   Direct URL: ${directUrl}`);
@@ -230,7 +240,7 @@ export class SupabaseStorageDeployer {
       };
       const contentType = contentTypeMap[ext || ''] || 'image/jpeg';
 
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('forms')
         .upload(filePath, file, {
           contentType,

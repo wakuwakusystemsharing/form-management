@@ -36,6 +36,24 @@ interface SubMenuItemModalProps {
   theme?: 'light' | 'dark';
 }
 
+// 金額フォーマット用のヘルパー関数
+const formatPrice = (value: string): string => {
+  // カンマを除去して数値のみ取得
+  const numericValue = value.replace(/,/g, '');
+  if (!numericValue) return '';
+  // 数値に変換
+  const num = parseInt(numericValue, 10);
+  if (isNaN(num)) return '';
+  
+  // カンマ区切りでフォーマット（環境に依存しない実装）
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+};
+
+const parsePrice = (value: string): string => {
+  // カンマを除去して数値のみ返す
+  return value.replace(/,/g, '');
+};
+
 const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
   isOpen,
   onClose,
@@ -53,7 +71,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
   React.useEffect(() => {
     if (subMenuItem) {
       setName(subMenuItem.name);
-      setPrice(subMenuItem.price.toString());
+      setPrice(formatPrice(subMenuItem.price.toString()));
       setDuration(subMenuItem.duration.toString());
       setDescription(subMenuItem.description || '');
       setImage(subMenuItem.image || '');
@@ -70,7 +88,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
     const newSubMenuItem: SubMenuItem = {
       id: subMenuItem?.id || `submenu_${Date.now()}`,
       name,
-      price: parseInt(price) || 0,
+      price: parseInt(parsePrice(price)) || 0,
       duration: parseInt(duration) || 0,
       description: description || undefined,
       image: image || undefined
@@ -102,13 +120,15 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
           <div className="space-y-4">
             <div>
               <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-1`}>
-                サブメニュー名
+                サブメニュー名 <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                placeholder="例: カット（ショート）"
                 className={themeClasses.input}
+                required
               />
             </div>
 
@@ -118,11 +138,25 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
                   料金（円）
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   value={price}
-                  onChange={(e) => setPrice(e.target.value)}
+                  onChange={(e) => {
+                    const rawValue = parsePrice(e.target.value);
+                    if (rawValue === '' || /^\d+$/.test(rawValue)) {
+                      setPrice(rawValue === '' ? '' : formatPrice(rawValue));
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (e.target.value) {
+                      setPrice(formatPrice(e.target.value));
+                    }
+                  }}
+                  placeholder="例: 5,000"
                   className={themeClasses.input}
                 />
+                <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                  カンマは自動で追加されます
+                </p>
               </div>
               <div>
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-1`}>
@@ -132,6 +166,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
                   type="number"
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
+                  min="0"
                   className={themeClasses.input}
                 />
               </div>
@@ -145,8 +180,12 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                placeholder="サブメニューの詳細説明を入力してください"
                 className={themeClasses.textarea}
               />
+              <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                お客様に表示される説明文です
+              </p>
             </div>
 
             <div>
@@ -164,12 +203,13 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
                 サブメニューの詳細表示で使用される画像のURLを入力してください
               </p>
               {image && (
-                <div className="mt-2">
+                <div className="mt-3">
+                  <p className={`text-xs ${themeClasses.text.secondary} mb-2`}>プレビュー:</p>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img 
                     src={image} 
                     alt="プレビュー" 
-                    className={`w-32 h-32 object-cover rounded-md ${
+                    className={`w-40 h-40 object-cover rounded-md ${
                       theme === 'light' ? 'border border-gray-300' : 'border border-gray-600'
                     }`}
                     onError={(e) => {
@@ -218,7 +258,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
   React.useEffect(() => {
     if (option) {
       setName(option.name);
-      setPrice(option.price.toString());
+      setPrice(formatPrice(option.price.toString()));
       setDuration(option.duration.toString());
       setDescription(option.description || '');
       setIsDefault(option.is_default || false);
@@ -235,7 +275,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
     const newOption: MenuOption = {
       id: option?.id || `option_${Date.now()}`,
       name,
-      price: parseInt(price) || 0,
+      price: parseInt(parsePrice(price)) || 0,
       duration: parseInt(duration) || 0,
       description: description || undefined,
       is_default: isDefault
@@ -283,11 +323,25 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
                   追加料金（円）
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   value={price}
-                  onChange={(e) => setPrice(e.target.value)}
+                  onChange={(e) => {
+                    const rawValue = parsePrice(e.target.value);
+                    if (rawValue === '' || /^\d+$/.test(rawValue)) {
+                      setPrice(rawValue === '' ? '' : formatPrice(rawValue));
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (e.target.value) {
+                      setPrice(formatPrice(e.target.value));
+                    }
+                  }}
+                  placeholder="例: 1,000"
                   className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
                 />
+                <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                  カンマは自動で追加されます
+                </p>
               </div>
               <div>
                 <label className={`block text-sm ${themeClasses.label} mb-1`}>
@@ -297,6 +351,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
                   type="number"
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
+                  min="0"
                   className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
                 />
               </div>
@@ -375,7 +430,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     if (isOpen) {
       if (menuItem) {
         setName(menuItem.name || '');
-        setPrice(menuItem.price?.toString() || '');
+        setPrice(menuItem.price ? formatPrice(menuItem.price.toString()) : '');
         setDuration(menuItem.duration?.toString() || '');
         setDescription(menuItem.description || '');
         setImage(menuItem.image || '');
@@ -401,7 +456,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     const newMenuItem: MenuItem = {
       id: menuItem?.id || `menu_${Date.now()}`,
       name,
-      price: hasSubmenu ? undefined : (parseInt(price) || 0),
+      price: hasSubmenu ? undefined : (parseInt(parsePrice(price)) || 0),
       duration: hasSubmenu ? undefined : (parseInt(duration) || 0),
       description: description || undefined,
       image: image || undefined,
@@ -530,11 +585,25 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                           料金（円）
                         </label>
                         <input
-                          type="number"
+                          type="text"
                           value={price}
-                          onChange={(e) => setPrice(e.target.value)}
+                          onChange={(e) => {
+                            const rawValue = parsePrice(e.target.value);
+                            if (rawValue === '' || /^\d+$/.test(rawValue)) {
+                              setPrice(rawValue === '' ? '' : formatPrice(rawValue));
+                            }
+                          }}
+                          onBlur={(e) => {
+                            if (e.target.value) {
+                              setPrice(formatPrice(e.target.value));
+                            }
+                          }}
+                          placeholder="例: 5,000"
                           className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
                         />
+                        <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                          カンマは自動で追加されます
+                        </p>
                       </div>
                       <div>
                         <label className={`block text-sm ${themeClasses.label} mb-1`}>
@@ -544,6 +613,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                           type="number"
                           value={duration}
                           onChange={(e) => setDuration(e.target.value)}
+                          min="0"
                           className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
                         />
                       </div>

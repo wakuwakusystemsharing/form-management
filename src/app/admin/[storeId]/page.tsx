@@ -8,7 +8,6 @@ import { Form } from '@/types/form';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
 import MenuStructureEditor from '@/components/FormEditor/MenuStructureEditor';
 import BusinessRulesEditor from '@/components/FormEditor/BusinessRulesEditor';
-import { getPublicFormUrl, getPreviewUrl } from '@/lib/form-url-helper';
 
 // テンプレート定義
 const FORM_TEMPLATES = {
@@ -235,6 +234,258 @@ const FORM_TEMPLATES = {
         show_repeat_booking: true
       }
     }
+  },
+  debug: {
+    name: '🐛 デバッグ用（全機能）',
+    description: '全ての機能を網羅したデバッグ用テンプレート',
+    liff_id: '2008098784-5ZQ1LRn3',
+    gas_endpoint: 'https://script.google.com/macros/s/AKfycby3QfS2E892nXbS-fnfBVrJX8KyJWTSsisKpe9zVz5QGWzvTH7Zc3PlOay9j60aSQLp/exec',
+    config: {
+      basic_info: {
+        show_gender_selection: true
+      },
+      menu_structure: {
+        structure_type: 'category',
+        categories: [
+          {
+            id: 'cat1',
+            name: 'カット',
+            display_name: 'カット',
+            menus: [
+              {
+                id: 'menu1',
+                name: 'スタンダードカット',
+                price: 3000,
+                duration: 60,
+                description: '基本的なカットメニュー',
+                gender_filter: 'both',
+                has_submenu: true,
+                sub_menu_items: [
+                  {
+                    id: 'sub1',
+                    name: 'ショートカット',
+                    price: 3000,
+                    duration: 60,
+                    description: 'ショートスタイルのカット'
+                  },
+                  {
+                    id: 'sub2',
+                    name: 'ミディアムカット',
+                    price: 3500,
+                    duration: 70,
+                    description: 'ミディアムスタイルのカット'
+                  },
+                  {
+                    id: 'sub3',
+                    name: 'ロングカット',
+                    price: 4000,
+                    duration: 80,
+                    description: 'ロングスタイルのカット'
+                  }
+                ],
+                options: [
+                  {
+                    id: 'opt1',
+                    name: 'シャンプー',
+                    price: 500,
+                    duration: 15,
+                    description: '基本シャンプー',
+                    is_default: true
+                  },
+                  {
+                    id: 'opt2',
+                    name: 'トリートメント',
+                    price: 1000,
+                    duration: 20,
+                    description: 'ヘアトリートメント',
+                    is_default: false
+                  }
+                ]
+              },
+              {
+                id: 'menu2',
+                name: '男性専用カット',
+                price: 2500,
+                duration: 45,
+                description: '男性向けのカットメニュー',
+                gender_filter: 'male',
+                options: [
+                  {
+                    id: 'opt3',
+                    name: 'シェービング',
+                    price: 800,
+                    duration: 10,
+                    description: '顔剃りサービス',
+                    is_default: false
+                  }
+                ]
+              },
+              {
+                id: 'menu3',
+                name: '女性専用カット',
+                price: 4000,
+                duration: 90,
+                description: '女性向けのカットメニュー',
+                gender_filter: 'female',
+                options: [
+                  {
+                    id: 'opt4',
+                    name: 'ブロー',
+                    price: 1500,
+                    duration: 30,
+                    description: 'スタイリングブロー',
+                    is_default: true
+                  }
+                ]
+              }
+            ],
+            options: [],
+            selection_mode: 'single',
+            gender_condition: 'all'
+          },
+          {
+            id: 'cat2',
+            name: 'カラー',
+            display_name: 'カラー',
+            menus: [
+              {
+                id: 'menu4',
+                name: 'フルカラー',
+                price: 8000,
+                duration: 120,
+                description: '全体カラーリング',
+                gender_filter: 'both',
+                has_submenu: true,
+                sub_menu_items: [
+                  {
+                    id: 'sub4',
+                    name: 'ベーシックカラー',
+                    price: 8000,
+                    duration: 120,
+                    description: '標準的なカラーリング'
+                  },
+                  {
+                    id: 'sub5',
+                    name: 'プレミアムカラー',
+                    price: 12000,
+                    duration: 150,
+                    description: '高品質なカラーリング'
+                  }
+                ],
+                options: [
+                  {
+                    id: 'opt5',
+                    name: 'カラートリートメント',
+                    price: 2000,
+                    duration: 20,
+                    description: 'カラー後のトリートメント',
+                    is_default: true
+                  }
+                ]
+              },
+              {
+                id: 'menu5',
+                name: 'ハイライト',
+                price: 10000,
+                duration: 150,
+                description: 'ハイライトカラー',
+                gender_filter: 'female',
+                options: [
+                  {
+                    id: 'opt6',
+                    name: 'オーガニックカラー',
+                    price: 3000,
+                    duration: 30,
+                    description: 'オーガニック素材使用',
+                    is_default: false
+                  }
+                ]
+              }
+            ],
+            options: [],
+            selection_mode: 'single',
+            gender_condition: 'all'
+          },
+          {
+            id: 'cat3',
+            name: 'パーマ',
+            display_name: 'パーマ',
+            menus: [
+              {
+                id: 'menu6',
+                name: 'デジタルパーマ',
+                price: 6000,
+                duration: 120,
+                description: 'デジタルパーマ',
+                gender_filter: 'both',
+                options: [
+                  {
+                    id: 'opt7',
+                    name: 'カット込み',
+                    price: 2000,
+                    duration: 60,
+                    description: 'カットサービス付き',
+                    is_default: true
+                  },
+                  {
+                    id: 'opt8',
+                    name: 'トリートメント込み',
+                    price: 1500,
+                    duration: 20,
+                    description: 'トリートメントサービス付き',
+                    is_default: false
+                  }
+                ]
+              }
+            ],
+            options: [],
+            selection_mode: 'single',
+            gender_condition: 'all'
+          },
+          {
+            id: 'cat4',
+            name: 'オプション',
+            display_name: 'オプション',
+            menus: [
+              {
+                id: 'menu7',
+                name: 'ヘッドスパ',
+                price: 2000,
+                duration: 30,
+                description: 'リラックスヘッドスパ',
+                gender_filter: 'both',
+                options: [
+                  {
+                    id: 'opt9',
+                    name: 'アロマオイル',
+                    price: 500,
+                    duration: 5,
+                    description: 'アロマオイル追加',
+                    is_default: false
+                  }
+                ]
+              },
+              {
+                id: 'menu8',
+                name: 'ヘッドマッサージ',
+                price: 1500,
+                duration: 20,
+                description: '頭皮マッサージ',
+                gender_filter: 'both'
+              }
+            ],
+            options: [],
+            selection_mode: 'single',
+            gender_condition: 'all'
+          }
+        ]
+      },
+      ui_settings: {
+        show_visit_count: true,
+        show_coupon_selection: true,
+        show_repeat_booking: true
+      }
+    }
   }
 };
 
@@ -345,7 +596,8 @@ export default function StoreDetailPage() {
         setForms([...forms, newForm]);
         setNewFormData({ form_name: '', liff_id: '', gas_endpoint: '', template: 'basic' });
         setShowCreateForm(false);
-        alert(`フォーム「${newForm.form_name}」を作成しました（ID: ${newForm.id}）\nテンプレート: ${selectedTemplate.name}`);
+        const formName = newForm.config?.basic_info?.form_name || newFormData.form_name.trim();
+        alert(`フォーム「${formName}」を作成しました（ID: ${newForm.id}）\nテンプレート: ${selectedTemplate?.name || 'ベーシック'}`);
       } else {
         const error = await response.json();
         alert(`エラー: ${error.error}`);
@@ -386,9 +638,9 @@ export default function StoreDetailPage() {
         );
         setForms(updatedForms);
         
-        setShowEditModal(false);
-        setEditingForm(null);
-        alert('フォームを保存しました');
+        setEditingForm(updatedForm);
+        
+        alert('フォームを保存しました。プレビューで確認してから「更新」ボタンでデプロイしてください。');
       } else {
         const error = await response.json();
         alert(`保存に失敗しました: ${error.error}`);
@@ -396,6 +648,62 @@ export default function StoreDetailPage() {
     } catch (error) {
       console.error('Save error:', error);
       alert('保存に失敗しました');
+    }
+  };
+  
+  const handleDeployForm = async () => {
+    if (!editingForm) return;
+    
+    try {
+      // 保存済みのフォームデータを取得（最新の状態を保証）
+      const formResponse = await fetch(`/api/forms/${editingForm.id}`, {
+        credentials: 'include',
+      });
+      
+      if (!formResponse.ok) {
+        alert('フォームデータの取得に失敗しました');
+        return;
+      }
+      
+      const savedForm = await formResponse.json();
+      
+      // 保存されたフォームデータを使って静的HTMLを再デプロイ
+      const deployResponse = await fetch(`/api/forms/${editingForm.id}/deploy`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          storeId: storeId,
+          formData: savedForm, // 保存された最新のフォームデータを渡す
+        }),
+      });
+      
+      if (deployResponse.ok) {
+        const result = await deployResponse.json();
+        
+        // フォーム一覧を再フェッチしてstatic_deploy情報を更新
+        try {
+          const formsResponse = await fetch(`/api/stores/${storeId}/forms`, {
+            credentials: 'include',
+          });
+          if (formsResponse.ok) {
+            const formsData = await formsResponse.json();
+            setForms(formsData);
+          }
+        } catch (error) {
+          console.error('Forms refresh error:', error);
+        }
+        
+        alert(`静的HTMLを更新しました！\n\n顧客向けURL: ${result.deployUrl}\n\n※ ブラウザのキャッシュをクリアするか、数分後に再読み込みしてください。`);
+      } else {
+        const error = await deployResponse.json();
+        alert(`デプロイに失敗しました: ${error.error || '不明なエラー'}`);
+      }
+    } catch (error) {
+      console.error('Deploy error:', error);
+      alert('デプロイに失敗しました');
     }
   };
 
@@ -762,7 +1070,27 @@ export default function StoreDetailPage() {
                           name="template"
                           value={key}
                           checked={newFormData.template === key}
-                          onChange={(e) => setNewFormData({...newFormData, template: e.target.value})}
+                          onChange={(e) => {
+                            const selectedKey = e.target.value;
+                            const selectedTemplate = FORM_TEMPLATES[selectedKey as keyof typeof FORM_TEMPLATES];
+                            const updatedData: typeof newFormData = {
+                              ...newFormData,
+                              template: selectedKey
+                            };
+                            
+                            // デバッグ用テンプレートが選ばれた場合、LIFF IDとGASエンドポイントを自動設定
+                            if (selectedKey === 'debug') {
+                              const debugTemplate = selectedTemplate as any;
+                              if (debugTemplate.liff_id) {
+                                updatedData.liff_id = debugTemplate.liff_id;
+                              }
+                              if (debugTemplate.gas_endpoint) {
+                                updatedData.gas_endpoint = debugTemplate.gas_endpoint;
+                              }
+                            }
+                            
+                            setNewFormData(updatedData);
+                          }}
                           className="sr-only"
                         />
                         <label
@@ -946,7 +1274,10 @@ export default function StoreDetailPage() {
                   フォーム編集: {(editingForm as any).form_name || editingForm.config?.basic_info?.form_name || 'フォーム'}
                 </h2>
                 <button
-                  onClick={() => setShowEditModal(false)}
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingForm(null);
+                  }}
                   className="text-gray-400 hover:text-gray-200"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1214,16 +1545,19 @@ export default function StoreDetailPage() {
 
             {/* モーダルフッター */}
             <div className="flex items-center justify-between p-6 border-t border-gray-700">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="bg-gray-600 text-gray-200 px-4 py-2 rounded-md hover:bg-gray-500 transition-colors"
-              >
-                キャンセル
-              </button>
+                <button
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setEditingForm(null);
+                  }}
+                  className="bg-gray-600 text-gray-200 px-4 py-2 rounded-md hover:bg-gray-500 transition-colors"
+                >
+                  キャンセル
+                </button>
               <div className="flex items-center space-x-3">
                 <button
                   onClick={async () => {
-                    // プレビューを開く
+                    // プレビューを開く（保存済みデータを表示）
                     const previewUrl = `/preview/${storeId}/forms/${editingForm.id}`;
                     window.open(previewUrl, '_blank');
                   }}
@@ -1238,37 +1572,10 @@ export default function StoreDetailPage() {
                   保存
                 </button>
                 <button
-                  onClick={async () => {
-                    if (!editingForm) return;
-                    try {
-                      // まず保存
-                      await handleSaveEditForm();
-                      
-                      // 静的HTMLを再デプロイ
-                      const deployResponse = await fetch(`/api/forms/${editingForm.id}/deploy`, {
-                        method: 'POST',
-                        credentials: 'include',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                          storeId: storeId,
-                        }),
-                      });
-                      
-                      if (deployResponse.ok) {
-                        alert('静的HTMLを更新しました！');
-                      } else {
-                        alert('デプロイに失敗しました');
-                      }
-                    } catch (error) {
-                      console.error('Deploy error:', error);
-                      alert('デプロイに失敗しました');
-                    }
-                  }}
+                  onClick={handleDeployForm}
                   className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition-colors"
                 >
-                  保存＆デプロイ
+                  更新
                 </button>
               </div>
             </div>

@@ -38,3 +38,5 @@ next-env.d.ts
 
 # data files
 data/*.json
+data/forms_html/
+public/static-forms/

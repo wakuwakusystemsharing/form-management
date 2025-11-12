@@ -7,6 +7,25 @@ import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 
+// テンプレート型定義
+type FormTemplate = {
+  name?: string;
+  description?: string;
+  config?: {
+    basic_info?: {
+      show_gender_selection?: boolean;
+    };
+    menu_structure?: FormConfig['menu_structure'];
+    ui_settings?: {
+      show_visit_count?: boolean;
+      show_coupon_selection?: boolean;
+      show_repeat_booking?: boolean;
+    };
+  };
+  liff_id?: string;
+  gas_endpoint?: string;
+};
+
 // 一時的なJSONファイルでのデータ保存（開発用）
 const DATA_DIR = path.join(process.cwd(), 'data');
 const FORMS_FILE = path.join(DATA_DIR, 'forms.json');
@@ -122,7 +141,7 @@ export async function POST(
       basic_info: {
         form_name: form_name || 'フォーム',
         store_name: '', // TODO: 店舗名を取得
-        liff_id: liff_id || '',
+        liff_id: (template as FormTemplate)?.liff_id || liff_id || '',
         theme_color: '#3B82F6',
         logo_url: undefined,
         show_gender_selection: template.config?.basic_info?.show_gender_selection || false
@@ -136,9 +155,11 @@ export async function POST(
         button_style: 'rounded' as const,
         show_repeat_booking: template.config?.ui_settings?.show_repeat_booking || false,
         show_side_nav: true,
-        custom_css: undefined
+        custom_css: undefined,
+        show_visit_count: template.config?.ui_settings?.show_visit_count || false,
+        show_coupon_selection: template.config?.ui_settings?.show_coupon_selection || false
       },
-      gas_endpoint: gas_endpoint || ''
+      gas_endpoint: (template as FormTemplate)?.gas_endpoint || gas_endpoint || ''
     } : {
       basic_info: {
         form_name: form_name || 'フォーム',
@@ -157,7 +178,9 @@ export async function POST(
         button_style: 'rounded' as const,
         show_repeat_booking: false,
         show_side_nav: true,
-        custom_css: undefined
+        custom_css: undefined,
+        show_visit_count: false,
+        show_coupon_selection: false
       },
       gas_endpoint: gas_endpoint || ''
     };
@@ -180,9 +203,29 @@ export async function POST(
           advance_booking_days: 30
         },
         visit_options: [],
-        gender_selection: { enabled: false, required: false, options: [] },
-        visit_count_selection: { enabled: false, required: false, options: [] },
-        coupon_selection: { enabled: false, options: [] },
+        gender_selection: { 
+          enabled: baseConfig.basic_info?.show_gender_selection || false, 
+          required: false, 
+          options: [
+            { value: 'male' as const, label: '男性' },
+            { value: 'female' as const, label: '女性' }
+          ]
+        },
+        visit_count_selection: { 
+          enabled: baseConfig.ui_settings?.show_visit_count || false, 
+          required: false, 
+          options: [
+            { value: 'first', label: '初回' },
+            { value: 'repeat', label: '2回目以降' }
+          ]
+        },
+        coupon_selection: { 
+          enabled: baseConfig.ui_settings?.show_coupon_selection || false, 
+          options: [
+            { value: 'use' as const, label: '利用する' },
+            { value: 'not_use' as const, label: '利用しない' }
+          ]
+        },
         menu_structure: {
           ...baseConfig.menu_structure,
           display_options: {
@@ -241,7 +284,7 @@ export async function POST(
           ]
         },
         visit_count_selection: {
-          enabled: false,
+          enabled: baseConfig.ui_settings?.show_visit_count || false,
           required: false,
           options: [
             { value: 'first', label: '初回' },
@@ -249,7 +292,7 @@ export async function POST(
           ]
         },
         coupon_selection: {
-          enabled: false,
+          enabled: baseConfig.ui_settings?.show_coupon_selection || false,
           options: [
             { value: 'use' as const, label: '利用する' },
             { value: 'not_use' as const, label: '利用しない' }
@@ -315,12 +358,16 @@ export async function POST(
     // 新形式のフォームデータを作成（Supabase用）
     const baseTemplateConfig = template?.config;
     const genderSelectionEnabled = baseTemplateConfig?.basic_info?.show_gender_selection || false;
+    const visitCountEnabled = baseTemplateConfig?.ui_settings?.show_visit_count || false;
+    const couponEnabled = baseTemplateConfig?.ui_settings?.show_coupon_selection || false;
+    const templateLiffId = (template as FormTemplate)?.liff_id;
+    const templateGasEndpoint = (template as FormTemplate)?.gas_endpoint;
     
     const supabaseConfig: FormConfig = {
       basic_info: {
         form_name: form_name || 'フォーム',
         store_name: '',
-        liff_id: liff_id || '',
+        liff_id: templateLiffId || liff_id || '',
         theme_color: '#3B82F6',
         logo_url: undefined
       },
@@ -334,7 +381,7 @@ export async function POST(
         ]
       },
       visit_count_selection: {
-        enabled: false,
+        enabled: visitCountEnabled,
         required: false,
         options: [
           { value: 'first', label: '初回' },
@@ -342,7 +389,7 @@ export async function POST(
         ]
       },
       coupon_selection: {
-        enabled: false,
+        enabled: couponEnabled,
         options: [
           { value: 'use' as const, label: '利用する' },
           { value: 'not_use' as const, label: '利用しない' }
@@ -384,7 +431,7 @@ export async function POST(
         phone_format: 'japanese' as const,
         name_max_length: 50
       },
-      gas_endpoint: gas_endpoint || ''
+      gas_endpoint: templateGasEndpoint || gas_endpoint || ''
     };
 
     // 新形式のフォームデータを作成（Supabase用）

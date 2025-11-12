@@ -138,19 +138,20 @@ export async function PUT(
     const updatedFormData = await request.json();
     const env = getAppEnvironment();
 
-    // ローカル環境: JSON を更新
+    // ローカル環境: JSON を更新（正規化されたフォーム形式で保存）
     if (env === 'local') {
       // まずグローバルフォームから検索・更新
       const globalForms = readForms();
       const formIndex = globalForms.findIndex((f: Form) => f.id === formId);
       
       if (formIndex !== -1) {
-        // グローバルフォームの更新
-        const updatedForm: Form = {
+        // グローバルフォームの更新（正規化）
+        const mergedForm = {
           ...globalForms[formIndex],
           ...updatedFormData,
           updated_at: new Date().toISOString()
         };
+        const updatedForm = normalizeForm(mergedForm);
         
         globalForms[formIndex] = updatedForm;
         writeForms(globalForms);
@@ -169,18 +170,19 @@ export async function PUT(
         );
       }
       
-      // 店舗固有フォームの更新
+      // 店舗固有フォームの更新（正規化）
       const storeFormFile = path.join(DATA_DIR, `forms_${storeForm.store_id}.json`);
       if (fs.existsSync(storeFormFile)) {
         const storeFormsData = JSON.parse(fs.readFileSync(storeFormFile, 'utf-8'));
         const storeFormIndex = storeFormsData.findIndex((f: Form) => f.id === formId);
         
         if (storeFormIndex !== -1) {
-          const updatedForm: Form = {
+          const mergedForm = {
             ...storeFormsData[storeFormIndex],
             ...updatedFormData,
             updated_at: new Date().toISOString()
           };
+          const updatedForm = normalizeForm(mergedForm);
           
           storeFormsData[storeFormIndex] = updatedForm;
           fs.writeFileSync(storeFormFile, JSON.stringify(storeFormsData, null, 2));
@@ -188,12 +190,13 @@ export async function PUT(
           return NextResponse.json(updatedForm);
         }
       } else {
-        // ファイルが存在しない場合は作成
-        const updatedForm: Form = {
+        // ファイルが存在しない場合は作成（正規化）
+        const mergedForm = {
           ...storeForm,
           ...updatedFormData,
           updated_at: new Date().toISOString()
         };
+        const updatedForm = normalizeForm(mergedForm);
         
         fs.writeFileSync(storeFormFile, JSON.stringify([updatedForm], null, 2));
         return NextResponse.json(updatedForm);
