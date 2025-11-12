@@ -249,7 +249,6 @@ export default function StoreDetailPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editingForm, setEditingForm] = useState<Form | null>(null);
-  const [originalForm, setOriginalForm] = useState<Form | null>(null); // 編集開始時のフォームデータ
   const [showEditModal, setShowEditModal] = useState(false);
   const [editModalTab, setEditModalTab] = useState<'basic' | 'menu' | 'business'>('basic');
   const [newFormData, setNewFormData] = useState({
@@ -359,27 +358,13 @@ export default function StoreDetailPage() {
   };
 
   const handleEditForm = (form: Form) => {
-    // 編集開始時に元のフォームデータを保存
     setEditingForm(form);
-    setOriginalForm(JSON.parse(JSON.stringify(form))); // ディープコピー
     setEditModalTab('basic');
     setShowEditModal(true);
   };
-  
-  // 変更があるかどうかを判定
-  const hasChanges = editingForm && originalForm 
-    ? JSON.stringify(editingForm) !== JSON.stringify(originalForm)
-    : false;
 
   const handleSaveEditForm = async () => {
-    if (!editingForm || !originalForm) return;
-    
-    // 変更がない場合は保存しない
-    const hasChangesCheck = JSON.stringify(editingForm) !== JSON.stringify(originalForm);
-    if (!hasChangesCheck) {
-      alert('変更がありません。');
-      return;
-    }
+    if (!editingForm) return;
     
     try {
       const response = await fetch(`/api/forms/${editingForm.id}`, {
@@ -400,8 +385,6 @@ export default function StoreDetailPage() {
         );
         setForms(updatedForms);
         
-        // 保存済みのフォームデータを新しいoriginalFormとして設定
-        setOriginalForm(JSON.parse(JSON.stringify(updatedForm)));
         setEditingForm(updatedForm);
         
         alert('フォームを保存しました。プレビューで確認してから「更新」ボタンでデプロイしてください。');
@@ -416,14 +399,7 @@ export default function StoreDetailPage() {
   };
   
   const handleDeployForm = async () => {
-    if (!editingForm || !originalForm) return;
-    
-    // 変更がある場合はデプロイしない（まず保存が必要）
-    const hasChangesCheck = JSON.stringify(editingForm) !== JSON.stringify(originalForm);
-    if (hasChangesCheck) {
-      alert('変更があります。まず「保存」ボタンをクリックしてください。');
-      return;
-    }
+    if (!editingForm) return;
     
     try {
       // 保存済みのフォームデータを取得（最新の状態を保証）
@@ -1028,7 +1004,6 @@ export default function StoreDetailPage() {
                   onClick={() => {
                     setShowEditModal(false);
                     setEditingForm(null);
-                    setOriginalForm(null);
                   }}
                   className="text-gray-400 hover:text-gray-200"
                 >
@@ -1301,7 +1276,6 @@ export default function StoreDetailPage() {
                   onClick={() => {
                     setShowEditModal(false);
                     setEditingForm(null);
-                    setOriginalForm(null);
                   }}
                   className="bg-gray-600 text-gray-200 px-4 py-2 rounded-md hover:bg-gray-500 transition-colors"
                 >
@@ -1319,38 +1293,14 @@ export default function StoreDetailPage() {
                   プレビュー
                 </button>
                 <button
-                  onClick={(e) => {
-                    if (!hasChanges) {
-                      e.preventDefault();
-                      return;
-                    }
-                    handleSaveEditForm();
-                  }}
-                  disabled={!hasChanges}
-                  className={`px-4 py-2 rounded-md transition-colors ${
-                    hasChanges
-                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-50'
-                  }`}
-                  title={!hasChanges ? '変更がありません' : '変更を保存します'}
+                  onClick={handleSaveEditForm}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
                 >
                   保存
                 </button>
                 <button
-                  onClick={(e) => {
-                    if (hasChanges) {
-                      e.preventDefault();
-                      return;
-                    }
-                    handleDeployForm();
-                  }}
-                  disabled={hasChanges}
-                  className={`px-4 py-2 rounded-md transition-colors ${
-                    !hasChanges
-                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                      : 'bg-gray-600 text-gray-300 cursor-not-allowed opacity-50'
-                  }`}
-                  title={hasChanges ? 'まず「保存」ボタンをクリックしてください' : '保存済みの内容をデプロイします'}
+                  onClick={handleDeployForm}
+                  className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition-colors"
                 >
                   更新
                 </button>
@@ -1513,7 +1463,6 @@ export default function StoreDetailPage() {
           onClose={() => {
             setShowEditModal(false);
             setEditingForm(null);
-            setOriginalForm(null);
           }}
           form={editingForm}
           storeId={storeId}
