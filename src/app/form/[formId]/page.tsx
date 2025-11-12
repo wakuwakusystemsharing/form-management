@@ -892,14 +892,31 @@ export default function CustomerFormPage() {
 
         {/* 前回と同じメニューで予約するボタン */}
         {form.config.ui_settings?.show_repeat_booking && (
-          <div className="mb-6 text-center">
+          <div className="mb-6">
             <button
               type="button"
               onClick={handleRepeatBooking}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+              className="w-full inline-flex items-center justify-center px-5 py-3 border-2 border-dashed rounded-lg text-sm font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                borderColor: form.config?.basic_info?.theme_color || '#3B82F6',
+                color: form.config?.basic_info?.theme_color || '#3B82F6',
+                backgroundColor: 'transparent'
+              }}
+              onMouseEnter={(e) => {
+                const themeColor = form.config?.basic_info?.theme_color || '#3B82F6';
+                e.currentTarget.style.backgroundColor = `${themeColor}15`;
+                e.currentTarget.style.borderColor = themeColor;
+              }}
+              onMouseLeave={(e) => {
+                const themeColor = form.config?.basic_info?.theme_color || '#3B82F6';
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.borderColor = themeColor;
+              }}
             >
-              <span className="mr-2">🔁</span>
-              前回と同じメニューで予約する
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>前回と同じメニューで予約する</span>
             </button>
           </div>
         )}
