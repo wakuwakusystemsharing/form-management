@@ -701,7 +701,7 @@ export default function PreviewFormPage() {
                               
                               return (
                                 <div key={menuId}>
-                                  • {menu.name} {menu.price ? `(¥${menu.price.toLocaleString()})` : ''}
+                                  • {menu.name} {menu.price ? `(¥${menu.price.toLocaleString()})` : ''} {menu.duration ? `(${menu.duration}分)` : ''}
                                   {optionTexts.length > 0 && (
                                     <div className="ml-4 text-xs text-gray-500">
                                       + {optionTexts.join(', ')}
@@ -750,7 +750,7 @@ export default function PreviewFormPage() {
                         
                         return (
                           <div key={`${menuId}-${subMenuId}`}>
-                            • {parentMenu.name} - {subMenu.name} {subMenu.price ? `(¥${subMenu.price.toLocaleString()})` : ''}
+                            • {parentMenu.name} - {subMenu.name} {subMenu.price ? `(¥${subMenu.price.toLocaleString()})` : ''} {subMenu.duration ? `(${subMenu.duration}分)` : ''}
                             {optionTexts.length > 0 && (
                               <div className="ml-4 text-xs text-gray-500">
                                 + {optionTexts.join(', ')}
@@ -762,6 +762,74 @@ export default function PreviewFormPage() {
                     </div>
                   </div>
                 )}
+                {(() => {
+                  // 合計金額と合計時間を計算
+                  let totalPrice = 0;
+                  let totalDuration = 0;
+                  
+                  // 通常メニューの合計
+                  Object.entries(formData.selectedMenus).forEach(([categoryId, menuIds]) => {
+                    const category = form.config.menu_structure.categories.find(c => c.id === categoryId);
+                    menuIds.forEach(menuId => {
+                      const menu = category?.menus.find(m => m.id === menuId);
+                      if (menu) {
+                        totalPrice += menu.price || 0;
+                        totalDuration += menu.duration || 0;
+                        // オプションの合計
+                        const selectedOptions = formData.selectedMenuOptions[menuId] || [];
+                        selectedOptions.forEach(optionId => {
+                          const option = menu.options?.find(o => o.id === optionId);
+                          if (option) {
+                            totalPrice += option.price || 0;
+                            totalDuration += option.duration || 0;
+                          }
+                        });
+                      }
+                    });
+                  });
+                  
+                  // サブメニューの合計
+                  Object.entries(formData.selectedSubMenus).forEach(([menuId, subMenuId]) => {
+                    if (!subMenuId) return;
+                    for (const category of form.config.menu_structure.categories) {
+                      const foundMenu = category.menus.find(m => m.id === menuId);
+                      if (foundMenu && foundMenu.sub_menu_items) {
+                        const subMenu = foundMenu.sub_menu_items.find((sm, idx) => {
+                          const smId = sm.id || `submenu-${idx}`;
+                          return smId === subMenuId;
+                        });
+                        if (subMenu) {
+                          totalPrice += subMenu.price || 0;
+                          totalDuration += subMenu.duration || 0;
+                          // オプションの合計
+                          const selectedOptions = formData.selectedMenuOptions[menuId] || [];
+                          selectedOptions.forEach(optionId => {
+                            const option = foundMenu.options?.find(o => o.id === optionId);
+                            if (option) {
+                              totalPrice += option.price || 0;
+                              totalDuration += option.duration || 0;
+                            }
+                          });
+                        }
+                        break;
+                      }
+                    }
+                  });
+                  
+                  if (totalPrice > 0 || totalDuration > 0) {
+                    return (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        {totalPrice > 0 && (
+                          <div className="font-semibold text-base">合計金額: ¥{totalPrice.toLocaleString()}</div>
+                        )}
+                        {totalDuration > 0 && (
+                          <div className="font-semibold text-base mt-1">合計時間: {totalDuration}分</div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 {formData.message && (
                   <div><span className="font-medium">メッセージ:</span> {formData.message}</div>
                 )}
@@ -865,7 +933,7 @@ export default function PreviewFormPage() {
                                 
                                 return (
                                   <div key={menuId} className="text-sm font-medium">
-                                    • {menu.name} {menu.price ? `(¥${menu.price.toLocaleString()})` : ''}
+                                    • {menu.name} {menu.price ? `(¥${menu.price.toLocaleString()})` : ''} {menu.duration ? `(${menu.duration}分)` : ''}
                                     {optionTexts.length > 0 && (
                                       <div className="ml-4 text-xs text-gray-500">
                                         + {optionTexts.join(', ')}
@@ -887,6 +955,81 @@ export default function PreviewFormPage() {
                       <p className="mt-1 text-sm bg-gray-50 p-2 rounded">{formData.message}</p>
                     </div>
                   )}
+                  
+                  {(() => {
+                    // 合計金額と合計時間を計算
+                    let totalPrice = 0;
+                    let totalDuration = 0;
+                    
+                    // 通常メニューの合計
+                    Object.entries(formData.selectedMenus).forEach(([categoryId, menuIds]) => {
+                      const category = form.config.menu_structure.categories.find(c => c.id === categoryId);
+                      menuIds.forEach(menuId => {
+                        const menu = category?.menus.find(m => m.id === menuId);
+                        if (menu) {
+                          totalPrice += menu.price || 0;
+                          totalDuration += menu.duration || 0;
+                          // オプションの合計
+                          const selectedOptions = formData.selectedMenuOptions[menuId] || [];
+                          selectedOptions.forEach(optionId => {
+                            const option = menu.options?.find(o => o.id === optionId);
+                            if (option) {
+                              totalPrice += option.price || 0;
+                              totalDuration += option.duration || 0;
+                            }
+                          });
+                        }
+                      });
+                    });
+                    
+                    // サブメニューの合計
+                    Object.entries(formData.selectedSubMenus).forEach(([menuId, subMenuId]) => {
+                      if (!subMenuId) return;
+                      for (const category of form.config.menu_structure.categories) {
+                        const foundMenu = category.menus.find(m => m.id === menuId);
+                        if (foundMenu && foundMenu.sub_menu_items) {
+                          const subMenu = foundMenu.sub_menu_items.find((sm, idx) => {
+                            const smId = sm.id || `submenu-${idx}`;
+                            return smId === subMenuId;
+                          });
+                          if (subMenu) {
+                            totalPrice += subMenu.price || 0;
+                            totalDuration += subMenu.duration || 0;
+                            // オプションの合計
+                            const selectedOptions = formData.selectedMenuOptions[menuId] || [];
+                            selectedOptions.forEach(optionId => {
+                              const option = foundMenu.options?.find(o => o.id === optionId);
+                              if (option) {
+                                totalPrice += option.price || 0;
+                                totalDuration += option.duration || 0;
+                              }
+                            });
+                          }
+                          break;
+                        }
+                      }
+                    });
+                    
+                    if (totalPrice > 0 || totalDuration > 0) {
+                      return (
+                        <div className="pt-4 mt-4 border-t border-gray-200">
+                          {totalPrice > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-600 font-semibold">合計金額</span>
+                              <span className="font-bold text-lg">¥{totalPrice.toLocaleString()}</span>
+                            </div>
+                          )}
+                          {totalDuration > 0 && (
+                            <div className="flex justify-between mt-2">
+                              <span className="text-gray-600 font-semibold">合計時間</span>
+                              <span className="font-bold text-lg">{totalDuration}分</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
                 
                 <div className="flex space-x-3">

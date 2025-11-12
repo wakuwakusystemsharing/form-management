@@ -677,13 +677,20 @@ class BookingForm {
         }
         if (this.state.selectedMenu || this.state.selectedSubmenu) {
             let menuText = '';
+            let totalPrice = 0;
+            let totalDuration = 0;
+            
             if (this.state.selectedSubmenu) {
+                totalPrice = this.state.selectedSubmenu.price || 0;
+                totalDuration = this.state.selectedSubmenu.duration || 0;
                 menuText = \`
                     <div style="font-size:0.875rem;color:#6b7280;">\${this.state.selectedMenu.name} &gt;</div>
                     <div>\${this.state.selectedSubmenu.name}</div>
                     <div style="font-size:0.875rem;color:#6b7280;">¥\${this.state.selectedSubmenu.price.toLocaleString()} / \${this.state.selectedSubmenu.duration}分</div>
                 \`;
             } else if (this.state.selectedMenu) {
+                totalPrice = this.state.selectedMenu.price || 0;
+                totalDuration = this.state.selectedMenu.duration || 0;
                 menuText = \`
                     <div>\${this.state.selectedMenu.name}</div>
                     \${this.state.selectedMenu.price ? \`<div style="font-size:0.875rem;color:#6b7280;">¥\${this.state.selectedMenu.price.toLocaleString()} / \${this.state.selectedMenu.duration}分</div>\` : ''}
@@ -698,7 +705,9 @@ class BookingForm {
                 const optionTexts = selectedOptionIds.map(optionId => {
                     const option = menu.options?.find(o => o.id === optionId);
                     if (option) {
-                        return \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ \${option.name}\${option.price > 0 ? \` (+¥\${option.price.toLocaleString()})\` : ''}</div>\`;
+                        totalPrice += option.price || 0;
+                        totalDuration += option.duration || 0;
+                        return \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ \${option.name}\${option.price > 0 ? \` (+¥\${option.price.toLocaleString()})\` : ''}\${option.duration > 0 ? \` (+\${option.duration}分)\` : ''}</div>\`;
                     }
                     return '';
                 }).join('');
@@ -706,6 +715,18 @@ class BookingForm {
             }
             
             items.push(\`<div class="summary-item" style="align-items:flex-start;"><div><strong>メニュー:</strong><div style="margin-top:0.25rem;">\${menuText}</div></div><button class="summary-edit-button" data-field="menu-field">修正</button></div>\`);
+            
+            // 合計金額と合計時間を表示
+            if (totalPrice > 0 || totalDuration > 0) {
+                let totalText = '';
+                if (totalPrice > 0) {
+                    totalText += \`<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #e5e7eb;"><strong style="font-size:1rem;">合計金額: ¥\${totalPrice.toLocaleString()}</strong></div>\`;
+                }
+                if (totalDuration > 0) {
+                    totalText += \`<div style="margin-top:0.25rem;"><strong style="font-size:1rem;">合計時間: \${totalDuration}分</strong></div>\`;
+                }
+                items.push(\`<div class="summary-item" style="align-items:flex-start;"><div>\${totalText}</div></div>\`);
+            }
         }
         if (this.state.selectedDate || this.state.selectedTime) {
             items.push(\`<div class="summary-item"><span><strong>希望日時:</strong> \${this.state.selectedDate} \${this.state.selectedTime}</span><button class="summary-edit-button" data-field="datetime-field">修正</button></div>\`);
