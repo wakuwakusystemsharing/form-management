@@ -72,7 +72,7 @@ export class SupabaseStorageDeployer {
       const htmlBuffer = Buffer.from(html, 'utf-8');
       
       // Supabase Storageにアップロード（upsert: trueで上書き）
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('forms')
         .upload(storagePath, htmlBuffer, {
           contentType: 'text/html; charset=utf-8',
@@ -240,7 +240,7 @@ export class SupabaseStorageDeployer {
       };
       const contentType = contentTypeMap[ext || ''] || 'image/jpeg';
 
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('forms')
         .upload(filePath, file, {
           contentType,
