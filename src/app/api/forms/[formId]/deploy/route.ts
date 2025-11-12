@@ -6,7 +6,7 @@ import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
-import { Form } from '@/types/form';
+import { Form, StaticDeploy } from '@/types/form';
 
 export async function POST(
   request: NextRequest,
@@ -107,12 +107,11 @@ export async function POST(
       deployUrl = `${baseUrl}${deployResult.url}`;
     }
     
-    const deployInfo = {
+    const deployInfo: StaticDeploy = {
       deployed_at: new Date().toISOString(),
       deploy_url: deployUrl,
       storage_url: deployResult.storage_url,
-      status: 'deployed',
-      environment: deployResult.environment
+      status: 'deployed'
     };
 
     if (env === 'local') {
