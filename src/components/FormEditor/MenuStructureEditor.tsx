@@ -41,10 +41,12 @@ const formatPrice = (value: string): string => {
   // カンマを除去して数値のみ取得
   const numericValue = value.replace(/,/g, '');
   if (!numericValue) return '';
-  // 数値に変換してカンマ区切りでフォーマット
+  // 数値に変換
   const num = parseInt(numericValue, 10);
   if (isNaN(num)) return '';
-  return num.toLocaleString('ja-JP');
+  
+  // カンマ区切りでフォーマット（環境に依存しない実装）
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 };
 
 const parsePrice = (value: string): string => {

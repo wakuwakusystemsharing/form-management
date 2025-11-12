@@ -245,7 +245,7 @@ class BookingForm {
             });
         });
         
-        // メニュー選択（1つだけ選択可能）
+        // メニュー選択
         document.querySelectorAll('.menu-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 // オプションボタンからのイベント伝播を防ぐ
@@ -257,10 +257,12 @@ class BookingForm {
                 const categoryId = item.dataset.categoryId;
                 const menu = this.findMenu(categoryId, menuId);
                 
-                // 既に選択されているメニューをクリックした場合は選択解除
-                const wasSelected = item.classList.contains('selected');
+                // クリックされたメニューが既に選択されているかチェック
+                const wasSelected = item.classList.contains('selected') && 
+                                   this.state.selectedMenu && 
+                                   this.state.selectedMenu.id === menuId;
                 
-                // 全てのメニューの選択状態をリセット
+                // 全てのメニューの選択状態をリセット（常に実行）
                 document.querySelectorAll('.menu-item').forEach(m => {
                     m.classList.remove('selected', 'has-submenu');
                 });
@@ -276,28 +278,23 @@ class BookingForm {
                 this.state.selectedSubmenu = null;
                 this.state.selectedOptions = {};
                 
-                // 選択解除の場合はここで終了
-                if (wasSelected) {
-                    this.toggleCalendarVisibility();
-                    this.updateSummary();
-                    return;
-                }
-                
-                // 新しいメニューを選択
-                if (menu.has_submenu) {
-                    // サブメニューがある場合
-                    item.classList.add('selected', 'has-submenu');
-                    this.state.selectedMenu = menu;
-                    this.showSubmenu(categoryId, menuId);
-                } else {
-                    // 通常メニュー
-                    item.classList.add('selected');
-                    this.state.selectedMenu = menu;
-                    
-                    // このメニューのオプションコンテナを表示
-                    const optionsContainer = document.getElementById(\`options-\${menuId}\`);
-                    if (optionsContainer) {
-                        optionsContainer.style.display = 'block';
+                // 同じメニューを再度クリックした場合は選択解除のみ（wasSelectedがtrueの場合は何もしない）
+                if (!wasSelected) {
+                    if (menu.has_submenu) {
+                        // サブメニューがある場合
+                        item.classList.add('selected', 'has-submenu');
+                        this.state.selectedMenu = menu;
+                        this.showSubmenu(categoryId, menuId);
+                    } else {
+                        // 通常メニュー
+                        item.classList.add('selected');
+                        this.state.selectedMenu = menu;
+                        
+                        // このメニューのオプションコンテナを表示
+                        const optionsContainer = document.getElementById(\`options-\${menuId}\`);
+                        if (optionsContainer) {
+                            optionsContainer.style.display = 'block';
+                        }
                     }
                 }
                 

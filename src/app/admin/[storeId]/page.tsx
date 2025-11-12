@@ -234,6 +234,258 @@ const FORM_TEMPLATES = {
         show_repeat_booking: true
       }
     }
+  },
+  debug: {
+    name: '🐛 デバッグ用（全機能）',
+    description: '全ての機能を網羅したデバッグ用テンプレート',
+    liff_id: '2008098784-5ZQ1LRn3',
+    gas_endpoint: 'https://script.google.com/macros/s/AKfycby3QfS2E892nXbS-fnfBVrJX8KyJWTSsisKpe9zVz5QGWzvTH7Zc3PlOay9j60aSQLp/exec',
+    config: {
+      basic_info: {
+        show_gender_selection: true
+      },
+      menu_structure: {
+        structure_type: 'category',
+        categories: [
+          {
+            id: 'cat1',
+            name: 'カット',
+            display_name: 'カット',
+            menus: [
+              {
+                id: 'menu1',
+                name: 'スタンダードカット',
+                price: 3000,
+                duration: 60,
+                description: '基本的なカットメニュー',
+                gender_filter: 'both',
+                has_submenu: true,
+                sub_menu_items: [
+                  {
+                    id: 'sub1',
+                    name: 'ショートカット',
+                    price: 3000,
+                    duration: 60,
+                    description: 'ショートスタイルのカット'
+                  },
+                  {
+                    id: 'sub2',
+                    name: 'ミディアムカット',
+                    price: 3500,
+                    duration: 70,
+                    description: 'ミディアムスタイルのカット'
+                  },
+                  {
+                    id: 'sub3',
+                    name: 'ロングカット',
+                    price: 4000,
+                    duration: 80,
+                    description: 'ロングスタイルのカット'
+                  }
+                ],
+                options: [
+                  {
+                    id: 'opt1',
+                    name: 'シャンプー',
+                    price: 500,
+                    duration: 15,
+                    description: '基本シャンプー',
+                    is_default: true
+                  },
+                  {
+                    id: 'opt2',
+                    name: 'トリートメント',
+                    price: 1000,
+                    duration: 20,
+                    description: 'ヘアトリートメント',
+                    is_default: false
+                  }
+                ]
+              },
+              {
+                id: 'menu2',
+                name: '男性専用カット',
+                price: 2500,
+                duration: 45,
+                description: '男性向けのカットメニュー',
+                gender_filter: 'male',
+                options: [
+                  {
+                    id: 'opt3',
+                    name: 'シェービング',
+                    price: 800,
+                    duration: 10,
+                    description: '顔剃りサービス',
+                    is_default: false
+                  }
+                ]
+              },
+              {
+                id: 'menu3',
+                name: '女性専用カット',
+                price: 4000,
+                duration: 90,
+                description: '女性向けのカットメニュー',
+                gender_filter: 'female',
+                options: [
+                  {
+                    id: 'opt4',
+                    name: 'ブロー',
+                    price: 1500,
+                    duration: 30,
+                    description: 'スタイリングブロー',
+                    is_default: true
+                  }
+                ]
+              }
+            ],
+            options: [],
+            selection_mode: 'single',
+            gender_condition: 'all'
+          },
+          {
+            id: 'cat2',
+            name: 'カラー',
+            display_name: 'カラー',
+            menus: [
+              {
+                id: 'menu4',
+                name: 'フルカラー',
+                price: 8000,
+                duration: 120,
+                description: '全体カラーリング',
+                gender_filter: 'both',
+                has_submenu: true,
+                sub_menu_items: [
+                  {
+                    id: 'sub4',
+                    name: 'ベーシックカラー',
+                    price: 8000,
+                    duration: 120,
+                    description: '標準的なカラーリング'
+                  },
+                  {
+                    id: 'sub5',
+                    name: 'プレミアムカラー',
+                    price: 12000,
+                    duration: 150,
+                    description: '高品質なカラーリング'
+                  }
+                ],
+                options: [
+                  {
+                    id: 'opt5',
+                    name: 'カラートリートメント',
+                    price: 2000,
+                    duration: 20,
+                    description: 'カラー後のトリートメント',
+                    is_default: true
+                  }
+                ]
+              },
+              {
+                id: 'menu5',
+                name: 'ハイライト',
+                price: 10000,
+                duration: 150,
+                description: 'ハイライトカラー',
+                gender_filter: 'female',
+                options: [
+                  {
+                    id: 'opt6',
+                    name: 'オーガニックカラー',
+                    price: 3000,
+                    duration: 30,
+                    description: 'オーガニック素材使用',
+                    is_default: false
+                  }
+                ]
+              }
+            ],
+            options: [],
+            selection_mode: 'single',
+            gender_condition: 'all'
+          },
+          {
+            id: 'cat3',
+            name: 'パーマ',
+            display_name: 'パーマ',
+            menus: [
+              {
+                id: 'menu6',
+                name: 'デジタルパーマ',
+                price: 6000,
+                duration: 120,
+                description: 'デジタルパーマ',
+                gender_filter: 'both',
+                options: [
+                  {
+                    id: 'opt7',
+                    name: 'カット込み',
+                    price: 2000,
+                    duration: 60,
+                    description: 'カットサービス付き',
+                    is_default: true
+                  },
+                  {
+                    id: 'opt8',
+                    name: 'トリートメント込み',
+                    price: 1500,
+                    duration: 20,
+                    description: 'トリートメントサービス付き',
+                    is_default: false
+                  }
+                ]
+              }
+            ],
+            options: [],
+            selection_mode: 'single',
+            gender_condition: 'all'
+          },
+          {
+            id: 'cat4',
+            name: 'オプション',
+            display_name: 'オプション',
+            menus: [
+              {
+                id: 'menu7',
+                name: 'ヘッドスパ',
+                price: 2000,
+                duration: 30,
+                description: 'リラックスヘッドスパ',
+                gender_filter: 'both',
+                options: [
+                  {
+                    id: 'opt9',
+                    name: 'アロマオイル',
+                    price: 500,
+                    duration: 5,
+                    description: 'アロマオイル追加',
+                    is_default: false
+                  }
+                ]
+              },
+              {
+                id: 'menu8',
+                name: 'ヘッドマッサージ',
+                price: 1500,
+                duration: 20,
+                description: '頭皮マッサージ',
+                gender_filter: 'both'
+              }
+            ],
+            options: [],
+            selection_mode: 'single',
+            gender_condition: 'all'
+          }
+        ]
+      },
+      ui_settings: {
+        show_visit_count: true,
+        show_coupon_selection: true,
+        show_repeat_booking: true
+      }
+    }
   }
 };
 
@@ -818,7 +1070,27 @@ export default function StoreDetailPage() {
                           name="template"
                           value={key}
                           checked={newFormData.template === key}
-                          onChange={(e) => setNewFormData({...newFormData, template: e.target.value})}
+                          onChange={(e) => {
+                            const selectedKey = e.target.value;
+                            const selectedTemplate = FORM_TEMPLATES[selectedKey as keyof typeof FORM_TEMPLATES];
+                            const updatedData: typeof newFormData = {
+                              ...newFormData,
+                              template: selectedKey
+                            };
+                            
+                            // デバッグ用テンプレートが選ばれた場合、LIFF IDとGASエンドポイントを自動設定
+                            if (selectedKey === 'debug') {
+                              const debugTemplate = selectedTemplate as any;
+                              if (debugTemplate.liff_id) {
+                                updatedData.liff_id = debugTemplate.liff_id;
+                              }
+                              if (debugTemplate.gas_endpoint) {
+                                updatedData.gas_endpoint = debugTemplate.gas_endpoint;
+                              }
+                            }
+                            
+                            setNewFormData(updatedData);
+                          }}
                           className="sr-only"
                         />
                         <label
