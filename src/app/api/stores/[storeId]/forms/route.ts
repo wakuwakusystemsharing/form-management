@@ -313,71 +313,53 @@ export async function POST(
     }
 
     // 新形式のフォームデータを作成（Supabase用）
-    const supabaseConfig = template ? {
+    const baseTemplateConfig = template?.config;
+    const genderSelectionEnabled = baseTemplateConfig?.basic_info?.show_gender_selection || false;
+    
+    const supabaseConfig: FormConfig = {
       basic_info: {
         form_name: form_name || 'フォーム',
         store_name: '',
         liff_id: liff_id || '',
         theme_color: '#3B82F6',
-        logo_url: undefined,
-        show_gender_selection: template.config?.basic_info?.show_gender_selection || false
+        logo_url: undefined
       },
-      menu_structure: template.config?.menu_structure || {
-        structure_type: 'simple' as const,
-        categories: []
+      visit_options: [],
+      gender_selection: {
+        enabled: genderSelectionEnabled,
+        required: false,
+        options: [
+          { value: 'male' as const, label: '男性' },
+          { value: 'female' as const, label: '女性' }
+        ]
       },
-      ui_settings: {
-        theme_color: '#3B82F6',
-        button_style: 'rounded' as const,
-        show_repeat_booking: template.config?.ui_settings?.show_repeat_booking || false,
-        show_side_nav: true,
-        custom_css: undefined
+      visit_count_selection: {
+        enabled: false,
+        required: false,
+        options: [
+          { value: 'first', label: '初回' },
+          { value: 'repeat', label: '2回目以降' }
+        ]
       },
-      validation_rules: {
-        required_fields: ['name', 'phone'],
-        phone_format: 'japanese' as const,
-        name_max_length: 50
-      },
-      gas_endpoint: gas_endpoint || '',
-      calendar_settings: {
-        business_hours: {
-          monday: { open: '09:00', close: '18:00', closed: false },
-          tuesday: { open: '09:00', close: '18:00', closed: false },
-          wednesday: { open: '09:00', close: '18:00', closed: false },
-          thursday: { open: '09:00', close: '18:00', closed: false },
-          friday: { open: '09:00', close: '18:00', closed: false },
-          saturday: { open: '09:00', close: '18:00', closed: false },
-          sunday: { open: '09:00', close: '18:00', closed: true }
-        },
-        advance_booking_days: 30,
-        google_calendar_url: ''
-      }
-    } : {
-      basic_info: {
-        form_name: form_name || 'フォーム',
-        store_name: '',
-        liff_id: liff_id || '',
-        theme_color: '#3B82F6',
-        logo_url: undefined,
-        show_gender_selection: false
+      coupon_selection: {
+        enabled: false,
+        options: [
+          { value: 'use' as const, label: '利用する' },
+          { value: 'not_use' as const, label: '利用しない' }
+        ]
       },
       menu_structure: {
-        structure_type: 'simple' as const,
-        categories: []
+        ...(baseTemplateConfig?.menu_structure || {
+          structure_type: 'simple' as const,
+          categories: []
+        }),
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
       },
-      ui_settings: {
-        theme_color: '#3B82F6',
-        button_style: 'rounded' as const,
-        show_repeat_booking: false,
-        show_side_nav: true,
-        custom_css: undefined
-      },
-      validation_rules: {
-        required_fields: ['name', 'phone'],
-        phone_format: 'japanese' as const,
-        name_max_length: 50
-      },
-      gas_endpoint: gas_endpoint || '',
       calendar_settings: {
         business_hours: {
           monday: { open: '09:00', close: '18:00', closed: false },
@@ -388,9 +370,21 @@ export async function POST(
           saturday: { open: '09:00', close: '18:00', closed: false },
           sunday: { open: '09:00', close: '18:00', closed: true }
         },
-        advance_booking_days: 30,
-        google_calendar_url: ''
-      }
+        advance_booking_days: 30
+      },
+      ui_settings: {
+        theme_color: '#3B82F6',
+        button_style: 'rounded' as const,
+        show_repeat_booking: baseTemplateConfig?.ui_settings?.show_repeat_booking || false,
+        show_side_nav: true,
+        custom_css: undefined
+      },
+      validation_rules: {
+        required_fields: ['name', 'phone'],
+        phone_format: 'japanese' as const,
+        name_max_length: 50
+      },
+      gas_endpoint: gas_endpoint || ''
     };
 
     // 新形式のフォームデータを作成（Supabase用）
@@ -424,8 +418,8 @@ export async function POST(
       const deployer = new SupabaseStorageDeployer();
 
       // FormConfigをそのまま使用してHTMLを生成
-      // supabaseConfig は FormConfig 互換の形で構築済み
-      const html = generator.generateHTML(supabaseConfig as FormConfig);
+      // supabaseConfig は FormConfig 型で構築済み
+      const html = generator.generateHTML(supabaseConfig);
       const createdFormId = (newForm as Form).id;
       const deployResult = await deployer.deployForm(storeId, createdFormId, html);
 
