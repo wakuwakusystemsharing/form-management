@@ -1194,6 +1194,24 @@ export default function PreviewFormPage() {
               padding: 2px;
             }
           }
+
+          /* iPhone SEより狭い画面（LINEアプリ内など） */
+          @media (max-width: 375px) {
+            .calendar th,
+            .calendar td {
+              font-size: 8px !important;
+              padding: 2px 1px !important;
+            }
+
+            .calendar th {
+              line-height: 1.1 !important;
+            }
+
+            .calendar th:first-child,
+            .calendar td:first-child {
+              min-width: 50px;
+            }
+          }
         `}</style>
 
         {/* 予約フォーム */}

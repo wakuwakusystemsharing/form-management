@@ -1391,6 +1391,35 @@ if (document.readyState === 'loading') {
             }
         }
         
+        /* iPhone SEより狭い画面（LINEアプリ内など） */
+        @media (max-width: 375px) {
+            #calendar-table th,
+            #calendar-table td {
+                font-size: 0.5rem !important;
+                padding: 0.2rem 0.1rem !important;
+            }
+            
+            #calendar-table th {
+                padding: 0.3rem 0.1rem !important;
+                line-height: 1.1 !important;
+            }
+            
+            #calendar-table th:first-child,
+            #calendar-table td:first-child {
+                min-width: 50px;
+            }
+            
+            .month-button,
+            .week-button {
+                padding: 0.3rem 0.75rem;
+                font-size: 0.75rem;
+            }
+            
+            .current-month {
+                font-size: 1rem !important;
+            }
+        }
+        
         .submit-button {
             width: 100%;
             padding: 0.75rem;
