@@ -128,7 +128,7 @@ export default function FormEditPage() {
     // まず保存してからプレビューを開く
     handleSave().then(() => {
       // 新しいウィンドウでプレビューを開く（統一テンプレート経由）
-      window.open(`/form/${formId}?preview=true`, '_blank');
+      window.open(`/preview/${storeId}/forms/${formId}`, '_blank');
     });
   };
 
@@ -137,7 +137,7 @@ export default function FormEditPage() {
   const handleVercelDeploy = async () => {
     if (!form) return;
     
-    if (window.confirm('本番フォームを更新しますか？\n\n編集内容が顧客向けフォーム（Vercel Blob）に反映されます。')) {
+    if (window.confirm('本番フォームを更新しますか？\n\n編集内容が顧客向けフォームに反映されます。')) {
       setSaveStatus('saving');
       try {
         const response = await fetch(`/api/forms/${formId}/deploy`, {
@@ -286,7 +286,13 @@ export default function FormEditPage() {
                       {form.static_deploy.deploy_url}
                     </a>
                     <button
-                      onClick={() => form.static_deploy && navigator.clipboard.writeText(form.static_deploy.deploy_url)}
+                      onClick={() => {
+                        const url = form.static_deploy?.deploy_url;
+                        if (url) {
+                          navigator.clipboard.writeText(url);
+                          alert('URLをコピーしました');
+                        }
+                      }}
                       className="text-gray-500 hover:text-gray-700 text-sm p-1 flex-shrink-0"
                       title="URLをコピー"
                     >

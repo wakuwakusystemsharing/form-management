@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { Form } from '@/types/form';
+import { Form, FormConfig } from '@/types/form';
 import { StaticFormGenerator } from '@/lib/static-generator';
-import { VercelBlobDeployer } from '@/lib/vercel-blob-deployer';
+import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 
@@ -205,7 +205,7 @@ export async function POST(
           name_max_length: 50
         }
       },
-      status: 'inactive',
+      status: 'active',
       draft_status: 'none',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -223,10 +223,10 @@ export async function POST(
     storeForms.push(newForm);
     fs.writeFileSync(formsPath, JSON.stringify(storeForms, null, 2));
 
-    // 🚀 自動的にVercel Blobに初期テンプレートHTMLをデプロイ（公開ステータス）
+    // 🚀 自動的にSupabase Storageに初期テンプレートHTMLをデプロイ（公開ステータス）
     try {
       const generator = new StaticFormGenerator();
-      const deployer = new VercelBlobDeployer();
+      const deployer = new SupabaseStorageDeployer();
       
       // FormConfigに正規化
       const formConfig = {
@@ -283,19 +283,20 @@ export async function POST(
       const html = generator.generateHTML(formConfig);
       const deployResult = await deployer.deployForm(storeId, newFormId, html);
       
-      console.log(`✅ フォーム作成と同時にBlobにデプロイ: ${deployResult.blob_url || deployResult.url}`);
+      console.log(`✅ フォーム作成と同時にStorageにデプロイ: ${deployResult.storage_url || deployResult.url}`);
       
       // デプロイ情報をフォームに追加
       newForm.static_deploy = {
         deployed_at: new Date().toISOString(),
         deploy_url: deployResult.url,
+        storage_url: deployResult.storage_url,
         status: 'deployed'
       };
       
       // 更新を保存
       fs.writeFileSync(formsPath, JSON.stringify(storeForms, null, 2));
       } catch (deployError) {
-        console.error('⚠️ Blobデプロイに失敗しましたが、フォーム作成は成功しました:', deployError);
+        console.error('⚠️ Storageデプロイに失敗しましたが、フォーム作成は成功しました:', deployError);
         // デプロイ失敗してもフォーム作成は成功とする
       }
 
@@ -312,48 +313,69 @@ export async function POST(
     }
 
     // 新形式のフォームデータを作成（Supabase用）
-    const supabaseConfig = template ? {
+    const baseTemplateConfig = template?.config;
+    const genderSelectionEnabled = baseTemplateConfig?.basic_info?.show_gender_selection || false;
+    
+    const supabaseConfig: FormConfig = {
       basic_info: {
         form_name: form_name || 'フォーム',
         store_name: '',
         liff_id: liff_id || '',
         theme_color: '#3B82F6',
-        logo_url: undefined,
-        show_gender_selection: template.config?.basic_info?.show_gender_selection || false
+        logo_url: undefined
       },
-      menu_structure: template.config?.menu_structure || {
-        structure_type: 'simple' as const,
-        categories: []
+      visit_options: [],
+      gender_selection: {
+        enabled: genderSelectionEnabled,
+        required: false,
+        options: [
+          { value: 'male' as const, label: '男性' },
+          { value: 'female' as const, label: '女性' }
+        ]
       },
-      ui_settings: {
-        theme_color: '#3B82F6',
-        button_style: 'rounded' as const,
-        show_repeat_booking: template.config?.ui_settings?.show_repeat_booking || false,
-        show_side_nav: true,
-        custom_css: undefined
+      visit_count_selection: {
+        enabled: false,
+        required: false,
+        options: [
+          { value: 'first', label: '初回' },
+          { value: 'repeat', label: '2回目以降' }
+        ]
       },
-      validation_rules: {
-        required_fields: ['name', 'phone'],
-        phone_format: 'japanese' as const,
-        name_max_length: 50
-      }
-    } : {
-      basic_info: {
-        form_name: form_name || 'フォーム',
-        store_name: '',
-        liff_id: liff_id || '',
-        theme_color: '#3B82F6',
-        logo_url: undefined,
-        show_gender_selection: false
+      coupon_selection: {
+        enabled: false,
+        options: [
+          { value: 'use' as const, label: '利用する' },
+          { value: 'not_use' as const, label: '利用しない' }
+        ]
       },
       menu_structure: {
-        structure_type: 'simple' as const,
-        categories: []
+        ...(baseTemplateConfig?.menu_structure || {
+          structure_type: 'simple' as const,
+          categories: []
+        }),
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
+      },
+      calendar_settings: {
+        business_hours: {
+          monday: { open: '09:00', close: '18:00', closed: false },
+          tuesday: { open: '09:00', close: '18:00', closed: false },
+          wednesday: { open: '09:00', close: '18:00', closed: false },
+          thursday: { open: '09:00', close: '18:00', closed: false },
+          friday: { open: '09:00', close: '18:00', closed: false },
+          saturday: { open: '09:00', close: '18:00', closed: false },
+          sunday: { open: '09:00', close: '18:00', closed: true }
+        },
+        advance_booking_days: 30
       },
       ui_settings: {
         theme_color: '#3B82F6',
         button_style: 'rounded' as const,
-        show_repeat_booking: false,
+        show_repeat_booking: baseTemplateConfig?.ui_settings?.show_repeat_booking || false,
         show_side_nav: true,
         custom_css: undefined
       },
@@ -361,14 +383,15 @@ export async function POST(
         required_fields: ['name', 'phone'],
         phone_format: 'japanese' as const,
         name_max_length: 50
-      }
+      },
+      gas_endpoint: gas_endpoint || ''
     };
 
     // 新形式のフォームデータを作成（Supabase用）
     const newFormData = {
       store_id: storeId,
       config: supabaseConfig,
-      status: 'inactive' as const,
+      status: 'active' as const,
       draft_status: 'none' as const,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -389,7 +412,45 @@ export async function POST(
       );
     }
 
-    // TODO: Vercel Blobデプロイも staging/production で対応する場合はここに追加
+    // 🚀 Supabase Storageに初期テンプレートHTMLをデプロイ（staging/production）
+    try {
+      const generator = new StaticFormGenerator();
+      const deployer = new SupabaseStorageDeployer();
+
+      // FormConfigをそのまま使用してHTMLを生成
+      // supabaseConfig は FormConfig 型で構築済み
+      const html = generator.generateHTML(supabaseConfig);
+      const createdFormId = (newForm as Form).id;
+      const deployResult = await deployer.deployForm(storeId, createdFormId, html);
+
+      console.log(`✅ [${env}] フォーム作成と同時にStorageにデプロイ: ${deployResult.storage_url || deployResult.url}`);
+
+      // デプロイ情報をフォームに反映
+      const staticDeploy = {
+        deployed_at: new Date().toISOString(),
+        deploy_url: deployResult.url,
+        storage_url: deployResult.storage_url,
+        status: 'deployed' as const
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: updateError } = await (adminClient as any)
+        .from('forms')
+        .update({ static_deploy: staticDeploy })
+        .eq('id', createdFormId);
+
+      if (updateError) {
+        console.error('⚠️ デプロイ情報の更新に失敗:', updateError);
+      } else {
+        // レスポンスに反映して返す
+        if (newForm && typeof newForm === 'object' && 'id' in newForm) {
+          (newForm as Form).static_deploy = staticDeploy;
+        }
+      }
+    } catch (deployError) {
+      console.error('⚠️ Storageデプロイに失敗しましたが、フォーム作成は成功しました:', deployError);
+      // デプロイ失敗してもフォーム作成は成功とする
+    }
 
     return NextResponse.json(newForm, { status: 201 });
   } catch (error) {

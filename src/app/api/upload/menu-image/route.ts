@@ -1,13 +1,13 @@
 /**
  * 画像アップロードAPI
- * メニュー・サブメニュー画像をVercel Blobにアップロード
+ * メニュー・サブメニュー画像をSupabase Storageにアップロード
  * 
  * POST /api/upload/menu-image
  * Body: FormData with 'file', 'storeId', 'menuId' or 'submenuId'
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { VercelBlobDeployer } from '@/lib/vercel-blob-deployer';
+import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,14 +57,14 @@ export async function POST(request: NextRequest) {
       ? `menu_images/${storeId}/${menuId}.${ext}`
       : `submenu_images/${storeId}/${submenuId}.${ext}`;
 
-    // Vercel Blobにアップロード
-    const deployer = new VercelBlobDeployer();
+    // Supabase Storageにアップロード
+    const deployer = new SupabaseStorageDeployer();
     const buffer = Buffer.from(await file.arrayBuffer());
-    const blobUrl = await deployer.uploadImage(buffer, path);
+    const storageUrl = await deployer.uploadImage(buffer, path);
 
     return NextResponse.json({
       success: true,
-      url: blobUrl,
+      url: storageUrl,
       path: path
     });
   } catch (error) {
@@ -89,7 +89,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deployer = new VercelBlobDeployer();
+    const deployer = new SupabaseStorageDeployer();
     await deployer.deleteImage(imageUrl);
 
     return NextResponse.json({ success: true });

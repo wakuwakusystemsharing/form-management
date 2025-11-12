@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { Form } from '@/types/form';
 
-export default function CustomerFormPage() {
+export default function PreviewFormPage() {
   const params = useParams();
+  const storeId = params.storeId as string;
   const formId = params.formId as string;
   
-  // プレビューモードの検出（URLパラメータから）
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  // プレビューモードは常に有効
+  const [isPreviewMode] = useState(true);
   
   const [form, setForm] = useState<Form | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,18 +74,6 @@ export default function CustomerFormPage() {
       try {
         setLoading(true);
         
-        // プレビューモードの検出
-        const urlParams = new URLSearchParams(window.location.search);
-        const previewMode = urlParams.get('preview') === 'true';
-        setIsPreviewMode(previewMode);
-        
-        // プレビューモードでない場合はアクセス不可
-        if (!previewMode) {
-          setError('このページは直接アクセスできません');
-          setLoading(false);
-          return;
-        }
-        
         const response = await fetch(`/api/forms/${formId}`);
         
         if (!response.ok) {
@@ -97,6 +86,12 @@ export default function CustomerFormPage() {
         }
         
         const formData = await response.json();
+        
+        // 店舗IDが一致するかチェック
+        if (formData.store_id !== storeId) {
+          setError('アクセス権限がありません');
+          return;
+        }
         
         // フォームデータの正規化
         const normalizedForm = normalizeFormData(formData);
@@ -111,10 +106,10 @@ export default function CustomerFormPage() {
       }
     };
 
-    if (formId) {
+    if (formId && storeId) {
       fetchForm();
     }
-  }, [formId]);
+  }, [formId, storeId]);
 
   // フォームデータ正規化関数
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

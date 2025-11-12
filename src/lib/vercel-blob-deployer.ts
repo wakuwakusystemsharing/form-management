@@ -1,6 +1,14 @@
 /**
+ * @deprecated このファイルは非推奨です。代わりに supabase-storage-deployer.ts を使用してください。
+ * 
  * Vercel Blob Storageへのデプロイメント管理
  * フォームの静的HTMLをVercel Blobにアップロード
+ * 
+ * 理由: Vercel BlobはHTMLファイルをダウンロードとして扱うため、
+ * ブラウザで直接表示できない問題があります。
+ * Supabase Storageは正しいContent-Typeで配信できます。
+ * 
+ * 削除予定: 1-2リリース後
  */
 
 import { put, del, list } from '@vercel/blob';
@@ -85,19 +93,6 @@ export class VercelBlobDeployer {
       console.error('❌ Blob deployment failed:', error);
       throw new Error(`Failed to deploy form to Vercel Blob: ${error}`);
     }
-  }
-
-  /**
-   * 旧バージョン互換メソッド（DeployResultのurlのみ返す）
-   * @deprecated deployForm() を使用してください
-   */
-  async deployFormLegacy(
-    storeId: string,
-    formId: string,
-    html: string
-  ): Promise<string> {
-    const result = await this.deployForm(storeId, formId, html);
-    return result.blob_url || result.url;
   }
 
   /**

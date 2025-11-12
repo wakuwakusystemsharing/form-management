@@ -8,6 +8,7 @@ import { Form } from '@/types/form';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
 import MenuStructureEditor from '@/components/FormEditor/MenuStructureEditor';
 import BusinessRulesEditor from '@/components/FormEditor/BusinessRulesEditor';
+import { getPublicFormUrl, getPreviewUrl } from '@/lib/form-url-helper';
 
 // テンプレート定義
 const FORM_TEMPLATES = {
@@ -497,21 +498,34 @@ export default function StoreDetailPage() {
         // static_deploy情報からURLを取得
         const deployInfo = (form as any).static_deploy;
         let formUrl = '';
+        let storageUrl = '';
         
-        if (deployInfo) {
-          // Blob URLがある場合はそれを使用、なければ deploy_url にベースURLを付与
-          formUrl = deployInfo.blob_url || `${baseUrl}${deployInfo.deploy_url}`;
+        if (deployInfo?.deploy_url) {
+          // deploy_url（プロキシURL）を最優先で使用
+          formUrl = deployInfo.deploy_url;
+        } else if (deployInfo?.storage_url) {
+          // Storage URL（直接URL）
+          formUrl = deployInfo.storage_url;
+        } else if (deployInfo?.blob_url) {
+          // Blob URL（旧URL）
+          formUrl = deployInfo.blob_url;
         } else {
-          // デプロイ情報がない場合はプレビューURL（非推奨）
-          formUrl = `${baseUrl}/form/${form.id}?preview=true`;
+          // デプロイ情報がない場合はプレビューURL
+          formUrl = `${baseUrl}/preview/${storeId}/forms/${form.id}`;
+        }
+        
+        // storage_urlを別途保存
+        if (deployInfo?.storage_url) {
+          storageUrl = deployInfo.storage_url;
         }
         
         return {
           id: form.id,
           name: (form as any).form_name || form.config?.basic_info?.form_name,
           url: formUrl,
+          storageUrl: storageUrl,
           status: form.status,
-          environment: deployInfo?.environment || 'unknown'
+          environment: deployInfo?.environment || 'production'
         };
       })
     };
@@ -594,52 +608,63 @@ export default function StoreDetailPage() {
             📎 お客様向けURL（LINEリッチメニュー用）
           </h2>
           
-          {/* 店舗管理者ページURL */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-cyan-300 mb-2">
-              店舗管理者ページ
-            </label>
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={urls.storeManagementUrl}
-                readOnly
-                className="flex-1 px-3 py-2 bg-gray-700 border border-gray-500 rounded-md text-sm text-gray-100 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
-              />
-              <button
-                onClick={() => navigator.clipboard.writeText(urls.storeManagementUrl)}
-                className="bg-cyan-600 text-white px-3 py-2 rounded-md hover:bg-cyan-500 text-sm transition-colors"
-              >
-                コピー
-              </button>
-            </div>
-          </div>
-
-          {/* フォームURL一覧 */}
+          {/* フォームURLカード（グリッドレイアウト） */}
           {urls.formUrls.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-cyan-300 mb-2">
-                予約フォーム
-              </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {urls.formUrls.map((form) => (
-                <div key={form.id} className="mb-2">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-cyan-300 min-w-0 flex-shrink-0">
-                      {form.name} ({form.status === 'active' ? '公開中' : '非公開'})
+                <div key={form.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                  {/* フォーム名とステータス */}
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-cyan-300 font-medium">{form.name}</h3>
+                    <span className={`px-2 py-1 rounded-full text-xs ${
+                      form.status === 'active' 
+                        ? 'bg-green-600 text-green-100' 
+                        : 'bg-gray-600 text-gray-300'
+                    }`}>
+                      {form.status === 'active' ? '公開中' : '非公開'}
                     </span>
-                    <input
-                      type="text"
-                      value={form.url}
-                      readOnly
-                      className="flex-1 px-3 py-1 bg-gray-700 border border-gray-500 rounded-md text-sm text-gray-100 focus:border-cyan-400"
-                    />
-                    <button
-                      onClick={() => navigator.clipboard.writeText(form.url)}
-                      className="bg-cyan-600 text-white px-3 py-1 rounded-md hover:bg-cyan-500 text-sm transition-colors"
-                    >
-                      コピー
-                    </button>
                   </div>
+                  
+                  {/* 本番URL（deploy_url）- 目立つ表示 */}
+                  <div className="mb-3">
+                    <label className="block text-xs text-gray-400 mb-2">顧客向け本番URL</label>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => window.open(form.url, '_blank')}
+                        className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-center"
+                        title="新しいタブで開く"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(form.url);
+                          alert('URLをコピーしました');
+                        }}
+                        className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md text-sm transition-colors"
+                        title="URLをコピー"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Storage URL - 控えめな表示 */}
+                  {form.storageUrl && (
+                    <div className="pt-2 border-t border-gray-600">
+                      <button
+                        onClick={() => window.open(form.storageUrl!, '_blank')}
+                        className="text-xs text-gray-400 hover:text-gray-300 underline"
+                        title="Storage URL を開く"
+                      >
+                        Storage URL を開く
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1070,24 +1095,15 @@ export default function StoreDetailPage() {
                     </label>
                     <input
                       type="url"
-                      value={(editingForm as any).gas_endpoint || editingForm.config?.gas_endpoint || ''}
+                      value={editingForm.config?.gas_endpoint || ''}
                       onChange={(e) => {
-                        if ((editingForm as any).gas_endpoint !== undefined) {
-                          // 新形式
-                          setEditingForm({
-                            ...editingForm,
+                        setEditingForm({
+                          ...editingForm,
+                          config: {
+                            ...editingForm.config,
                             gas_endpoint: e.target.value
-                          } as any);
-                        } else {
-                          // 旧形式
-                          setEditingForm({
-                            ...editingForm,
-                            config: {
-                              ...editingForm.config,
-                              gas_endpoint: e.target.value
-                            }
-                          });
-                        }
+                          }
+                        });
                       }}
                       className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-gray-100"
                       placeholder="例：https://script.google.com/macros/s/xxx/exec"
@@ -1208,7 +1224,7 @@ export default function StoreDetailPage() {
                 <button
                   onClick={async () => {
                     // プレビューを開く
-                    const previewUrl = `/form/${editingForm.id}?preview=true`;
+                    const previewUrl = `/preview/${storeId}/forms/${editingForm.id}`;
                     window.open(previewUrl, '_blank');
                   }}
                   className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors"

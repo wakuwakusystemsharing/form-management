@@ -142,24 +142,15 @@ const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({
             </label>
             <input
               type="url"
-              value={(form as any).gas_endpoint || form.config?.gas_endpoint || ''}
+              value={form.config?.gas_endpoint || ''}
               onChange={(e) => {
-                if ((form as any).gas_endpoint !== undefined) {
-                  // 新形式
-                  onUpdate({
-                    ...form,
+                onUpdate({
+                  ...form,
+                  config: {
+                    ...form.config,
                     gas_endpoint: e.target.value
-                  } as any);
-                } else {
-                  // 旧形式
-                  onUpdate({
-                    ...form,
-                    config: {
-                      ...form.config,
-                      gas_endpoint: e.target.value
-                    }
-                  });
-                }
+                  }
+                });
               }}
               className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
               placeholder="例：https://script.google.com/macros/s/xxx/exec"

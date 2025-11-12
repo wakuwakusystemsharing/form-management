@@ -19,7 +19,7 @@ LINE LIFFを活用した予約フォーム管理システムです。サービ�
 ### 📋 店舗管理者機能
 - **フォーム基本情報設定**: 店舗名、フォーム名、LIFF ID、テーマカラーの設定
 - **メニュー・カテゴリ管理**: メニューの追加・編集・削除、カテゴリの作成・管理
-- **画像アップロード**: メニューに画像を添付（Vercel Blob統合）
+- **画像アップロード**: メニューに画像を添付（Supabase Storage統合）
 - **性別フィルタリング**: 性別によるメニュー表示制御
 - **営業時間設定**: 曜日別営業時間・定休日の設定
 - **プレビュー機能**: 変更内容をリアルタイムで確認
@@ -43,8 +43,8 @@ LINE LIFFを活用した予約フォーム管理システムです。サービ�
 - **Styling**: Tailwind CSS v4
 - **Database**: Supabase (Staging/Production), JSON ファイル (Local開発)
 - **Authentication**: Supabase Auth
-- **Image Hosting**: Vercel Blob Storage
-- **Static Deployment**: Vercel Blob（顧客向けフォーム）
+- **Storage**: Supabase Storage（画像・フォームHTML）
+- **Static Deployment**: Supabase Storage（顧客向けフォーム）
 - **Backend Integration**: Google Apps Script
 - **Package Manager**: pnpm
 
@@ -323,12 +323,15 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 
 ### 実装状況
 - ✅ ログインページ作成（`/login`）
-- ✅ 認証ミドルウェア（`src/middleware.ts`）
-- ✅ Supabase Auth統合
+- ✅ 認証ミドルウェア（`src/middleware.ts`）- UI ページアクセス制御のみ
+- ✅ API 認証 - 各 API ルート内で独立処理
+- ✅ Supabase Auth統合（middleware.ts で getUser() チェック）
 - ✅ Admin Client（RLSバイパス）でサービス管理者権限実装
 - ✅ 予約管理API（店舗別・全体）
 - ✅ ローカル環境は認証スキップ（開発効率化）
-- ⏳ Row Level Security適用（部分実装）
+- ✅ Row Level Security適用
+- ✅ credentials: 'include' で Cookie 自動送信（本番環境対応）
+- ✅ PR ベースマージ - GitHub branch protection rules で main 保護
 
 ## 📦 データベース設計（Supabase）
 
@@ -372,4 +375,64 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 ### ID形式
 - **Staging/Production**: UUID（Supabase自動生成）
 - **Local開発**: `st{timestamp}` 形式（JSON互換性維持）
+
+## 🌍 環境別設定
+
+### 環境の種類
+
+| 環境 | URL | ブランチ | 用途 | データベース | Blob Storage |
+|------|-----|---------|------|-------------|--------------|
+| **Production（本番）** | https://form-management-seven.vercel.app | `main` | 商用・実運用 | Supabase Production | Blob Production |
+| **Staging（プレビュー）** | https://form-management-staging.vercel.app | `staging` | テスト・検証 | Supabase Staging | Blob Staging |
+| **Local（開発）** | http://localhost:3000 | `staging` | ローカル開発 | JSON ファイル | Mock (Blob Mock) |
+
+### 環境別の主な違い
+
+#### 🟢 Production（form-management-seven.vercel.app）
+- **用途**: 商用・実運用環境
+- **認証**: Supabase Auth 本番環境
+- **データベース**: Supabase Production プロジェクト
+- **ストレージ**: Vercel Blob Production (`prod/forms/{storeId}/{formId}.html`)
+- **デプロイ**: `main` ブランチへマージ時に自動デプロイ
+- **RLS**: Row Level Security 有効
+- **特徴**: 本番データが保存される、実際のユーザーが利用
+
+#### 🟡 Staging（form-management-staging.vercel.app）
+- **用途**: テスト・検証・デモ
+- **認証**: Supabase Auth ステージング環境（テスト用アカウント）
+- **データベース**: Supabase Staging プロジェクト
+- **ストレージ**: Vercel Blob Staging (`staging/forms/{storeId}/{formId}.html`)
+- **デプロイ**: `staging` ブランチへプッシュ時に自動デプロイ
+- **RLS**: Row Level Security 有効
+- **特徴**: 開発チーム向け、新機能テスト、PR レビュー用
+
+#### 🔵 Local（localhost:3000）
+- **用途**: ローカル開発・デバッグ
+- **認証**: スキップ（全機能アクセス可能）
+- **データベース**: `data/` フォルダの JSON ファイル
+- **ストレージ**: Mock（`public/static-forms/` に出力）
+- **デプロイ**: なし（`pnpm dev` で実行）
+- **RLS**: 適用なし
+- **特徴**: 認証不要、高速開発、オフライン対応可能
+
+### 環境変数の管理
+
+```bash
+# Local 開発環境（.env.local）
+NEXT_PUBLIC_APP_ENV=local
+
+# Staging 環境（Vercel Environment Variables）
+NEXT_PUBLIC_APP_ENV=staging
+NEXT_PUBLIC_SUPABASE_URL=<staging-url>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<staging-key>
+SUPABASE_SERVICE_ROLE_KEY=<staging-service-key>
+BLOB_READ_WRITE_TOKEN=<staging-blob-token>
+
+# Production 環境（Vercel Environment Variables）
+NEXT_PUBLIC_APP_ENV=production
+NEXT_PUBLIC_SUPABASE_URL=<production-url>
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<production-key>
+SUPABASE_SERVICE_ROLE_KEY=<production-service-key>
+BLOB_READ_WRITE_TOKEN=<production-blob-token>
+```
 

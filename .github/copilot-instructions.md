@@ -29,8 +29,9 @@
   - RLS (Row Level Security) で店舗別アクセス制御
   - `store_admins.store_id` で自店舗のみ CRUD 可能
   - サービス管理者は全店舗アクセス可
-- **互換性**: 旧「フラット形式」(`form_name` 等) と新 `config.*` 形式共存 → `normalizeForm(form)` が API GET で統一
+- **互換性**: 旧「フラット形式」(`form_name` 等) と新 `config.*` 形式共存 → `normalizeForm(form)` が常に全フィールド補完
 - 保存系 API は全体上書き + `updated_at` 更新 (差分マージなし)
+- **API 認証**: middleware では UI ページのアクセス制御のみ実施、API ルート内で独立認証処理
 
 ### 3. 型とフォーム構造
 - 代表型: `types/form.ts` (`Form`, `FormConfig`) – 新機能追加時はここを最初に拡張
@@ -47,11 +48,20 @@
 - 出力 HTML は LIFF SDK script 埋め込み + インライン CSS (テーマ色 `config.basic_info.theme_color` 適用)
 - メニュー/オプション有無は `config.*.enabled` フラグで条件レンダリング
 
-### 6. Blob デプロイ仕様 (`VercelBlobDeployer`)
-- **環境別 prefix**: staging → `staging/forms/{storeId}/{formId}.html`, production → `prod/forms/{storeId}/{formId}.html`
-- **Blob ストレージ分離**: Vercel Dashboard で staging 用・prod 用の Blob トークンを別々に設定推奨
-- エラーハンドリング: Blob 失敗時は throw → 呼び出し側でユーザ通知必須 (再試行ロジック未実装: 追加する際は指数バックオフ推奨)
+### 6. Supabase Storage デプロイ仕様 (`SupabaseStorageDeployer`)
+- **環境別パス構造**: 
+  - staging → `staging/forms/{storeId}/{formId}/config/current.html`
+  - production → `prod/forms/{storeId}/{formId}/config/current.html`
+- **公開URL形式**: `{project-ref}.supabase.co/storage/v1/object/public/forms/{path}`
+- **Content-Type設定**: `text/html; charset=utf-8` で正しくブラウザ表示可能
+- **バケット設定**: 
+  - バケット名: `forms`
+  - パブリック読み取り: 有効（匿名ユーザーがアクセス可能）
+  - 書き込み権限: サービスロールのみ
+- **キャッシュ制御**: HTMLは1時間、画像は1年キャッシュ
+- エラーハンドリング: Storage 失敗時は throw → 呼び出し側でユーザ通知必須
 - 画像アップロード API で同クラス `uploadImage()` 利用 (パス命名一貫: `menu_images/{storeId}/{menuId}.{ext}`)
+- **旧Vercel Blob**: `vercel-blob-deployer.ts` は非推奨、1-2リリース後に削除予定
 
 ### 7. API パターン (例: `api/forms/[formId]/route.ts`)
 - GET: 正規化して単一返却 (404 メッセージは日本語固定)
@@ -88,5 +98,24 @@
   - 個人アクセストークンは `.cursor/mcp.json` にハードコードしない、環境変数で管理
   - 開発環境のみ接続、本番環境接続は厳禁
 - **その他 MCP サーバ**: Firecrawl MCP も同ファイルで設定可能 (`FIRECRAWL_API_KEY` 使用)
+
+### 13. Git ワークフロー＆ PR ベースマージ
+- **ブランチ保護**: `main` ブランチは PR なしマージ禁止（GitHub branch protection rules 設定済み）
+- **開発フロー**:
+  1. `staging` ブランチで開発・修正
+  2. `git add . && git commit && git push origin staging`
+  3. GitHub で PR を作成（staging → main）
+  4. 自動チェック実行: ESLint, TypeScript type-check, Build テスト
+  5. レビュー＆承認後にマージ可能
+  6. main への merge 自動で本番環境（form-management-seven）に Vercel デプロイ
+- **注意**: 直接 `git push origin main` や `git merge staging` は GitHub がブロック
+
+### 14. コード整理ポリシー
+- **古いコード削除**:
+  - `deprecated` メソッド: コメント付きで 1-2 リリース後に削除
+  - 古いルートファイル: `*-old.ts`, `new-route.ts`, `*-preview.ts` など命名されたファイルは直ちに削除
+  - レガシー実装: `TODO:` コメント確認して、実装完了後にコメント更新 or 削除
+- **バージョン追跡**: 削除前に関連ドキュメント更新して、削除理由を記載
+- **保守性**: `normalizeForm()` 等の互換性関数は保持（旧データとの互換性維持のため）
 
 不足/不明点があればこのファイルを更新する形で質問を追記してください。
