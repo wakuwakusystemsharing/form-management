@@ -258,43 +258,55 @@ class BookingForm {
                 if (menu.has_submenu) {
                     // サブメニューがある場合
                     const wasSelected = item.classList.contains('selected');
+                    
+                    // 全てのメニューの選択状態をリセット
                     document.querySelectorAll('.menu-item').forEach(m => {
                         m.classList.remove('selected', 'has-submenu');
                     });
                     
-                    // オプションコンテナを全て非表示
-                    document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
-                    
-                    if (!wasSelected) {
-                        item.classList.add('selected', 'has-submenu');
-                        this.state.selectedMenu = menu;
-                        this.state.selectedSubmenu = null;
-                        this.showSubmenu(categoryId, menuId);
-                    } else {
-                        this.state.selectedMenu = null;
-                        this.hideSubmenu();
-                    }
-                } else {
-                    // 通常メニュー
-                    const wasSelected = item.classList.contains('selected');
-                    document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('selected'));
+                    // 全てのサブメニューコンテナを削除
+                    this.hideSubmenu();
                     
                     // 全てのオプションコンテナを非表示
                     document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
                     
+                    // 以前の選択をリセット
+                    this.state.selectedMenu = null;
+                    this.state.selectedSubmenu = null;
+                    this.state.selectedOptions = {};
+                    
+                    if (!wasSelected) {
+                        item.classList.add('selected', 'has-submenu');
+                        this.state.selectedMenu = menu;
+                        this.showSubmenu(categoryId, menuId);
+                    }
+                } else {
+                    // 通常メニュー
+                    const wasSelected = item.classList.contains('selected');
+                    
+                    // 全てのメニューの選択状態をリセット
+                    document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('selected', 'has-submenu'));
+                    
+                    // 全てのサブメニューコンテナを削除
+                    this.hideSubmenu();
+                    
+                    // 全てのオプションコンテナを非表示
+                    document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
+                    
+                    // 以前の選択をリセット
+                    this.state.selectedMenu = null;
+                    this.state.selectedSubmenu = null;
+                    this.state.selectedOptions = {};
+                    
                     if (!wasSelected) {
                         item.classList.add('selected');
                         this.state.selectedMenu = menu;
-                        this.state.selectedSubmenu = null;
-                        this.hideSubmenu();
                         
                         // このメニューのオプションコンテナを表示
                         const optionsContainer = document.getElementById(\`options-\${menuId}\`);
                         if (optionsContainer) {
                             optionsContainer.style.display = 'block';
                         }
-                    } else {
-                        this.state.selectedMenu = null;
                     }
                 }
                 

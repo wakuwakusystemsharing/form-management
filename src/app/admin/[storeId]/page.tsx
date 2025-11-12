@@ -344,7 +344,8 @@ export default function StoreDetailPage() {
         setForms([...forms, newForm]);
         setNewFormData({ form_name: '', liff_id: '', gas_endpoint: '', template: 'basic' });
         setShowCreateForm(false);
-        alert(`フォーム「${newForm.form_name}」を作成しました（ID: ${newForm.id}）\nテンプレート: ${selectedTemplate.name}`);
+        const formName = newForm.config?.basic_info?.form_name || newFormData.form_name.trim();
+        alert(`フォーム「${formName}」を作成しました（ID: ${newForm.id}）\nテンプレート: ${selectedTemplate?.name || 'ベーシック'}`);
       } else {
         const error = await response.json();
         alert(`エラー: ${error.error}`);
