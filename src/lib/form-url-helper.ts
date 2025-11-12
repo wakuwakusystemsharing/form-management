@@ -3,6 +3,8 @@
  * 本番 Blob URL の生成やプレビュー URL の構築
  */
 
+import { Form } from '@/types/form';
+
 /**
  * 本番環境の Blob URL を生成
  * @param storeId 店舗ID
@@ -29,7 +31,7 @@ export function getPreviewUrl(storeId: string, formId: string): string {
  * @param form フォームオブジェクト
  * @returns 本番フォーム URL
  */
-export function getPublicFormUrl(form: any): string {
+export function getPublicFormUrl(form: Form): string {
   // static_deploy に本番 Blob URL が保存されていれば使用
   if (form.static_deploy?.blob_url) {
     return form.static_deploy.blob_url;

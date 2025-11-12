@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { Form } from '@/types/form';
+import { Form, FormConfig } from '@/types/form';
 import { StaticFormGenerator } from '@/lib/static-generator';
 import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { getAppEnvironment } from '@/lib/env';
@@ -425,8 +425,8 @@ export async function POST(
 
       // FormConfigをそのまま使用してHTMLを生成
       // supabaseConfig は FormConfig 互換の形で構築済み
-      const html = generator.generateHTML(supabaseConfig as unknown as any);
-      const createdFormId = (newForm as any).id as string;
+      const html = generator.generateHTML(supabaseConfig as FormConfig);
+      const createdFormId = (newForm as Form).id;
       const deployResult = await deployer.deployForm(storeId, createdFormId, html);
 
       console.log(`✅ [${env}] フォーム作成と同時にStorageにデプロイ: ${deployResult.storage_url || deployResult.url}`);
@@ -439,6 +439,7 @@ export async function POST(
         status: 'deployed' as const
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: updateError } = await (adminClient as any)
         .from('forms')
         .update({ static_deploy: staticDeploy })
@@ -448,7 +449,9 @@ export async function POST(
         console.error('⚠️ デプロイ情報の更新に失敗:', updateError);
       } else {
         // レスポンスに反映して返す
-        (newForm as any).static_deploy = staticDeploy;
+        if (newForm && typeof newForm === 'object' && 'id' in newForm) {
+          (newForm as Form).static_deploy = staticDeploy;
+        }
       }
     } catch (deployError) {
       console.error('⚠️ Storageデプロイに失敗しましたが、フォーム作成は成功しました:', deployError);

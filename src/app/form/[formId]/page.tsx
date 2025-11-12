@@ -174,6 +174,7 @@ export default function CustomerFormPage() {
     
     // business_hoursの構造を正規化（古い形式から新しい形式へ）
     if (form.config.calendar_settings.business_hours) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const hours = form.config.calendar_settings.business_hours as any;
       
       // 古い形式 {start: '09:00', end: '18:00'} を検出
@@ -193,7 +194,7 @@ export default function CustomerFormPage() {
           friday: { ...defaultHours },
           saturday: { ...defaultHours },
           sunday: { ...defaultHours, closed: true }
-        } as any;
+        } as Form['config']['calendar_settings']['business_hours'];
       }
       
       // business_hoursが存在しない場合はデフォルト値を設定
@@ -212,7 +213,7 @@ export default function CustomerFormPage() {
           friday: { ...defaultHours },
           saturday: { ...defaultHours },
           sunday: { ...defaultHours, closed: true }
-        } as any;
+        } as Form['config']['calendar_settings']['business_hours'];
       }
     } else {
       // business_hoursが完全に存在しない場合
@@ -230,7 +231,7 @@ export default function CustomerFormPage() {
         friday: { ...defaultHours },
         saturday: { ...defaultHours },
         sunday: { ...defaultHours, closed: true }
-      } as any;
+      } as Form['config']['calendar_settings']['business_hours'];
     }
     
     return form as Form;
