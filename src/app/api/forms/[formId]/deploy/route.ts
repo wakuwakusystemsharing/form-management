@@ -6,6 +6,7 @@ import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { Form } from '@/types/form';
 
 export async function POST(
   request: NextRequest,
@@ -99,18 +100,25 @@ export async function POST(
     console.log(`✅ フォーム再デプロイ完了: ${deployResult.storage_url || deployResult.url}`);
 
     // デプロイ情報をフォームに記録（環境に応じて）
+    // ローカル環境の場合、相対パスを完全なURLに変換
+    let deployUrl = deployResult.url;
+    if (env === 'local' && deployUrl.startsWith('/')) {
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+      deployUrl = `${baseUrl}${deployResult.url}`;
+    }
+    
     const deployInfo = {
       deployed_at: new Date().toISOString(),
-      deploy_url: deployResult.url,
+      deploy_url: deployUrl,
       storage_url: deployResult.storage_url,
       status: 'deployed',
       environment: deployResult.environment
     };
 
     if (env === 'local') {
-      // ローカル環境: JSON を更新
-      const updatedForm = {
-        ...form,
+      // ローカル環境: JSON を更新（正規化されたフォーム形式で保存）
+      const updatedForm: Form = {
+        ...normalizedForm,
         static_deploy: deployInfo,
         updated_at: new Date().toISOString()
       };
