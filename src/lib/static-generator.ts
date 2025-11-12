@@ -476,13 +476,11 @@ class BookingForm {
         }
         
         // テーブルヘッダー生成
-        let headerHTML = '<thead><tr><th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:2px solid #696969;font-size:0.75rem;">時間</th>';
+        let headerHTML = '<thead><tr><th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:2px solid #696969;font-size:0.75rem;vertical-align:middle;width:17%;box-sizing:border-box;">時間</th>';
         weekDates.forEach(date => {
             const dayOfWeek = date.getDay();
             const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
-            headerHTML += \`<th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:2px solid #696969;font-size:0.75rem;">
-                \${date.getMonth() + 1}/\${date.getDate()}<br/>(\${dayNames[dayOfWeek]})
-            </th>\`;
+            headerHTML += \`<th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:2px solid #696969;font-size:0.75rem;vertical-align:middle;line-height:1.3;width:calc((100% - 17%) / 7);box-sizing:border-box;word-break:keep-all;white-space:normal;">\${date.getMonth() + 1}/\${date.getDate()}<br/>(\${dayNames[dayOfWeek]})</th>\`;
         });
         headerHTML += '</tr></thead>';
         
@@ -1209,6 +1207,8 @@ if (document.readyState === 'loading') {
         
         #calendar-table {
             table-layout: fixed;
+            width: 100%;
+            border-collapse: collapse;
         }
         
         #calendar-table th,
@@ -1219,16 +1219,24 @@ if (document.readyState === 'loading') {
             vertical-align: middle;
             box-sizing: border-box;
             border: 2px solid #696969;
+            word-break: keep-all;
+            white-space: normal;
         }
         
         #calendar-table th {
             background: #f3f4f6;
             font-weight: 500;
+            padding: 0.5rem;
         }
         
         #calendar-table th:first-child,
         #calendar-table td:first-child {
             width: 17%;
+            min-width: 60px;
+        }
+        
+        #calendar-table th:not(:first-child) {
+            width: calc((100% - 17%) / 7);
         }
         
         #calendar-table td.calendar-cell {
@@ -1251,10 +1259,19 @@ if (document.readyState === 'loading') {
         }
         
         @media (max-width: 768px) {
+            #calendar-table {
+                font-size: 0.625rem;
+            }
+            
             #calendar-table th,
             #calendar-table td {
                 font-size: 0.625rem;
-                padding: 0.125rem;
+                padding: 0.25rem 0.125rem;
+            }
+            
+            #calendar-table th {
+                padding: 0.375rem 0.125rem;
+                line-height: 1.2;
             }
             
             .month-button,
