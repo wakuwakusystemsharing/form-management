@@ -637,99 +637,146 @@ class BookingForm {
     }
     
     async handleSubmit() {
-        // バリデーション（old_index.htmlと同じ形式）
-        if (!this.state.name) {
-            alert('お名前を入力してください。');
+        // バリデーション
+        if (!this.state.name || !this.state.phone) {
+            alert('お名前と電話番号を入力してください');
             return;
         }
-        
-        if (!this.state.phone) {
-            alert('電話番号を入力してください。');
-            return;
-        }
-        
         if (!this.state.selectedMenu && !this.state.selectedSubmenu) {
-            alert('メニューを選択してください。');
+            alert('メニューを選択してください');
             return;
         }
-        
         if (!this.state.selectedDate || !this.state.selectedTime) {
-            alert('希望日時を選択してください。');
+            alert('予約日時を選択してください');
             return;
         }
         
-        // 日時を日本語形式に変換
-        const dateObj = new Date(this.state.selectedDate);
-        const formattedDate = \`\${dateObj.getFullYear()}年\${String(dateObj.getMonth() + 1).padStart(2, '0')}月\${String(dateObj.getDate()).padStart(2, '0')}日 \${this.state.selectedTime}\`;
-        
-        // メッセージ本文を構築（old_index.htmlと同じ形式：常に全項目を表示）
-        let messageText = '【予約フォーム】\\n';
-        messageText += \`お名前：\${this.state.name}\\n\`;
-        messageText += \`電話番号：\${this.state.phone}\\n\`;
-        
-        // ご来店回数（old_index.htmlと同じ：常に表示、空の場合は空文字列）
-        let visitCountText = '';
-        if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
-            const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
-            visitCountText = visitLabel || '';
-        }
-        messageText += \`ご来店回数：\${visitCountText}\\n\`;
-        
-        // コース（old_index.htmlと同じ：常に表示、空の場合は空文字列）
-        let courseText = '';
-        if (this.state.selectedMenu) {
-            const category = this.config.menu_structure.categories.find(c => 
-                c.menus.some(m => m.id === this.state.selectedMenu.id)
-            );
-            if (category) {
-                courseText = category.name;
+        try {
+            // 日時を日本語形式に変換
+            const dateObj = new Date(this.state.selectedDate);
+            const formattedDate = \`\${dateObj.getFullYear()}年\${String(dateObj.getMonth() + 1).padStart(2, '0')}月\${String(dateObj.getDate()).padStart(2, '0')}日 \${this.state.selectedTime}\`;
+            
+            // メッセージ本文を構築（old_index.htmlとbooking.gsのparseReservationFormに合わせた形式）
+            // booking.gsが期待する順序：お名前、電話番号、ご来店回数、コース、メニュー、希望日時、メッセージ
+            let messageText = '【予約フォーム】\\n';
+            
+            // 常に表示：お名前、電話番号
+            messageText += \`お名前：\${this.state.name || ''}\\n\`;
+            messageText += \`電話番号：\${this.state.phone || ''}\\n\`;
+            
+            // ご来店回数（old_index.htmlでは常に表示、booking.gsも期待している）
+            let visitCountText = '';
+            if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
+                const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
+                visitCountText = visitLabel || this.state.visitCount || '';
             }
-        }
-        messageText += \`コース：\${courseText}\\n\`;
-        
-        // メニュー（old_index.htmlと同じ形式：配列として扱う）
-        let selectedSymptomArray = [];
-        if (this.state.selectedSubmenu) {
-            selectedSymptomArray.push(\`\${this.state.selectedMenu.name} > \${this.state.selectedSubmenu.name}\`);
-        } else if (this.state.selectedMenu) {
-            selectedSymptomArray.push(this.state.selectedMenu.name);
-        }
-        
-        // オプション（old_index.htmlと同じ形式：カンマ区切りの文字列）
-        let irradiationsCount = '';
-        const menuId = this.state.selectedMenu?.id;
-        if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
-            const optionNames = this.state.selectedOptions[menuId].map(optionId => {
-                const option = this.state.selectedMenu.options?.find(o => o.id === optionId);
-                return option?.name || '';
-            }).filter(Boolean);
-            if (optionNames.length > 0) {
-                irradiationsCount = optionNames.join(', ');
+            messageText += \`ご来店回数：\${visitCountText}\\n\`;
+            
+            // コース/カテゴリー（old_index.htmlでは常に表示、booking.gsも期待している）
+            let courseText = '';
+            if (this.state.selectedMenu) {
+                const category = this.config.menu_structure.categories.find(c => 
+                    c.menus.some(m => m.id === this.state.selectedMenu.id)
+                );
+                courseText = category?.name || '';
             }
+            messageText += \`コース：\${courseText}\\n\`;
+            
+            // メニュー（常に表示、old_index.htmlと同じ形式：配列として扱う）
+            let selectedSymptomArray = [];
+            // デバッグ: メニュー選択状態を確認
+            console.log('Selected menu state:', {
+                selectedMenu: this.state.selectedMenu,
+                selectedSubmenu: this.state.selectedSubmenu,
+                selectedOptions: this.state.selectedOptions
+            });
+            
+            if (this.state.selectedSubmenu && this.state.selectedMenu) {
+                // サブメニューが選択されている場合
+                const menuName = this.state.selectedMenu?.name || '';
+                const submenuName = this.state.selectedSubmenu?.name || '';
+                if (menuName && submenuName) {
+                    selectedSymptomArray.push(\`\${menuName} > \${submenuName}\`);
+                }
+            } else if (this.state.selectedMenu) {
+                // 通常メニューが選択されている場合
+                const menuName = this.state.selectedMenu?.name || '';
+                if (menuName) {
+                    selectedSymptomArray.push(menuName);
+                } else {
+                    // メニューオブジェクトはあるがnameプロパティがない場合のフォールバック
+                    console.warn('Menu selected but name is missing:', this.state.selectedMenu);
+                }
+            } else {
+                // メニューが選択されていない場合
+                console.warn('No menu selected at submit time');
+            }
+            
+            // オプション（old_index.htmlと同じ形式：カンマ区切りの文字列）
+            let irradiationsCount = '';
+            const menuId = this.state.selectedMenu?.id;
+            if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
+                const optionNames = this.state.selectedOptions[menuId].map(optionId => {
+                    const option = this.state.selectedMenu?.options?.find(o => o.id === optionId);
+                    return option?.name || '';
+                }).filter(Boolean);
+                if (optionNames.length > 0) {
+                    irradiationsCount = optionNames.join(', ');
+                }
+            }
+            
+            // old_index.htmlと同じ形式：selectedSymptom（配列）とirradiationsCount（文字列）を結合
+            // booking.gsのparseReservationFormは「メニュー：」の後にカンマ区切りの文字列を期待
+            // 配列を文字列化するとカンマ区切りになる（例：["コースA"] → "コースA"）
+            const selectedSymptomText = selectedSymptomArray.length > 0 ? selectedSymptomArray.join(',') : '';
+            messageText += \`メニュー：\${selectedSymptomText}\${irradiationsCount ? ',' + irradiationsCount : ''}\\n\`;
+            
+            // 希望日時（常に表示、booking.gsは「希望日時：」の次の行を日時として解析）
+            messageText += \`希望日時：\\n \${formattedDate}\\n\`;
+            
+            // メッセージ（常に表示、空文字列でも）
+            messageText += \`メッセージ：\${this.state.message || ''}\`;
+            
+            // 性別とクーポンはbooking.gsが解析しないため、メッセージの最後に追加（オプション）
+            if (this.config.gender_selection?.enabled && this.state.gender) {
+                const genderLabel = this.config.gender_selection.options.find(o => o.value === this.state.gender)?.label;
+                if (genderLabel) {
+                    messageText += \`\\n性別：\${genderLabel}\`;
+                }
+            }
+            
+            if (this.config.coupon_selection?.enabled && this.state.coupon) {
+                const couponLabel = this.config.coupon_selection.options.find(o => o.value === this.state.coupon)?.label;
+                if (couponLabel) {
+                    messageText += \`\\nクーポン：\${couponLabel}\`;
+                }
+            }
+            
+            // 成功画面を表示
+            document.querySelector('.form-content').innerHTML = \`
+                <div class="success">
+                    <h3>予約が完了しました！</h3>
+                    <p>ご予約ありがとうございます。</p>
+                </div>
+            \`;
+            
+            // LIFF メッセージ送信
+            if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
+                liff.sendMessages([{
+                    type: 'text',
+                    text: messageText
+                }]).then(() => {
+                    // メッセージ送信成功後にウィンドウを閉じる
+                    alert('当日キャンセルは無いようにお願いいたします。');
+                    liff.closeWindow();
+                }).catch((err) => {
+                    console.error('メッセージの送信に失敗しました', err);
+                });
+            }
+        } catch (error) {
+            console.error('Submit error:', error);
+            alert('送信に失敗しました。もう一度お試しください。');
         }
-        
-        // old_index.htmlと同じ形式：selectedSymptom（配列）とirradiationsCount（文字列）を結合
-        const selectedSymptomText = selectedSymptomArray.length > 0 ? selectedSymptomArray.join(',') : '';
-        messageText += \`メニュー：\${selectedSymptomText}\${irradiationsCount ? ',' + irradiationsCount : ''}\\n\`;
-        messageText += \`希望日時：\\n \${formattedDate}\\n\`;
-        
-        // メッセージ（old_index.htmlと同じ：常に表示、空の場合は空文字列）
-        messageText += \`メッセージ：\${this.state.message || ''}\`;
-        
-        // old_index.htmlと同じ挙動：成功画面を表示せず、直接LIFFメッセージ送信
-        // LIFFチェックなし（old_index.htmlと同じ）
-        liff.sendMessages([{
-            type: 'text',
-            text: messageText
-        }]).then(() => {
-            // メッセージ送信成功時の処理（old_index.htmlと同じ）
-            alert('当日キャンセルは無いようにお願いいたします。');
-            // LIFFウィンドウを閉じる
-            liff.closeWindow();
-        }).catch((err) => {
-            // メッセージ送信失敗時の処理（old_index.htmlと同じ）
-            console.error('メッセージの送信に失敗しました', err);
-        });
     }
 }
 
