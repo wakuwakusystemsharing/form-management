@@ -221,7 +221,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
                                 const formData = new FormData();
                                 formData.append('file', file);
                                 formData.append('storeId', form.store_id);
-                                formData.append('submenuId', selectedSubMenuItem?.id || `submenu_${Date.now()}`);
+                                formData.append('submenuId', subMenuItem?.id || `submenu_${Date.now()}`);
                                 
                                 const response = await fetch('/api/upload/menu-image', {
                                   method: 'POST',
