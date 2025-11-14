@@ -910,15 +910,15 @@ export default function StoreDetailPage() {
           </div>
         </div>
 
-        {/* お客様向けURL表示 */}
+        {/* フォーム一覧表示 */}
         <div className="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-600">
           <h2 className="text-lg font-semibold text-cyan-400 mb-4">
-            📎 お客様向けURL（LINEリッチメニュー用）
+            📋 フォーム一覧
           </h2>
           
-          {/* フォームURLカード（グリッドレイアウト） */}
+          {/* フォームURLカード（4列グリッドレイアウト） */}
           {urls.formUrls.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {urls.formUrls.map((form) => (
                 <div key={form.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
                   {/* フォーム名とステータス */}
