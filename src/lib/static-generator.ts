@@ -408,6 +408,11 @@ class BookingForm {
             <div class="submenu-title">サブメニューを選択してください</div>
             \${menu.sub_menu_items.map((sub, idx) => \`
                 <button class="submenu-item" data-submenu-index="\${idx}">
+                    \${sub.image ? \`
+                        <div class="menu-item-image">
+                            <img src="\${sub.image}" alt="\${sub.name}" class="menu-image" loading="lazy" onerror="this.style.display='none'">
+                        </div>
+                    \` : ''}
                     <div class="menu-item-content">
                         <div class="menu-item-name">\${sub.name}</div>
                         \${sub.description ? \`<div class="menu-item-desc">\${sub.description}</div>\` : ''}
@@ -429,6 +434,11 @@ class BookingForm {
                 document.querySelectorAll('.submenu-item').forEach(s => s.classList.remove('selected'));
                 sub.classList.add('selected');
                 this.state.selectedSubmenu = menu.sub_menu_items[idx];
+                // サブメニュー選択後にカレンダーを表示
+                const calendarContainer = document.querySelector('.calendar-container');
+                if (calendarContainer) {
+                    calendarContainer.style.display = 'flex';
+                }
                 this.toggleCalendarVisibility();
                 this.updateSummary();
             });
@@ -440,19 +450,7 @@ class BookingForm {
         if (container) container.remove();
     }
     
-    toggleCalendarVisibility() {
-        const calendarField = document.getElementById('datetime-field');
-        if (!calendarField) return;
-        
-        // メニューまたはサブメニューが選択されている場合のみカレンダーを表示
-        if (this.state.selectedMenu || this.state.selectedSubmenu) {
-            calendarField.style.display = 'block';
-            // カレンダーを初めて表示する際にレンダリング
-            this.renderCalendar();
-        } else {
-            calendarField.style.display = 'none';
-        }
-    }
+
     
     // 週の開始日を取得（月曜日）
     getWeekStart(date) {
@@ -1021,14 +1019,20 @@ class BookingForm {
             fields.forEach(fieldId => {
                 const field = document.getElementById(fieldId);
                 if (field) {
-                    field.style.display = this.state.selectedMenu ? 'block' : 'none';
+                    field.style.display = (this.state.selectedMenu || this.state.selectedSubmenu) ? 'block' : 'none';
                 }
             });
         } else {
             // カレンダーモード（既存ロジック）
             const datetimeField = document.getElementById('datetime-field');
             if (datetimeField) {
-                datetimeField.style.display = this.state.selectedMenu ? 'block' : 'none';
+                if (this.state.selectedMenu || this.state.selectedSubmenu) {
+                    datetimeField.style.display = 'block';
+                    // カレンダーを初めて表示する際にレンダリング
+                    this.renderCalendar();
+                } else {
+                    datetimeField.style.display = 'none';
+                }
             }
         }
     }
@@ -1105,6 +1109,11 @@ if (document.readyState === 'loading') {
                         ${category.menus.map(menu => `
                             <div>
                                 <button type="button" class="menu-item" data-menu-id="${menu.id}" data-category-id="${category.id}">
+                                    ${menu.image ? `
+                                        <div class="menu-item-image">
+                                            <img src="${menu.image}" alt="${menu.name}" class="menu-image" loading="lazy" onerror="this.style.display='none'">
+                                        </div>
+                                    ` : ''}
                                     <div class="menu-item-content">
                                         <div class="menu-item-name">${menu.name}${menu.has_submenu ? ' ▶' : ''}</div>
                                         ${menu.description ? `<div class="menu-item-desc">${menu.description}</div>` : ''}
@@ -1453,8 +1462,29 @@ if (document.readyState === 'loading') {
             border-color: #3b82f6;
         }
         
+        .menu-item-image {
+            width: 60px;
+            height: 45px;
+            margin-right: 0.75rem;
+            border-radius: 0.375rem;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        
+        .menu-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.2s;
+        }
+        
+        .menu-item:hover .menu-image {
+            transform: scale(1.05);
+        }
+        
         .menu-item-content {
             text-align: left;
+            flex: 1;
         }
         
         .menu-item-name {
@@ -1586,6 +1616,12 @@ if (document.readyState === 'loading') {
         }
         
         @media (max-width: 768px) {
+            .menu-item-image {
+                width: 50px;
+                height: 38px;
+                margin-right: 0.5rem;
+            }
+            
             #calendar-table {
                 font-size: 0.625rem;
             }
