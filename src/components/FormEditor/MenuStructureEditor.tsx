@@ -18,7 +18,7 @@ interface MenuItemModalProps {
   categoryId: string;
   genderEnabled: boolean;  // 性別機能が有効かどうか
   theme?: 'light' | 'dark';
-  form: any; // Form object for store_id
+  form: Form; // Form object for store_id
 }
 
 interface MenuOptionModalProps {
@@ -35,7 +35,7 @@ interface SubMenuItemModalProps {
   onSave: (subMenuItem: SubMenuItem) => void;
   subMenuItem?: SubMenuItem;
   theme?: 'light' | 'dark';
-  form: any; // Form object for store_id
+  form: Form; // Form object for store_id
 }
 
 // 金額フォーマット用のヘルパー関数

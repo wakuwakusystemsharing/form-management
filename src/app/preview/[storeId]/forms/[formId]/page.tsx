@@ -1407,6 +1407,7 @@ export default function PreviewFormPage() {
                                 <div className="flex items-center gap-3">
                                   {menu.image && (
                                     <div className="w-16 h-12 rounded overflow-hidden flex-shrink-0">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
                                       <img 
                                         src={menu.image} 
                                         alt={menu.name}
@@ -1461,6 +1462,7 @@ export default function PreviewFormPage() {
                                         // 画像がある場合：画像を上に、情報を下に配置
                                         <div className="flex flex-col">
                                           <div className="w-full h-40 rounded-t-sm overflow-hidden">
+                                            {/* eslint-disable-next-line @next/next/no-img-element */}
                                             <img 
                                               src={subMenu.image} 
                                               alt={subMenu.name}
@@ -1529,6 +1531,7 @@ export default function PreviewFormPage() {
                                 // 画像がある場合：画像を上に、情報を下に配置
                                 <div className="flex flex-col">
                                   <div className="w-full h-40 rounded-t-sm overflow-hidden">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img 
                                       src={menu.image} 
                                       alt={menu.name}
