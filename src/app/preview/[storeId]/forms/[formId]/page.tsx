@@ -31,7 +31,12 @@ export default function PreviewFormPage() {
     selectedSubMenus: {} as Record<string, string>, // メニューIDに対する選択されたサブメニューID
     selectedMenuOptions: {} as Record<string, string[]>, // メニューIDに対するオプションID配列
     selectedDate: '',
-    selectedTime: ''
+    selectedTime: '',
+    // 第三希望日時モード用
+    selectedDate2: '',
+    selectedTime2: '',
+    selectedDate3: '',
+    selectedTime3: ''
   });
 
   // サブメニューアコーディオンの開閉状態
@@ -473,14 +478,32 @@ export default function PreviewFormPage() {
       return;
     }
     
-    if (!formData.selectedDate) {
-      alert('ご希望日を選択してください');
-      return;
-    }
-    
-    if (!formData.selectedTime) {
-      alert('ご希望時間を選択してください');
-      return;
+    // 日時選択のバリデーション（モード別）
+    if (form.config?.calendar_settings?.booking_mode === 'multiple_dates') {
+      // 第三希望日時モード
+      if (!formData.selectedDate || !formData.selectedTime) {
+        alert('第一希望日時を選択してください');
+        return;
+      }
+      if (!formData.selectedDate2 || !formData.selectedTime2) {
+        alert('第二希望日時を選択してください');
+        return;
+      }
+      if (!formData.selectedDate3 || !formData.selectedTime3) {
+        alert('第三希望日時を選択してください');
+        return;
+      }
+    } else {
+      // カレンダーモード
+      if (!formData.selectedDate) {
+        alert('ご希望日を選択してください');
+        return;
+      }
+      
+      if (!formData.selectedTime) {
+        alert('ご希望時間を選択してください');
+        return;
+      }
     }
 
     // 性別が必須の場合のチェック
@@ -849,7 +872,11 @@ export default function PreviewFormPage() {
                   selectedSubMenus: {},
                   selectedMenuOptions: {},
                   selectedDate: '',
-                  selectedTime: ''
+                  selectedTime: '',
+                  selectedDate2: '',
+                  selectedTime2: '',
+                  selectedDate3: '',
+                  selectedTime3: ''
                 });
               }}
               className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
@@ -1522,116 +1549,381 @@ export default function PreviewFormPage() {
 
           {/* 希望日時 - メニューが選択された場合のみ表示 */}
           {isMenuSelected() && (
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                希望日時 <span className="text-red-500">*</span>
-              </label>
-              <div className="text-sm text-gray-600 mb-3">
-                ※メニューを選択すると空き状況のカレンダーが表示されます
-              </div>
-            
-            <div className="calendar-container">
-              {/* 現在の月表示 */}
-              <div className="current-month-container mb-4">
-                <span className="current-month text-lg font-bold text-gray-700">
-                  {currentWeekStart.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })}
-                </span>
-              </div>
+            <>
+              {/* カレンダーモード */}
+              {(!form.config?.calendar_settings?.booking_mode || form.config.calendar_settings.booking_mode === 'calendar') && (
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    希望日時 <span className="text-red-500">*</span>
+                  </label>
+                  <div className="text-sm text-gray-600 mb-3">
+                    ※メニューを選択すると空き状況のカレンダーが表示されます
+                  </div>
+                
+                <div className="calendar-container">
+                  {/* 現在の月表示 */}
+                  <div className="current-month-container mb-4">
+                    <span className="current-month text-lg font-bold text-gray-700">
+                      {currentWeekStart.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })}
+                    </span>
+                  </div>
 
-              {/* 月移動ボタン */}
-              <div className="month-button-container mb-3">
-                <button 
-                  type="button"
-                  onClick={() => navigateMonth('prev')}
-                  className="month-button px-5 py-2 bg-gray-700 text-white border-none rounded cursor-pointer hover:bg-gray-800"
-                >
-                  前月
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => navigateMonth('next')}
-                  className="month-button px-5 py-2 bg-gray-700 text-white border-none rounded cursor-pointer hover:bg-gray-800"
-                >
-                  翌月
-                </button>
-              </div>
+                  {/* 月移動ボタン */}
+                  <div className="month-button-container mb-3">
+                    <button 
+                      type="button"
+                      onClick={() => navigateMonth('prev')}
+                      className="month-button px-5 py-2 bg-gray-700 text-white border-none rounded cursor-pointer hover:bg-gray-800"
+                    >
+                      前月
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => navigateMonth('next')}
+                      className="month-button px-5 py-2 bg-gray-700 text-white border-none rounded cursor-pointer hover:bg-gray-800"
+                    >
+                      翌月
+                    </button>
+                  </div>
 
-              {/* 週移動ボタン */}
-              <div className="week-button-container mb-3">
-                <button 
-                  type="button"
-                  onClick={() => navigateWeek('prev')}
-                  className="week-button px-5 py-2 bg-gray-700 text-white border-none rounded cursor-pointer hover:bg-gray-800"
-                >
-                  前週
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => navigateWeek('next')}
-                  className="week-button px-5 py-2 bg-gray-700 text-white border-none rounded cursor-pointer hover:bg-gray-800"
-                >
-                  翌週
-                </button>
-              </div>
+                  {/* 週移動ボタン */}
+                  <div className="week-button-container mb-3">
+                    <button 
+                      type="button"
+                      onClick={() => navigateWeek('prev')}
+                      className="week-button px-5 py-2 bg-gray-700 text-white border-none rounded cursor-pointer hover:bg-gray-800"
+                    >
+                      前週
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => navigateWeek('next')}
+                      className="week-button px-5 py-2 bg-gray-700 text-white border-none rounded cursor-pointer hover:bg-gray-800"
+                    >
+                      翌週
+                    </button>
+                  </div>
 
-              {/* カレンダーテーブル */}
-              <div className="calendar bg-white border border-gray-300 rounded shadow-sm overflow-hidden">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr>
-                      <th className="text-center p-2 bg-gray-100 border border-gray-400 text-xs">時間</th>
-                      {getWeekDates(currentWeekStart).map((date, index) => (
-                        <th key={index} className="text-center p-2 bg-gray-100 border border-gray-400 text-xs">
-                          {date.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
-                          <br />
-                          ({['日', '月', '火', '水', '木', '金', '土'][date.getDay()]})
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* 時間帯ごとの行を生成 */}
-                    {(() => {
-                      const timeSlots = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', 
-                                        '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'];
-                      return timeSlots.map((time) => (
-                        <tr key={time}>
-                          <td className="text-center p-1 border border-gray-400 text-xs bg-gray-50 font-medium">
-                            {time}
-                          </td>
-                          {getWeekDates(currentWeekStart).map((date, dateIndex) => {
-                            const availableSlots = getAvailableTimeSlots(date);
-                            const isAvailable = availableSlots.includes(time);
-                            const isSelected = selectedDateTime && 
-                              selectedDateTime.toDateString() === date.toDateString() &&
-                              selectedDateTime.toTimeString().slice(0, 5) === time;
-                            const isPast = new Date() > new Date(date.getFullYear(), date.getMonth(), date.getDate(), 
-                              parseInt(time.split(':')[0]), parseInt(time.split(':')[1]));
-                            
-                            return (
-                              <td 
-                                key={dateIndex}
-                                onClick={() => isAvailable && !isPast ? handleDateTimeSelect(date, time) : null}
-                                className={`text-center p-1 border border-gray-400 text-xs cursor-pointer ${
-                                  isSelected 
-                                    ? 'bg-green-500 text-white' 
-                                    : isAvailable && !isPast
-                                      ? 'hover:bg-gray-200 bg-white'
-                                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                }`}
-                              >
-                                {isAvailable && !isPast ? '○' : '×'}
-                              </td>
-                            );
-                          })}
+                  {/* カレンダーテーブル */}
+                  <div className="calendar bg-white border border-gray-300 rounded shadow-sm overflow-hidden">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="text-center p-2 bg-gray-100 border border-gray-400 text-xs">時間</th>
+                          {getWeekDates(currentWeekStart).map((date, index) => (
+                            <th key={index} className="text-center p-2 bg-gray-100 border border-gray-400 text-xs">
+                              {date.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
+                              <br />
+                              ({['日', '月', '火', '水', '木', '金', '土'][date.getDay()]})
+                            </th>
+                          ))}
                         </tr>
-                      ));
-                    })()}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {/* 時間帯ごとの行を生成 */}
+                        {(() => {
+                          const timeSlots = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', 
+                                            '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'];
+                          return timeSlots.map((time) => (
+                            <tr key={time}>
+                              <td className="text-center p-1 border border-gray-400 text-xs bg-gray-50 font-medium">
+                                {time}
+                              </td>
+                              {getWeekDates(currentWeekStart).map((date, dateIndex) => {
+                                const availableSlots = getAvailableTimeSlots(date);
+                                const isAvailable = availableSlots.includes(time);
+                                const isSelected = selectedDateTime && 
+                                  selectedDateTime.toDateString() === date.toDateString() &&
+                                  selectedDateTime.toTimeString().slice(0, 5) === time;
+                                const isPast = new Date() > new Date(date.getFullYear(), date.getMonth(), date.getDate(), 
+                                  parseInt(time.split(':')[0]), parseInt(time.split(':')[1]));
+                                
+                                return (
+                                  <td 
+                                    key={dateIndex}
+                                    onClick={() => isAvailable && !isPast ? handleDateTimeSelect(date, time) : null}
+                                    className={`text-center p-1 border border-gray-400 text-xs cursor-pointer ${
+                                      isSelected 
+                                        ? 'bg-green-500 text-white' 
+                                        : isAvailable && !isPast
+                                          ? 'hover:bg-gray-200 bg-white'
+                                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                    }`}
+                                  >
+                                    {isAvailable && !isPast ? '○' : '×'}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+              )}
+
+              {/* 第三希望日時モード */}
+              {form.config?.calendar_settings?.booking_mode === 'multiple_dates' && (
+                <div className="space-y-6 mb-6">
+                  {/* 第一希望日時 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      第一希望日時 <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <select
+                        value={formData.selectedDate}
+                        onChange={(e) => setFormData(prev => ({ ...prev, selectedDate: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      >
+                        <option value="">日付を選択</option>
+                        {/* 日付オプションを生成 */}
+                        {(() => {
+                          const options = [];
+                          const today = new Date();
+                          const settings = form.config.calendar_settings.multiple_dates_settings || {
+                            date_range_days: 30,
+                            exclude_weekdays: [0]
+                          };
+                          
+                          for (let i = 0; i < settings.date_range_days; i++) {
+                            const date = new Date(today);
+                            date.setDate(today.getDate() + i);
+                            
+                            if (settings.exclude_weekdays?.includes(date.getDay())) {
+                              continue;
+                            }
+                            
+                            const dateStr = date.toISOString().split('T')[0];
+                            const displayStr = date.toLocaleDateString('ja-JP', {
+                              month: 'numeric',
+                              day: 'numeric',
+                              weekday: 'short'
+                            });
+                            
+                            options.push(
+                              <option key={dateStr} value={dateStr}>{displayStr}</option>
+                            );
+                          }
+                          return options;
+                        })()}
+                      </select>
+                      <select
+                        value={formData.selectedTime}
+                        onChange={(e) => setFormData(prev => ({ ...prev, selectedTime: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      >
+                        <option value="">時間を選択</option>
+                        {/* 時間オプションを生成 */}
+                        {(() => {
+                          const settings = form.config.calendar_settings.multiple_dates_settings || {
+                            start_time: '09:00',
+                            end_time: '18:00',
+                            time_interval: 30
+                          };
+                          
+                          const timeSlots = [];
+                          const [startHour, startMin] = settings.start_time.split(':').map(Number);
+                          const [endHour, endMin] = settings.end_time.split(':').map(Number);
+                          
+                          let currentHour = startHour;
+                          let currentMin = startMin;
+                          
+                          while (currentHour < endHour || (currentHour === endHour && currentMin < endMin)) {
+                            const timeStr = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`;
+                            timeSlots.push(
+                              <option key={timeStr} value={timeStr}>{timeStr}</option>
+                            );
+                            
+                            currentMin += settings.time_interval;
+                            if (currentMin >= 60) {
+                              currentHour += Math.floor(currentMin / 60);
+                              currentMin = currentMin % 60;
+                            }
+                          }
+                          
+                          return timeSlots;
+                        })()}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 第二希望日時 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      第二希望日時 <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <select
+                        value={formData.selectedDate2}
+                        onChange={(e) => setFormData(prev => ({ ...prev, selectedDate2: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      >
+                        <option value="">日付を選択</option>
+                        {/* 同じ日付オプション */}
+                        {(() => {
+                          const options = [];
+                          const today = new Date();
+                          const settings = form.config.calendar_settings.multiple_dates_settings || {
+                            date_range_days: 30,
+                            exclude_weekdays: [0]
+                          };
+                          
+                          for (let i = 0; i < settings.date_range_days; i++) {
+                            const date = new Date(today);
+                            date.setDate(today.getDate() + i);
+                            
+                            if (settings.exclude_weekdays?.includes(date.getDay())) {
+                              continue;
+                            }
+                            
+                            const dateStr = date.toISOString().split('T')[0];
+                            const displayStr = date.toLocaleDateString('ja-JP', {
+                              month: 'numeric',
+                              day: 'numeric',
+                              weekday: 'short'
+                            });
+                            
+                            options.push(
+                              <option key={dateStr} value={dateStr}>{displayStr}</option>
+                            );
+                          }
+                          return options;
+                        })()}
+                      </select>
+                      <select
+                        value={formData.selectedTime2}
+                        onChange={(e) => setFormData(prev => ({ ...prev, selectedTime2: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      >
+                        <option value="">時間を選択</option>
+                        {/* 同じ時間オプション */}
+                        {(() => {
+                          const settings = form.config.calendar_settings.multiple_dates_settings || {
+                            start_time: '09:00',
+                            end_time: '18:00',
+                            time_interval: 30
+                          };
+                          
+                          const timeSlots = [];
+                          const [startHour, startMin] = settings.start_time.split(':').map(Number);
+                          const [endHour, endMin] = settings.end_time.split(':').map(Number);
+                          
+                          let currentHour = startHour;
+                          let currentMin = startMin;
+                          
+                          while (currentHour < endHour || (currentHour === endHour && currentMin < endMin)) {
+                            const timeStr = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`;
+                            timeSlots.push(
+                              <option key={timeStr} value={timeStr}>{timeStr}</option>
+                            );
+                            
+                            currentMin += settings.time_interval;
+                            if (currentMin >= 60) {
+                              currentHour += Math.floor(currentMin / 60);
+                              currentMin = currentMin % 60;
+                            }
+                          }
+                          
+                          return timeSlots;
+                        })()}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 第三希望日時 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      第三希望日時 <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <select
+                        value={formData.selectedDate3}
+                        onChange={(e) => setFormData(prev => ({ ...prev, selectedDate3: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      >
+                        <option value="">日付を選択</option>
+                        {/* 同じ日付オプション */}
+                        {(() => {
+                          const options = [];
+                          const today = new Date();
+                          const settings = form.config.calendar_settings.multiple_dates_settings || {
+                            date_range_days: 30,
+                            exclude_weekdays: [0]
+                          };
+                          
+                          for (let i = 0; i < settings.date_range_days; i++) {
+                            const date = new Date(today);
+                            date.setDate(today.getDate() + i);
+                            
+                            if (settings.exclude_weekdays?.includes(date.getDay())) {
+                              continue;
+                            }
+                            
+                            const dateStr = date.toISOString().split('T')[0];
+                            const displayStr = date.toLocaleDateString('ja-JP', {
+                              month: 'numeric',
+                              day: 'numeric',
+                              weekday: 'short'
+                            });
+                            
+                            options.push(
+                              <option key={dateStr} value={dateStr}>{displayStr}</option>
+                            );
+                          }
+                          return options;
+                        })()}
+                      </select>
+                      <select
+                        value={formData.selectedTime3}
+                        onChange={(e) => setFormData(prev => ({ ...prev, selectedTime3: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required
+                      >
+                        <option value="">時間を選択</option>
+                        {/* 同じ時間オプション */}
+                        {(() => {
+                          const settings = form.config.calendar_settings.multiple_dates_settings || {
+                            start_time: '09:00',
+                            end_time: '18:00',
+                            time_interval: 30
+                          };
+                          
+                          const timeSlots = [];
+                          const [startHour, startMin] = settings.start_time.split(':').map(Number);
+                          const [endHour, endMin] = settings.end_time.split(':').map(Number);
+                          
+                          let currentHour = startHour;
+                          let currentMin = startMin;
+                          
+                          while (currentHour < endHour || (currentHour === endHour && currentMin < endMin)) {
+                            const timeStr = `${currentHour.toString().padStart(2, '0')}:${currentMin.toString().padStart(2, '0')}`;
+                            timeSlots.push(
+                              <option key={timeStr} value={timeStr}>{timeStr}</option>
+                            );
+                            
+                            currentMin += settings.time_interval;
+                            if (currentMin >= 60) {
+                              currentHour += Math.floor(currentMin / 60);
+                              currentMin = currentMin % 60;
+                            }
+                          }
+                          
+                          return timeSlots;
+                        })()}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {/* メッセージ */}
@@ -1711,11 +2003,35 @@ export default function PreviewFormPage() {
                   </div>
                 )}
                 
-                {formData.selectedDate && formData.selectedTime && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">ご希望日時:</span>
-                    <span className="font-medium">{formData.selectedDate} {formData.selectedTime}</span>
-                  </div>
+                {/* 日時表示（モード別） */}
+                {form.config?.calendar_settings?.booking_mode === 'multiple_dates' ? (
+                  <>
+                    {formData.selectedDate && formData.selectedTime && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">第一希望日時:</span>
+                        <span className="font-medium">{formData.selectedDate} {formData.selectedTime}</span>
+                      </div>
+                    )}
+                    {formData.selectedDate2 && formData.selectedTime2 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">第二希望日時:</span>
+                        <span className="font-medium">{formData.selectedDate2} {formData.selectedTime2}</span>
+                      </div>
+                    )}
+                    {formData.selectedDate3 && formData.selectedTime3 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">第三希望日時:</span>
+                        <span className="font-medium">{formData.selectedDate3} {formData.selectedTime3}</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  formData.selectedDate && formData.selectedTime && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">ご希望日時:</span>
+                      <span className="font-medium">{formData.selectedDate} {formData.selectedTime}</span>
+                    </div>
+                  )
                 )}
                 
                 {/* 通常のメニュー表示 */}

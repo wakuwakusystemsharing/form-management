@@ -136,7 +136,7 @@ export class StaticFormGenerator {
             ${safeConfig.visit_count_selection.enabled ? this.renderVisitCountField(safeConfig) : ''}
             ${safeConfig.coupon_selection.enabled ? this.renderCouponField(safeConfig) : ''}
             ${this.renderMenuField(safeConfig)}
-            ${this.renderDateTimeField()}
+            ${this.renderDateTimeFields(safeConfig)}
             ${this.renderMessageField()}
             ${this.renderSummary()}
             
@@ -169,11 +169,19 @@ class BookingForm {
     
     async init() {
         try {
-            // カレンダーの初期設定
-            const today = new Date();
-            this.state.currentWeekStart = this.getWeekStart(today);
-            this.state.selectedDate = '';
-            this.state.selectedTime = '';
+            // 日時選択モードの初期設定
+            const bookingMode = this.config.calendar_settings?.booking_mode || 'calendar';
+            
+            if (bookingMode === 'multiple_dates') {
+                // 第三希望日時モードの初期設定
+                this.initializeMultipleDates();
+            } else {
+                // カレンダーモードの初期設定
+                const today = new Date();
+                this.state.currentWeekStart = this.getWeekStart(today);
+                this.state.selectedDate = '';
+                this.state.selectedTime = '';
+            }
             
             await this.initializeLIFF();
             
@@ -873,6 +881,157 @@ class BookingForm {
             alert('送信に失敗しました。もう一度お試しください。');
         }
     }
+    
+    // 第三希望日時モード用関数
+    initializeMultipleDates() {
+        const settings = this.config.calendar_settings?.multiple_dates_settings || {
+            time_interval: 30,
+            date_range_days: 30,
+            exclude_weekdays: [0],
+            start_time: '09:00',
+            end_time: '18:00'
+        };
+        
+        // 各希望日時の初期化
+        for (let i = 1; i <= 3; i++) {
+            this.populateDateOptions(i, settings);
+            this.populateTimeOptions(i, settings);
+            
+            // イベントリスナー追加
+            const daySelect = document.getElementById(\`date\${i}_day\`);
+            const timeSelect = document.getElementById(\`date\${i}_time\`);
+            if (daySelect && timeSelect) {
+                daySelect.addEventListener('change', () => this.updateDateTime(i));
+                timeSelect.addEventListener('change', () => this.updateDateTime(i));
+            }
+        }
+    }
+    
+    populateDateOptions(index, settings) {
+        const select = document.getElementById(\`date\${index}_day\`);
+        if (!select) return;
+        
+        const today = new Date();
+        
+        // デフォルトオプション
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '日付を選択';
+        select.appendChild(defaultOption);
+        
+        for (let i = 0; i < settings.date_range_days; i++) {
+            const date = new Date(today);
+            date.setDate(today.getDate() + i);
+            
+            // 除外曜日チェック
+            if (settings.exclude_weekdays.includes(date.getDay())) {
+                continue;
+            }
+            
+            const option = document.createElement('option');
+            option.value = date.toISOString().split('T')[0];
+            option.textContent = date.toLocaleDateString('ja-JP', {
+                month: 'numeric',
+                day: 'numeric',
+                weekday: 'short'
+            });
+            select.appendChild(option);
+        }
+    }
+    
+    populateTimeOptions(index, settings) {
+        const select = document.getElementById(\`date\${index}_time\`);
+        if (!select) return;
+        
+        // デフォルトオプション
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '時間を選択';
+        select.appendChild(defaultOption);
+        
+        // 時間スロット生成
+        const timeSlots = this.generateTimeSlots(settings.start_time, settings.end_time, settings.time_interval);
+        
+        timeSlots.forEach(time => {
+            const option = document.createElement('option');
+            option.value = time;
+            option.textContent = time;
+            select.appendChild(option);
+        });
+    }
+    
+    generateTimeSlots(startTime, endTime, interval) {
+        const slots = [];
+        const [startHour, startMin] = startTime.split(':').map(Number);
+        const [endHour, endMin] = endTime.split(':').map(Number);
+        
+        let currentHour = startHour;
+        let currentMin = startMin;
+        
+        while (currentHour < endHour || (currentHour === endHour && currentMin < endMin)) {
+            const timeStr = \`\${currentHour.toString().padStart(2, '0')}:\${currentMin.toString().padStart(2, '0')}\`;
+            slots.push(timeStr);
+            
+            currentMin += interval;
+            if (currentMin >= 60) {
+                currentHour += Math.floor(currentMin / 60);
+                currentMin = currentMin % 60;
+            }
+        }
+        
+        return slots;
+    }
+    
+    updateDateTime(index) {
+        const daySelect = document.getElementById(\`date\${index}_day\`);
+        const timeSelect = document.getElementById(\`date\${index}_time\`);
+        const hiddenInput = document.getElementById(\`date\${index}\`);
+        const placeholder = document.getElementById(\`placeholder\${index}\`);
+        
+        if (!daySelect || !timeSelect || !hiddenInput || !placeholder) return;
+        
+        if (daySelect.value && timeSelect.value) {
+            const dateTimeString = \`\${daySelect.value}T\${timeSelect.value}:00\`;
+            hiddenInput.value = dateTimeString;
+            
+            // プレースホルダーを選択内容に更新
+            const displayText = \`\${daySelect.options[daySelect.selectedIndex].textContent} \${timeSelect.value}\`;
+            placeholder.textContent = displayText;
+            placeholder.style.color = '#374151';
+            placeholder.style.fontWeight = 'bold';
+            
+            // 対応するstateを更新
+            if (index === 1) this.state.selectedDate = daySelect.value;
+            if (index === 1) this.state.selectedTime = timeSelect.value;
+        } else {
+            placeholder.textContent = '⇩タップして日時を入力⇩';
+            placeholder.style.color = '#6b7280';
+            placeholder.style.fontWeight = 'normal';
+        }
+        
+        this.updateSummary();
+    }
+    
+    toggleCalendarVisibility() {
+        const bookingMode = this.config.calendar_settings?.booking_mode || 'calendar';
+        
+        if (bookingMode === 'multiple_dates') {
+            // 第三希望日時モード
+            const fields = ['datetime-field-1', 'datetime-field-2', 'datetime-field-3'];
+            fields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    field.style.display = this.state.selectedMenu ? 'block' : 'none';
+                }
+            });
+        } else {
+            // カレンダーモード（既存ロジック）
+            const datetimeField = document.getElementById('datetime-field');
+            if (datetimeField) {
+                datetimeField.style.display = this.state.selectedMenu ? 'block' : 'none';
+            }
+        }
+    }
 }
 
 // 初期化
@@ -986,7 +1145,23 @@ if (document.readyState === 'loading') {
             </div>`;
   }
 
+  private renderDateTimeFields(config: FormConfig): string {
+    const bookingMode = config.calendar_settings?.booking_mode || 'calendar';
+    
+    if (bookingMode === 'multiple_dates') {
+      return this.renderMultipleDatesField();
+    } else {
+      return this.renderDateTimeField();
+    }
+  }
+  
   private renderDateTimeField(): string {
+    return `${this.renderCalendarField()}`;
+  }
+  
+  private renderCalendarField(): string {
+    // 現在は常にカレンダーモードで生成（プレビューと同じ）
+    // 静的HTML生成時はプレビューと完全一致させる
     return `
             <!-- 日時選択 -->
             <div class="field" id="datetime-field" style="display:none;">
@@ -1030,6 +1205,48 @@ if (document.readyState === 'loading') {
                         <table id="calendar-table" style="width:100%;border-collapse:collapse;">
                             <!-- JavaScriptで動的生成 -->
                         </table>
+                    </div>
+                </div>
+            </div>`;
+  }
+  
+  private renderMultipleDatesField(): string {
+    return `
+            <!-- 第一希望日時 -->
+            <div class="field" id="datetime-field-1" style="display:none;">
+                <label class="field-label">第一希望日時 <span class="required">*</span></label>
+                <div class="datetime-wrapper" style="text-align: center;">
+                    <span class="placeholder" id="placeholder1" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
+                    <input type="hidden" id="date1" name="date1">
+                    <div class="dt-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
+                        <select id="date1_day" class="datetime-input" aria-label="日付を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
+                        <select id="date1_time" class="datetime-input" aria-label="時間を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第二希望日時 -->
+            <div class="field" id="datetime-field-2" style="display:none;">
+                <label class="field-label">第二希望日時 <span class="required">*</span></label>
+                <div class="datetime-wrapper" style="text-align: center;">
+                    <span class="placeholder" id="placeholder2" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
+                    <input type="hidden" id="date2" name="date2">
+                    <div class="dt-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
+                        <select id="date2_day" class="datetime-input" aria-label="日付を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
+                        <select id="date2_time" class="datetime-input" aria-label="時間を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 第三希望日時 -->
+            <div class="field" id="datetime-field-3" style="display:none;">
+                <label class="field-label">第三希望日時 <span class="required">*</span></label>
+                <div class="datetime-wrapper" style="text-align: center;">
+                    <span class="placeholder" id="placeholder3" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
+                    <input type="hidden" id="date3" name="date3">
+                    <div class="dt-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
+                        <select id="date3_day" class="datetime-input" aria-label="日付を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
+                        <select id="date3_time" class="datetime-input" aria-label="時間を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
                     </div>
                 </div>
             </div>`;
