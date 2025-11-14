@@ -1404,19 +1404,31 @@ export default function PreviewFormPage() {
                                     : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50'
                                 }`}
                               >
-                                <div className="flex items-center">
-                                  <svg 
-                                    className={`mr-2 h-5 w-5 transform transition-transform ${
-                                      expandedMenus.has(menu.id) ? 'rotate-90' : ''
-                                    }`}
-                                    fill="none" 
-                                    stroke="currentColor" 
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                  </svg>
+                                <div className="flex items-center gap-3">
+                                  {menu.image && (
+                                    <div className="w-16 h-12 rounded overflow-hidden flex-shrink-0">
+                                      <img 
+                                        src={menu.image} 
+                                        alt={menu.name}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).style.display = 'none';
+                                        }}
+                                      />
+                                    </div>
+                                  )}
                                   <div>
-                                    <div className="text-left">{menu.name}</div>
+                                    <svg 
+                                      className={`inline-block mr-2 h-5 w-5 transform transition-transform ${
+                                        expandedMenus.has(menu.id) ? 'rotate-90' : ''
+                                      }`}
+                                      fill="none" 
+                                      stroke="currentColor" 
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                    <div className="text-left inline">{menu.name}</div>
                                     {menu.description && (
                                       <div className="text-sm opacity-70 text-left">{menu.description}</div>
                                     )}
@@ -1439,26 +1451,63 @@ export default function PreviewFormPage() {
                                       key={`${menu.id}-${subMenuId}`}
                                       type="button"
                                       onClick={() => handleSubMenuSelection(menu.id, subMenuId)}
-                                      className={`w-full flex items-center justify-between p-3 border-2 rounded-md font-medium transition-all duration-200 ${
+                                      className={`w-full text-left border-2 rounded-md font-medium transition-all duration-200 overflow-hidden ${
                                         formData.selectedSubMenus[menu.id] === subMenuId
-                                          ? 'border-green-500 bg-green-50 text-green-700'
-                                          : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                                          ? 'border-green-500 bg-green-50'
+                                          : 'border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50'
                                       }`}
                                     >
-                                      <div>
-                                        <div className="text-left">{subMenu.name}</div>
-                                        {subMenu.description && (
-                                          <div className="text-sm opacity-70 text-left">{subMenu.description}</div>
-                                        )}
-                                      </div>
-                                      <div className="text-right ml-4">
-                                        {form.config?.menu_structure?.display_options?.show_price && (
-                                          <div className="font-semibold">¥{subMenu.price.toLocaleString()}</div>
-                                        )}
-                                        {form.config?.menu_structure?.display_options?.show_duration && (
-                                          <div className="text-sm opacity-70">{subMenu.duration}分</div>
-                                        )}
-                                      </div>
+                                      {subMenu.image ? (
+                                        // 画像がある場合：画像を上に、情報を下に配置
+                                        <div className="flex flex-col">
+                                          <div className="w-full h-40 rounded-t-sm overflow-hidden">
+                                            <img 
+                                              src={subMenu.image} 
+                                              alt={subMenu.name}
+                                              className="w-full h-full object-cover"
+                                              onError={(e) => {
+                                                (e.target as HTMLImageElement).style.display = 'none';
+                                              }}
+                                            />
+                                          </div>
+                                          <div className="p-3">
+                                            <div className={`font-semibold mb-1 ${formData.selectedSubMenus[menu.id] === subMenuId ? 'text-green-700' : 'text-gray-900'}`}>
+                                              {subMenu.name}
+                                            </div>
+                                            {subMenu.description && (
+                                              <div className="text-xs text-gray-600 mb-2">{subMenu.description}</div>
+                                            )}
+                                            <div className="flex justify-between items-center gap-2 text-sm">
+                                              {form.config?.menu_structure?.display_options?.show_price && (
+                                                <div className="font-semibold">¥{subMenu.price.toLocaleString()}</div>
+                                              )}
+                                              {form.config?.menu_structure?.display_options?.show_duration && (
+                                                <div className="text-gray-600">{subMenu.duration}分</div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        // 画像がない場合：従来のレイアウト
+                                        <div className="flex items-center justify-between p-3">
+                                          <div className="flex items-center gap-3">
+                                            <div>
+                                              <div className={`text-left ${formData.selectedSubMenus[menu.id] === subMenuId ? 'text-green-700' : ''}`}>{subMenu.name}</div>
+                                              {subMenu.description && (
+                                                <div className="text-sm opacity-70 text-left">{subMenu.description}</div>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="text-right ml-4">
+                                            {form.config?.menu_structure?.display_options?.show_price && (
+                                              <div className="font-semibold">¥{subMenu.price.toLocaleString()}</div>
+                                            )}
+                                            {form.config?.menu_structure?.display_options?.show_duration && (
+                                              <div className="text-sm opacity-70">{subMenu.duration}分</div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
                                     </button>
                                     );
                                   })}
@@ -1470,26 +1519,64 @@ export default function PreviewFormPage() {
                             <button
                               type="button"
                               onClick={() => handleMenuSelection(category.id, menu.id, category.selection_mode === 'multiple')}
-                              className={`w-full flex items-center justify-between p-3 border-2 rounded-md font-medium transition-all duration-200 ${
+                              className={`w-full text-left border-2 rounded-md font-medium transition-all duration-200 overflow-hidden ${
                                 formData.selectedMenus[category.id]?.includes(menu.id)
-                                  ? 'border-green-500 bg-green-50 text-green-700'
-                                  : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                                  ? 'border-green-500 bg-green-50'
+                                  : 'border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50'
                               }`}
                             >
-                              <div>
-                                <div className="text-left">{menu.name}</div>
-                                {menu.description && (
-                                  <div className="text-sm opacity-70 text-left">{menu.description}</div>
-                                )}
-                              </div>
-                              <div className="text-right ml-4">
-                                {form.config?.menu_structure?.display_options?.show_price && menu.price !== undefined && (
-                                  <div className="font-semibold">¥{menu.price.toLocaleString()}</div>
-                                )}
-                                {form.config?.menu_structure?.display_options?.show_duration && menu.duration !== undefined && (
-                                  <div className="text-sm opacity-70">{menu.duration}分</div>
-                                )}
-                              </div>
+                              {menu.image ? (
+                                // 画像がある場合：画像を上に、情報を下に配置
+                                <div className="flex flex-col">
+                                  <div className="w-full h-40 rounded-t-sm overflow-hidden">
+                                    <img 
+                                      src={menu.image} 
+                                      alt={menu.name}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="p-3">
+                                    <div className={`font-semibold mb-1 ${formData.selectedMenus[category.id]?.includes(menu.id) ? 'text-green-700' : 'text-gray-900'}`}>
+                                      {menu.name}
+                                    </div>
+                                    {menu.description && (
+                                      <div className="text-xs text-gray-600 mb-2">{menu.description}</div>
+                                    )}
+                                    <div className="flex justify-between items-center gap-2 text-sm">
+                                      {form.config?.menu_structure?.display_options?.show_price && menu.price !== undefined && (
+                                        <div className="font-semibold">¥{menu.price.toLocaleString()}</div>
+                                      )}
+                                      {form.config?.menu_structure?.display_options?.show_duration && menu.duration !== undefined && (
+                                        <div className="text-gray-600">{menu.duration}分</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                // 画像がない場合：従来のレイアウト
+                                <div className="flex items-center justify-between p-3">
+                                  <div>
+                                    <div className={`text-left ${formData.selectedMenus[category.id]?.includes(menu.id) ? 'text-green-700' : ''}`}>{menu.name}</div>
+                                    {menu.description && (
+                                      <div className="text-sm opacity-70 text-left">{menu.description}</div>
+                                    )}
+                                  </div>
+                                  <div className="text-right ml-4">
+                                    {form.config?.menu_structure?.display_options?.show_price && menu.price !== undefined && (
+                                      <div className="font-semibold">¥{menu.price.toLocaleString()}</div>
+                                    )}
+                                    {form.config?.menu_structure?.display_options?.show_price && menu.price !== undefined && (
+                                      <div className="font-semibold">¥{menu.price.toLocaleString()}</div>
+                                    )}
+                                    {form.config?.menu_structure?.display_options?.show_duration && menu.duration !== undefined && (
+                                      <div className="text-sm opacity-70">{menu.duration}分</div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </button>
                           )}
                           

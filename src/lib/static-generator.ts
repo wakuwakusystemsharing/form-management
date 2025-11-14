@@ -1437,9 +1437,10 @@ if (document.readyState === 'loading') {
         .menu-item {
             width: 100%;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.75rem;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: stretch;
+            padding: 0;
             border: 2px solid #d1d5db;
             border-radius: 0.375rem;
             background: white;
@@ -1447,6 +1448,7 @@ if (document.readyState === 'loading') {
             margin-bottom: 0.5rem;
             transition: all 0.15s;
             text-align: left;
+            overflow: hidden;
         }
         
         .menu-item:hover {
@@ -1454,19 +1456,19 @@ if (document.readyState === 'loading') {
         }
         
         .menu-item.selected {
-            border-color: #3b82f6;
-            background-color: #eff6ff;
+            border-color: #10b981;
+            background-color: #f0fdf4;
         }
         
         .menu-item.has-submenu {
-            border-color: #3b82f6;
+            border-color: #10b981;
         }
         
         .menu-item-image {
-            width: 60px;
-            height: 45px;
-            margin-right: 0.75rem;
-            border-radius: 0.375rem;
+            width: 100%;
+            height: 160px;
+            margin: 0;
+            border-radius: 0;
             overflow: hidden;
             flex-shrink: 0;
         }
@@ -1485,31 +1487,41 @@ if (document.readyState === 'loading') {
         .menu-item-content {
             text-align: left;
             flex: 1;
+            padding: 0.75rem 0.75rem 0 0.75rem;
         }
         
         .menu-item-name {
-            font-weight: 500;
+            font-weight: 600;
             color: #111827;
+            font-size: 0.95rem;
         }
         
         .menu-item-desc {
-            font-size: 0.875rem;
+            font-size: 0.8rem;
             opacity: 0.7;
             margin-top: 0.25rem;
+            line-height: 1.4;
         }
         
         .menu-item-info {
             text-align: right;
-            margin-left: 1rem;
+            margin-left: 0;
+            padding: 0 0.75rem 0.75rem 0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
         }
         
         .menu-item-price {
-            font-weight: 600;
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: #111827;
         }
         
         .menu-item-duration {
-            font-size: 0.875rem;
+            font-size: 0.8rem;
             opacity: 0.7;
+            margin-top: 0;
         }
         
         .submenu-container {

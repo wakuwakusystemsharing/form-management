@@ -486,6 +486,127 @@ const FORM_TEMPLATES = {
         show_repeat_booking: true
       }
     }
+  },
+  with_images: {
+    name: '🖼️ 画像付きメニュー',
+    description: '画像表示機能付きのメニュー選択フォーム',
+    liff_id: '2008098784-5ZQ1LRn3',
+    gas_endpoint: 'https://script.google.com/macros/s/AKfycby3QfS2E892nXbS-fnfBVrJX8KyJWTSsisKpe9zVz5QGWzvTH7Zc3PlOay9j60aSQLp/exec',
+    config: {
+      basic_info: {
+        show_gender_selection: true
+      },
+      menu_structure: {
+        structure_type: 'category',
+        categories: [
+          {
+            id: 'cat1',
+            name: 'メニュー',
+            display_name: 'メニュー',
+            menus: [
+              {
+                id: 'menu1',
+                name: 'コースA (1000円/30分)',
+                price: 1000,
+                duration: 30,
+                description: '初回体験向け。軽めの着色汚れを除去。',
+                image: 'https://www.dropbox.com/scl/fi/rp6b5xcnbnt5d03ommeb4/.png?rlkey=y6hhwc2ubinzpavldh3fgzl6p&st=d0cbcp3s&raw=1',
+                gender_filter: 'both',
+                has_submenu: false,
+                options: [
+                  {
+                    id: 'opt1',
+                    name: 'コーヒーやお茶の着色が気になる方',
+                    price: 0,
+                    duration: 0,
+                    description: 'おすすめ',
+                    is_default: true
+                  }
+                ]
+              },
+              {
+                id: 'menu2',
+                name: 'コースB (2000円/60分)',
+                price: 2000,
+                duration: 60,
+                description: '本格的なホワイトニング。より白い歯へ。',
+                image: 'https://www.dropbox.com/scl/fi/adiq6vy9fxdqub025oavy/.png?rlkey=ghg3q2r7a9izp610x7johbl3b&st=eup1t89x&raw=1',
+                gender_filter: 'both',
+                has_submenu: false,
+                options: [
+                  {
+                    id: 'opt2',
+                    name: 'より白い歯を目指す方',
+                    price: 0,
+                    duration: 0,
+                    description: 'おすすめ',
+                    is_default: false
+                  }
+                ]
+              },
+              {
+                id: 'menu3',
+                name: 'コースC (3000円/90分)',
+                price: 3000,
+                duration: 90,
+                description: 'プレミアムホワイトニング。最高の白さを実現。',
+                image: 'https://www.dropbox.com/scl/fi/su141b49bkpnspprslc17/.png?rlkey=guaknyrjpgta2nve3hf9nagkz&st=jyx7zxcn&raw=1',
+                gender_filter: 'both',
+                has_submenu: false,
+                options: [
+                  {
+                    id: 'opt3',
+                    name: '結婚式や重要な行事を控えている方',
+                    price: 0,
+                    duration: 0,
+                    description: 'おすすめ',
+                    is_default: false
+                  }
+                ]
+              }
+            ],
+            options: [],
+            selection_mode: 'single',
+            gender_condition: 'all'
+          },
+          {
+            id: 'cat2',
+            name: 'オプション',
+            display_name: 'オプション',
+            menus: [
+              {
+                id: 'menu4',
+                name: 'フッ素コーティング',
+                price: 500,
+                duration: 10,
+                description: '歯を保護します',
+                image: 'https://www.dropbox.com/scl/fi/rp6b5xcnbnt5d03ommeb4/.png?rlkey=y6hhwc2ubinzpavldh3fgzl6p&st=d0cbcp3s&raw=1',
+                gender_filter: 'both',
+                options: []
+              },
+              {
+                id: 'menu5',
+                name: 'リテーナー（カスタム）',
+                price: 5000,
+                duration: 0,
+                description: 'ホワイトニング維持用',
+                image: 'https://www.dropbox.com/scl/fi/adiq6vy9fxdqub025oavy/.png?rlkey=ghg3q2r7a9izp610x7johbl3b&st=eup1t89x&raw=1',
+                gender_filter: 'both',
+                options: []
+              }
+            ],
+            options: [],
+            selection_mode: 'single',
+            gender_condition: 'all'
+          }
+        ]
+      },
+      ui_settings: {
+        show_visit_count: true,
+        show_coupon_selection: true,
+        show_repeat_booking: true
+      }
+    }
   }
 };
 
