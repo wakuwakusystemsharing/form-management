@@ -217,14 +217,14 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                           type="time"
                           value={businessHours[day]?.open || '09:00'}
                           onChange={(e) => handleBusinessHoursChange(day, 'open', e.target.value)}
-                          className={themeClasses.input}
+                          className={themeClasses.timeInput}
                         />
                         <span className={`text-sm ${themeClasses.text.secondary}`}>〜</span>
                         <input
                           type="time"
                           value={businessHours[day]?.close || '18:00'}
                           onChange={(e) => handleBusinessHoursChange(day, 'close', e.target.value)}
-                          className={themeClasses.input}
+                          className={themeClasses.timeInput}
                         />
                       </>
                     )}
@@ -354,7 +354,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                       type="time"
                       value={multipleDatesSettings.start_time}
                       onChange={(e) => handleMultipleDatesSettingsChange('start_time', e.target.value)}
-                      className={themeClasses.input}
+                      className={themeClasses.timeInput}
                     />
                   </div>
 
@@ -367,7 +367,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                       type="time"
                       value={multipleDatesSettings.end_time}
                       onChange={(e) => handleMultipleDatesSettingsChange('end_time', e.target.value)}
-                      className={themeClasses.input}
+                      className={themeClasses.timeInput}
                     />
                   </div>
                 </div>
