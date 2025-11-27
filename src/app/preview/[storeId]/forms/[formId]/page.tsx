@@ -1406,7 +1406,7 @@ export default function PreviewFormPage() {
                               >
                                 <div className="flex items-center gap-3">
                                   {menu.image && (
-                                    <div className="w-16 h-12 rounded overflow-hidden flex-shrink-0">
+                                    <div className="w-16 rounded overflow-hidden flex-shrink-0" style={{ aspectRatio: '16/9' }}>
                                       {/* eslint-disable-next-line @next/next/no-img-element */}
                                       <img 
                                         src={menu.image} 
@@ -1461,7 +1461,7 @@ export default function PreviewFormPage() {
                                       {subMenu.image ? (
                                         // 画像がある場合：画像を上に、情報を下に配置
                                         <div className="flex flex-col">
-                                          <div className="w-full h-40 rounded-t-sm overflow-hidden">
+                                          <div className="w-full rounded-t-sm overflow-hidden" style={{ aspectRatio: '16/9' }}>
                                             {/* eslint-disable-next-line @next/next/no-img-element */}
                                             <img 
                                               src={subMenu.image} 
@@ -1530,7 +1530,7 @@ export default function PreviewFormPage() {
                               {menu.image ? (
                                 // 画像がある場合：画像を上に、情報を下に配置
                                 <div className="flex flex-col">
-                                  <div className="w-full h-40 rounded-t-sm overflow-hidden">
+                                  <div className="w-full rounded-t-sm overflow-hidden" style={{ aspectRatio: '16/9' }}>
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img 
                                       src={menu.image} 

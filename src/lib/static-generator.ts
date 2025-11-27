@@ -1466,7 +1466,7 @@ if (document.readyState === 'loading') {
         
         .menu-item-image {
             width: 100%;
-            height: 160px;
+            aspect-ratio: 16 / 9;
             margin: 0;
             border-radius: 0;
             overflow: hidden;
@@ -1630,7 +1630,7 @@ if (document.readyState === 'loading') {
         @media (max-width: 768px) {
             .menu-item-image {
                 width: 50px;
-                height: 38px;
+                aspect-ratio: 16 / 9;
                 margin-right: 0.5rem;
             }
             

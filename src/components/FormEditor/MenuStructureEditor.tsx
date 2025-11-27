@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Form, MenuCategory, MenuItem, MenuOption, SubMenuItem } from '@/types/form';
 import { getThemeClasses, ThemeType } from './FormEditorTheme';
+import ImageCropperModal from './ImageCropperModal';
 
 interface MenuStructureEditorProps {
   form: Form;
@@ -71,6 +72,8 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
   const [description, setDescription] = useState('');
   const [image, setImage] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [cropperOpen, setCropperOpen] = useState(false);
 
   React.useEffect(() => {
     if (subMenuItem) {
@@ -210,37 +213,14 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
                     <input
                       type="file"
                       ref={(el) => {
-                        if (el && !el.dataset.initialized) {
-                          el.dataset.initialized = 'true';
+                        if (el && !el.dataset.submenuInitialized) {
+                          el.dataset.submenuInitialized = 'true';
                           el.accept = 'image/*';
                           el.onchange = async (e) => {
                             const file = (e.target as HTMLInputElement).files?.[0];
                             if (file) {
-                              setUploading(true);
-                              try {
-                                const formData = new FormData();
-                                formData.append('file', file);
-                                formData.append('storeId', form.store_id);
-                                formData.append('submenuId', subMenuItem?.id || `submenu_${Date.now()}`);
-                                
-                                const response = await fetch('/api/upload/menu-image', {
-                                  method: 'POST',
-                                  body: formData,
-                                });
-                                
-                                if (response.ok) {
-                                  const { url } = await response.json();
-                                  setImage(url);
-                                } else {
-                                  const error = await response.json();
-                                  alert(`アップロードに失敗しました: ${error.error}`);
-                                }
-                              } catch (error) {
-                                console.error('Upload error:', error);
-                                alert('アップロードに失敗しました');
-                              } finally {
-                                setUploading(false);
-                              }
+                              setSelectedFile(file);
+                              setCropperOpen(true);
                             }
                           };
                         }
@@ -312,6 +292,44 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
           </div>
         </div>
       </div>
+
+      <ImageCropperModal
+        isOpen={cropperOpen}
+        onClose={() => setCropperOpen(false)}
+        onCropConfirm={async (blob: Blob) => {
+          setUploading(true);
+          try {
+            const formData = new FormData();
+            formData.append('file', blob, 'cropped-image.jpg');
+            formData.append('storeId', form.store_id);
+            formData.append('submenuId', subMenuItem?.id || `submenu_${Date.now()}`);
+            // 古い画像URLがあれば送信（削除処理用）
+            if (image) {
+              formData.append('oldImageUrl', image);
+            }
+            
+            const response = await fetch('/api/upload/menu-image', {
+              method: 'POST',
+              body: formData,
+            });
+            
+            if (response.ok) {
+              const { url } = await response.json();
+              setImage(url);
+            } else {
+              const error = await response.json();
+              alert(`アップロードに失敗しました: ${error.error}`);
+            }
+          } catch (error) {
+            console.error('Upload error:', error);
+            alert('アップロードに失敗しました');
+          } finally {
+            setUploading(false);
+          }
+        }}
+        imageFile={selectedFile!}
+        theme={theme}
+      />
     </div>
   );
 };
@@ -502,6 +520,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   const [subMenuModalOpen, setSubMenuModalOpen] = useState(false);
   const [selectedSubMenuItem, setSelectedSubMenuItem] = useState<SubMenuItem | undefined>();
   const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [cropperOpen, setCropperOpen] = useState(false);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -558,10 +578,23 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   };
 
   const handleSaveSubMenuItem = (subMenuItem: SubMenuItem) => {
+    let updatedSubMenuItems: SubMenuItem[];
     if (selectedSubMenuItem?.id) {
-      setSubMenuItems(prev => prev.map(item => item.id === selectedSubMenuItem.id ? subMenuItem : item));
+      updatedSubMenuItems = subMenuItems.map(item => item.id === selectedSubMenuItem.id ? subMenuItem : item);
     } else {
-      setSubMenuItems(prev => [...prev, subMenuItem]);
+      updatedSubMenuItems = [...subMenuItems, subMenuItem];
+    }
+    setSubMenuItems(updatedSubMenuItems);
+    
+    // 親MenuItemModalのプレビューをすぐに更新するために、onSaveを呼ぶ
+    if (menuItem && hasSubmenu) {
+      const updatedMenuItem: MenuItem = {
+        ...menuItem,
+        id: menuItem.id,
+        name: menuItem.name,
+        sub_menu_items: updatedSubMenuItems
+      };
+      onSave(updatedMenuItem);
     }
   };
 
@@ -735,31 +768,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                               el.onchange = async (e) => {
                                 const file = (e.target as HTMLInputElement).files?.[0];
                                 if (file) {
-                                  setUploading(true);
-                                  try {
-                                    const formData = new FormData();
-                                    formData.append('file', file);
-                                    formData.append('storeId', form.store_id);
-                                    formData.append('menuId', menuItem?.id || `menu_${Date.now()}`);
-                                    
-                                    const response = await fetch('/api/upload/menu-image', {
-                                      method: 'POST',
-                                      body: formData,
-                                    });
-                                    
-                                    if (response.ok) {
-                                      const { url } = await response.json();
-                                      setImage(url);
-                                    } else {
-                                      const error = await response.json();
-                                      alert(`アップロードに失敗しました: ${error.error}`);
-                                    }
-                                  } catch (error) {
-                                    console.error('Upload error:', error);
-                                    alert('アップロードに失敗しました');
-                                  } finally {
-                                    setUploading(false);
-                                  }
+                                  setSelectedFile(file);
+                                  setCropperOpen(true);
                                 }
                               };
                             }
@@ -988,6 +998,44 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         subMenuItem={selectedSubMenuItem}
         theme={theme}
         form={form}
+      />
+
+      <ImageCropperModal
+        isOpen={cropperOpen}
+        onClose={() => setCropperOpen(false)}
+        onCropConfirm={async (blob: Blob) => {
+          setUploading(true);
+          try {
+            const formData = new FormData();
+            formData.append('file', blob, 'cropped-image.jpg');
+            formData.append('storeId', form.store_id);
+            formData.append('menuId', menuItem?.id || `menu_${Date.now()}`);
+            // 古い画像URLがあれば送信（削除処理用）
+            if (image) {
+              formData.append('oldImageUrl', image);
+            }
+            
+            const response = await fetch('/api/upload/menu-image', {
+              method: 'POST',
+              body: formData,
+            });
+            
+            if (response.ok) {
+              const { url } = await response.json();
+              setImage(url);
+            } else {
+              const error = await response.json();
+              alert(`アップロードに失敗しました: ${error.error}`);
+            }
+          } catch (error) {
+            console.error('Upload error:', error);
+            alert('アップロードに失敗しました');
+          } finally {
+            setUploading(false);
+          }
+        }}
+        imageFile={selectedFile!}
+        theme={theme}
       />
     </>
   );

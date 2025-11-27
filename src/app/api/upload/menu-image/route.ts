@@ -1,13 +1,16 @@
 /**
  * 画像アップロードAPI
  * メニュー・サブメニュー画像をSupabase Storageにアップロード
+ * 古い画像があれば自動削除
  * 
  * POST /api/upload/menu-image
- * Body: FormData with 'file', 'storeId', 'menuId' or 'submenuId'
+ * Body: FormData with 'file', 'storeId', 'menuId' or 'submenuId', optional 'oldImageUrl'
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
+import fs from 'fs';
+import path from 'path';
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,6 +19,7 @@ export async function POST(request: NextRequest) {
     const storeId = formData.get('storeId') as string;
     const menuId = formData.get('menuId') as string | null;
     const submenuId = formData.get('submenuId') as string | null;
+    const oldImageUrl = formData.get('oldImageUrl') as string | null;
 
     // バリデーション
     if (!file || !storeId) {
@@ -53,19 +57,40 @@ export async function POST(request: NextRequest) {
     const ext = file.name.split('.').pop() || 'jpg';
 
     // パス生成
-    const path = menuId
+    const newPath = menuId
       ? `menu_images/${storeId}/${menuId}.${ext}`
       : `submenu_images/${storeId}/${submenuId}.${ext}`;
 
-    // Supabase Storageにアップロード
+    // 古い画像を削除（存在する場合）
+    if (oldImageUrl) {
+      const deployer = new SupabaseStorageDeployer();
+      try {
+        // ローカル開発環境の場合、ローカルファイルを削除
+        if (oldImageUrl.startsWith('/')) {
+          const localFilePath = path.join(process.cwd(), 'public', oldImageUrl);
+          if (fs.existsSync(localFilePath)) {
+            fs.unlinkSync(localFilePath);
+            console.log(`[LOCAL MODE] Old image deleted: ${localFilePath}`);
+          }
+        } else {
+          // 本番環境の場合、Supabase Storageから削除
+          await deployer.deleteImage(oldImageUrl);
+        }
+      } catch (error) {
+        console.warn('Failed to delete old image:', error);
+        // 古い画像の削除失敗は続行する
+      }
+    }
+
+    // 新しい画像をアップロード
     const deployer = new SupabaseStorageDeployer();
     const buffer = Buffer.from(await file.arrayBuffer());
-    const storageUrl = await deployer.uploadImage(buffer, path);
+    const storageUrl = await deployer.uploadImage(buffer, newPath);
 
     return NextResponse.json({
       success: true,
       url: storageUrl,
-      path: path
+      path: newPath
     });
   } catch (error) {
     console.error('Image upload error:', error);
