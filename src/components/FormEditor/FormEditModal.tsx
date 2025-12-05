@@ -2,18 +2,20 @@
 
 import React, { useState } from 'react';
 import { Form } from '@/types/form';
+import { SurveyForm } from '@/types/survey';
 import { getThemeClasses, ThemeType } from './FormEditorTheme';
-import FormEditorTabs, { TabId } from './FormEditorTabs';
-import BasicInfoEditor from './BasicInfoEditor';
-import MenuStructureEditor from './MenuStructureEditor';
-import BusinessRulesEditor from './BusinessRulesEditor';
+import FormEditorTabs, { TabId } from './Reservation/FormEditorTabs';
+import BasicInfoEditor from './Reservation/BasicInfoEditor';
+import MenuStructureEditor from './Reservation/MenuStructureEditor';
+import BusinessRulesEditor from './Reservation/BusinessRulesEditor';
+import SurveyFormEditor from './Survey/SurveyFormEditor';
 
 interface FormEditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  form: Form;
+  form: Form | SurveyForm;
   storeId: string;
-  onSave: (form: Form) => Promise<void>;
+  onSave: (form: Form | SurveyForm) => Promise<void>;
   theme?: ThemeType;
   userRole: 'service_admin' | 'store_admin';
 }
@@ -27,7 +29,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
   theme = 'dark',
   userRole
 }) => {
-  const [editingForm, setEditingForm] = useState<Form>(initialForm);
+  const [editingForm, setEditingForm] = useState<Form | SurveyForm>(initialForm);
   const [activeTab, setActiveTab] = useState<TabId>(
     userRole === 'service_admin' ? 'basic' : 'menu'
   );
@@ -39,6 +41,10 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
   React.useEffect(() => {
     setEditingForm(initialForm);
   }, [initialForm]);
+
+  const isSurvey = (form: Form | SurveyForm): form is SurveyForm => {
+    return 'questions' in form.config;
+  };
 
   const handleSave = async () => {
     try {
@@ -61,7 +67,11 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
       await onSave(editingForm);
       
       // 静的HTMLを再デプロイ
-      const deployResponse = await fetch(`/api/forms/${editingForm.id}/deploy`, {
+      const endpoint = isSurvey(editingForm) 
+        ? `/api/surveys/${editingForm.id}/deploy`
+        : `/api/forms/${editingForm.id}/deploy`;
+
+      const deployResponse = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -88,7 +98,9 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
   };
 
   const handlePreview = () => {
-    const previewUrl = `/preview/${storeId}/forms/${editingForm.id}`;
+    const previewUrl = isSurvey(editingForm)
+      ? `/preview/${storeId}/surveys/${editingForm.id}`
+      : `/preview/${storeId}/forms/${editingForm.id}`;
     window.open(previewUrl, '_blank');
   };
 
@@ -102,10 +114,12 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
           <div className="flex items-center justify-between">
             <div>
               <h2 className={`text-2xl font-bold ${themeClasses.text.primary}`}>
-                フォーム編集
+                {isSurvey(editingForm) ? 'アンケートフォーム編集' : '予約フォーム編集'}
               </h2>
               <p className={`text-sm ${themeClasses.text.secondary} mt-1`}>
-                {editingForm.config?.basic_info?.form_name}
+                {isSurvey(editingForm) 
+                  ? editingForm.config.basic_info.title 
+                  : (editingForm as Form).config.basic_info.form_name}
               </p>
             </div>
             <button
@@ -119,51 +133,65 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
           </div>
         </div>
 
-        {/* タブナビゲーション */}
-        <FormEditorTabs
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          userRole={userRole}
-          theme={theme}
-        />
-
-        {/* タブコンテンツ */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {activeTab === 'basic' && (
-            <BasicInfoEditor
-              form={editingForm}
-              onUpdate={setEditingForm}
-              theme={theme}
-              userRole={userRole}
-            />
-          )}
-
-          {activeTab === 'menu' && (
-            <MenuStructureEditor
-              form={editingForm}
-              onUpdate={setEditingForm}
-              theme={theme}
-            />
-          )}
-
-          {activeTab === 'business' && (
-            <BusinessRulesEditor
-              form={editingForm}
-              onUpdate={setEditingForm}
-              theme={theme}
-            />
+        {/* コンテンツエリア */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          {isSurvey(editingForm) ? (
+            <div className="flex-1 overflow-y-auto p-6">
+              <SurveyFormEditor
+                form={editingForm}
+                onUpdate={(updatedForm) => setEditingForm(updatedForm)}
+              />
+            </div>
+          ) : (
+            <>
+              {/* 予約フォーム用タブ */}
+              <FormEditorTabs
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                theme={theme}
+                userRole={userRole}
+              />
+              
+              <div className="flex-1 overflow-y-auto p-6">
+                {activeTab === 'basic' && (
+                  <BasicInfoEditor
+                    form={editingForm as Form}
+                    onUpdate={(updatedForm) => setEditingForm(updatedForm)}
+                    theme={theme}
+                    userRole={userRole}
+                  />
+                )}
+                {activeTab === 'menu' && (
+                  <MenuStructureEditor
+                    form={editingForm as Form}
+                    onUpdate={(updatedForm) => setEditingForm(updatedForm)}
+                    theme={theme}
+                  />
+                )}
+                {activeTab === 'business' && (
+                  <BusinessRulesEditor
+                    form={editingForm as Form}
+                    onUpdate={(updatedForm) => setEditingForm(updatedForm)}
+                    theme={theme}
+                  />
+                )}
+              </div>
+            </>
           )}
         </div>
 
         {/* モーダルフッター */}
         <div className={`flex items-center justify-between p-6 border-t ${themeClasses.divider}`}>
-          <button
-            onClick={onClose}
-            disabled={isSaving}
-            className={`px-4 py-2 rounded-md ${themeClasses.button.secondary}`}
-          >
-            キャンセル
-          </button>
+          <div className="flex items-center space-x-4">
+            <span className={`text-sm ${themeClasses.text.secondary}`}>
+              ステータス: {editingForm.status === 'active' ? '公開中' : '非公開'}
+            </span>
+            {editingForm.draft_status === 'draft' && (
+              <span className={`text-sm ${themeClasses.badge.warning}`}>
+                ● 未保存の変更があります
+              </span>
+            )}
+          </div>
           <div className="flex items-center space-x-3">
             <button
               onClick={handlePreview}

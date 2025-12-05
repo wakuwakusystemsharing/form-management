@@ -146,12 +146,15 @@ export interface FormConfig {
   gas_endpoint?: string;
 }
 
+export type AppEnvironment = 'local' | 'staging' | 'production';
+
 export interface StaticDeploy {
   deployed_at: string;
   deploy_url: string;
   storage_url?: string;  // Supabase Storage URL
   blob_url?: string;     // 旧Vercel Blob URL（後方互換性のため）
   status: 'deployed' | 'failed' | 'pending';
+  environment?: AppEnvironment;
 }
 
 export interface Form {

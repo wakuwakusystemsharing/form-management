@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import Cropper from 'react-easy-crop';
-import { getThemeClasses, ThemeType } from './FormEditorTheme';
+import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 
 interface CroppedAreaPixels {
   x: number;

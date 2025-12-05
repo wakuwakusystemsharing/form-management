@@ -4,8 +4,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Form } from '@/types/form';
-import BusinessRulesEditor from '@/components/FormEditor/BusinessRulesEditor';
-import MenuStructureEditor from '@/components/FormEditor/MenuStructureEditor';
+import BusinessRulesEditor from '@/components/FormEditor/Reservation/BusinessRulesEditor';
+import MenuStructureEditor from '@/components/FormEditor/Reservation/MenuStructureEditor';
 
 // フォーム構造の互換性を保つためのヘルパー関数
 function getFormName(form: Form): string {

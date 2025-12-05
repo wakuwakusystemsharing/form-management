@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { Form, FormConfig } from '@/types/form';
-import { StaticFormGenerator } from '@/lib/static-generator';
+import { StaticReservationGenerator } from '@/lib/static-generator-reservation';
 import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
@@ -268,7 +268,7 @@ export async function POST(
 
     // 🚀 自動的にSupabase Storageに初期テンプレートHTMLをデプロイ（公開ステータス）
     try {
-      const generator = new StaticFormGenerator();
+      const generator = new StaticReservationGenerator();
       const deployer = new SupabaseStorageDeployer();
       
       // FormConfigに正規化
@@ -461,7 +461,7 @@ export async function POST(
 
     // 🚀 Supabase Storageに初期テンプレートHTMLをデプロイ（staging/production）
     try {
-      const generator = new StaticFormGenerator();
+      const generator = new StaticReservationGenerator();
       const deployer = new SupabaseStorageDeployer();
 
       // FormConfigをそのまま使用してHTMLを生成

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Form, MenuCategory, MenuItem, MenuOption, SubMenuItem } from '@/types/form';
-import { getThemeClasses, ThemeType } from './FormEditorTheme';
+import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 import ImageCropperModal from './ImageCropperModal';
 
 interface MenuStructureEditorProps {

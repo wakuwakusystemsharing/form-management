@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { StaticFormGenerator } from '@/lib/static-generator';
+import { StaticReservationGenerator } from '@/lib/static-generator-reservation';
 import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { getAppEnvironment } from '@/lib/env';
@@ -90,7 +90,7 @@ export async function POST(
     }
 
     // 静的HTMLを生成
-    const generator = new StaticFormGenerator();
+    const generator = new StaticReservationGenerator();
     const staticHtml = generator.generateHTML(formConfig);
     
     // Supabase Storageにデプロイ（環境に応じて自動判定）

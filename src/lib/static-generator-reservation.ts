@@ -5,7 +5,7 @@
 
 import { FormConfig } from '@/types/form';
 
-export class StaticFormGenerator {
+export class StaticReservationGenerator {
   /**
    * FormConfigから静的HTMLを生成
    * プレビュー画面と完全一致

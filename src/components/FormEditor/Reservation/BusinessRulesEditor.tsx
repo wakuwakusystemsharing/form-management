@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Form, BusinessHours } from '@/types/form';
-import { getThemeClasses, ThemeType } from './FormEditorTheme';
+import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 
 interface BusinessRulesEditorProps {
   form: Form;
