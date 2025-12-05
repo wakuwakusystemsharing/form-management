@@ -193,6 +193,7 @@ export async function POST(
       // @ts-expect-error Supabase型定義不足のため
       .insert({
         store_id: storeId,
+        name: form_name || 'アンケートフォーム',
         config: newConfig,
         status: 'active',
         draft_status: 'none'
