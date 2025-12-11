@@ -105,6 +105,15 @@ export class StaticSurveyGenerator {
                     hasError = true;
                     return; // 最初のエラーで止める
                 }
+
+                // 同意チェック: 選択肢に「同意する」が含まれている場合、それが選択されていないとエラー
+                if (q.type === 'radio' && q.options && q.options.some(o => o.label === '同意する')) {
+                    if (value !== '同意する') {
+                        alert(\`\${q.title}に同意していただく必要があります。\`);
+                        hasError = true;
+                        return;
+                    }
+                }
                 
                 formData[q.title] = value;
             }
