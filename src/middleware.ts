@@ -33,6 +33,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // 公開APIパスは常に許可
+  if (pathname.startsWith('/api/public-form')) {
+    return NextResponse.next();
+  }
+
   // /admin パスの保護（サービス管理者）
   const isServiceAdminRoute = pathname.startsWith('/admin');
   
@@ -108,5 +113,10 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/st:storeId*/(admin|forms|reservations)/:path*', '/api/(forms|stores|reservations)/:path*']
+  matcher: [
+    '/admin/:path*', 
+    '/st:storeId*/(admin|forms|reservations)/:path*',
+    // public-form API は除外（一般公開）
+    '/((?!api/public-form)api)/(forms|stores|reservations)/:path*'
+  ]
 };

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Form } from '@/types/form';
-import { getThemeClasses, ThemeType } from './FormEditorTheme';
+import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 
 interface BasicInfoEditorProps {
   form: Form;

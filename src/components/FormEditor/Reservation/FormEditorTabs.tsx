@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { getThemeClasses, ThemeType } from './FormEditorTheme';
+import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 
 export type TabId = 'basic' | 'menu' | 'business';
 

@@ -116,6 +116,16 @@ export interface FormConfig {
     business_hours: BusinessHours;
     advance_booking_days: number;
     google_calendar_url?: string;
+    // 日時選択モード
+    booking_mode?: 'calendar' | 'multiple_dates';  // カレンダー表示 or 第三希望日時選択
+    // 第三希望日時モード用設定
+    multiple_dates_settings?: {
+      time_interval: 15 | 30 | 60;        // 時間間隔（分）
+      date_range_days: number;            // 選択可能日数（本日から何日後まで）
+      exclude_weekdays: number[];         // 除外曜日 (0:日曜, 1:月曜, ...)
+      start_time: string;                 // 開始時間 "09:00"
+      end_time: string;                   // 終了時間 "18:00"
+    };
   };
   
   ui_settings: {
@@ -136,12 +146,15 @@ export interface FormConfig {
   gas_endpoint?: string;
 }
 
+export type AppEnvironment = 'local' | 'staging' | 'production';
+
 export interface StaticDeploy {
   deployed_at: string;
   deploy_url: string;
   storage_url?: string;  // Supabase Storage URL
   blob_url?: string;     // 旧Vercel Blob URL（後方互換性のため）
   status: 'deployed' | 'failed' | 'pending';
+  environment?: AppEnvironment;
 }
 
 export interface Form {
@@ -175,6 +188,10 @@ export interface MenuSelections {
   selected_options: MenuItem[];     // カテゴリーオプション（従来のもの）
   customer_info: CustomerInfo;
   selected_datetime: Date | null;
+  // 第三希望日時対応
+  selected_datetime_2?: Date | null;  // 第二希望日時
+  selected_datetime_3?: Date | null;  // 第三希望日時
+  booking_mode?: 'calendar' | 'multiple_dates';  // 選択モード
 }
 
 // 料金計算結果
