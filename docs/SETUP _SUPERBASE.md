@@ -14,13 +14,23 @@
 
 ### 1. プロジェクト作成
 
+> **📌 重要**: Staging と Production は **別々の Supabase プロジェクト** を使用します
+
+#### Staging 用プロジェクト（既存プロジェクトを継続使用）
+
+1. **既存の Supabase プロジェクトを staging 用として運用**
+   - 既存プロジェクトをそのまま使用（新規作成不要）
+   - プロジェクト名: `wakuwakusystemsharing-staging` など（既存のまま）
+
+#### Production 用プロジェクト（新規作成）
+
 1. https://supabase.com/dashboard にアクセス
 2. **New Project** をクリック
 3. 以下を設定：
-   - **Name**: `form-management-staging` (開発用) / `form-management-prod` (本番用)
+   - **Name**: `wakuwakusystemsharing-prod` (本番用)
    - **Database Password**: 強力なパスワードを生成
    - **Region**: `Northeast Asia (Tokyo)` を選択
-   - **Pricing Plan**: `Free` (開発時)
+   - **Pricing Plan**: **Pro** (本番運用のため推奨)
 
 ### 2. Email Provider の有効化
 
@@ -274,21 +284,25 @@ SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
 ### 3. Vercel 環境変数に追加
 
+> **📌 重要**: Staging と Production は **別々の Supabase プロジェクト** を使用します
+> - **Staging**: 既存の Supabase プロジェクトを継続使用
+> - **Production**: 新規の Supabase プロジェクトを作成（Pro プラン推奨）
+
 1. Vercel Dashboard → **Settings** → **Environment Variables**
 2. **Preview** 環境（staging ブランチ用）：
    ```
    NEXT_PUBLIC_APP_ENV=staging
-   NEXT_PUBLIC_SUPABASE_URL=<staging の URL>
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=<staging の anon key>
-   SUPABASE_SERVICE_ROLE_KEY=<staging の service role key>
+   NEXT_PUBLIC_SUPABASE_URL=<既存プロジェクトの URL>  # Staging 用 Supabase プロジェクト
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=<既存プロジェクトの anon key>
+   SUPABASE_SERVICE_ROLE_KEY=<既存プロジェクトの service role key>
    ```
 
 3. **Production** 環境（main ブランチ用）：
    ```
    NEXT_PUBLIC_APP_ENV=production
-   NEXT_PUBLIC_SUPABASE_URL=<production の URL>
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=<production の anon key>
-   SUPABASE_SERVICE_ROLE_KEY=<production の service role key>
+   NEXT_PUBLIC_SUPABASE_URL=<新規プロジェクトの URL>  # Production 用 Supabase プロジェクト（新規作成）
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=<新規プロジェクトの anon key>
+   SUPABASE_SERVICE_ROLE_KEY=<新規プロジェクトの service role key>
    ```
 
 ---

@@ -18,9 +18,12 @@
   - Supabase 未接続 (モック予定)
 - **staging / production (本番系)**:
   - Supabase 接続 (RLS 適用、店舗別アクセス制御)
-  - Vercel Blob 実デプロイ: `staging/forms/{storeId}/{formId}.html` or `prod/forms/{storeId}/{formId}.html`
+    - **staging**: 既存の Supabase プロジェクト（staging 専用、既存データを継続使用）
+    - **production**: 新規の Supabase プロジェクト（production 専用、Pro プラン推奨）
+    - 環境変数 (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) で環境ごとに異なるプロジェクトを指定
+  - Supabase Storage 実デプロイ: `staging/forms/{storeId}/{formId}/config/current.html` or `prod/forms/{storeId}/{formId}/config/current.html`
   - CI/CD: Vercel 自動デプロイ (staging は preview ブランチ、prod は main ブランチ)
-  - 環境変数は Vercel Dashboard で管理 (`NEXT_PUBLIC_APP_ENV`, `BLOB_READ_WRITE_TOKEN`, Supabase keys)
+  - 環境変数は Vercel Dashboard で管理（環境ごとに異なる Supabase プロジェクトを指定）
 
 ### 2. データレイヤ構成
 - **dev 環境**: JSON ファイル (`data/forms.json`, `data/forms_st{storeId}.json`, `data/stores.json`, `data/reservations.json`)

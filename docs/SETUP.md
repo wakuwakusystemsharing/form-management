@@ -59,14 +59,19 @@ pnpm dev
 > **📌 重要**: Vercel プロジェクトは **1つ** で、ブランチごとに環境変数を分けます
 > - `main` ブランチ → Production 環境変数を使用
 > - `staging` ブランチ → Preview 環境変数を使用
+> 
+> **📌 Supabase プロジェクト分離**: staging と production は **別々の Supabase プロジェクト** を使用します
 
-### 1. Supabase プロジェクト作成
+### 1. Supabase プロジェクト（Staging 用）
 
-1. [Supabase Dashboard](https://supabase.com/dashboard) でプロジェクト作成
-2. `staging-form-management` などの名前を推奨
-3. SQL Editor で以下のマイグレーションを順番に実行:
-   - `supabase/migrations/20250101000000_initial_schema.sql` - 初期スキーマ
-   - `supabase/migrations/20250116000000_update_draft_status.sql` - draft_status フィールド更新（自動実行済みの場合はスキップ）
+1. **既存の Supabase プロジェクトを staging 用として運用**
+   - 既存のプロジェクトをそのまま staging 環境として使用
+   - プロジェクト名: `wakuwakusystemsharing-staging` など（既存のまま）
+2. マイグレーション確認:
+   - SQL Editor で以下のマイグレーションが適用されているか確認:
+     - `supabase/migrations/20250101000000_initial_schema.sql` - 初期スキーマ
+     - `supabase/migrations/20250116000000_update_draft_status.sql` - draft_status フィールド更新
+   - 未適用の場合は順番に実行
 
 **注意**: Supabase MCPを使用している場合、マイグレーションは自動適用されています。
 
@@ -83,19 +88,21 @@ Vercel Dashboard → Settings → Environment Variables で **Preview** にチ�
 
 ```
 NEXT_PUBLIC_APP_ENV=staging
-BLOB_READ_WRITE_TOKEN=vercel_blob_rw_xxxx (Staging 用トークン)
-NEXT_PUBLIC_SUPABASE_URL=https://xxx-staging.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (Staging)
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (Staging 秘密鍵)
+NEXT_PUBLIC_SUPABASE_URL=https://[既存プロジェクト].supabase.co (Staging 用 Supabase プロジェクト)
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (Staging プロジェクトの anon key)
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (Staging プロジェクトの service_role key)
 ```
 
-**重要**: Preview 環境は `staging` ブランチのデプロイに適用されます
+**重要**: 
+- Preview 環境は `staging` ブランチのデプロイに適用されます
+- **既存の Supabase プロジェクトを staging 用として使用**（新規作成不要）
 
-### 3. Vercel Blob Storage 設定
+### 3. Supabase Storage 設定（Staging 用）
 
-1. Vercel Dashboard > Storage > Create Database > Blob
-2. **Staging 専用の Blob ストレージ** を作成推奨
-3. `BLOB_READ_WRITE_TOKEN` をコピーして環境変数に設定
+1. Supabase Dashboard > Storage > Create bucket（未作成の場合）
+2. バケット名: `forms`
+3. Public bucket: 有効（匿名ユーザーがアクセス可能）
+4. 環境変数は既に設定済み（`NEXT_PUBLIC_SUPABASE_URL` で自動的に staging プロジェクトの Storage に接続）
 
 ### 4. デプロイ
 
@@ -107,19 +114,35 @@ git push origin staging
 
 ### 5. 動作確認
 
-- データは Supabase に保存
-- 静的HTML は Vercel Blob (`staging/forms/`) に出力
+- データは Staging 用 Supabase プロジェクトに保存（既存プロジェクト）
+- 静的HTML は Supabase Storage (`staging/forms/{storeId}/{formId}/config/current.html`) に出力
 - RLS で店舗別アクセス制御が有効
+- Production 環境とは完全に分離されていることを確認
 
 ---
 
 ## 🚀 本番環境 (production)
 
+> **📌 重要**: Production 環境は **staging とは別の Supabase プロジェクト** を使用します
+> - 既存の Supabase プロジェクト → staging 用として継続使用
+> - 新しい Supabase プロジェクト → production 用として新規作成
+
 ### 1. Supabase 本番プロジェクト作成
 
-1. Supabase Dashboard で **本番用プロジェクト** を新規作成
-2. `prod-form-management` などの名前を推奨
-3. SQL Editor で `supabase/migrations/20250101000000_initial_schema.sql` を実行
+1. Supabase Dashboard で **新規の本番用プロジェクト** を作成
+   - **重要**: staging とは別の Supabase プロジェクトを使用
+   - プロジェクト名: `wakuwakusystemsharing-prod` など
+   - プラン: **Pro プラン推奨**（本番運用のため）
+2. SQL Editor で以下のマイグレーションを順番に実行:
+   - `supabase/migrations/20250101000000_initial_schema.sql` - 初期スキーマ
+   - `supabase/migrations/20250116000000_update_draft_status.sql` - draft_status フィールド更新
+   - `supabase/migrations/20250125000000_add_survey_forms.sql` - アンケートフォーム用（必要に応じて）
+   - `supabase/migrations/20251204000000_create_survey_forms.sql` - アンケートフォーム用（必要に応じて）
+3. Storage バケット設定:
+   - Storage → Create bucket
+   - バケット名: `forms`
+   - Public bucket: 有効（匿名ユーザーがアクセス可能）
+   - File size limit: 適切なサイズを設定
 
 ### 2. Vercel 本番環境変数設定
 
@@ -127,19 +150,24 @@ git push origin staging
 
 ```
 NEXT_PUBLIC_APP_ENV=production
-BLOB_READ_WRITE_TOKEN=vercel_blob_rw_yyyy (Production 用トークン、Staging と別)
-NEXT_PUBLIC_SUPABASE_URL=https://yyy-prod.supabase.co (本番 Supabase URL、Staging と別)
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (本番)
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (本番秘密鍵)
+NEXT_PUBLIC_SUPABASE_URL=https://[新規プロジェクト].supabase.co (本番 Supabase URL、Staging と別プロジェクト)
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (本番プロジェクトの anon key)
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (本番プロジェクトの service_role key)
 ```
 
-**重要**: Production 環境は `main` ブランチのデプロイに適用されます
+**重要**: 
+- Production 環境は `main` ブランチのデプロイに適用されます
+- **Staging と Production で異なる Supabase プロジェクトを使用**（環境変数で自動切り替え）
+- Supabase Storage も環境ごとに分離（`staging/forms/` と `prod/forms/`）
 
-### 3. Vercel Blob Storage (本番用)
+### 3. Supabase Storage (本番用)
 
-1. Vercel Dashboard > Storage > Create Database > Blob
-2. **Production 専用の Blob ストレージ** を作成
-3. `BLOB_READ_WRITE_TOKEN` を本番環境変数に設定
+> **注意**: 現在は Supabase Storage を使用しています（Vercel Blob は非推奨）
+
+1. Supabase Dashboard > Storage > Create bucket
+2. バケット名: `forms`（staging と同じ名前でOK、プロジェクトが別なので分離される）
+3. Public bucket: 有効（匿名ユーザーがアクセス可能）
+4. 環境変数は既に設定済み（`NEXT_PUBLIC_SUPABASE_URL` で自動的に本番プロジェクトの Storage に接続）
 
 ### 4. デプロイ
 
@@ -151,9 +179,10 @@ git push origin main
 
 ### 5. 動作確認
 
-- データは本番 Supabase に保存
-- 静的HTML は Vercel Blob (`prod/forms/`) に出力
+- データは本番 Supabase プロジェクトに保存（staging とは別プロジェクト）
+- 静的HTML は Supabase Storage (`prod/forms/{storeId}/{formId}/config/current.html`) に出力
 - RLS で本番データが保護される
+- staging 環境のデータと production 環境のデータは完全に分離されていることを確認
 
 ---
 
@@ -180,11 +209,12 @@ pnpm build
 
 | 項目 | dev (local) | staging | production |
 |------|-------------|---------|------------|
-| データ永続化 | JSON ファイル | Supabase | Supabase |
-| Blob デプロイ | `/public/static-forms/` | `staging/forms/` | `prod/forms/` |
+| データ永続化 | JSON ファイル | Supabase (既存プロジェクト) | Supabase (新規プロジェクト、Pro プラン) |
+| Storage デプロイ | `/public/static-forms/` | Supabase Storage (`staging/forms/`) | Supabase Storage (`prod/forms/`) |
 | 認証 | 未実装 | Supabase Auth | Supabase Auth |
 | RLS | 無効 | 有効 | 有効 |
 | CI/CD | - | GitHub Actions + Vercel | GitHub Actions + Vercel |
+| プロジェクト分離 | - | 既存プロジェクト継続使用 | 新規プロジェクト作成 |
 
 ---
 

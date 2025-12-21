@@ -11,9 +11,9 @@ LINE LIFFを活用した予約フォーム管理システムの全体設計、�
 └────────────────┬────────────────────────────────────────────────┘
                  │
          ┌───────▼────────┐
-         │  Vercel Blob   │
-         │ Static Forms   │
-         │ (HTML Deploy)  │
+         │ Supabase Storage│
+         │ Static Forms    │
+         │ (HTML Deploy)   │
          └────────────────┘
                  ▲
                  │
@@ -131,19 +131,24 @@ RLS (Row Level Security):
 
 ### 4. ストレージ層
 
-#### Vercel Blob（顧客向けフォーム HTML）
+#### Supabase Storage（顧客向けフォーム HTML）
 ```
-Staging:  staging/forms/{storeId}/{formId}.html
-Prod:     prod/forms/{storeId}/{formId}.html
+Staging:  staging/forms/{storeId}/{formId}/config/current.html (Supabase Storage - Staging プロジェクト)
+Prod:     prod/forms/{storeId}/{formId}/config/current.html (Supabase Storage - Production プロジェクト)
 Local:    /public/static-forms/{formId}.html (mock)
 ```
 
-#### Vercel Blob（メニュー画像）
+#### Supabase Storage（メニュー画像）
 ```
-Staging:  staging/menu_images/{storeId}/{menuId}.{ext}
-Prod:     prod/menu_images/{storeId}/{menuId}.{ext}
+Staging:  menu_images/{storeId}/{menuId}.{ext} (Supabase Storage - Staging プロジェクト)
+Prod:     menu_images/{storeId}/{menuId}.{ext} (Supabase Storage - Production プロジェクト)
 Local:    /public/uploads/{storeId}/{menuId}.{ext} (mock)
 ```
+
+**重要**: 
+- Staging と Production は **別々の Supabase プロジェクト** を使用
+- 環境変数 (`NEXT_PUBLIC_SUPABASE_URL`) で自動的に適切なプロジェクトの Storage に接続
+- バケット名は両環境で `forms`（プロジェクトが別なので分離される）
 
 ### 5. 静的HTML生成・デプロイ
 
@@ -151,9 +156,14 @@ Local:    /public/uploads/{storeId}/{menuId}.{ext} (mock)
 1. サービス管理者が「保存＆デプロイ」をクリック
 2. API `/api/forms/{formId}/deploy` を呼び出し
 3. `StaticFormGenerator.generateHTML()` で HTML を生成
-4. `VercelBlobDeployer.deployForm()` で Blob に アップロード
+4. `SupabaseStorageDeployer.deployForm()` で Supabase Storage にアップロード
 5. `static_deploy` 情報を DB に記録
 6. 顧客が LINE で フォーム URL にアクセス → 静的 HTML を表示
+
+**環境分離**:
+- Staging 環境: Staging 用 Supabase プロジェクトの Storage にデプロイ
+- Production 環境: Production 用 Supabase プロジェクトの Storage にデプロイ
+- 環境変数で自動的に適切なプロジェクトに接続
 
 **技術的特徴**:
 - HTML 内に LIFF SDK + JavaScript を埋め込み
@@ -312,14 +322,15 @@ StaticFormGenerator:
   ├─ テーマカラーをインライン CSS で適用
   └─ LIFF SDK + JavaScriptで予約処理実装
   ↓
-VercelBlobDeployer:
+SupabaseStorageDeployer:
   ├─ 環境別 path に決定
-  │  ├─ staging: staging/forms/{storeId}/{formId}.html
-  │  └─ prod: prod/forms/{storeId}/{formId}.html
-  ├─ Blob API で アップロード
-  └─ URL を返す
+  │  ├─ staging: staging/forms/{storeId}/{formId}/config/current.html (Staging プロジェクト)
+  │  └─ prod: prod/forms/{storeId}/{formId}/config/current.html (Production プロジェクト)
+  ├─ 環境変数で適切な Supabase プロジェクトに接続
+  ├─ Supabase Storage API でアップロード
+  └─ URL を返す（プロジェクトごとに異なる公開URL）
   ↓ DB 更新
-  - static_deploy: { url, deployed_at: now, status: 'deployed' }
+  - static_deploy: { url, storage_url, deployed_at: now, status: 'deployed' }
   - last_published_at: now
   ↓ 顧客が LINE でフォーム URL アクセス
   → 静的 HTML が表示される（React なし）
