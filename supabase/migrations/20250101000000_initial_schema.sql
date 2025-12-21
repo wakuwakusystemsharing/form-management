@@ -10,15 +10,22 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- 1. stores テーブル (店舗)
 -- ==========================================
 CREATE TABLE IF NOT EXISTS stores (
-  id TEXT PRIMARY KEY DEFAULT 'st' || LPAD(FLOOR(RANDOM() * 10000)::TEXT, 4, '0'),
+  id TEXT PRIMARY KEY DEFAULT REPLACE(uuid_generate_v4()::TEXT, '-', '')::TEXT,
   name TEXT NOT NULL,
+  owner_name TEXT NOT NULL,
+  owner_email TEXT NOT NULL,
+  phone TEXT,
+  address TEXT,
   description TEXT,
+  website_url TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- 店舗テーブルのインデックス
 CREATE INDEX IF NOT EXISTS idx_stores_created_at ON stores(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_stores_status ON stores(status);
 
 -- 店舗テーブルの updated_at 自動更新トリガー
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -201,9 +208,9 @@ CREATE POLICY "店舗管理者は自分の情報を閲覧可能" ON store_admins
 -- ==========================================
 
 -- サンプル店舗
-INSERT INTO stores (id, name, description) VALUES
-  ('st0001', 'サンプル店舗A', 'テスト用の店舗データです'),
-  ('st0002', 'サンプル店舗B', 'テスト用の店舗データです')
+INSERT INTO stores (id, name, owner_name, owner_email, description, status) VALUES
+  ('st0001', 'サンプル店舗A', 'サンプルオーナーA', 'owner-a@example.com', 'テスト用の店舗データです', 'active'),
+  ('st0002', 'サンプル店舗B', 'サンプルオーナーB', 'owner-b@example.com', 'テスト用の店舗データです', 'active')
 ON CONFLICT (id) DO NOTHING;
 
 -- サンプルフォーム (店舗 st0001 用)
