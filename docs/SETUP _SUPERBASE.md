@@ -43,84 +43,78 @@
 
 ## データベーステーブル作成
 
-### SQL Editor でテーブル作成
+> **📌 重要**: データベース構造は **マイグレーションファイル** を使用して作成・更新します。
+> 手動で SQL を実行する場合は、以下のマイグレーションファイルを順番に実行してください。
+
+### マイグレーションファイルの実行順序
+
+1. **`20250101000000_initial_schema.sql`** - 初期スキーマ作成
+2. **`20250116000000_update_draft_status.sql`** - forms テーブル拡張
+3. **`20250125000000_add_survey_forms.sql`** - survey_forms テーブル追加
+4. **`20250128000000_sync_production_with_staging.sql`** - Production と Staging の構造同期（Production 環境のみ）
+
+### SQL Editor でマイグレーション実行
 
 1. 左メニュー → **SQL Editor**
 2. **New Query** をクリック
-3. 以下の SQL をコピー＆ペーストして実行（▶ ボタン）：
-
-```sql
--- 1. stores テーブル（店舗情報）
-CREATE TABLE IF NOT EXISTS stores (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    owner_name TEXT NOT NULL,
-    owner_email TEXT NOT NULL,
-    phone TEXT,
-    address TEXT,
-    description TEXT,
-    website_url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
-);
-
--- 2. store_admins テーブル（店舗管理者）
-CREATE TABLE IF NOT EXISTS store_admins (
-    id TEXT PRIMARY KEY,
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-    UNIQUE(user_id, store_id)
-);
-
--- 3. forms テーブル（予約フォーム）
-CREATE TABLE IF NOT EXISTS forms (
-    id TEXT PRIMARY KEY,
-    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    config JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
-);
-
--- 4. reservations テーブル（予約データ）
-CREATE TABLE IF NOT EXISTS reservations (
-    id TEXT PRIMARY KEY,
-    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
-    form_id TEXT REFERENCES forms(id) ON DELETE CASCADE,
-    customer_name TEXT NOT NULL,
-    customer_email TEXT,
-    customer_phone TEXT,
-    reservation_date DATE NOT NULL,
-    reservation_time TIME NOT NULL,
-    menu_items JSONB NOT NULL DEFAULT '[]'::jsonb,
-    options JSONB NOT NULL DEFAULT '[]'::jsonb,
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
-);
-
--- 5. updated_at 自動更新トリガー
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = TIMEZONE('utc'::text, NOW());
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
-CREATE TRIGGER update_stores_updated_at BEFORE UPDATE ON stores
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_forms_updated_at BEFORE UPDATE ON forms
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_reservations_updated_at BEFORE UPDATE ON reservations
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-```
-
+3. `supabase/migrations/` ディレクトリ内のマイグレーションファイルを順番にコピー＆ペーストして実行
 4. **▶ Run** をクリックして実行
-5. 成功メッセージ「Success. No rows returned」が表示されることを確認
+5. 成功メッセージが表示されることを確認
+
+### テーブル構造の概要
+
+#### `stores` テーブル（店舗情報）
+- `id` (uuid) - 店舗ID（自動生成）
+- `name` (text) - 店舗名
+- `owner_name`, `owner_email` (text) - オーナー情報
+- `phone`, `address`, `description`, `website_url` (text) - 店舗詳細
+- `created_at`, `updated_at` (timestamptz)
+
+#### `forms` テーブル（予約フォーム）
+- `id` (uuid) - フォームID（自動生成）
+- `store_id` (uuid) - 店舗ID（外部キー）
+- `name` (text, nullable) - フォーム名（後方互換性のため）
+- `form_name` (text, nullable) - フォーム名（新形式）
+- `config` (jsonb) - フォーム設定
+- `status` (text) - 'active' | 'inactive'
+- `draft_status` (text) - 'none' | 'draft' | 'ready_to_publish'
+- `static_deploy` (jsonb) - デプロイ情報
+- `last_published_at` (timestamptz)
+- `line_settings` (jsonb) - LINE設定
+- `gas_endpoint` (text) - Google Apps Script URL
+- `ui_settings` (jsonb) - UI設定
+- `created_at`, `updated_at` (timestamptz)
+
+#### `survey_forms` テーブル（アンケートフォーム）
+- `id` (uuid) - アンケートフォームID（自動生成）
+- `store_id` (uuid) - 店舗ID（外部キー、NOT NULL）
+- `name` (text, NOT NULL) - アンケートフォーム名
+- `config` (jsonb) - アンケート設定
+- `status` (text, default 'draft') - 'active' | 'inactive' | 'paused' | 'draft'
+- `draft_status` (text, default 'none') - 'none' | 'draft' | 'ready_to_publish'
+- `public_url` (text, nullable) - 公開URL
+- `storage_url` (text, nullable) - ストレージURL
+- `static_deploy` (jsonb, nullable) - デプロイ情報
+- `created_at`, `updated_at` (timestamptz)
+
+#### `reservations` テーブル（予約データ）
+- `id` (uuid) - 予約ID（自動生成）
+- `form_id`, `store_id` (uuid) - 関連ID
+- `customer_name` (text) - 顧客名
+- `customer_email` (text, nullable) - 顧客メールアドレス
+- `customer_phone` (text, nullable) - 顧客電話番号
+- `reservation_date` (date) - 予約日
+- `reservation_time` (time) - 予約時間
+- `menu_items` (jsonb) - 選択メニュー
+- `options` (jsonb) - 選択オプション
+- `notes` (text, nullable) - 備考
+- `created_at`, `updated_at` (timestamptz)
+
+#### `store_admins` テーブル（店舗管理者）
+- `id` (uuid) - 管理者ID（自動生成）
+- `user_id` (uuid) - ユーザーID（外部キー）
+- `store_id` (uuid) - 店舗ID（外部キー）
+- `created_at` (timestamptz)
 
 ### テーブル確認
 
@@ -129,7 +123,10 @@ CREATE TRIGGER update_reservations_updated_at BEFORE UPDATE ON reservations
    - `stores`
    - `store_admins`
    - `forms`
+   - `survey_forms`
    - `reservations`
+
+> **📝 注意**: Production と Staging のデータベース構造は **完全に一致** しています（2025-01-28 に同期済み）。
 
 ---
 

@@ -340,32 +340,55 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 #### `stores` テーブル
 - `id` (uuid) - 店舗ID（自動生成）
 - `name` (text) - 店舗名
-- `owner_name`, `owner_email` - オーナー情報
-- `phone`, `address`, `website_url`, `description` - 店舗詳細
+- `owner_name`, `owner_email` (text) - オーナー情報
+- `phone`, `address`, `website_url`, `description` (text, nullable) - 店舗詳細
 - `created_at`, `updated_at` (timestamptz)
 
-#### `forms` テーブル
+#### `forms` テーブル（予約フォーム）
 - `id` (uuid) - フォームID（自動生成）
-- `store_id` (uuid) - 店舗ID（外部キー）
-- `form_name` (text) - フォーム名
-- `status` (text) - 'active' | 'inactive'
-- `draft_status` (text) - 'none' | 'draft' | 'ready_to_publish'
+- `store_id` (uuid, nullable) - 店舗ID（外部キー）
+- `name` (text, nullable) - フォーム名（後方互換性のため）
+- `form_name` (text, nullable) - フォーム名（新形式）
+- `status` (text, default 'inactive') - 'active' | 'inactive'
+- `draft_status` (text, default 'none') - 'none' | 'draft' | 'ready_to_publish'
 - `config` (jsonb) - フォーム設定
-- `static_deploy` (jsonb) - デプロイ情報
-- `line_settings` (jsonb) - LINE設定（LIFF ID等）
-- `gas_endpoint` (text) - Google Apps Script URL
-- `ui_settings` (jsonb) - UI設定
-- `created_at`, `updated_at`, `last_published_at` (timestamptz)
+- `static_deploy` (jsonb, nullable) - デプロイ情報
+- `last_published_at` (timestamptz, nullable)
+- `line_settings` (jsonb, nullable) - LINE設定（LIFF ID等）
+- `gas_endpoint` (text, nullable) - Google Apps Script URL
+- `ui_settings` (jsonb, nullable) - UI設定
+- `created_at`, `updated_at` (timestamptz)
+
+#### `survey_forms` テーブル（アンケートフォーム）
+- `id` (uuid) - アンケートフォームID（自動生成）
+- `store_id` (uuid, NOT NULL) - 店舗ID（外部キー）
+- `name` (text, NOT NULL) - アンケートフォーム名
+- `config` (jsonb) - アンケート設定
+- `status` (text, default 'draft') - 'active' | 'inactive' | 'paused' | 'draft'
+- `draft_status` (text, default 'none') - 'none' | 'draft' | 'ready_to_publish'
+- `public_url` (text, nullable) - 公開URL
+- `storage_url` (text, nullable) - ストレージURL
+- `static_deploy` (jsonb, nullable) - デプロイ情報
+- `created_at`, `updated_at` (timestamptz)
 
 #### `reservations` テーブル
 - `id` (uuid) - 予約ID（自動生成）
-- `form_id`, `store_id` (uuid) - 関連ID
-- `customer_name`, `customer_phone`, `customer_email` - 顧客情報
-- `selected_menus`, `selected_options` (jsonb) - 選択内容
-- `reservation_date` (date), `reservation_time` (time)
-- `customer_info` (jsonb) - その他情報
-- `status` (text) - 'pending' | 'confirmed' | 'cancelled' | 'completed'
+- `form_id`, `store_id` (uuid, nullable) - 関連ID
+- `customer_name` (text) - 顧客名
+- `customer_email` (text, nullable) - 顧客メールアドレス
+- `customer_phone` (text, nullable) - 顧客電話番号
+- `reservation_date` (date) - 予約日
+- `reservation_time` (time) - 予約時間
+- `menu_items` (jsonb) - 選択メニュー
+- `options` (jsonb) - 選択オプション
+- `notes` (text, nullable) - 備考
 - `created_at`, `updated_at` (timestamptz)
+
+#### `store_admins` テーブル
+- `id` (uuid) - 管理者ID（自動生成）
+- `user_id` (uuid, nullable) - ユーザーID（外部キー）
+- `store_id` (uuid, nullable) - 店舗ID（外部キー）
+- `created_at` (timestamptz)
 
 ### データアクセス制御
 - **サービス管理者**: Admin Client（RLSバイパス）で全データアクセス

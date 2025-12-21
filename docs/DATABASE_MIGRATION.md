@@ -33,6 +33,47 @@
 #### 変更されたカラム
 - `name` カラム - NULL許可に変更（後方互換性のため）
 
+### `20250125000000_add_survey_forms.sql` - survey_formsテーブル追加
+
+**実行状況**: ✅ 実行済み
+
+アンケートフォーム機能のためのテーブルを作成：
+- `survey_forms` テーブル（基本構造）
+
+### `20250128000000_sync_production_with_staging.sql` - ProductionとStagingの構造同期
+
+**実行状況**: ✅ 実行済み（2025-01-28）
+
+**目的**: Production 環境のデータベース構造を Staging 環境と完全に一致させる
+
+#### 主な変更点
+
+**`stores` テーブル**:
+- `status` カラムを削除（Staging には存在しない）
+
+**`survey_forms` テーブル**:
+- `name` カラムを追加（NOT NULL）- アンケートフォーム名
+- `public_url` カラムを追加 - 公開URL
+- `storage_url` カラムを追加 - ストレージURL
+- `status` のデフォルト値を `'draft'` に変更
+- `status` の CHECK 制約を更新（'active', 'inactive', 'paused', 'draft' を許可）
+
+**`forms` テーブル**:
+- `name` カラムを追加（NULL許可）
+- `form_name` カラムを追加
+- `line_settings` カラムを追加（JSONB）
+- `gas_endpoint` カラムを追加
+- `ui_settings` カラムを追加（JSONB）
+
+**`reservations` テーブル**:
+- `customer_email` カラムを追加
+
+**`store_admins` テーブル**:
+- `role` カラムを削除（Staging には存在しない）
+- `updated_at` カラムを削除（Staging には存在しない）
+
+**重要**: このマイグレーションにより、Production と Staging のデータベース構造が完全に一致しました。
+
 ## 🚀 新規環境へのマイグレーション手順
 
 ### 方法1: Supabase MCP経由（推奨）
@@ -60,6 +101,19 @@
 ```bash
 # supabase/migrations/20250116000000_update_draft_status.sql の内容をコピー
 # SQL Editorに貼り付けて実行
+```
+
+#### ステップ3: survey_formsテーブル追加
+```bash
+# supabase/migrations/20250125000000_add_survey_forms.sql の内容をコピー
+# SQL Editorに貼り付けて実行
+```
+
+#### ステップ4: ProductionとStagingの構造同期（Production環境のみ）
+```bash
+# supabase/migrations/20250128000000_sync_production_with_staging.sql の内容をコピー
+# SQL Editorに貼り付けて実行
+# 注意: このマイグレーションは Production 環境で既に実行済み
 ```
 
 ### 方法3: Supabase CLI経由
