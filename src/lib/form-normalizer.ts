@@ -147,7 +147,17 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       },
       calendar_settings: {
         business_hours: existingConfig?.calendar_settings?.business_hours || rawForm.config?.calendar_settings?.business_hours || rawForm.business_rules?.business_hours || defaultConfig.calendar_settings.business_hours,
-        advance_booking_days: existingConfig?.calendar_settings?.advance_booking_days || rawForm.config?.calendar_settings?.advance_booking_days || rawForm.business_rules?.advance_booking_days || 30
+        advance_booking_days: existingConfig?.calendar_settings?.advance_booking_days || rawForm.config?.calendar_settings?.advance_booking_days || rawForm.business_rules?.advance_booking_days || 30,
+        google_calendar_url: existingConfig?.calendar_settings?.google_calendar_url || rawForm.config?.calendar_settings?.google_calendar_url,
+        // 日時選択モードのデフォルト値設定
+        booking_mode: existingConfig?.calendar_settings?.booking_mode || rawForm.config?.calendar_settings?.booking_mode || 'calendar',
+        multiple_dates_settings: existingConfig?.calendar_settings?.multiple_dates_settings || rawForm.config?.calendar_settings?.multiple_dates_settings || {
+          time_interval: 30,
+          date_range_days: 30,
+          exclude_weekdays: [0], // 日曜日
+          start_time: '09:00',
+          end_time: '18:00'
+        }
       },
       ui_settings: {
         theme_color: existingConfig?.ui_settings?.theme_color || rawForm.config?.basic_info?.theme_color || rawForm.basic_info?.theme_color || rawForm.config?.ui_settings?.theme_color || rawForm.ui_settings?.theme_color || '#3B82F6',

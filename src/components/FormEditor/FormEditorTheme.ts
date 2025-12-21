@@ -11,6 +11,7 @@ export interface ThemeClasses {
   card: string;
   cardHeader: string;
   input: string;
+  timeInput: string;
   textarea: string;
   select: string;
   label: string;
@@ -51,6 +52,7 @@ export const themeClasses: Record<ThemeType, ThemeClasses> = {
     card: 'bg-gray-50 border border-gray-200',
     cardHeader: 'bg-white border-b border-gray-200',
     input: 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent',
+    timeInput: 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent [&::-webkit-calendar-picker-indicator]:filter-none [&::-webkit-calendar-picker-indicator]:cursor-pointer',
     textarea: 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent',
     select: 'bg-white border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent',
     label: 'text-gray-700 font-medium',
@@ -89,6 +91,7 @@ export const themeClasses: Record<ThemeType, ThemeClasses> = {
     card: 'bg-gray-800 border border-gray-700',
     cardHeader: 'bg-gray-800 border-b border-gray-700',
     input: 'bg-gray-700 border border-gray-600 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent',
+    timeInput: 'bg-gray-700 border border-gray-600 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:cursor-pointer',
     textarea: 'bg-gray-700 border border-gray-600 text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent',
     select: 'bg-gray-700 border border-gray-600 text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent',
     label: 'text-gray-300 font-medium',

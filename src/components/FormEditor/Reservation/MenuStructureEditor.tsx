@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { Form, MenuCategory, MenuItem, MenuOption, SubMenuItem } from '@/types/form';
-import { getThemeClasses, ThemeType } from './FormEditorTheme';
+import { getThemeClasses, ThemeType } from '../FormEditorTheme';
+import ImageCropperModal from './ImageCropperModal';
 
 interface MenuStructureEditorProps {
   form: Form;
@@ -18,6 +19,7 @@ interface MenuItemModalProps {
   categoryId: string;
   genderEnabled: boolean;  // 性別機能が有効かどうか
   theme?: 'light' | 'dark';
+  form: Form; // Form object for store_id
 }
 
 interface MenuOptionModalProps {
@@ -34,6 +36,7 @@ interface SubMenuItemModalProps {
   onSave: (subMenuItem: SubMenuItem) => void;
   subMenuItem?: SubMenuItem;
   theme?: 'light' | 'dark';
+  form: Form; // Form object for store_id
 }
 
 // 金額フォーマット用のヘルパー関数
@@ -59,7 +62,8 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
   onClose,
   onSave,
   subMenuItem,
-  theme = 'dark'
+  theme = 'dark',
+  form
 }) => {
   const themeClasses = getThemeClasses(theme);
   const [name, setName] = useState('');
@@ -67,6 +71,9 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
   const [duration, setDuration] = useState('');
   const [description, setDescription] = useState('');
   const [image, setImage] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [cropperOpen, setCropperOpen] = useState(false);
 
   React.useEffect(() => {
     if (subMenuItem) {
@@ -190,21 +197,69 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
 
             <div>
               <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-1`}>
-                画像URL（オプション）
+                画像（オプション）
               </label>
-              <input
-                type="url"
-                value={image}
-                onChange={(e) => setImage(e.target.value)}
-                placeholder="https://example.com/image.jpg"
-                className={themeClasses.input}
-              />
-              <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
-                サブメニューの詳細表示で使用される画像のURLを入力してください
-              </p>
+              <div className="space-y-3">
+                {/* 画像URL入力 */}
+                <div className="flex space-x-2">
+                  <input
+                    type="url"
+                    value={image}
+                    onChange={(e) => setImage(e.target.value)}
+                    placeholder="https://example.com/image.jpg"
+                    className={`flex-1 ${themeClasses.input}`}
+                  />
+                  <div className="relative">
+                    <input
+                      type="file"
+                      ref={(el) => {
+                        if (el && !el.dataset.submenuInitialized) {
+                          el.dataset.submenuInitialized = 'true';
+                          el.accept = 'image/*';
+                          el.onchange = async (e) => {
+                            const file = (e.target as HTMLInputElement).files?.[0];
+                            if (file) {
+                              setSelectedFile(file);
+                              setCropperOpen(true);
+                            }
+                          };
+                        }
+                      }}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        const input = (e.currentTarget.parentNode as HTMLElement).querySelector('input[type="file"]') as HTMLInputElement;
+                        input?.click();
+                      }}
+                      disabled={uploading}
+                      className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                        uploading 
+                          ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                          : `${themeClasses.button.secondary} hover:opacity-90`
+                      }`}
+                    >
+                      {uploading ? 'アップロード中...' : 'ファイル選択'}
+                    </button>
+                  </div>
+                </div>
+                <p className={`text-xs ${themeClasses.text.tertiary}`}>
+                  画像URLを直接入力するか、ファイルをアップロードしてください（最大5MB、JPEG/PNG/GIF/WebP対応）
+                </p>
+              </div>
               {image && (
                 <div className="mt-3">
-                  <p className={`text-xs ${themeClasses.text.secondary} mb-2`}>プレビュー:</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className={`text-xs ${themeClasses.text.secondary}`}>プレビュー:</p>
+                    <button
+                      type="button"
+                      onClick={() => setImage('')}
+                      className={`text-xs ${themeClasses.button.delete} px-2 py-1 rounded`}
+                    >
+                      削除
+                    </button>
+                  </div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img 
                     src={image} 
@@ -237,6 +292,44 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
           </div>
         </div>
       </div>
+
+      <ImageCropperModal
+        isOpen={cropperOpen}
+        onClose={() => setCropperOpen(false)}
+        onCropConfirm={async (blob: Blob) => {
+          setUploading(true);
+          try {
+            const formData = new FormData();
+            formData.append('file', blob, 'cropped-image.jpg');
+            formData.append('storeId', form.store_id);
+            formData.append('submenuId', subMenuItem?.id || `submenu_${Date.now()}`);
+            // 古い画像URLがあれば送信（削除処理用）
+            if (image) {
+              formData.append('oldImageUrl', image);
+            }
+            
+            const response = await fetch('/api/upload/menu-image', {
+              method: 'POST',
+              body: formData,
+            });
+            
+            if (response.ok) {
+              const { url } = await response.json();
+              setImage(url);
+            } else {
+              const error = await response.json();
+              alert(`アップロードに失敗しました: ${error.error}`);
+            }
+          } catch (error) {
+            console.error('Upload error:', error);
+            alert('アップロードに失敗しました');
+          } finally {
+            setUploading(false);
+          }
+        }}
+        imageFile={selectedFile!}
+        theme={theme}
+      />
     </div>
   );
 };
@@ -410,7 +503,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   menuItem,
   categoryId,
   genderEnabled,
-  theme = 'dark'
+  theme = 'dark',
+  form
 }) => {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -425,6 +519,9 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   const [subMenuItems, setSubMenuItems] = useState<SubMenuItem[]>([]);
   const [subMenuModalOpen, setSubMenuModalOpen] = useState(false);
   const [selectedSubMenuItem, setSelectedSubMenuItem] = useState<SubMenuItem | undefined>();
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [cropperOpen, setCropperOpen] = useState(false);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -481,10 +578,23 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   };
 
   const handleSaveSubMenuItem = (subMenuItem: SubMenuItem) => {
+    let updatedSubMenuItems: SubMenuItem[];
     if (selectedSubMenuItem?.id) {
-      setSubMenuItems(prev => prev.map(item => item.id === selectedSubMenuItem.id ? subMenuItem : item));
+      updatedSubMenuItems = subMenuItems.map(item => item.id === selectedSubMenuItem.id ? subMenuItem : item);
     } else {
-      setSubMenuItems(prev => [...prev, subMenuItem]);
+      updatedSubMenuItems = [...subMenuItems, subMenuItem];
+    }
+    setSubMenuItems(updatedSubMenuItems);
+    
+    // 親MenuItemModalのプレビューをすぐに更新するために、onSaveを呼ぶ
+    if (menuItem && hasSubmenu) {
+      const updatedMenuItem: MenuItem = {
+        ...menuItem,
+        id: menuItem.id,
+        name: menuItem.name,
+        sub_menu_items: updatedSubMenuItems
+      };
+      onSave(updatedMenuItem);
     }
   };
 
@@ -633,23 +743,72 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                   />
                 </div>
 
-                {/* 画像URL */}
+                {/* 画像 */}
                 <div>
                   <label className={`block text-sm ${themeClasses.label} mb-1`}>
-                    画像URL（オプション）
+                    画像（オプション）
                   </label>
-                  <input
-                    type="url"
-                    value={image}
-                    onChange={(e) => setImage(e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                    className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
-                  />
-                  <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
-                    メニューの詳細表示で使用される画像のURLを入力してください
-                  </p>
+                  <div className="space-y-3">
+                    {/* 画像URL入力 */}
+                    <div className="flex space-x-2">
+                      <input
+                        type="url"
+                        value={image}
+                        onChange={(e) => setImage(e.target.value)}
+                        placeholder="https://example.com/image.jpg"
+                        className={`flex-1 px-3 py-2 rounded-md ${themeClasses.input}`}
+                      />
+                      <div className="relative">
+                        <input
+                          type="file"
+                          ref={(el) => {
+                            if (el && !el.dataset.menuInitialized) {
+                              el.dataset.menuInitialized = 'true';
+                              el.accept = 'image/*';
+                              el.onchange = async (e) => {
+                                const file = (e.target as HTMLInputElement).files?.[0];
+                                if (file) {
+                                  setSelectedFile(file);
+                                  setCropperOpen(true);
+                                }
+                              };
+                            }
+                          }}
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            const input = (e.currentTarget.parentNode as HTMLElement).querySelector('input[type="file"]') as HTMLInputElement;
+                            input?.click();
+                          }}
+                          disabled={uploading}
+                          className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                            uploading 
+                              ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                              : `${themeClasses.button.secondary} hover:opacity-90`
+                          }`}
+                        >
+                          {uploading ? 'アップロード中...' : 'ファイル選択'}
+                        </button>
+                      </div>
+                    </div>
+                    <p className={`text-xs ${themeClasses.text.tertiary}`}>
+                      画像URLを直接入力するか、ファイルをアップロードしてください（最大5MB、JPEG/PNG/GIF/WebP対応）
+                    </p>
+                  </div>
                   {image && (
-                    <div className="mt-2">
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className={`text-xs ${themeClasses.text.secondary}`}>プレビュー:</p>
+                        <button
+                          type="button"
+                          onClick={() => setImage('')}
+                          className={`text-xs ${themeClasses.button.delete} px-2 py-1 rounded`}
+                        >
+                          削除
+                        </button>
+                      </div>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img 
                         src={image} 
@@ -837,6 +996,45 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         onClose={() => setSubMenuModalOpen(false)}
         onSave={handleSaveSubMenuItem}
         subMenuItem={selectedSubMenuItem}
+        theme={theme}
+        form={form}
+      />
+
+      <ImageCropperModal
+        isOpen={cropperOpen}
+        onClose={() => setCropperOpen(false)}
+        onCropConfirm={async (blob: Blob) => {
+          setUploading(true);
+          try {
+            const formData = new FormData();
+            formData.append('file', blob, 'cropped-image.jpg');
+            formData.append('storeId', form.store_id);
+            formData.append('menuId', menuItem?.id || `menu_${Date.now()}`);
+            // 古い画像URLがあれば送信（削除処理用）
+            if (image) {
+              formData.append('oldImageUrl', image);
+            }
+            
+            const response = await fetch('/api/upload/menu-image', {
+              method: 'POST',
+              body: formData,
+            });
+            
+            if (response.ok) {
+              const { url } = await response.json();
+              setImage(url);
+            } else {
+              const error = await response.json();
+              alert(`アップロードに失敗しました: ${error.error}`);
+            }
+          } catch (error) {
+            console.error('Upload error:', error);
+            alert('アップロードに失敗しました');
+          } finally {
+            setUploading(false);
+          }
+        }}
+        imageFile={selectedFile!}
         theme={theme}
       />
     </>
@@ -1346,6 +1544,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
         categoryId="default"
         genderEnabled={form.config?.gender_selection?.enabled || false}
         theme={theme}
+        form={form}
       />
     </div>
   );

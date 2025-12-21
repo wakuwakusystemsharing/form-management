@@ -380,31 +380,31 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 
 ### 環境の種類
 
-| 環境 | URL | ブランチ | 用途 | データベース | Blob Storage |
-|------|-----|---------|------|-------------|--------------|
-| **Production（本番）** | https://form-management-seven.vercel.app | `main` | 商用・実運用 | Supabase Production | Blob Production |
-| **Staging（プレビュー）** | https://form-management-staging.vercel.app | `staging` | テスト・検証 | Supabase Staging | Blob Staging |
-| **Local（開発）** | http://localhost:3000 | `staging` | ローカル開発 | JSON ファイル | Mock (Blob Mock) |
+| 環境 | URL | ブランチ | 用途 | データベース | Storage |
+|------|-----|---------|------|-------------|---------|
+| **Production（本番）** | https://form-management-seven.vercel.app | `main` | 商用・実運用 | Supabase Production (新規プロジェクト、Pro プラン) | Supabase Storage Production |
+| **Staging（プレビュー）** | https://form-management-staging.vercel.app | `staging` | テスト・検証 | Supabase Staging (既存プロジェクト) | Supabase Storage Staging |
+| **Local（開発）** | http://localhost:3000 | `staging` | ローカル開発 | JSON ファイル | Mock (ローカルファイル) |
 
 ### 環境別の主な違い
 
 #### 🟢 Production（form-management-seven.vercel.app）
 - **用途**: 商用・実運用環境
 - **認証**: Supabase Auth 本番環境
-- **データベース**: Supabase Production プロジェクト
-- **ストレージ**: Vercel Blob Production (`prod/forms/{storeId}/{formId}.html`)
+- **データベース**: Supabase Production プロジェクト（**新規作成、Pro プラン推奨**）
+- **ストレージ**: Supabase Storage Production (`prod/forms/{storeId}/{formId}/config/current.html`)
 - **デプロイ**: `main` ブランチへマージ時に自動デプロイ
 - **RLS**: Row Level Security 有効
-- **特徴**: 本番データが保存される、実際のユーザーが利用
+- **特徴**: 本番データが保存される、実際のユーザーが利用、**staging とは完全に分離**
 
 #### 🟡 Staging（form-management-staging.vercel.app）
 - **用途**: テスト・検証・デモ
 - **認証**: Supabase Auth ステージング環境（テスト用アカウント）
-- **データベース**: Supabase Staging プロジェクト
-- **ストレージ**: Vercel Blob Staging (`staging/forms/{storeId}/{formId}.html`)
+- **データベース**: Supabase Staging プロジェクト（**既存プロジェクトを継続使用**）
+- **ストレージ**: Supabase Storage Staging (`staging/forms/{storeId}/{formId}/config/current.html`)
 - **デプロイ**: `staging` ブランチへプッシュ時に自動デプロイ
 - **RLS**: Row Level Security 有効
-- **特徴**: 開発チーム向け、新機能テスト、PR レビュー用
+- **特徴**: 開発チーム向け、新機能テスト、PR レビュー用、**production とは完全に分離**
 
 #### 🔵 Local（localhost:3000）
 - **用途**: ローカル開発・デバッグ
@@ -421,18 +421,16 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 # Local 開発環境（.env.local）
 NEXT_PUBLIC_APP_ENV=local
 
-# Staging 環境（Vercel Environment Variables）
+# Staging 環境（Vercel Environment Variables - Preview）
 NEXT_PUBLIC_APP_ENV=staging
-NEXT_PUBLIC_SUPABASE_URL=<staging-url>
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<staging-key>
-SUPABASE_SERVICE_ROLE_KEY=<staging-service-key>
-BLOB_READ_WRITE_TOKEN=<staging-blob-token>
+NEXT_PUBLIC_SUPABASE_URL=<既存プロジェクトのURL>  # Staging 用 Supabase プロジェクト
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<既存プロジェクトのanon-key>
+SUPABASE_SERVICE_ROLE_KEY=<既存プロジェクトのservice-role-key>
 
-# Production 環境（Vercel Environment Variables）
+# Production 環境（Vercel Environment Variables - Production）
 NEXT_PUBLIC_APP_ENV=production
-NEXT_PUBLIC_SUPABASE_URL=<production-url>
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<production-key>
-SUPABASE_SERVICE_ROLE_KEY=<production-service-key>
-BLOB_READ_WRITE_TOKEN=<production-blob-token>
+NEXT_PUBLIC_SUPABASE_URL=<新規プロジェクトのURL>  # Production 用 Supabase プロジェクト（新規作成）
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<新規プロジェクトのanon-key>
+SUPABASE_SERVICE_ROLE_KEY=<新規プロジェクトのservice-role-key>
 ```
 

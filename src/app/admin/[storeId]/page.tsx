@@ -5,9 +5,77 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Store } from '@/types/store';
 import { Form } from '@/types/form';
+import { SurveyForm } from '@/types/survey';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
-import MenuStructureEditor from '@/components/FormEditor/MenuStructureEditor';
-import BusinessRulesEditor from '@/components/FormEditor/BusinessRulesEditor';
+
+// アンケートテンプレート定義
+const SURVEY_TEMPLATES = {
+  counseling: {
+    name: '📋 カウンセリングシート',
+    description: '初回来店時の詳細なヒアリング用',
+    config: {
+      questions: [
+        { id: 'q1', type: 'text', title: 'ご来店日(例:西暦記載 ○年○月○日)', required: true },
+        { id: 'q2', type: 'text', title: 'お名前(漢字フルネーム/ふりがな)', required: true },
+        { id: 'q3', type: 'date', title: 'ご来店日(例:西暦記載 ○年○月○日)', required: true },
+        { id: 'q4', type: 'date', title: '生年月日(例:西暦記載 ○年○月○日)', required: true },
+        { id: 'q5', type: 'text', title: '電話番号', required: true },
+        { id: 'q6', type: 'text', title: 'お住まい(都道府県/市区町村まで)', required: true },
+        { id: 'q7', type: 'radio', title: 'ご職業', required: true, options: [
+          { label: '会社員', value: '会社員' },
+          { label: 'パート・アルバイト', value: 'パート・アルバイト' },
+          { label: '学生', value: '学生' },
+          { label: '専業主婦', value: '専業主婦' },
+          { label: 'その他', value: 'その他' }
+        ]},
+        { id: 'q8', type: 'radio', title: '来店動機', required: true, options: [
+          { label: 'HP', value: 'HP' },
+          { label: 'Instagram', value: 'Instagram' },
+          { label: 'Google等での検索', value: 'Google等での検索' },
+          { label: 'ホットペッパービューティー', value: 'ホットペッパービューティー' },
+          { label: '知人の紹介', value: '知人の紹介' },
+          { label: '通りすがり', value: '通りすがり' },
+          { label: 'その他', value: 'その他' }
+        ]},
+        { id: 'q9', type: 'text', title: '"知人の紹介"を選択された方は、紹介者のお名前をご記入ください。', required: false },
+        { id: 'q10', type: 'radio', title: '来店頻度(ネイルサロンにどのくらいの頻度で通っているか)', required: true, options: [
+          { label: '2週間に1度', value: '2週間に1度' },
+          { label: '3週間に1度', value: '3週間に1度' },
+          { label: '1ヵ月に1度', value: '1ヵ月に1度' },
+          { label: '2〜3カ月に1度', value: '2〜3カ月に1度' }
+        ]},
+        { id: 'q11', type: 'radio', title: '薬品/ネイルでのアレルギー', required: true, options: [
+          { label: '薬品アレルギー有り', value: '薬品アレルギー有り' },
+          { label: '薬品アレルギー無し', value: '薬品アレルギー無し' }
+        ]},
+        { id: 'q12', type: 'radio', title: '重要項目の同意', required: true, 
+          description: `①トークでのご予約の受付・変更・キャンセルについては承っておりません。全てTELにてお願いいたします😊✨ 
+\n②当店では施術後の返金対応は致しかねます。気になる箇所がございましたら、お直しは施術後１週間以内のご来店ですと無料(※１週間超えてのご来店ですと本数分計算の有料)で承っておりますのでお気軽にご相談ください。
+お問い合わせに関しましては、トークに詳細と合わせ状態のお写真なども添えていただけるとスムーズなやり取りとご案内ができます。
+また、TELでも承っており、その場でのご案内が可能です。
+※トークの場合、施術対応中などでご返信が遅くなることがございます。
+\n③お持ち込みネイルのお問い合わせに関しましては、リピーター様のみ受付ており、全てこちらのLINEにてご対応させて頂きます。 ご予約される前にこちらのLINEに持ち込みデザイン画像とご要望の送信をお願い致します。持ち込みデザインについてのご相談をさせていただきます。また、施術にかかるお時間、料金、ご予約時選択するメニュー等なども合わせてご連絡させていただきます。 
+\n④LINEお問い合わせのご対応時間について 営業時間中の10:00〜20:00とさせていただきます。 それ以外の時間のご返信は致しかねますことご了承を願います。 また、営業時間中につきましても施術対応中などにより返信が遅くなる場合がありますことも重ねてご了承を願います。`,
+          options: [
+            { label: '同意する', value: '同意する' },
+            { label: '同意しない', value: '同意しない' }
+          ]
+        }
+      ]
+    }
+  },
+  simple: {
+    name: '📝 簡易アンケート',
+    description: '基本情報のみのシンプルなアンケート',
+    config: {
+      questions: [
+        { id: 'q1', type: 'text', title: 'お名前', required: true },
+        { id: 'q2', type: 'text', title: '電話番号', required: true },
+        { id: 'q3', type: 'text', title: 'ご要望', required: false }
+      ]
+    }
+  }
+};
 
 // テンプレート定義
 const FORM_TEMPLATES = {
@@ -486,6 +554,127 @@ const FORM_TEMPLATES = {
         show_repeat_booking: true
       }
     }
+  },
+  with_images: {
+    name: '🖼️ 画像付きメニュー',
+    description: '画像表示機能付きのメニュー選択フォーム',
+    liff_id: '2008098784-5ZQ1LRn3',
+    gas_endpoint: 'https://script.google.com/macros/s/AKfycby3QfS2E892nXbS-fnfBVrJX8KyJWTSsisKpe9zVz5QGWzvTH7Zc3PlOay9j60aSQLp/exec',
+    config: {
+      basic_info: {
+        show_gender_selection: true
+      },
+      menu_structure: {
+        structure_type: 'category',
+        categories: [
+          {
+            id: 'cat1',
+            name: 'メニュー',
+            display_name: 'メニュー',
+            menus: [
+              {
+                id: 'menu1',
+                name: 'コースA (1000円/30分)',
+                price: 1000,
+                duration: 30,
+                description: '初回体験向け。軽めの着色汚れを除去。',
+                image: 'https://www.dropbox.com/scl/fi/rp6b5xcnbnt5d03ommeb4/.png?rlkey=y6hhwc2ubinzpavldh3fgzl6p&st=d0cbcp3s&raw=1',
+                gender_filter: 'both',
+                has_submenu: false,
+                options: [
+                  {
+                    id: 'opt1',
+                    name: 'コーヒーやお茶の着色が気になる方',
+                    price: 0,
+                    duration: 0,
+                    description: 'おすすめ',
+                    is_default: true
+                  }
+                ]
+              },
+              {
+                id: 'menu2',
+                name: 'コースB (2000円/60分)',
+                price: 2000,
+                duration: 60,
+                description: '本格的なホワイトニング。より白い歯へ。',
+                image: 'https://www.dropbox.com/scl/fi/adiq6vy9fxdqub025oavy/.png?rlkey=ghg3q2r7a9izp610x7johbl3b&st=eup1t89x&raw=1',
+                gender_filter: 'both',
+                has_submenu: false,
+                options: [
+                  {
+                    id: 'opt2',
+                    name: 'より白い歯を目指す方',
+                    price: 0,
+                    duration: 0,
+                    description: 'おすすめ',
+                    is_default: false
+                  }
+                ]
+              },
+              {
+                id: 'menu3',
+                name: 'コースC (3000円/90分)',
+                price: 3000,
+                duration: 90,
+                description: 'プレミアムホワイトニング。最高の白さを実現。',
+                image: 'https://www.dropbox.com/scl/fi/su141b49bkpnspprslc17/.png?rlkey=guaknyrjpgta2nve3hf9nagkz&st=jyx7zxcn&raw=1',
+                gender_filter: 'both',
+                has_submenu: false,
+                options: [
+                  {
+                    id: 'opt3',
+                    name: '結婚式や重要な行事を控えている方',
+                    price: 0,
+                    duration: 0,
+                    description: 'おすすめ',
+                    is_default: false
+                  }
+                ]
+              }
+            ],
+            options: [],
+            selection_mode: 'single',
+            gender_condition: 'all'
+          },
+          {
+            id: 'cat2',
+            name: 'オプション',
+            display_name: 'オプション',
+            menus: [
+              {
+                id: 'menu4',
+                name: 'フッ素コーティング',
+                price: 500,
+                duration: 10,
+                description: '歯を保護します',
+                image: 'https://www.dropbox.com/scl/fi/rp6b5xcnbnt5d03ommeb4/.png?rlkey=y6hhwc2ubinzpavldh3fgzl6p&st=d0cbcp3s&raw=1',
+                gender_filter: 'both',
+                options: []
+              },
+              {
+                id: 'menu5',
+                name: 'リテーナー（カスタム）',
+                price: 5000,
+                duration: 0,
+                description: 'ホワイトニング維持用',
+                image: 'https://www.dropbox.com/scl/fi/adiq6vy9fxdqub025oavy/.png?rlkey=ghg3q2r7a9izp610x7johbl3b&st=eup1t89x&raw=1',
+                gender_filter: 'both',
+                options: []
+              }
+            ],
+            options: [],
+            selection_mode: 'single',
+            gender_condition: 'all'
+          }
+        ]
+      },
+      ui_settings: {
+        show_visit_count: true,
+        show_coupon_selection: true,
+        show_repeat_booking: true
+      }
+    }
   }
 };
 
@@ -496,18 +685,24 @@ export default function StoreDetailPage() {
   
   const [store, setStore] = useState<Store | null>(null);
   const [forms, setForms] = useState<Form[]>([]);
+  const [surveyForms, setSurveyForms] = useState<SurveyForm[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [editingForm, setEditingForm] = useState<Form | null>(null);
+  const [editingForm, setEditingForm] = useState<Form | SurveyForm | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editModalTab, setEditModalTab] = useState<'basic' | 'menu' | 'business'>('basic');
   const [newFormData, setNewFormData] = useState({
     form_name: '',
     liff_id: '',
     gas_endpoint: '',
     template: 'basic'
+  });
+  const [showCreateSurveyForm, setShowCreateSurveyForm] = useState(false);
+  const [newSurveyData, setNewSurveyData] = useState({
+    form_name: '',
+    liff_id: '',
+    template: 'counseling'
   });
   const [showStoreEditModal, setShowStoreEditModal] = useState(false);
   const [editingStore, setEditingStore] = useState<Store | null>(null);
@@ -541,6 +736,15 @@ export default function StoreDetailPage() {
         if (formsResponse.ok) {
           const formsData = await formsResponse.json();
           setForms(formsData);
+        }
+
+        // アンケート一覧取得
+        const surveysResponse = await fetch(`/api/stores/${storeId}/surveys`, {
+          credentials: 'include',
+        });
+        if (surveysResponse.ok) {
+          const surveysData = await surveysResponse.json();
+          setSurveyForms(surveysData);
         }
         
       } catch (err) {
@@ -610,102 +814,76 @@ export default function StoreDetailPage() {
     }
   };
 
-  const handleEditForm = (form: Form) => {
-    setEditingForm(form);
-    setEditModalTab('basic');
-    setShowEditModal(true);
-  };
+  const handleCreateSurveyForm = async () => {
+    if (!newSurveyData.form_name.trim()) {
+      alert('フォーム名を入力してください');
+      return;
+    }
 
-  const handleSaveEditForm = async () => {
-    if (!editingForm) return;
-    
+    setSubmitting(true);
     try {
-      const response = await fetch(`/api/forms/${editingForm.id}`, {
-        method: 'PUT',
+      const selectedTemplate = SURVEY_TEMPLATES[newSurveyData.template as keyof typeof SURVEY_TEMPLATES];
+      const response = await fetch(`/api/stores/${storeId}/surveys`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify(editingForm),
+        body: JSON.stringify({
+          form_name: newSurveyData.form_name.trim(),
+          liff_id: newSurveyData.liff_id.trim(),
+          template_config: selectedTemplate.config
+        }),
       });
 
       if (response.ok) {
-        const updatedForm = await response.json();
-        
-        // フォーム一覧を更新
-        const updatedForms = forms.map(f => 
-          f.id === updatedForm.id ? updatedForm : f
-        );
-        setForms(updatedForms);
-        
-        setEditingForm(updatedForm);
-        
-        alert('フォームを保存しました。プレビューで確認してから「更新」ボタンでデプロイしてください。');
+        const newForm = await response.json();
+        setSurveyForms([...surveyForms, newForm]);
+        setNewSurveyData({ form_name: '', liff_id: '', template: 'counseling' });
+        setShowCreateSurveyForm(false);
+        alert(`アンケートフォーム「${newForm.config.basic_info.title}」を作成しました`);
       } else {
         const error = await response.json();
-        alert(`保存に失敗しました: ${error.error}`);
+        alert(`エラー: ${error.error}`);
       }
     } catch (error) {
-      console.error('Save error:', error);
-      alert('保存に失敗しました');
+      console.error('Survey creation error:', error);
+      alert('アンケート作成に失敗しました');
+    } finally {
+      setSubmitting(false);
     }
   };
-  
-  const handleDeployForm = async () => {
-    if (!editingForm) return;
-    
+
+  const handleDeleteSurveyForm = async (formId: string) => {
+    if (!confirm('本当にこのアンケートフォームを削除しますか？\nこの操作は取り消せません。')) {
+      return;
+    }
+
     try {
-      // 保存済みのフォームデータを取得（最新の状態を保証）
-      const formResponse = await fetch(`/api/forms/${editingForm.id}`, {
+      const response = await fetch(`/api/surveys/${formId}`, {
+        method: 'DELETE',
         credentials: 'include',
       });
-      
-      if (!formResponse.ok) {
-        alert('フォームデータの取得に失敗しました');
-        return;
-      }
-      
-      const savedForm = await formResponse.json();
-      
-      // 保存されたフォームデータを使って静的HTMLを再デプロイ
-      const deployResponse = await fetch(`/api/forms/${editingForm.id}/deploy`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          storeId: storeId,
-          formData: savedForm, // 保存された最新のフォームデータを渡す
-        }),
-      });
-      
-      if (deployResponse.ok) {
-        const result = await deployResponse.json();
-        
-        // フォーム一覧を再フェッチしてstatic_deploy情報を更新
-        try {
-          const formsResponse = await fetch(`/api/stores/${storeId}/forms`, {
-            credentials: 'include',
-          });
-          if (formsResponse.ok) {
-            const formsData = await formsResponse.json();
-            setForms(formsData);
-          }
-        } catch (error) {
-          console.error('Forms refresh error:', error);
-        }
-        
-        alert(`静的HTMLを更新しました！\n\n顧客向けURL: ${result.deployUrl}\n\n※ ブラウザのキャッシュをクリアするか、数分後に再読み込みしてください。`);
+
+      if (response.ok) {
+        setSurveyForms(surveyForms.filter(f => f.id !== formId));
+        alert('アンケートフォームを削除しました');
       } else {
-        const error = await deployResponse.json();
-        alert(`デプロイに失敗しました: ${error.error || '不明なエラー'}`);
+        const error = await response.json();
+        alert(`削除に失敗しました: ${error.error}`);
       }
     } catch (error) {
-      console.error('Deploy error:', error);
-      alert('デプロイに失敗しました');
+      console.error('Delete error:', error);
+      alert('削除に失敗しました');
     }
   };
+
+  const handleEditForm = (form: Form | SurveyForm) => {
+    setEditingForm(form);
+    setShowEditModal(true);
+  };
+
+
 
   const handleEditStore = () => {
     if (store) {
@@ -835,6 +1013,32 @@ export default function StoreDetailPage() {
           status: form.status,
           environment: deployInfo?.environment || 'production'
         };
+      }),
+      surveyUrls: surveyForms.map(form => {
+        const deployInfo = form.static_deploy;
+        let formUrl = '';
+        let storageUrl = '';
+        
+        if (deployInfo?.deploy_url) {
+          formUrl = deployInfo.deploy_url;
+        } else if (deployInfo?.storage_url) {
+          formUrl = deployInfo.storage_url;
+        } else {
+          formUrl = `${baseUrl}/preview/${storeId}/surveys/${form.id}`;
+        }
+        
+        if (deployInfo?.storage_url) {
+          storageUrl = deployInfo.storage_url;
+        }
+        
+        return {
+          id: form.id,
+          name: form.config.basic_info.title,
+          url: formUrl,
+          storageUrl: storageUrl,
+          status: form.status,
+          environment: deployInfo?.environment || 'production'
+        };
       })
     };
   };
@@ -910,71 +1114,139 @@ export default function StoreDetailPage() {
           </div>
         </div>
 
-        {/* お客様向けURL表示 */}
+        {/* フォーム一覧表示 */}
         <div className="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-600">
           <h2 className="text-lg font-semibold text-cyan-400 mb-4">
-            📎 お客様向けURL（LINEリッチメニュー用）
+            📋 フォーム一覧
           </h2>
           
-          {/* フォームURLカード（グリッドレイアウト） */}
+          {/* フォームURLカード（4列グリッドレイアウト） */}
           {urls.formUrls.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {urls.formUrls.map((form) => (
-                <div key={form.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                  {/* フォーム名とステータス */}
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-cyan-300 font-medium">{form.name}</h3>
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      form.status === 'active' 
-                        ? 'bg-green-600 text-green-100' 
-                        : 'bg-gray-600 text-gray-300'
-                    }`}>
-                      {form.status === 'active' ? '公開中' : '非公開'}
-                    </span>
-                  </div>
-                  
-                  {/* 本番URL（deploy_url）- 目立つ表示 */}
-                  <div className="mb-3">
-                    <label className="block text-xs text-gray-400 mb-2">顧客向け本番URL</label>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => window.open(form.url, '_blank')}
-                        className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-center"
-                        title="新しいタブで開く"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(form.url);
-                          alert('URLをコピーしました');
-                        }}
-                        className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md text-sm transition-colors"
-                        title="URLをコピー"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                        </svg>
-                      </button>
+            <div className="mb-6">
+              <h3 className="text-sm font-medium text-gray-400 mb-2">予約フォーム</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {urls.formUrls.map((form) => (
+                  <div key={form.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                    {/* フォーム名とステータス */}
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-cyan-300 font-medium">{form.name}</h3>
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        form.status === 'active' 
+                          ? 'bg-green-600 text-green-100' 
+                          : 'bg-gray-600 text-gray-300'
+                      }`}>
+                        {form.status === 'active' ? '公開中' : '非公開'}
+                      </span>
                     </div>
-                  </div>
-                  
-                  {/* Storage URL - 控えめな表示 */}
-                  {form.storageUrl && (
-                    <div className="pt-2 border-t border-gray-600">
-                      <button
-                        onClick={() => window.open(form.storageUrl!, '_blank')}
-                        className="text-xs text-gray-400 hover:text-gray-300 underline"
-                        title="Storage URL を開く"
-                      >
-                        Storage URL を開く
-                      </button>
+                    
+                    {/* 本番URL（deploy_url）- 目立つ表示 */}
+                    <div className="mb-3">
+                      <label className="block text-xs text-gray-400 mb-2">顧客向け本番URL</label>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => window.open(form.url, '_blank')}
+                          className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-center"
+                          title="新しいタブで開く"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(form.url);
+                            alert('URLをコピーしました');
+                          }}
+                          className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md text-sm transition-colors"
+                          title="URLをコピー"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
+                    
+                    {/* Storage URL - 控えめな表示 */}
+                    {form.storageUrl && (
+                      <div className="pt-2 border-t border-gray-600">
+                        <button
+                          onClick={() => window.open(form.storageUrl!, '_blank')}
+                          className="text-xs text-gray-400 hover:text-gray-300 underline"
+                          title="Storage URL を開く"
+                        >
+                          Storage URL を開く
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* アンケートフォームURLカード */}
+          {urls.surveyUrls.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-gray-400 mb-2">アンケートフォーム</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {urls.surveyUrls.map((form) => (
+                  <div key={form.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                    {/* フォーム名とステータス */}
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-emerald-300 font-medium">{form.name}</h3>
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        form.status === 'active' 
+                          ? 'bg-green-600 text-green-100' 
+                          : 'bg-gray-600 text-gray-300'
+                      }`}>
+                        {form.status === 'active' ? '公開中' : '非公開'}
+                      </span>
+                    </div>
+                    
+                    {/* 本番URL（deploy_url）- 目立つ表示 */}
+                    <div className="mb-3">
+                      <label className="block text-xs text-gray-400 mb-2">顧客向け本番URL</label>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => window.open(form.url, '_blank')}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-center"
+                          title="新しいタブで開く"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(form.url);
+                            alert('URLをコピーしました');
+                          }}
+                          className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md text-sm transition-colors"
+                          title="URLをコピー"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Storage URL - 控えめな表示 */}
+                    {form.storageUrl && (
+                      <div className="pt-2 border-t border-gray-600">
+                        <button
+                          onClick={() => window.open(form.storageUrl!, '_blank')}
+                          className="text-xs text-gray-400 hover:text-gray-300 underline"
+                          title="Storage URL を開く"
+                        >
+                          Storage URL を開く
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1189,11 +1461,12 @@ export default function StoreDetailPage() {
             </div>
           )}
 
-          {/* フォーム一覧 */}
+          {/* 予約フォーム一覧 */}
           <div className="space-y-3">
+            <h2 className="text-xl font-semibold text-gray-100 mb-4">予約フォーム</h2>
             {forms.length === 0 ? (
               <div className="text-gray-400 text-center py-8">
-                まだフォームが作成されていません
+                まだ予約フォームが作成されていません
               </div>
             ) : (
               forms.map((form) => (
@@ -1222,6 +1495,142 @@ export default function StoreDetailPage() {
                       </button>
                       <button 
                         onClick={() => handleDeleteForm(form.id)}
+                        className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500"
+                      >
+                        削除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* アンケートフォーム管理 */}
+        <div className="bg-gray-800 rounded-lg shadow-sm p-6 mb-6 border border-gray-600">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-100">アンケートフォーム</h2>
+            <button
+              onClick={() => setShowCreateSurveyForm(!showCreateSurveyForm)}
+              className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-500 transition-colors font-medium"
+            >
+              {showCreateSurveyForm ? 'キャンセル' : '新規アンケート作成'}
+            </button>
+          </div>
+
+          {/* アンケート作成フォーム */}
+          {showCreateSurveyForm && (
+            <div className="bg-gray-700 rounded-lg p-4 mb-4 border border-gray-500">
+              <h3 className="text-lg font-medium mb-3 text-gray-100">新しいアンケートを作成</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    フォーム名 <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newSurveyData.form_name}
+                    onChange={(e) => setNewSurveyData({...newSurveyData, form_name: e.target.value})}
+                    placeholder="例：初回カウンセリングシート"
+                    className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    テンプレート選択
+                  </label>
+                  <div className="grid grid-cols-1 gap-3">
+                    {Object.entries(SURVEY_TEMPLATES).map(([key, template]) => (
+                      <div
+                        key={key}
+                        onClick={() => setNewSurveyData({ ...newSurveyData, template: key })}
+                        className={`cursor-pointer border rounded-lg p-3 transition-colors ${
+                          newSurveyData.template === key
+                            ? 'border-emerald-500 bg-emerald-900/20'
+                            : 'border-gray-600 hover:border-gray-500 bg-gray-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-gray-200">{template.name}</span>
+                          {newSurveyData.template === key && (
+                            <span className="text-emerald-500">
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-400">{template.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    LIFF ID
+                  </label>
+                  <input
+                    type="text"
+                    value={newSurveyData.liff_id}
+                    onChange={(e) => setNewSurveyData({...newSurveyData, liff_id: e.target.value})}
+                    placeholder="例：1234567890-abcdefgh"
+                    className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">LINE Developersで作成したLIFF IDを入力（任意）</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3 mt-6">
+                <button
+                  onClick={handleCreateSurveyForm}
+                  disabled={submitting}
+                  className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-gray-700"
+                >
+                  {submitting ? '作成中...' : 'アンケートを作成'}
+                </button>
+                <button
+                  onClick={() => setShowCreateSurveyForm(false)}
+                  className="bg-gray-600 text-gray-200 px-4 py-2 rounded-md hover:bg-gray-500 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-700"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* アンケート一覧 */}
+          <div className="space-y-3">
+            {surveyForms.length === 0 ? (
+              <div className="text-gray-400 text-center py-8">
+                まだアンケートが作成されていません
+              </div>
+            ) : (
+              surveyForms.map((form) => (
+                <div key={form.id} className="border border-gray-600 rounded-lg p-4 bg-gray-700">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-gray-100">
+                        {form.config.basic_info.title}
+                        {form.draft_status === 'draft' && (
+                          <span className="ml-2 px-2 py-1 text-xs bg-yellow-600 text-yellow-100 rounded-full">
+                            下書き
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-sm text-gray-400">
+                        ID: {form.id} • ステータス: {form.status === 'active' ? '公開中' : '非公開'}
+                        {form.draft_status === 'draft' && ' • 未保存の変更があります'}
+                      </p>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button 
+                        onClick={() => handleEditForm(form)}
+                        className="bg-cyan-600 text-white px-3 py-1 rounded text-sm hover:bg-cyan-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      >
+                        編集
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteSurveyForm(form.id)}
                         className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500"
                       >
                         削除
@@ -1263,325 +1672,7 @@ export default function StoreDetailPage() {
         </div>
       </div>
 
-      {/* フォーム編集モーダル */}
-      {showEditModal && editingForm && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-900 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col border border-gray-700">
-            {/* モーダルヘッダー */}
-            <div className="p-6 border-b border-gray-700">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-white">
-                  フォーム編集: {(editingForm as any).form_name || editingForm.config?.basic_info?.form_name || 'フォーム'}
-                </h2>
-                <button
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setEditingForm(null);
-                  }}
-                  className="text-gray-400 hover:text-gray-200"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
 
-              {/* タブナビゲーション */}
-              <nav className="flex space-x-8">
-                <button
-                  onClick={() => setEditModalTab('basic')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    editModalTab === 'basic'
-                      ? 'border-blue-500 text-blue-400'
-                      : 'border-transparent text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  基本情報
-                </button>
-                <button
-                  onClick={() => setEditModalTab('menu')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    editModalTab === 'menu'
-                      ? 'border-blue-500 text-blue-400'
-                      : 'border-transparent text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  メニュー構成
-                </button>
-                <button
-                  onClick={() => setEditModalTab('business')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    editModalTab === 'business'
-                      ? 'border-blue-500 text-blue-400'
-                      : 'border-transparent text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  営業時間・ルール
-                </button>
-              </nav>
-            </div>
-
-            {/* モーダルコンテンツ */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {editModalTab === 'basic' && (
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      フォーム名 <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={(editingForm as any).form_name || editingForm.config?.basic_info?.form_name || ''}
-                      onChange={(e) => {
-                        if ((editingForm as any).form_name !== undefined) {
-                          // 新形式
-                          setEditingForm({
-                            ...editingForm,
-                            form_name: e.target.value
-                          } as any);
-                        } else {
-                          // 旧形式
-                          setEditingForm({
-                            ...editingForm,
-                            config: {
-                              ...editingForm.config,
-                              basic_info: {
-                                ...editingForm.config?.basic_info,
-                                form_name: e.target.value
-                              }
-                            }
-                          });
-                        }
-                      }}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-gray-100"
-                      placeholder="例：カット＆カラー予約フォーム"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      店舗名（フォーム内表示用）
-                    </label>
-                    <input
-                      type="text"
-                      value={editingForm.config?.basic_info?.store_name || ''}
-                      onChange={(e) => {
-                        setEditingForm({
-                          ...editingForm,
-                          config: {
-                            ...editingForm.config,
-                            basic_info: {
-                              ...editingForm.config?.basic_info,
-                              store_name: e.target.value
-                            }
-                          }
-                        });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-gray-100"
-                      placeholder="例：Hair Salon ABC"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">フォームヘッダーに表示される店舗名</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      LIFF ID <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={(editingForm as any).line_settings?.liff_id || editingForm.config?.basic_info?.liff_id || ''}
-                      onChange={(e) => {
-                        if ((editingForm as any).line_settings !== undefined) {
-                          // 新形式
-                          setEditingForm({
-                            ...editingForm,
-                            line_settings: {
-                              ...(editingForm as any).line_settings,
-                              liff_id: e.target.value
-                            }
-                          } as any);
-                        } else {
-                          // 旧形式
-                          setEditingForm({
-                            ...editingForm,
-                            config: {
-                              ...editingForm.config,
-                              basic_info: {
-                                ...editingForm.config?.basic_info,
-                                liff_id: e.target.value
-                              }
-                            }
-                          });
-                        }
-                      }}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-gray-100"
-                      placeholder="例：1234567890-abcdefgh"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">LINE Developersで作成したLIFF ID</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Google App Script エンドポイント <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="url"
-                      value={editingForm.config?.gas_endpoint || ''}
-                      onChange={(e) => {
-                        setEditingForm({
-                          ...editingForm,
-                          config: {
-                            ...editingForm.config,
-                            gas_endpoint: e.target.value
-                          }
-                        });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-gray-100"
-                      placeholder="例：https://script.google.com/macros/s/xxx/exec"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">予約データ送信用のGASエンドポイント</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Google Calendar URL <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="url"
-                      value={editingForm.config?.calendar_settings?.google_calendar_url || ''}
-                      onChange={(e) => {
-                        setEditingForm({
-                          ...editingForm,
-                          config: {
-                            ...editingForm.config,
-                            calendar_settings: {
-                              ...editingForm.config?.calendar_settings,
-                              google_calendar_url: e.target.value
-                            }
-                          }
-                        });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-gray-100"
-                      placeholder="例：https://calendar.google.com/calendar/embed?src=xxx"
-                      required
-                    />
-                    <p className="text-xs text-gray-400 mt-1">空き状況確認用のGoogleカレンダーURL</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      テーマカラー
-                    </label>
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="color"
-                        value={(editingForm as any).ui_settings?.theme_color || editingForm.config?.basic_info?.theme_color || '#3B82F6'}
-                        onChange={(e) => {
-                          if ((editingForm as any).ui_settings !== undefined) {
-                            // 新形式
-                            setEditingForm({
-                              ...editingForm,
-                              ui_settings: {
-                                ...(editingForm as any).ui_settings,
-                                theme_color: e.target.value
-                              }
-                            } as any);
-                          } else {
-                            // 旧形式
-                            setEditingForm({
-                              ...editingForm,
-                              config: {
-                                ...editingForm.config,
-                                basic_info: {
-                                  ...editingForm.config?.basic_info,
-                                  theme_color: e.target.value
-                                }
-                              }
-                            });
-                          }
-                        }}
-                        className="w-20 h-10 border border-gray-500 rounded-md cursor-pointer"
-                      />
-                      <span className="text-sm text-gray-400">フォームのメインカラー</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      公開ステータス
-                    </label>
-                    <select
-                      value={editingForm.status}
-                      onChange={(e) => setEditingForm({
-                        ...editingForm,
-                        status: e.target.value as 'active' | 'inactive'
-                      })}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-gray-100"
-                    >
-                      <option value="inactive">非公開（下書き）</option>
-                      <option value="active">公開中</option>
-                    </select>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {editingForm.status === 'active' ? '顧客がフォームにアクセス可能です' : 'フォームは非公開です（管理者のみ確認可能）'}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {editModalTab === 'menu' && (
-                <MenuStructureEditor 
-                  form={editingForm}
-                  onUpdate={setEditingForm}
-                />
-              )}
-
-              {editModalTab === 'business' && (
-                <BusinessRulesEditor 
-                  form={editingForm}
-                  onUpdate={setEditingForm}
-                />
-              )}
-            </div>
-
-            {/* モーダルフッター */}
-            <div className="flex items-center justify-between p-6 border-t border-gray-700">
-                <button
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setEditingForm(null);
-                  }}
-                  className="bg-gray-600 text-gray-200 px-4 py-2 rounded-md hover:bg-gray-500 transition-colors"
-                >
-                  キャンセル
-                </button>
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={async () => {
-                    // プレビューを開く（保存済みデータを表示）
-                    const previewUrl = `/preview/${storeId}/forms/${editingForm.id}`;
-                    window.open(previewUrl, '_blank');
-                  }}
-                  className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors"
-                >
-                  プレビュー
-                </button>
-                <button
-                  onClick={handleSaveEditForm}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-                >
-                  保存
-                </button>
-                <button
-                  onClick={handleDeployForm}
-                  className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 transition-colors"
-                >
-                  更新
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 店舗編集モーダル */}
       {showStoreEditModal && editingStore && (
@@ -1740,7 +1831,12 @@ export default function StoreDetailPage() {
           form={editingForm}
           storeId={storeId}
           onSave={async (updatedForm) => {
-            const response = await fetch(`/api/forms/${updatedForm.id}`, {
+            const isSurvey = 'questions' in updatedForm.config;
+            const endpoint = isSurvey 
+              ? `/api/surveys/${updatedForm.id}`
+              : `/api/forms/${updatedForm.id}`;
+            
+            const response = await fetch(endpoint, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
@@ -1751,7 +1847,11 @@ export default function StoreDetailPage() {
 
             if (response.ok) {
               const savedForm = await response.json();
-              setForms(forms.map(f => f.id === savedForm.id ? savedForm : f));
+              if (isSurvey) {
+                 setSurveyForms(surveyForms.map(f => f.id === savedForm.id ? (savedForm as SurveyForm) : f));
+              } else {
+                 setForms(forms.map(f => f.id === savedForm.id ? (savedForm as Form) : f));
+              }
             } else {
               throw new Error('保存に失敗しました');
             }

@@ -24,11 +24,6 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   
-  // ESLint設定（デプロイ時は一時的に無効化）
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  
   // 実験的機能
   experimental: {
     optimizePackageImports: ['@heroicons/react'],

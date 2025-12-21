@@ -223,6 +223,35 @@ export class SupabaseStorageDeployer {
    */
   async uploadImage(file: Buffer | Blob, filePath: string): Promise<string> {
     try {
+      const env = getAppEnvironment();
+      
+      // ローカル環境: public/ にファイルを保存 (filePathにディレクトリが含まれているため)
+      if (env === 'local') {
+        const publicDir = path.join(process.cwd(), 'public');
+        if (!fs.existsSync(publicDir)) {
+          fs.mkdirSync(publicDir, { recursive: true });
+        }
+        
+        const localFilePath = path.join(publicDir, filePath);
+        const fileDir = path.dirname(localFilePath);
+        if (!fs.existsSync(fileDir)) {
+          fs.mkdirSync(fileDir, { recursive: true });
+        }
+        
+        // Buffer または Blob をファイルに書き込み
+        if (file instanceof Blob) {
+          const arrayBuffer = await file.arrayBuffer();
+          fs.writeFileSync(localFilePath, Buffer.from(arrayBuffer));
+        } else {
+          fs.writeFileSync(localFilePath, file);
+        }
+        
+        // 公開 URL を返却（public/ から公開されるため /{filePath} でアクセス可能）
+        const url = `/${filePath}`;
+        console.log(`[LOCAL MODE] Image saved to: ${localFilePath}`);
+        return url;
+      }
+      
       const supabase = createAdminClient();
       
       if (!supabase) {
