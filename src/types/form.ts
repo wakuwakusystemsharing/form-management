@@ -159,7 +159,7 @@ export interface StaticDeploy {
 
 export interface Form {
   id: string;          // 16文字のランダム英数文字列
-  store_id: string;    // UUID (staging/production) or st形式 (local)
+  store_id: string;    // 6文字のランダム文字列 (全環境共通)
   config: FormConfig;
   draft_config?: FormConfig;  // 下書き設定
   status: 'active' | 'inactive' | 'paused';

@@ -42,9 +42,9 @@ export async function middleware(request: NextRequest) {
   const isServiceAdminRoute = pathname.startsWith('/admin');
   
   // 店舗管理画面のパターン
-  // - 旧形式: /st0001/admin, /st0001/forms/*, etc.
-  // - UUID形式: /[uuid]/admin, /[uuid]/forms/*, etc.
-  const storeAdminPattern = /^\/(st\d{4}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(admin|forms|reservations)/;
+  // - 6文字のランダム文字列: /[a-z0-9]{6}/(admin|forms|reservations)
+  // - 旧形式（後方互換性のため）: /st\d{4}/(admin|forms|reservations)
+  const storeAdminPattern = /^\/([a-z0-9]{6}|st\d{4})\/(admin|forms|reservations)/;
   
   // API 保護パターン (公開 API は除外)
   // - GET /api/forms/{formId} は公開（顧客向け）
@@ -59,7 +59,8 @@ export async function middleware(request: NextRequest) {
 
   // /admin ルート自体では認証チェックをスキップ（ページ内でログイン画面表示）
   // /admin/[storeId] も許可（サービス管理者の店舗詳細ページ）
-  if (pathname === '/admin' || pathname.match(/^\/admin\/[0-9a-f-]+$/)) {
+  // 6文字のランダム文字列または旧形式（st0001）に対応
+  if (pathname === '/admin' || pathname.match(/^\/admin\/([a-z0-9]{6}|st\d{4})$/)) {
     return NextResponse.next();
   }
 
@@ -93,8 +94,9 @@ export async function middleware(request: NextRequest) {
   }
 
   // 店舗 ID 抽出
-  const storeIdMatch = pathname.match(/\/st(\d{4})/);
-  const storeId = storeIdMatch ? `st${storeIdMatch[1]}` : null;
+  // 6文字のランダム文字列または旧形式（st0001）を抽出
+  const storeIdMatch = pathname.match(/\/([a-z0-9]{6}|st\d{4})\//);
+  const storeId = storeIdMatch ? storeIdMatch[1] : null;
   
   if (storeId) {
     // 店舗アクセス権限チェック
@@ -115,7 +117,8 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/admin/:path*', 
-    '/st:storeId*/(admin|forms|reservations)/:path*',
+    // 6文字のランダム文字列または旧形式（st0001）の店舗管理画面
+    '/:storeId([a-z0-9]{6}|st\\d{4})/(admin|forms|reservations)/:path*',
     // public-form API は除外（一般公開）
     '/((?!api/public-form)api)/(forms|stores|reservations)/:path*'
   ]

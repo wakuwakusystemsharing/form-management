@@ -1,7 +1,7 @@
 import type { Form } from './form';
 
 export interface Store {
-  id: string;                 // UUID (staging/production) or st形式 (local)
+  id: string;                 // 6文字のランダム文字列 (全環境共通)
   name: string;
   description?: string;
   owner_name: string;
