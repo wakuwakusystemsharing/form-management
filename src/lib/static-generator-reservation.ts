@@ -498,11 +498,11 @@ class BookingForm {
         }
         
         // テーブルヘッダー生成
-        let headerHTML = '<thead><tr><th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:2px solid #696969;font-size:0.75rem;vertical-align:middle;width:17%;box-sizing:border-box;">時間</th>';
+        let headerHTML = '<thead><tr><th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:1px solid #9ca3af;font-size:0.75rem;vertical-align:middle;width:17%;box-sizing:border-box;">時間</th>';
         weekDates.forEach(date => {
             const dayOfWeek = date.getDay();
             const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
-            headerHTML += \`<th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:2px solid #696969;font-size:0.75rem;vertical-align:middle;line-height:1.3;width:calc((100% - 17%) / 7);box-sizing:border-box;word-break:keep-all;white-space:normal;">\${date.getMonth() + 1}/\${date.getDate()}<br/>(\${dayNames[dayOfWeek]})</th>\`;
+            headerHTML += \`<th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:1px solid #9ca3af;font-size:0.75rem;vertical-align:middle;line-height:1.3;width:calc((100% - 17%) / 7);box-sizing:border-box;word-break:keep-all;white-space:normal;">\${date.getMonth() + 1}/\${date.getDate()}<br/>(\${dayNames[dayOfWeek]})</th>\`;
         });
         headerHTML += '</tr></thead>';
         
@@ -510,7 +510,7 @@ class BookingForm {
         let bodyHTML = '<tbody>';
         timeSlots.forEach(time => {
             bodyHTML += '<tr>';
-            bodyHTML += \`<td style="text-align:center;padding:0.25rem;border:2px solid #696969;font-size:0.75rem;background:#f9fafb;font-weight:500;">\${time}</td>\`;
+            bodyHTML += \`<td style="text-align:center;padding:0.25rem;border:1px solid #9ca3af;font-size:0.75rem;background:#f9fafb;font-weight:500;">\${time}</td>\`;
             
             weekDates.forEach((date, dateIndex) => {
         const dateStr = date.toISOString().split('T')[0];
@@ -564,7 +564,7 @@ class BookingForm {
                     data-date="\${dateStr}" 
                     data-time="\${time}"
                     class="calendar-cell \${isSelected ? 'selected' : ''}"
-                    style="text-align:center;padding:0.25rem;border:2px solid #696969;font-size:0.75rem;cursor:\${cursor};background:\${bgColor};color:\${textColor};"
+                    style="text-align:center;padding:0.25rem;border:1px solid #9ca3af;font-size:0.75rem;cursor:\${cursor};background:\${bgColor};color:\${textColor};"
                     \${hoverStyle}
                     onclick="window.bookingForm.handleDateTimeSelect('\${dateStr}', '\${time}', \${isAvailable && !isPast})"
                 >\${isAvailable && !isPast ? '○' : '×'}</td>\`;
@@ -1587,7 +1587,7 @@ if (document.readyState === 'loading') {
             padding: 0.25rem;
             vertical-align: middle;
             box-sizing: border-box;
-            border: 2px solid #696969;
+            border: 1px solid #9ca3af;
             word-break: keep-all;
             white-space: normal;
         }
