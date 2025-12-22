@@ -19,8 +19,11 @@ export default async function Home() {
   const cookieStore = await cookies()
   const accessToken = cookieStore.get('sb-access-token')?.value
 
+  console.log('[Home] Access token:', accessToken ? 'Present' : 'Missing')
+
   if (!accessToken) {
     // 未認証 → /login にリダイレクト
+    console.log('[Home] No access token, redirecting to /login')
     redirect('/login?redirect=/admin')
   }
 
@@ -28,6 +31,7 @@ export default async function Home() {
   const supabase = createAuthenticatedClient(accessToken)
   
   if (!supabase) {
+    console.log('[Home] Failed to create Supabase client')
     redirect('/login?redirect=/admin')
   }
 
@@ -35,14 +39,17 @@ export default async function Home() {
   const { data: { user }, error: userError } = await supabase.auth.getUser()
   
   if (userError || !user) {
+    console.log('[Home] Failed to get user:', userError?.message)
     redirect('/login?redirect=/admin')
   }
 
   // サービス管理者チェック
   if (!ADMIN_EMAILS.includes(user.email || '')) {
+    console.log('[Home] User not authorized:', user.email)
     redirect('/login?redirect=/admin')
   }
 
   // 認証済み → /admin にリダイレクト
+  console.log('[Home] User authenticated, redirecting to /admin')
   redirect('/admin')
 }

@@ -22,7 +22,10 @@ export async function POST(request: NextRequest) {
   try {
     const { accessToken } = await request.json();
 
+    console.log('[SetCookie] Received request, accessToken:', accessToken ? 'Present' : 'Missing');
+
     if (!accessToken) {
+      console.error('[SetCookie] Access token missing');
       return NextResponse.json(
         { error: 'アクセストークンが必要です' },
         { 
@@ -34,6 +37,9 @@ export async function POST(request: NextRequest) {
         }
       );
     }
+
+    const isSecure = request.url.startsWith('https://');
+    console.log('[SetCookie] Setting cookie, secure:', isSecure, 'url:', request.url);
 
     const response = NextResponse.json(
       { success: true },
@@ -49,7 +55,6 @@ export async function POST(request: NextRequest) {
     // HttpOnly: false にすることで、クライアント側からも読み取り可能（ミドルウェアで使用）
     // Secure: true にすることで、HTTPS接続時のみ送信（staging/productionはHTTPS）
     // SameSite: 'lax' にすることで、CSRF攻撃を防ぐ
-    const isSecure = request.url.startsWith('https://');
     response.cookies.set('sb-access-token', accessToken, {
       httpOnly: false, // ミドルウェアで読み取るため
       secure: isSecure, // HTTPS接続時のみ
@@ -58,6 +63,7 @@ export async function POST(request: NextRequest) {
       path: '/',
     });
 
+    console.log('[SetCookie] Cookie set successfully');
     return response;
   } catch (error) {
     console.error('Cookie設定エラー:', error);

@@ -116,8 +116,11 @@ function LoginForm() {
 
       // セッションからアクセストークンを取得してCookieに設定
       const accessToken = signInData.session.access_token;
+      console.log('[Login] Access token received:', accessToken ? 'Yes' : 'No');
+      
       if (accessToken) {
         try {
+          console.log('[Login] Setting cookie...');
           const cookieResponse = await fetch('/api/auth/set-cookie', {
             method: 'POST',
             headers: {
@@ -127,31 +130,37 @@ function LoginForm() {
             body: JSON.stringify({ accessToken }),
           });
 
+          console.log('[Login] Cookie response status:', cookieResponse.status);
+
           if (!cookieResponse.ok) {
             const errorText = await cookieResponse.text();
-            console.error('Cookie設定に失敗:', cookieResponse.status, errorText);
+            console.error('[Login] Cookie設定に失敗:', cookieResponse.status, errorText);
             setError('Cookie設定に失敗しました。ページを再読み込みしてください。');
             setLoading(false);
             return;
           }
           
-          console.log('Cookie設定成功');
+          const cookieData = await cookieResponse.json();
+          console.log('[Login] Cookie設定成功:', cookieData);
+          
+          // Cookie設定成功後、少し待ってからリダイレクト
+          // これにより、Cookieが確実に設定される
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          console.log('[Login] Redirecting to:', redirect);
+          window.location.href = redirect;
         } catch (cookieError) {
-          console.error('Cookie設定エラー:', cookieError);
+          console.error('[Login] Cookie設定エラー:', cookieError);
           setError('Cookie設定に失敗しました。ページを再読み込みしてください。');
           setLoading(false);
           return;
         }
       } else {
-        console.error('アクセストークンが見つかりません');
+        console.error('[Login] アクセストークンが見つかりません');
         setError('アクセストークンの取得に失敗しました');
         setLoading(false);
         return;
       }
-
-      // Cookie設定完了後、フルページリロードでリダイレクト
-      // これにより、ミドルウェアがCookieを正しく読み取れる
-      window.location.href = redirect;
     } catch (err) {
       console.error('Login error:', err);
       setError('ログインに失敗しました');
