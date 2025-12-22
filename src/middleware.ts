@@ -28,19 +28,6 @@ const ADMIN_EMAILS = [
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // OPTIONSリクエスト（CORSプリフライト）は許可
-  if (request.method === 'OPTIONS') {
-    return new NextResponse(null, {
-      status: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Max-Age': '86400',
-      },
-    });
-  }
-
   // ローカル開発環境では認証をスキップ
   if (isLocal()) {
     return NextResponse.next();
@@ -70,39 +57,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // /admin ルート自体でも完全な認証チェックを実行
-  // /admin/[storeId] も同様（サービス管理者の店舗詳細ページ）
+  // /admin ルート自体では認証チェックをスキップ（ページ内でログイン画面表示）
+  // /admin/[storeId] も許可（サービス管理者の店舗詳細ページ）
   // 6文字のランダム文字列または旧形式（st0001）に対応
   if (pathname === '/admin' || pathname.match(/^\/admin\/([a-z0-9]{6}|st\d{4})$/)) {
-    // アクセストークン取得
-    const accessToken = request.cookies.get('sb-access-token')?.value;
-    
-    if (!accessToken) {
-      // 未認証 → /login にリダイレクト
-      return NextResponse.redirect(new URL('/login?redirect=' + encodeURIComponent(pathname), request.url));
-    }
-
-    // 認証済みクライアント作成
-    const supabase = createAuthenticatedClient(accessToken);
-    
-    if (!supabase) {
-      // Supabase 接続エラー
-      return NextResponse.redirect(new URL('/login?redirect=' + encodeURIComponent(pathname), request.url));
-    }
-
-    // ユーザー情報取得
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      // セッション無効 → /login にリダイレクト
-      return NextResponse.redirect(new URL('/login?redirect=' + encodeURIComponent(pathname), request.url));
-    }
-
-    // サービス管理者アカウント確認
-    if (!ADMIN_EMAILS.includes(user.email || '')) {
-      return NextResponse.redirect(new URL('/login?redirect=' + encodeURIComponent(pathname), request.url));
-    }
-
     return NextResponse.next();
   }
 
@@ -110,8 +68,8 @@ export async function middleware(request: NextRequest) {
   const accessToken = request.cookies.get('sb-access-token')?.value;
   
   if (!accessToken) {
-    // 未認証 → /login にリダイレクト
-    return NextResponse.redirect(new URL('/login?redirect=' + encodeURIComponent(pathname), request.url));
+    // 未認証 → /admin にリダイレクト
+    return NextResponse.redirect(new URL('/admin', request.url));
   }
 
   // 認証済みクライアント作成
@@ -119,20 +77,20 @@ export async function middleware(request: NextRequest) {
   
   if (!supabase) {
     // Supabase 接続エラー
-    return NextResponse.redirect(new URL('/login?redirect=' + encodeURIComponent(pathname), request.url));
+    return NextResponse.redirect(new URL('/admin', request.url));
   }
 
   // ユーザー情報取得
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   
   if (userError || !user) {
-    // セッション無効 → /login にリダイレクト
-    return NextResponse.redirect(new URL('/login?redirect=' + encodeURIComponent(pathname), request.url));
+    // セッション無効 → /admin にリダイレクト
+    return NextResponse.redirect(new URL('/admin', request.url));
   }
 
   // サービス管理者ルートの場合は管理者アカウント確認
   if (isServiceAdminRoute && !ADMIN_EMAILS.includes(user.email || '')) {
-    return NextResponse.redirect(new URL('/login?redirect=' + encodeURIComponent(pathname), request.url));
+    return NextResponse.redirect(new URL('/admin', request.url));
   }
 
   // 店舗 ID 抽出
