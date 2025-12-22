@@ -101,6 +101,10 @@ export class SupabaseStorageDeployer {
       const proxyUrl = `${baseUrl}/api/public-form/${storagePath}?v=${timestamp}`;
 
       console.log(`✅ [${env.toUpperCase()}] Form deployed to Supabase Storage`);
+      console.log(`   Environment: ${getAppEnvironment()}`);
+      console.log(`   NEXT_PUBLIC_APP_ENV: ${process.env.NEXT_PUBLIC_APP_ENV}`);
+      console.log(`   NEXT_PUBLIC_PRODUCTION_URL: ${process.env.NEXT_PUBLIC_PRODUCTION_URL}`);
+      console.log(`   Base URL: ${baseUrl}`);
       console.log(`   Direct URL: ${directUrl}`);
       console.log(`   Proxy URL: ${proxyUrl}`);
       
