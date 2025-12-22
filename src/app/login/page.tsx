@@ -77,27 +77,49 @@ function LoginForm() {
         return;
       }
 
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (signInError) {
+        console.error('Sign in error:', signInError);
         setError('メールアドレスまたはパスワードが正しくありません');
         setLoading(false);
         return;
       }
 
+      // ログイン成功後、セッションを確認
+      if (!signInData.session) {
+        setError('セッションの取得に失敗しました');
+        setLoading(false);
+        return;
+      }
+
       // セッションからアクセストークンを取得してCookieに設定
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        await fetch('/api/auth/set-cookie', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ accessToken: session.access_token }),
-        });
+      const accessToken = signInData.session.access_token;
+      if (accessToken) {
+        try {
+          const cookieResponse = await fetch('/api/auth/set-cookie', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({ accessToken }),
+          });
+
+          if (!cookieResponse.ok) {
+            const errorText = await cookieResponse.text();
+            console.error('Cookie設定に失敗:', cookieResponse.status, errorText);
+            // Cookie設定に失敗してもログインは続行（セッションは有効）
+          }
+        } catch (cookieError) {
+          console.error('Cookie設定エラー:', cookieError);
+          // Cookie設定に失敗してもログインは続行（セッションは有効）
+        }
+      } else {
+        console.error('アクセストークンが見つかりません');
       }
 
       // MFAが必要かチェック
@@ -172,27 +194,47 @@ function LoginForm() {
       }
 
       // セッションをリフレッシュ
-      const { data: { session } } = await supabase.auth.refreshSession();
+      const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
+      
+      if (refreshError || !session) {
+        setError('セッションの更新に失敗しました');
+        setLoading(false);
+        return;
+      }
       
       // アクセストークンをCookieに設定
-      if (session?.access_token) {
-        await fetch('/api/auth/set-cookie', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ accessToken: session.access_token }),
-        });
+      const accessToken = session.access_token;
+      if (accessToken) {
+        try {
+          const cookieResponse = await fetch('/api/auth/set-cookie', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({ accessToken }),
+          });
+
+          if (!cookieResponse.ok) {
+            const errorText = await cookieResponse.text();
+            console.error('Cookie設定に失敗:', cookieResponse.status, errorText);
+            // Cookie設定に失敗してもログインは続行（セッションは有効）
+          }
+        } catch (cookieError) {
+          console.error('Cookie設定エラー:', cookieError);
+          // Cookie設定に失敗してもログインは続行（セッションは有効）
+        }
       }
       
       // MFAレベルを再確認
       const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
       
       // MFAが完了している場合のみリダイレクト
-      if (session?.user && aalData?.currentLevel === 'aal2') {
+      if (session.user && aalData?.currentLevel === 'aal2') {
         router.push(redirect);
       } else {
         setError('MFA認証が完了していません');
+        setLoading(false);
       }
     } catch (err) {
       console.error('MFA verify error:', err);

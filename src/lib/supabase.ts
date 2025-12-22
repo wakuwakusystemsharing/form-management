@@ -99,7 +99,13 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
     return null;
   }
 
-  supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey);
+  supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true, // セッションをローカルストレージに保存
+      autoRefreshToken: true, // トークンを自動リフレッシュ
+      detectSessionInUrl: true, // URLからセッションを検出
+    },
+  });
   console.log('[Supabase] Client initialized for staging/production');
   
   return supabaseClient;
