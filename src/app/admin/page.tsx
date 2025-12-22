@@ -110,8 +110,9 @@ export default function AdminPage() {
             await loadStores();
           }
         } else if (isMounted) {
-          // 未認証 → /login にリダイレクト
-          router.push('/login?redirect=/admin');
+          // 未認証 → /login にリダイレクト（ミドルウェアでも処理されるが、念のため）
+          console.log('[Admin] No session, redirecting to login');
+          window.location.href = '/login?redirect=/admin';
         }
       } catch (error) {
         console.error('Error checking authentication:', error);
