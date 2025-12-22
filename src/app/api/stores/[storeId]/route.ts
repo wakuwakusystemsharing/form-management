@@ -192,8 +192,25 @@ export async function DELETE(
         );
       }
 
-      // 関連するフォームファイルを削除
+      // 関連フォーム数をチェック
       const formsFile = path.join(DATA_DIR, `forms_${storeId}.json`);
+      let formCount = 0;
+      if (fs.existsSync(formsFile)) {
+        const formsData = JSON.parse(fs.readFileSync(formsFile, 'utf-8'));
+        formCount = Array.isArray(formsData) ? formsData.length : 0;
+      }
+
+      // フォーム数が0より大きい場合は削除不可
+      if (formCount > 0) {
+        return NextResponse.json(
+          { 
+            error: `店舗を削除できません。関連するフォームが ${formCount} 件存在します。先にすべてのフォームを削除してください。` 
+          },
+          { status: 400 }
+        );
+      }
+
+      // 関連するフォームファイルを削除（念のため）
       if (fs.existsSync(formsFile)) {
         fs.unlinkSync(formsFile);
       }
@@ -202,7 +219,7 @@ export async function DELETE(
       stores.splice(storeIndex, 1);
       writeStores(stores);
 
-      return NextResponse.json({ message: '店舗と関連フォームを削除しました' });
+      return NextResponse.json({ message: '店舗を削除しました' });
     }
 
     // staging/production: Supabase から削除
@@ -211,6 +228,52 @@ export async function DELETE(
       return NextResponse.json(
         { error: 'Supabase 接続エラー' },
         { status: 500 }
+      );
+    }
+
+    // 関連フォーム数をチェック（予約フォーム）
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { count: formsCount, error: formsCountError } = await (adminClient as any)
+      .from('forms')
+      .select('*', { count: 'exact', head: true })
+      .eq('store_id', storeId);
+
+    if (formsCountError) {
+      console.error('[API] Forms count error:', formsCountError);
+      return NextResponse.json(
+        { error: 'フォーム数の確認に失敗しました' },
+        { status: 500 }
+      );
+    }
+
+    // 関連アンケートフォーム数をチェック
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { count: surveyFormsCount, error: surveyFormsCountError } = await (adminClient as any)
+      .from('survey_forms')
+      .select('*', { count: 'exact', head: true })
+      .eq('store_id', storeId);
+
+    if (surveyFormsCountError) {
+      console.error('[API] Survey forms count error:', surveyFormsCountError);
+      return NextResponse.json(
+        { error: 'アンケートフォーム数の確認に失敗しました' },
+        { status: 500 }
+      );
+    }
+
+    const totalFormCount = (formsCount || 0) + (surveyFormsCount || 0);
+
+    // フォーム数が0より大きい場合は削除不可
+    if (totalFormCount > 0) {
+      const formsMessage = formsCount > 0 ? `予約フォーム ${formsCount} 件` : '';
+      const surveyMessage = surveyFormsCount > 0 ? `アンケートフォーム ${surveyFormsCount} 件` : '';
+      const formList = [formsMessage, surveyMessage].filter(Boolean).join('、');
+      
+      return NextResponse.json(
+        { 
+          error: `店舗を削除できません。関連するフォームが存在します（${formList}）。先にすべてのフォームを削除してください。` 
+        },
+        { status: 400 }
       );
     }
 
@@ -229,7 +292,7 @@ export async function DELETE(
       );
     }
 
-    return NextResponse.json({ message: '店舗と関連フォームを削除しました' });
+    return NextResponse.json({ message: '店舗を削除しました' });
   } catch (error) {
     console.error('Store delete error:', error);
     return NextResponse.json(
