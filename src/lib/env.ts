@@ -36,10 +36,27 @@ export function getBaseUrl(): string {
   }
   
   if (isStaging()) {
-    return process.env.NEXT_PUBLIC_STAGING_URL || 'https://line-schedule-app-staging.vercel.app';
+    return process.env.NEXT_PUBLIC_STAGING_URL || 'https://form-management-staging.vercel.app';
   }
   
-  return process.env.NEXT_PUBLIC_PRODUCTION_URL || 'https://line-schedule-app.vercel.app';
+  // Production環境: カスタムドメインを優先使用
+  // VERCEL_URL がプレビューデプロイメントURL（-wakuwakusystems-projects.vercel.app）の場合でも
+  // カスタムドメインを強制的に使用
+  const vercelUrl = process.env.VERCEL_URL;
+  const isPreviewDeployment = vercelUrl && vercelUrl.includes('-wakuwakusystems-projects.vercel.app');
+  
+  // 環境変数が明示的に設定されている場合はそれを使用
+  if (process.env.NEXT_PUBLIC_PRODUCTION_URL) {
+    return process.env.NEXT_PUBLIC_PRODUCTION_URL;
+  }
+  
+  // プレビューデプロイメントでもカスタムドメインを使用
+  if (isPreviewDeployment || isProduction()) {
+    return 'https://nas-rsv.com';
+  }
+  
+  // フォールバック
+  return 'https://nas-rsv.com';
 }
 
 export function getEnvironmentBadge(): { label: string; color: string } {
