@@ -4,7 +4,7 @@
  */
 
 import { createAdminClient } from './supabase';
-import { shouldUseMockBlob, isProduction, getAppEnvironment } from './env';
+import { shouldUseMockBlob, isProduction, getAppEnvironment, getBaseUrl } from './env';
 import fs from 'fs';
 import path from 'path';
 
@@ -95,9 +95,8 @@ export class SupabaseStorageDeployer {
       // プロキシURL（Next.jsのAPIルート経由）を生成
       // これにより正しいContent-Typeヘッダーで配信される
       // キャッシュバスティングのため、タイムスタンプをクエリパラメータに追加
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-                      process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
-                      'http://localhost:3000';
+      // 環境に応じた適切なベースURLを使用（カスタムドメイン対応）
+      const baseUrl = getBaseUrl();
       const timestamp = Date.now();
       const proxyUrl = `${baseUrl}/api/public-form/${storagePath}?v=${timestamp}`;
 

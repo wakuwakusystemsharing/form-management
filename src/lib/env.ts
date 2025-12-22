@@ -36,10 +36,11 @@ export function getBaseUrl(): string {
   }
   
   if (isStaging()) {
-    return process.env.NEXT_PUBLIC_STAGING_URL || 'https://line-schedule-app-staging.vercel.app';
+    return process.env.NEXT_PUBLIC_STAGING_URL || 'https://form-management-staging.vercel.app';
   }
   
-  return process.env.NEXT_PUBLIC_PRODUCTION_URL || 'https://line-schedule-app.vercel.app';
+  // Production環境: カスタムドメインを優先使用
+  return process.env.NEXT_PUBLIC_PRODUCTION_URL || 'https://nas-rsv.com';
 }
 
 export function getEnvironmentBadge(): { label: string; color: string } {

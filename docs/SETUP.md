@@ -144,23 +144,35 @@ git push origin staging
    - Public bucket: 有効（匿名ユーザーがアクセス可能）
    - File size limit: 適切なサイズを設定
 
-### 2. Vercel 本番環境変数設定
+### 2. Vercel カスタムドメイン設定
+
+1. Vercel Dashboard > Settings > Domains にアクセス
+2. **Add Domain** をクリック
+3. カスタムドメイン `nas-rsv.com` を入力
+4. DNS設定を確認（AレコードまたはCNAMEレコードの設定が必要）
+5. ドメインが有効化されるまで待機（数分〜数時間）
+
+> **📌 重要**: カスタムドメインが有効化されると、フォームのURLが自動的にカスタムドメインを使用するようになります。
+
+### 3. Vercel 本番環境変数設定
 
 同じ Vercel プロジェクトで、Vercel Dashboard > Settings > Environment Variables で **Production** にチェック:
 
 ```
 NEXT_PUBLIC_APP_ENV=production
+NEXT_PUBLIC_PRODUCTION_URL=https://nas-rsv.com (カスタムドメイン)
 NEXT_PUBLIC_SUPABASE_URL=https://[新規プロジェクト].supabase.co (本番 Supabase URL、Staging と別プロジェクト)
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (本番プロジェクトの anon key)
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (本番プロジェクトの service_role key)
 ```
 
 **重要**: 
+- `NEXT_PUBLIC_PRODUCTION_URL` をカスタムドメイン `https://nas-rsv.com` に設定することで、フォームのURLがカスタムドメインを使用します
 - Production 環境は `main` ブランチのデプロイに適用されます
 - **Staging と Production で異なる Supabase プロジェクトを使用**（環境変数で自動切り替え）
 - Supabase Storage も環境ごとに分離（`staging/forms/` と `prod/forms/`）
 
-### 3. Supabase Storage (本番用)
+### 4. Supabase Storage (本番用)
 
 > **注意**: 現在は Supabase Storage を使用しています（Vercel Blob は非推奨）
 

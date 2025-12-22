@@ -405,20 +405,22 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 
 | 環境 | URL | ブランチ | 用途 | データベース | Storage |
 |------|-----|---------|------|-------------|---------|
-| **Production（本番）** | https://form-management-seven.vercel.app | `main` | 商用・実運用 | Supabase Production (新規プロジェクト、Pro プラン) | Supabase Storage Production |
+| **Production（本番）** | https://nas-rsv.com (カスタムドメイン) | `main` | 商用・実運用 | Supabase Production (新規プロジェクト、Pro プラン) | Supabase Storage Production |
 | **Staging（プレビュー）** | https://form-management-staging.vercel.app | `staging` | テスト・検証 | Supabase Staging (既存プロジェクト) | Supabase Storage Staging |
 | **Local（開発）** | http://localhost:3000 | `staging` | ローカル開発 | JSON ファイル | Mock (ローカルファイル) |
 
 ### 環境別の主な違い
 
-#### 🟢 Production（form-management-seven.vercel.app）
+#### 🟢 Production（https://nas-rsv.com）
 - **用途**: 商用・実運用環境
+- **URL**: カスタムドメイン `https://nas-rsv.com` を使用
 - **認証**: Supabase Auth 本番環境
 - **データベース**: Supabase Production プロジェクト（**新規作成、Pro プラン推奨**）
 - **ストレージ**: Supabase Storage Production (`prod/forms/{storeId}/{formId}/config/current.html`)
 - **デプロイ**: `main` ブランチへマージ時に自動デプロイ
 - **RLS**: Row Level Security 有効
 - **特徴**: 本番データが保存される、実際のユーザーが利用、**staging とは完全に分離**
+- **フォームURL**: `https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{formId}/config/current.html`
 
 #### 🟡 Staging（form-management-staging.vercel.app）
 - **用途**: テスト・検証・デモ
