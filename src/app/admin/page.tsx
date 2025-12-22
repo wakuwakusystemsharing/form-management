@@ -18,15 +18,9 @@ export default function AdminPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
-  const [loginError, setLoginError] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showAddStore, setShowAddStore] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [mfaStep, setMfaStep] = useState<'login' | 'mfa-challenge'>('login');
-  const [mfaCode, setMfaCode] = useState('');
-  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
   const [showMFASettings, setShowMFASettings] = useState(false);
 
   // 新しいStore用の状態
@@ -93,8 +87,7 @@ export default function AdminPage() {
         if (currentUser && !ADMIN_EMAILS.includes(currentUser.email || '')) {
           await supabase.auth.signOut();
           if (isMounted) {
-            setUser(null);
-            setMfaStep('login');
+            router.push('/login?redirect=/admin');
           }
           return;
         }
@@ -104,28 +97,21 @@ export default function AdminPage() {
           const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
           
           if (aalData?.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
-            // MFAが必要だが完了していない場合
-            const { data: factorsData } = await supabase.auth.mfa.listFactors();
-            if (factorsData?.totp && factorsData.totp.length > 0) {
-              if (isMounted) {
-                setMfaFactorId(factorsData.totp[0].id);
-                setMfaStep('mfa-challenge');
-                setUser(null); // MFA完了までユーザーをnullに
-              }
-              return;
+            // MFAが必要だが完了していない場合 → /login にリダイレクト
+            if (isMounted) {
+              router.push('/login?redirect=/admin');
             }
+            return;
           }
 
           // MFAが完了しているか不要な場合
           if (isMounted) {
             setUser(currentUser);
-            setMfaStep('login');
             await loadStores();
           }
         } else if (isMounted) {
-          setUser(null);
-          setMfaStep('login');
-          setLoading(false);
+          // 未認証 → /login にリダイレクト
+          router.push('/login?redirect=/admin');
         }
       } catch (error) {
         console.error('Error checking authentication:', error);
@@ -142,8 +128,7 @@ export default function AdminPage() {
 
       if (nextUser && !ADMIN_EMAILS.includes(nextUser.email || '')) {
         supabase.auth.signOut();
-        setUser(null);
-        setMfaStep('login');
+        router.push('/login?redirect=/admin');
         return;
       }
 
@@ -152,23 +137,17 @@ export default function AdminPage() {
         const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         
         if (aalData?.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
-          // MFAが必要だが完了していない場合
-          const { data: factorsData } = await supabase.auth.mfa.listFactors();
-          if (factorsData?.totp && factorsData.totp.length > 0) {
-            setMfaFactorId(factorsData.totp[0].id);
-            setMfaStep('mfa-challenge');
-            setUser(null); // MFA完了までユーザーをnullに
-            return;
-          }
+          // MFAが必要だが完了していない場合 → /login にリダイレクト
+          router.push('/login?redirect=/admin');
+          return;
         }
 
         // MFAが完了しているか不要な場合
         setUser(nextUser);
-        setMfaStep('login');
         loadStores();
       } else {
-        setUser(null);
-        setMfaStep('login');
+        // 未認証 → /login にリダイレクト
+        router.push('/login?redirect=/admin');
       }
     });
 
@@ -178,130 +157,13 @@ export default function AdminPage() {
     };
   }, [loadStores]);
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setLoginError('');
-
-    if (!ADMIN_EMAILS.includes(loginForm.email)) {
-      setLoginError('このアカウントにはアクセス権限がありません');
-      setIsLoggingIn(false);
-      return;
-    }
-
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      setLoginError('認証サービスに接続できません');
-      setIsLoggingIn(false);
-      return;
-    }
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: loginForm.email,
-      password: loginForm.password,
-    });
-
-    if (error) {
-      setLoginError('メールアドレスまたはパスワードが正しくありません');
-      setIsLoggingIn(false);
-      return;
-    }
-
-    // MFAが必要かチェック
-    const { data: aalData, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    
-    if (!aalError && aalData) {
-      if (aalData.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
-        // MFAが必要 - TOTPのみチェック
-        const { data: factorsData } = await supabase.auth.mfa.listFactors();
-        
-        // TOTPベースのMFAのみ
-        if (factorsData?.totp && factorsData.totp.length > 0) {
-          setMfaFactorId(factorsData.totp[0].id);
-          setMfaStep('mfa-challenge');
-          setIsLoggingIn(false);
-          return;
-        }
-      }
-    }
-
-    setIsLoggingIn(false);
-  };
-
-  const handleMFAVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    setIsLoggingIn(true);
-
-    try {
-      if (!mfaFactorId) {
-        setLoginError('MFA設定が見つかりません');
-        setIsLoggingIn(false);
-        return;
-      }
-
-      const supabase = getSupabaseClient();
-      if (!supabase) {
-        setLoginError('認証サービスに接続できません');
-        setIsLoggingIn(false);
-        return;
-      }
-
-      // チャレンジ作成（TOTPの場合）
-      const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({
-        factorId: mfaFactorId,
-      });
-
-      if (challengeError || !challengeData) {
-        setLoginError('MFAチャレンジの作成に失敗しました');
-        setIsLoggingIn(false);
-        return;
-      }
-
-      // コード検証
-      const { error: verifyError } = await supabase.auth.mfa.verify({
-        factorId: mfaFactorId,
-        challengeId: challengeData.id,
-        code: mfaCode,
-      });
-
-      if (verifyError) {
-        setLoginError('認証コードが正しくありません');
-        setIsLoggingIn(false);
-        return;
-      }
-
-      // セッションをリフレッシュ
-      const { data: { session } } = await supabase.auth.refreshSession();
-      
-      // MFAレベルを再確認
-      const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      
-      // MFAが完了している場合のみユーザーを設定
-      if (session?.user && aalData?.currentLevel === 'aal2') {
-        setUser(session.user);
-        setMfaStep('login');
-        setMfaCode('');
-        setMfaFactorId(null);
-      } else {
-        setLoginError('MFA認証が完了していません');
-      }
-    } catch (err) {
-      console.error('MFA verify error:', err);
-      setLoginError('MFA認証に失敗しました');
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
 
   const handleSignOut = async () => {
     const supabase = getSupabaseClient();
     if (supabase) {
       await supabase.auth.signOut();
       setUser(null);
-      setMfaStep('login');
-      setMfaCode('');
-      setMfaFactorId(null);
+      router.push('/login?redirect=/admin');
     }
   };
 
@@ -320,139 +182,11 @@ export default function AdminPage() {
     );
   }
 
-  // 未認証時のログイン画面
-  if (!user) {
-    // MFAチャレンジ画面
-    if (mfaStep === 'mfa-challenge') {
-      return (
-        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-          <div className="max-w-md mx-auto px-4 py-16">
-            <div className="bg-white rounded-lg shadow-lg p-8">
-              <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                </div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">二要素認証</h1>
-                <p className="text-gray-600">認証アプリのコードを入力してください</p>
-              </div>
-
-              <form onSubmit={handleMFAVerify} className="space-y-6">
-                <div>
-                  <label htmlFor="mfaCode" className="block text-sm font-medium text-gray-700 mb-2">
-                    認証コード
-                  </label>
-                  <input
-                    id="mfaCode"
-                    type="text"
-                    value={mfaCode}
-                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="000000"
-                    maxLength={6}
-                    required
-                    autoFocus
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-2xl tracking-widest"
-                  />
-                  <p className="mt-2 text-xs text-gray-500 text-center">
-                    Google Authenticator、1Password、Authyなどの認証アプリから6桁のコードを入力してください
-                  </p>
-                </div>
-
-                {loginError && (
-                  <div className="text-red-600 text-sm text-center">{loginError}</div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isLoggingIn || mfaCode.length !== 6}
-                  className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isLoggingIn ? '認証中...' : '認証'}
-                </button>
-              </form>
-
-              <div className="mt-6 text-center">
-                <button
-                  onClick={() => {
-                    setMfaStep('login');
-                    setMfaCode('');
-                    setLoginError('');
-                  }}
-                  className="text-blue-600 hover:text-blue-700 text-sm transition-colors"
-                >
-                  ← ログインに戻る
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // 通常のログイン画面
+  // 未認証時は /login にリダイレクト（useEffectで処理）
+  if (!user && !loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-        <div className="max-w-md mx-auto px-4 py-16">
-          <div className="bg-white rounded-lg shadow-lg p-8">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">Need Appointment System</h1>
-              <p className="text-gray-600">店舗運営にとって「Need（必要不可欠）」な予約システム</p>
-            </div>
-
-            <form onSubmit={handleSignIn} className="space-y-6">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                  メールアドレス
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  required
-                  value={loginForm.email}
-                  onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="wakuwakusystemsharing@gmail.com"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                  パスワード
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  value={loginForm.password}
-                  onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              {loginError && (
-                <div className="text-red-600 text-sm text-center">{loginError}</div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isLoggingIn}
-                className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoggingIn ? 'ログイン中...' : 'ログイン'}
-              </button>
-            </form>
-
-            <div className="mt-6 text-xs text-gray-500 text-center">
-              <p>許可されたアカウントのみアクセス可能</p>
-            </div>
-          </div>
-        </div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-lg text-gray-600">リダイレクト中...</div>
       </div>
     );
   }
