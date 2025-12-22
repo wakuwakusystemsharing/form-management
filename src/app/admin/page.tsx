@@ -94,16 +94,38 @@ export default function AdminPage() {
           await supabase.auth.signOut();
           if (isMounted) {
             setUser(null);
+            setMfaStep('login');
           }
-        } else {
+          return;
+        }
+
+        if (currentUser) {
+          // MFAレベルをチェック
+          const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+          
+          if (aalData?.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
+            // MFAが必要だが完了していない場合
+            const { data: factorsData } = await supabase.auth.mfa.listFactors();
+            if (factorsData?.totp && factorsData.totp.length > 0) {
+              if (isMounted) {
+                setMfaFactorId(factorsData.totp[0].id);
+                setMfaStep('mfa-challenge');
+                setUser(null); // MFA完了までユーザーをnullに
+              }
+              return;
+            }
+          }
+
+          // MFAが完了しているか不要な場合
           if (isMounted) {
             setUser(currentUser);
-          }
-          if (currentUser) {
+            setMfaStep('login');
             await loadStores();
-          } else if (isMounted) {
-            setLoading(false);
           }
+        } else if (isMounted) {
+          setUser(null);
+          setMfaStep('login');
+          setLoading(false);
         }
       } catch (error) {
         console.error('Error checking authentication:', error);
@@ -115,17 +137,38 @@ export default function AdminPage() {
 
     initialize();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const nextUser = session?.user ?? null;
 
       if (nextUser && !ADMIN_EMAILS.includes(nextUser.email || '')) {
         supabase.auth.signOut();
         setUser(null);
-      } else {
-        setUser(nextUser);
-        if (nextUser) {
-          loadStores();
+        setMfaStep('login');
+        return;
+      }
+
+      if (nextUser) {
+        // MFAレベルをチェック
+        const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        
+        if (aalData?.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
+          // MFAが必要だが完了していない場合
+          const { data: factorsData } = await supabase.auth.mfa.listFactors();
+          if (factorsData?.totp && factorsData.totp.length > 0) {
+            setMfaFactorId(factorsData.totp[0].id);
+            setMfaStep('mfa-challenge');
+            setUser(null); // MFA完了までユーザーをnullに
+            return;
+          }
         }
+
+        // MFAが完了しているか不要な場合
+        setUser(nextUser);
+        setMfaStep('login');
+        loadStores();
+      } else {
+        setUser(null);
+        setMfaStep('login');
       }
     });
 
@@ -229,10 +272,20 @@ export default function AdminPage() {
       }
 
       // セッションをリフレッシュ
-      await supabase.auth.refreshSession();
-      setMfaStep('login');
-      setMfaCode('');
-      setMfaFactorId(null);
+      const { data: { session } } = await supabase.auth.refreshSession();
+      
+      // MFAレベルを再確認
+      const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      
+      // MFAが完了している場合のみユーザーを設定
+      if (session?.user && aalData?.currentLevel === 'aal2') {
+        setUser(session.user);
+        setMfaStep('login');
+        setMfaCode('');
+        setMfaFactorId(null);
+      } else {
+        setLoginError('MFA認証が完了していません');
+      }
     } catch (err) {
       console.error('MFA verify error:', err);
       setLoginError('MFA認証に失敗しました');
@@ -245,6 +298,10 @@ export default function AdminPage() {
     const supabase = getSupabaseClient();
     if (supabase) {
       await supabase.auth.signOut();
+      setUser(null);
+      setMfaStep('login');
+      setMfaCode('');
+      setMfaFactorId(null);
     }
   };
 
