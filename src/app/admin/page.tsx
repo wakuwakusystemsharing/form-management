@@ -123,12 +123,17 @@ export default function AdminPage() {
 
     initialize();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const nextUser = session?.user ?? null;
 
+      console.log('[Admin] Auth state changed:', event, nextUser?.email);
+
       if (nextUser && !ADMIN_EMAILS.includes(nextUser.email || '')) {
-        supabase.auth.signOut();
-        router.push('/login?redirect=/admin');
+        console.log('[Admin] User not authorized:', nextUser.email);
+        await supabase.auth.signOut();
+        if (isMounted) {
+          router.push('/login?redirect=/admin');
+        }
         return;
       }
 
@@ -138,16 +143,25 @@ export default function AdminPage() {
         
         if (aalData?.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
           // MFAが必要だが完了していない場合 → /login にリダイレクト
-          router.push('/login?redirect=/admin');
+          console.log('[Admin] MFA required but not completed');
+          if (isMounted) {
+            router.push('/login?redirect=/admin');
+          }
           return;
         }
 
         // MFAが完了しているか不要な場合
-        setUser(nextUser);
-        loadStores();
+        console.log('[Admin] User authenticated:', nextUser.email);
+        if (isMounted) {
+          setUser(nextUser);
+          await loadStores();
+        }
       } else {
         // 未認証 → /login にリダイレクト
-        router.push('/login?redirect=/admin');
+        console.log('[Admin] User not authenticated');
+        if (isMounted) {
+          router.push('/login?redirect=/admin');
+        }
       }
     });
 
