@@ -95,6 +95,7 @@ export default function AdminPage() {
           if (isMounted) {
             setUser(null);
             setMfaStep('login');
+            setLoading(false);
           }
           return;
         }
@@ -111,6 +112,7 @@ export default function AdminPage() {
                 setMfaFactorId(factorsData.totp[0].id);
                 setMfaStep('mfa-challenge');
                 setUser(null); // MFA完了までユーザーをnullに
+                setLoading(false);
               }
               return;
             }
@@ -121,6 +123,7 @@ export default function AdminPage() {
             setUser(currentUser);
             setMfaStep('login');
             await loadStores();
+            setLoading(false);
           }
         } else if (isMounted) {
           setUser(null);
@@ -130,6 +133,8 @@ export default function AdminPage() {
       } catch (error) {
         console.error('Error checking authentication:', error);
         if (isMounted) {
+          setUser(null);
+          setMfaStep('login');
           setLoading(false);
         }
       }
