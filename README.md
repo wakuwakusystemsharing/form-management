@@ -56,8 +56,10 @@ src/
 │   ├── api/                     # API Routes
 │   │   ├── forms/[formId]/     # フォーム個別API
 │   │   ├── stores/             # 店舗関連API
+│   │   ├── surveys/            # アンケートフォームAPI
 │   │   ├── reservations/       # 予約管理API（全店舗）
-│   │   └── upload/             # 画像アップロードAPI
+│   │   ├── upload/             # 画像アップロードAPI
+│   │   └── public-form/        # 公開フォームプロキシAPI
 │   ├── admin/                  # サービス管理者画面
 │   │   ├── [storeId]/          # 店舗詳細管理
 │   │   └── reservations/       # 全予約一覧
@@ -74,8 +76,9 @@ src/
 │   └── Layout/                 # レイアウトコンポーネント
 ├── lib/                        # ユーティリティ・ビジネスロジック
 │   ├── memory-storage.ts       # 一時データストレージ
-│   ├── static-generator.ts     # 静的HTML生成
-│   └── vercel-blob-deployer.ts # Blob Storage管理
+│   ├── static-generator-reservation.ts  # 予約フォーム静的HTML生成
+│   ├── static-generator-survey.ts       # アンケートフォーム静的HTML生成
+│   └── supabase-storage-deployer.ts     # Supabase Storage管理
 ├── middleware.ts               # 認証ミドルウェア
 ├── types/                      # TypeScript型定義
 │   ├── form.ts                 # フォーム・予約型
@@ -197,7 +200,7 @@ git push origin feature/your-feature
    - **営業時間**: 営業時間、休業日設定
    - **オプション**: 性別選択、クーポン等の設定
 6. プレビューで確認後、公開
-7. 「再デプロイ」ボタンでVercel Blobに静的HTMLをデプロイ
+7. 「再デプロイ」ボタンでSupabase Storageに静的HTMLをデプロイ
 
 ### 顧客向けフォーム
 1. `/form/{formId}` でフォームにアクセス
@@ -226,7 +229,7 @@ git push origin feature/your-feature
 
 ### 画像アップロード
 - 対応形式: PNG, JPEG, GIF, WebP (最大5MB)
-- Vercel Blob Storage経由でアップロード
+- Supabase Storage経由でアップロード
 - パス: `menu_images/{storeId}/{menuId}.{ext}`
 - 顧客フォームでポップアップ表示
 
@@ -245,11 +248,15 @@ git push origin feature/your-feature
 - `/api/stores` - 店舗管理（CRUD）
 - `/api/stores/{storeId}` - 個別店舗操作
 - `/api/stores/{storeId}/forms` - 店舗別フォーム管理
+- `/api/stores/{storeId}/surveys` - 店舗別アンケートフォーム管理
 - `/api/stores/{storeId}/reservations` - 店舗別予約一覧
 - `/api/forms/{formId}` - フォーム個別操作
-- `/api/forms/{formId}/deploy` - Vercel Blobデプロイ
+- `/api/forms/{formId}/deploy` - Supabase Storageデプロイ
+- `/api/surveys/{id}` - アンケートフォーム個別操作
+- `/api/surveys/{id}/deploy` - アンケートフォームデプロイ
 - `/api/reservations` - 全予約管理（サービス管理者用）
 - `/api/upload/menu-image` - 画像アップロード
+- `/api/public-form/[...path]` - 公開フォームプロキシ（Supabase Storageから配信）
 - RESTful設計でCRUD操作対応
 
 ## 🚀 デプロイメント
@@ -266,16 +273,13 @@ npm run start
 # アプリケーション環境
 NEXT_PUBLIC_APP_ENV=local  # local | staging | production
 
-# Vercel Blob Storage（画像・静的デプロイ）
-BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
-
-# Supabase（データベース・認証）
+# Supabase（データベース・認証・ストレージ）
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-# その他
-NEXT_PUBLIC_APP_URL=https://your-domain.com
+# Production環境のカスタムドメイン（Production環境のみ）
+NEXT_PUBLIC_PRODUCTION_URL=https://nas-rsv.com
 ```
 
 **環境の自動切り替え**:
@@ -283,11 +287,11 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 - `NEXT_PUBLIC_APP_ENV=staging/production`: Supabase（本番環境）
 - 環境変数未設定時: URLから自動判定（localhost → local, vercel.app → staging/production）
 
-### Vercel Blob Storageの設定
-1. Vercelプロジェクトで「Storage」タブを開く
-2. 「Create Database」→「Blob」を選択
-3. トークンを生成して`.env.local`に追加
-4. 詳細: [Vercel Blob Documentation](https://vercel.com/docs/storage/vercel-blob)
+### Supabase Storageの設定
+1. Supabase Dashboard > Storage > Create bucket
+2. バケット名: `forms`
+3. Public bucket: 有効（匿名ユーザーがアクセス可能）
+4. 詳細: [`SUPABASE_STORAGE_SETUP.md`](docs/SUPABASE_STORAGE_SETUP.md) を参照
 
 ### デプロイ先候補
 - **Vercel**: Next.jsに最適化（推奨）
@@ -310,7 +314,7 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 
 ### デバッグ
 - フォーム構造の互換性問題 → API正規化を確認
-- 画像アップロード問題 → Vercel Blob設定を確認
+- 画像アップロード問題 → Supabase Storage設定を確認
 - GAS連携問題 → エンドポイントURL設定を確認
 - 認証エラー → ミドルウェアとSupabase設定を確認
 
@@ -338,10 +342,11 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 ### 主要テーブル
 
 #### `stores` テーブル
-- `id` (uuid) - 店舗ID（自動生成）
+- `id` (text) - 店舗ID（6文字ランダム文字列 `[a-z0-9]{6}` または UUID形式（既存データ））
 - `name` (text) - 店舗名
-- `owner_name`, `owner_email` (text) - オーナー情報
+- `owner_name`, `owner_email` (text, NOT NULL) - オーナー情報
 - `phone`, `address`, `website_url`, `description` (text, nullable) - 店舗詳細
+- `status` (text, default 'active') - 'active' | 'inactive'
 - `created_at`, `updated_at` (timestamptz)
 
 #### `forms` テーブル（予約フォーム）
@@ -360,16 +365,15 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 - `created_at`, `updated_at` (timestamptz)
 
 #### `survey_forms` テーブル（アンケートフォーム）
-- `id` (uuid) - アンケートフォームID（自動生成）
-- `store_id` (uuid, NOT NULL) - 店舗ID（外部キー）
+- `id` (text) - アンケートフォームID（12文字ランダム文字列）
+- `store_id` (text, NOT NULL) - 店舗ID（外部キー、6文字ランダム文字列またはUUID）
 - `name` (text, NOT NULL) - アンケートフォーム名
-- `config` (jsonb) - アンケート設定
+- `config` (jsonb) - アンケート設定（質問・UI設定を含む）
 - `status` (text, default 'draft') - 'active' | 'inactive' | 'paused' | 'draft'
 - `draft_status` (text, default 'none') - 'none' | 'draft' | 'ready_to_publish'
-- `public_url` (text, nullable) - 公開URL
-- `storage_url` (text, nullable) - ストレージURL
-- `static_deploy` (jsonb, nullable) - デプロイ情報
+- `static_deploy` (jsonb, nullable) - デプロイ情報（deploy_url, storage_url, deployed_at等）
 - `created_at`, `updated_at` (timestamptz)
+- `last_published_at` (timestamptz, nullable) - 最終公開日時
 
 #### `reservations` テーブル
 - `id` (uuid) - 予約ID（自動生成）
@@ -396,7 +400,11 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 - **顧客**: 予約作成のみ（公開API）
 
 ### ID形式
-- **Staging/Production**: UUID（Supabase自動生成）
+- **ストアID**:
+  - **新規作成**: 6文字ランダム文字列（`[a-z0-9]{6}`）
+  - **既存データ**: UUID形式または`st{timestamp}`形式（後方互換性維持）
+  - **ミドルウェア**: 両形式に対応（`/[a-z0-9]{6}/` または `/st\d{4}/`）
+- **フォームID**: 12文字ランダム文字列（予約フォーム・アンケートフォーム共通）
 - **Local開発**: `st{timestamp}` 形式（JSON互換性維持）
 
 ## 🌍 環境別設定

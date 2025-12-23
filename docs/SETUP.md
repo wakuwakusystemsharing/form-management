@@ -34,7 +34,6 @@ cp .env.local.example .env.local
 
 ```env
 NEXT_PUBLIC_APP_ENV=local
-# BLOB_READ_WRITE_TOKEN は未設定でOK (モックモード)
 # Supabase 設定も不要 (JSON ファイル永続化)
 
 # ローカル環境でログイン画面を確認する場合は、以下を設定:
@@ -111,7 +110,11 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (Staging プ�
 1. Supabase Dashboard > Storage > Create bucket（未作成の場合）
 2. バケット名: `forms`
 3. Public bucket: 有効（匿名ユーザーがアクセス可能）
-4. 環境変数は既に設定済み（`NEXT_PUBLIC_SUPABASE_URL` で自動的に staging プロジェクトの Storage に接続）
+4. File size limit: 適切なサイズを設定（デフォルト: 50MB）
+5. RLSポリシーを設定（詳細は [`SUPABASE_STORAGE_SETUP.md`](SUPABASE_STORAGE_SETUP.md) を参照）
+6. 環境変数は既に設定済み（`NEXT_PUBLIC_SUPABASE_URL` で自動的に staging プロジェクトの Storage に接続）
+
+**注意**: フォームHTMLは `staging/forms/{storeId}/{formId}/config/current.html` のパス構造で保存されます
 
 ### 4. デプロイ
 
@@ -188,7 +191,13 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (本番プロ�
 1. Supabase Dashboard > Storage > Create bucket
 2. バケット名: `forms`（staging と同じ名前でOK、プロジェクトが別なので分離される）
 3. Public bucket: 有効（匿名ユーザーがアクセス可能）
-4. 環境変数は既に設定済み（`NEXT_PUBLIC_SUPABASE_URL` で自動的に本番プロジェクトの Storage に接続）
+4. File size limit: 適切なサイズを設定（デフォルト: 50MB）
+5. RLSポリシーを設定（詳細は [`SUPABASE_STORAGE_SETUP.md`](SUPABASE_STORAGE_SETUP.md) を参照）
+6. 環境変数は既に設定済み（`NEXT_PUBLIC_SUPABASE_URL` で自動的に本番プロジェクトの Storage に接続）
+
+**注意**: 
+- フォームHTMLは `prod/forms/{storeId}/{formId}/config/current.html` のパス構造で保存されます
+- プロキシURL (`/api/public-form/*`) 経由でアクセスすることで、正しいContent-Typeで配信されます
 
 ### 4. デプロイ
 
@@ -241,13 +250,13 @@ pnpm build
 
 ## 🛠 トラブルシューティング
 
-### Blob デプロイエラー
+### Supabase Storage デプロイエラー
 
 ```
-Error: BLOB_READ_WRITE_TOKEN is not set
+Error: Supabase クライアントの初期化に失敗しました
 ```
 
-→ Vercel Dashboard で環境変数を設定してください
+→ Vercel Dashboard で環境変数（`NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`）を設定してください
 
 ### Supabase 接続エラー
 
@@ -256,6 +265,10 @@ Error: Missing environment variables
 ```
 
 → `.env.local` または Vercel 環境変数で Supabase URL/Key を設定
+
+### フォームが表示されない
+
+→ Supabase Storage の RLSポリシーを確認してください（詳細は [`SUPABASE_STORAGE_SETUP.md`](SUPABASE_STORAGE_SETUP.md) を参照）
 
 ### ビルドエラー
 
