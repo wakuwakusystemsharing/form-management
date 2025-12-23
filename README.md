@@ -146,25 +146,31 @@ pnpm dev
 ### 開発フロー（実際の作業）
 
 ```bash
-# 1. 新機能の開発開始
-git checkout staging
-git pull origin staging
-git checkout -b feature/your-feature
+# 1. 新機能の開発開始（devブランチで開発）
+git checkout dev
+git pull origin dev
+git add .
+git commit -m "feat: 新機能追加"
+git push origin dev  # 直接プッシュ可能
 
-# 2. 開発
+# 2. ローカルで開発
 pnpm dev  # ローカルで開発
 
 # 3. Staging で確認
-git add .
-git commit -m "feat: 新機能追加"
-git push origin feature/your-feature
-# → staging にマージして確認
+# GitHub で Pull Request を作成: dev → staging
+# レビュー & マージ後、Staging環境で動作確認
 
 # 4. 本番デプロイ
-# staging → main の Pull Request を作成してマージ
+# GitHub で Pull Request を作成: staging → main
+# レビュー必須（1名以上、推奨: 2名）& マージ
 ```
 
-詳細は [`WORKFLOW.md`](WORKFLOW.md) を参照
+**🔒 ブランチ保護ルール**:
+- `main` (Production): 直接プッシュ禁止、`staging` からのPRのみ
+- `staging`: 直接プッシュ禁止、`dev` または `feature/*` からのPRのみ
+- `dev`: 直接プッシュ可能（開発用）
+
+詳細は [`docs/WORKFLOW.md`](docs/WORKFLOW.md) と [`docs/BRANCH_PROTECTION.md`](docs/BRANCH_PROTECTION.md) を参照
 
 ### 利用可能なコマンド
 
@@ -439,6 +445,15 @@ NEXT_PUBLIC_PRODUCTION_URL=https://nas-rsv.com
 - **RLS**: Row Level Security 有効
 - **特徴**: 開発チーム向け、新機能テスト、PR レビュー用、**production とは完全に分離**
 
+#### 🟠 Development（devブランチ - Vercel Preview）
+- **用途**: 開発環境・機能開発・実験的機能のテスト
+- **認証**: Supabase Auth 開発環境
+- **データベース**: Supabase Staging プロジェクトの **devブランチ**（ブランチ機能を使用）
+- **ストレージ**: Supabase Storage Development (`dev/forms/{storeId}/{formId}/config/current.html`)
+- **デプロイ**: `dev` ブランチへプッシュ時に自動デプロイ（Vercel Preview環境）
+- **RLS**: Row Level Security 有効
+- **特徴**: 開発中の機能をテスト、production/stagingとは完全に分離、**Supabaseブランチ機能を使用**、**本番環境への影響を回避**
+
 #### 🔵 Local（localhost:3000）
 - **用途**: ローカル開発・デバッグ
 - **認証**: スキップ（全機能アクセス可能）
@@ -461,12 +476,21 @@ NEXT_PUBLIC_APP_ENV=local
 # 取得方法: https://supabase.com/dashboard/project/[project-ref]/settings/api-keys/legacy
 # 例: https://supabase.com/dashboard/project/ohplaysshllkinaiqksb/settings/api-keys/legacy
 
-# Staging 環境（Vercel Environment Variables - Preview）
+# Staging 環境（Vercel Environment Variables - Preview、stagingブランチ用）
 NEXT_PUBLIC_APP_ENV=staging
 NEXT_PUBLIC_SUPABASE_URL=<既存プロジェクトのURL>  # Staging 用 Supabase プロジェクト
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<既存プロジェクトのanon-key>
 SUPABASE_SERVICE_ROLE_KEY=<既存プロジェクトのservice-role-key>
 # 取得方法: https://supabase.com/dashboard/project/[project-ref]/settings/api-keys/legacy
+
+# Development 環境（Vercel Environment Variables - Preview、devブランチ用）
+# ⚠️ 注意: Supabaseブランチ機能を使用する場合は、devブランチのURLとキーを使用
+NEXT_PUBLIC_APP_ENV=staging  # または development（環境判定ロジックに応じて）
+NEXT_PUBLIC_SUPABASE_URL=<devブランチのURL>  # Supabase Stagingプロジェクトのdevブランチ
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<devブランチのanon-key>
+SUPABASE_SERVICE_ROLE_KEY=<devブランチのservice-role-key>
+# 取得方法: Supabase Dashboard → Stagingプロジェクト → Branches → dev → Settings → API Keys
+# または: https://supabase.com/dashboard/project/[staging-project-ref]/branches/dev/settings/api-keys/legacy
 
 # Production 環境（Vercel Environment Variables - Production）
 NEXT_PUBLIC_APP_ENV=production
