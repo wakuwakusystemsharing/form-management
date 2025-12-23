@@ -80,12 +80,6 @@ let supabaseClient: SupabaseClient<Database> | null = null;
  * ローカル環境では null を返し、JSON ファイル永続化にフォールバック
  */
 export function getSupabaseClient(): SupabaseClient<Database> | null {
-  // ローカル開発環境では Supabase を使用しない
-  if (isLocal()) {
-    console.log('[Supabase] Local mode: using JSON file storage');
-    return null;
-  }
-
   // すでに初期化済みの場合は再利用
   if (supabaseClient) {
     return supabaseClient;
@@ -94,13 +88,23 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  // 環境変数が設定されていない場合
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('[Supabase] Missing environment variables: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    if (isLocal()) {
+      console.log('[Supabase] Local mode: using JSON file storage (Supabase env vars not set)');
+    } else {
+      console.error('[Supabase] Missing environment variables: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    }
     return null;
   }
 
+  // 環境変数が設定されている場合はSupabase接続を試みる（ローカル環境でも）
   supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey);
-  console.log('[Supabase] Client initialized for staging/production');
+  if (isLocal()) {
+    console.log('[Supabase] Client initialized for local development (Supabase env vars set)');
+  } else {
+    console.log('[Supabase] Client initialized for staging/production');
+  }
   
   return supabaseClient;
 }

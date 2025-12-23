@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAppEnvironment } from '../../../lib/env'
 import { getSupabaseClient, createAdminClient, isServiceAdmin } from '../../../lib/supabase'
+import { generateStoreId } from '../../../lib/store-id-generator'
 import { promises as fs } from 'fs'
 import path from 'path'
 
@@ -118,9 +119,27 @@ export async function POST(request: NextRequest) {
 
     const now = new Date().toISOString()
     
-    // ローカル環境: JSON に保存（st形式のID）
+    // ローカル環境: JSON に保存（重複チェック付き）
     if (env === 'local') {
-      const storeId = `st${Date.now()}`
+      const stores = await loadStoresFromJSON()
+      
+      // 重複しないIDを生成
+      let storeId: string
+      let attempts = 0
+      const maxAttempts = 10
+      do {
+        storeId = generateStoreId()
+        attempts++
+        if (attempts > maxAttempts) {
+          return NextResponse.json(
+            { error: '店舗IDの生成に失敗しました。しばらく経ってから再度お試しください。' },
+            { status: 500 }
+          )
+        }
+      } while (stores.some((s: Store) => s.id === storeId))
+      
+      console.log('[API] Generated unique store ID:', storeId, `(attempts: ${attempts})`)
+      
       const newStore: Store = {
         id: storeId,
         name,
@@ -133,13 +152,12 @@ export async function POST(request: NextRequest) {
         created_at: now,
         updated_at: now
       }
-      const stores = await loadStoresFromJSON()
       stores.push(newStore)
       await saveStoresToJSON(stores)
       return NextResponse.json({ success: true, store: newStore })
     }
 
-    // staging/production: UUID形式のIDを使用（Supabase が自動生成）
+    // staging/production: 6文字のランダムIDを明示的に指定
 
     // staging/production: Supabase に保存
     console.log('[API] Creating admin client...')
@@ -196,12 +214,56 @@ export async function POST(request: NextRequest) {
     }
 
     // Supabase に挿入（RLS をバイパスするため adminClient 使用）
-    // id は Supabase が UUID として自動生成
-    console.log('[API] Inserting store to Supabase')
+    // 重複しない6文字のランダムIDを生成して挿入
+    let storeId: string
+    let attempts = 0
+    const maxAttempts = 10
+    
+    // 重複チェック関数
+    const checkStoreExists = async (id: string): Promise<boolean> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (adminClient as any)
+        .from('stores')
+        .select('id')
+        .eq('id', id)
+        .single()
+      
+      if (error && error.code !== 'PGRST116') { // PGRST116 = not found (正常)
+        console.error('[API] Store existence check error:', error)
+        throw error
+      }
+      
+      return !!data
+    }
+    
+    // 重複しないIDを生成
+    do {
+      storeId = generateStoreId()
+      attempts++
+      
+      if (attempts > maxAttempts) {
+        return NextResponse.json(
+          { error: '店舗IDの生成に失敗しました。しばらく経ってから再度お試しください。' },
+          { status: 500 }
+        )
+      }
+      
+      const exists = await checkStoreExists(storeId)
+      if (!exists) {
+        break
+      }
+      
+      console.log(`[API] Store ID ${storeId} already exists, retrying... (attempt ${attempts})`)
+    } while (true)
+    
+    console.log('[API] Generated unique store ID:', storeId, `(attempts: ${attempts})`)
+    
+    // 店舗を挿入
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (adminClient as any)
       .from('stores')
       .insert([{
+        id: storeId, // 明示的に6文字のランダムIDを指定
         name,
         owner_name,
         owner_email,
@@ -215,6 +277,13 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('[API] Store insert error:', error)
+      // 重複エラーの場合（通常は発生しないはずだが、念のため）
+      if (error.code === '23505') { // PostgreSQL unique violation
+        return NextResponse.json(
+          { error: '店舗IDが重複しています。再度お試しください。' },
+          { status: 409 }
+        )
+      }
       return NextResponse.json(
         { error: `店舗作成に失敗しました: ${error.message}` },
         { status: 500 }

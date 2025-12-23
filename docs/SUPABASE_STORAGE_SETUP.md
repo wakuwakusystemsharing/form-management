@@ -90,7 +90,12 @@ Vercel Dashboardで以下の環境変数が設定されていることを確認�
 - `SUPABASE_SERVICE_ROLE_KEY`: Supabase Dashboard → Settings → API → service_role (⚠️ 秘密鍵)
 
 #### Production環境
-- 同じ環境変数を設定（Staging環境と同じ値）
+- `NEXT_PUBLIC_SUPABASE_URL`: `https://[production-project-ref].supabase.co`（Stagingとは別プロジェクト）
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Productionプロジェクトの anon key
+- `SUPABASE_SERVICE_ROLE_KEY`: Productionプロジェクトの service_role key
+- `NEXT_PUBLIC_PRODUCTION_URL`: `https://nas-rsv.com`（カスタムドメイン）
+
+**重要**: Staging環境とProduction環境は**別々のSupabaseプロジェクト**を使用します
 
 ### 5. 動作確認
 
@@ -117,9 +122,28 @@ git push origin staging
 4. フォームHTMLが正しくブラウザで表示されることを確認
 
 **期待されるURL形式:**
+
+**直接URL（Supabase Storage）:**
 ```
 https://[project-ref].supabase.co/storage/v1/object/public/forms/staging/forms/[storeId]/[formId]/config/current.html
 ```
+
+**プロキシURL（推奨、正しいContent-Typeで配信）:**
+```
+https://form-management-staging.vercel.app/api/public-form/staging/forms/[storeId]/[formId]/config/current.html
+```
+
+**Production環境の場合:**
+```
+https://nas-rsv.com/api/public-form/prod/forms/[storeId]/[formId]/config/current.html
+```
+
+**注意**: 
+- 環境に応じて自動的に適切なパスプレフィックスが使用されます
+  - Staging: `staging/forms/{storeId}/{formId}/config/current.html`
+  - Production: `prod/forms/{storeId}/{formId}/config/current.html`
+- プロキシURL (`/api/public-form/*`) 経由でアクセスすることで、正しいContent-Type (`text/html; charset=utf-8`) で配信されます
+- キャッシュバスティングのため、`?v={timestamp}` パラメータが自動的に追加されます
 
 ### トラブルシューティング
 
@@ -154,17 +178,35 @@ https://[project-ref].supabase.co/storage/v1/object/public/forms/staging/forms/[
 **原因:** Content-Typeが正しく設定されていない
 
 **解決方法:**
-- この問題はSupabase Storageでは発生しません
-- Vercel Blobから移行した場合、新しいデプロイで自動的に解決されます
+- プロキシURL (`/api/public-form/*`) を使用してください
+- プロキシURL経由でアクセスすることで、正しいContent-Type (`text/html; charset=utf-8`) で配信されます
+- 直接Supabase Storage URLを使用する場合、ブラウザによってはダウンロードされる可能性があります
 
-### カスタムドメインの設定（オプション）
+#### 環境別のパス構造
 
-将来的にカスタムドメイン（例: `forms.yourdomain.com`）を使用する場合:
+**Staging環境:**
+- ストレージパス: `staging/forms/{storeId}/{formId}/config/current.html`
+- プロキシURL: `https://form-management-staging.vercel.app/api/public-form/staging/forms/{storeId}/{formId}/config/current.html`
 
-1. Supabase Dashboard → Settings → Storage
-2. Custom domain設定を追加
-3. DNSレコードを設定（Supabaseの指示に従う）
-4. SSL証明書の自動発行を待つ
+**Production環境:**
+- ストレージパス: `prod/forms/{storeId}/{formId}/config/current.html`
+- プロキシURL: `https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{formId}/config/current.html`
+
+**Local環境:**
+- ローカルファイル: `public/static-forms/{formId}.html`
+- アクセスURL: `http://localhost:3000/static-forms/{formId}.html`
+
+### カスタムドメインの設定
+
+Production環境では、Vercelのカスタムドメイン（`nas-rsv.com`）を使用します:
+
+1. Vercel Dashboard → Settings → Domains
+2. カスタムドメイン `nas-rsv.com` を追加
+3. DNS設定を確認（AレコードまたはCNAMEレコード）
+4. ドメインが有効化されるまで待機
+5. 環境変数 `NEXT_PUBLIC_PRODUCTION_URL=https://nas-rsv.com` を設定
+
+**注意**: カスタムドメインが有効化されると、フォームのURLが自動的にカスタムドメインを使用するようになります
 
 ## まとめ
 

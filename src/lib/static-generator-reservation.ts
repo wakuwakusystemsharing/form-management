@@ -435,10 +435,6 @@ class BookingForm {
                 sub.classList.add('selected');
                 this.state.selectedSubmenu = menu.sub_menu_items[idx];
                 // サブメニュー選択後にカレンダーを表示
-                const calendarContainer = document.querySelector('.calendar-container');
-                if (calendarContainer) {
-                    calendarContainer.style.display = 'flex';
-                }
                 this.toggleCalendarVisibility();
                 this.updateSummary();
             });
@@ -1181,12 +1177,12 @@ if (document.readyState === 'loading') {
                 
                 <div class="calendar-container">
                     <!-- 現在の月表示 -->
-                    <div class="current-month-container">
+                    <div class="current-month-container" style="margin-bottom:1rem;text-align:center;">
                         <span id="current-month" class="current-month" style="font-size:1.125rem;font-weight:bold;color:#374151;"></span>
                     </div>
 
                     <!-- 月移動ボタン -->
-                    <div class="month-button-container">
+                    <div class="month-button-container" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;gap:0.5rem;">
                         <button type="button" onclick="window.bookingForm.navigateMonth('prev')" 
                                 class="month-button" style="flex:1;padding:0.5rem 1.25rem;background:#374151;color:#fff;border:none;border-radius:0.25rem;cursor:pointer;font-weight:500;">
                             前月
@@ -1198,7 +1194,7 @@ if (document.readyState === 'loading') {
                     </div>
 
                     <!-- 週移動ボタン -->
-                    <div class="week-button-container">
+                    <div class="week-button-container" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;gap:0.5rem;">
                         <button type="button" onclick="window.bookingForm.navigateWeek('prev')" 
                                 class="week-button" style="flex:1;padding:0.5rem 1.25rem;background:#374151;color:#fff;border:none;border-radius:0.25rem;cursor:pointer;font-weight:500;">
                             前週
@@ -1566,32 +1562,26 @@ if (document.readyState === 'loading') {
         
         /* カレンダーコンテナ */
         .calendar-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
             width: 100%;
             margin-bottom: 1.5rem;
-            position: relative;
         }
         
         .current-month-container {
             display: flex;
-            justify-content: center;
             align-items: center;
-            width: 100%;
-            margin-bottom: 1rem;
-            text-align: center;
+            justify-content: center;
         }
         
-        .month-button-container,
+        .month-button-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
         .week-button-container {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            width: 100%;
-            gap: 0.5rem;
-            margin-bottom: 0.75rem;
+            justify-content: space-between;
         }
         
         .calendar-table-wrapper {

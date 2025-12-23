@@ -33,8 +33,10 @@ LINE LIFFを活用した予約フォーム管理システムの全体設計、�
 │ │ ├─ /api/stores/* - 店舗管理API                               ││
 │ │ ├─ /api/forms/* - フォーム管理API                            ││
 │ │ ├─ /api/forms/[formId]/deploy - 静的HTML生成・デプロイ       ││
+│ │ ├─ /api/surveys/* - アンケートフォーム管理API                ││
 │ │ ├─ /api/reservations/* - 予約管理API                        ││
-│ │ └─ /api/upload/* - 画像アップロードAPI                       ││
+│ │ ├─ /api/upload/* - 画像アップロードAPI                       ││
+│ │ └─ /api/public-form/* - 公開フォームプロキシAPI              ││
 │ ├──────────────────────────────────────────────────────────────┤│
 │ │ Middleware (認証・ルーティング)                              ││
 │ │ ├─ UI ページアクセス制御 (/admin, /[storeId]/admin など)      ││
@@ -89,11 +91,20 @@ PUT  /api/forms/[formId] - フォーム更新
 DELETE /api/forms/[formId] - フォーム削除
 POST /api/forms/[formId]/deploy - 静的HTML生成・デプロイ
 
+POST /api/stores/[storeId]/surveys - アンケートフォーム作成
+GET  /api/stores/[storeId]/surveys - アンケートフォーム一覧（店舗別）
+GET  /api/surveys/[id] - アンケートフォーム詳細
+PUT  /api/surveys/[id] - アンケートフォーム更新
+DELETE /api/surveys/[id] - アンケートフォーム削除
+POST /api/surveys/[id]/deploy - アンケートフォーム静的HTML生成・デプロイ
+
 POST /api/reservations - 予約作成
 GET  /api/reservations - 全予約一覧（管理者用）
 GET  /api/stores/[storeId]/reservations - 店舗別予約一覧
 
 POST /api/upload/menu-image - メニュー画像アップロード
+
+GET  /api/public-form/[...path] - 公開フォームプロキシ（Supabase Storageから配信）
 ```
 
 **認証方針**:
@@ -116,8 +127,9 @@ data/
 #### Staging / Production（Supabase）
 ```
 Database Tables:
-├── stores - 店舗マスタ
-├── forms - フォーム定義（config は JSONB）
+├── stores - 店舗マスタ（ID: 6文字ランダム文字列またはUUID）
+├── forms - 予約フォーム定義（config は JSONB）
+├── survey_forms - アンケートフォーム定義（config は JSONB）
 ├── reservations - 予約データ
 ├── store_admins - 店舗管理者の権限管理
 └── profiles - ユーザープロファイル
@@ -125,7 +137,8 @@ Database Tables:
 RLS (Row Level Security):
 ├── stores: 全員読み取り可、管理者のみ更新/削除
 ├── forms: 店舗別RLS、管理者は全店舗アクセス可
-├── reservations: 同上
+├── survey_forms: 店舗別RLS、管理者は全店舗アクセス可
+├── reservations: 店舗別RLS、管理者は全店舗アクセス可
 └── store_admins: 管理者のみアクセス可
 ```
 
@@ -152,13 +165,21 @@ Local:    /public/uploads/{storeId}/{menuId}.{ext} (mock)
 
 ### 5. 静的HTML生成・デプロイ
 
-**フロー**:
+**フロー（予約フォーム）**:
 1. サービス管理者が「保存＆デプロイ」をクリック
 2. API `/api/forms/{formId}/deploy` を呼び出し
-3. `StaticFormGenerator.generateHTML()` で HTML を生成
+3. `StaticReservationGenerator.generateHTML()` で HTML を生成
 4. `SupabaseStorageDeployer.deployForm()` で Supabase Storage にアップロード
 5. `static_deploy` 情報を DB に記録
-6. 顧客が LINE で フォーム URL にアクセス → 静的 HTML を表示
+6. 顧客が LINE で フォーム URL にアクセス → `/api/public-form/*` 経由で静的 HTML を表示
+
+**フロー（アンケートフォーム）**:
+1. 店舗管理者が「デプロイ」をクリック
+2. API `/api/surveys/{id}/deploy` を呼び出し
+3. `StaticSurveyGenerator.generateHTML()` で HTML を生成
+4. `SupabaseStorageDeployer.deployForm()` で Supabase Storage にアップロード
+5. `static_deploy` 情報を DB に記録
+6. 顧客が LINE で フォーム URL にアクセス → `/api/public-form/*` 経由で静的 HTML を表示
 
 **環境分離**:
 - Staging 環境: Staging 用 Supabase プロジェクトの Storage にデプロイ
@@ -169,7 +190,9 @@ Local:    /public/uploads/{storeId}/{menuId}.{ext} (mock)
 - HTML 内に LIFF SDK + JavaScript を埋め込み
 - React 不使用（軽量化のため vanilla JS）
 - テーマカラーはインライン CSS で適用
-- すべての設定（menu_structure など）を `FORM_CONFIG` として JSON 埋め込み
+- 予約フォーム: すべての設定（menu_structure など）を `FORM_CONFIG` として JSON 埋め込み
+- アンケートフォーム: 質問設定を `questions` 配列として JSON 埋め込み
+- プロキシURL (`/api/public-form/*`) 経由で配信することで、正しいContent-Typeヘッダーを設定
 
 ## 🔐 認証・認可設計
 
@@ -258,7 +281,7 @@ interface FormConfig {
 
 ```typescript
 interface Store {
-  id: string; // UUID
+  id: string; // 6文字ランダム文字列 [a-z0-9]{6} または UUID（既存データ）
   name: string;
   owner_name: string;
   owner_email: string;
@@ -269,6 +292,19 @@ interface Store {
   status: 'active' | 'inactive';
   created_at: string;
   updated_at: string;
+}
+
+interface SurveyForm {
+  id: string; // 12文字ランダム文字列
+  store_id: string; // 6文字ランダム文字列またはUUID
+  name: string;
+  config: SurveyConfig;
+  status: 'active' | 'inactive' | 'paused' | 'draft';
+  draft_status: 'none' | 'draft' | 'ready_to_publish';
+  static_deploy?: StaticDeploy;
+  created_at: string;
+  updated_at: string;
+  last_published_at?: string;
 }
 ```
 
@@ -285,8 +321,8 @@ API: POST /api/stores/[storeId]/forms
   ├─ Local: JSON に保存
   └─ Staging/Prod: Supabase に INSERT
   ↓ 同時に自動デプロイ
-  ├─ StaticFormGenerator で HTML 生成
-  └─ VercelBlobDeployer で Blob にアップロード
+  ├─ StaticReservationGenerator で HTML 生成
+  └─ SupabaseStorageDeployer で Supabase Storage にアップロード
   ↓ 初期状態
   - status: 'inactive'
   - draft_status: 'none'
@@ -316,11 +352,11 @@ API: PUT /api/forms/[formId]
   ↓ 1. PUT /api/forms/{formId} で保存
   ↓ 2. POST /api/forms/{formId}/deploy でデプロイ
   ↓
-StaticFormGenerator:
+StaticReservationGenerator (予約フォーム) / StaticSurveyGenerator (アンケートフォーム):
   ├─ config から HTML テンプレート生成
-  ├─ すべての設定を FORM_CONFIG に埋め込み
+  ├─ すべての設定を FORM_CONFIG / questions に埋め込み
   ├─ テーマカラーをインライン CSS で適用
-  └─ LIFF SDK + JavaScriptで予約処理実装
+  └─ LIFF SDK + JavaScriptで予約/アンケート処理実装
   ↓
 SupabaseStorageDeployer:
   ├─ 環境別 path に決定
@@ -330,10 +366,10 @@ SupabaseStorageDeployer:
   ├─ Supabase Storage API でアップロード
   └─ URL を返す（プロジェクトごとに異なる公開URL）
   ↓ DB 更新
-  - static_deploy: { url, storage_url, deployed_at: now, status: 'deployed' }
+  - static_deploy: { deploy_url, storage_url, deployed_at: now, status: 'deployed', environment }
   - last_published_at: now
   ↓ 顧客が LINE でフォーム URL アクセス
-  → 静的 HTML が表示される（React なし）
+  → `/api/public-form/{env}/forms/{storeId}/{formId}/config/current.html` 経由で静的 HTML が表示される（React なし）
 ```
 
 ## 🛡️ エラーハンドリング
@@ -344,7 +380,7 @@ SupabaseStorageDeployer:
    - Supabase JSONB が string で返される場合をパース
    - 不足しているフィールドにデフォルト値を補完
 
-2. **StaticFormGenerator.generateHTML()** - undefined チェック
+2. **StaticReservationGenerator.generateHTML() / StaticSurveyGenerator.generateHTML()** - undefined チェック
    - safeConfig に深コピーして修正
    - 全フィールドを初期化（null check を明示的に）
    - テンプレート内で ?. オプショナルチェーニング
@@ -353,6 +389,10 @@ SupabaseStorageDeployer:
    - 400: "必須フィールドが不足しています"
    - 404: "フォームが見つかりません"
    - 500: "内部サーバーエラーが発生しました"
+
+4. **Supabase Storage エラー** - 適切なフォールバック
+   - アップロード失敗時: エラーログを記録し、デプロイ情報を更新しない
+   - プロキシ配信失敗時: 404エラーを返す
 
 ## 📚 関連ドキュメント
 

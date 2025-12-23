@@ -8,7 +8,7 @@
 |------|----------|-------------|
 | **Local** | http://localhost:3000 | JSON ファイル |
 | **Staging** | https://form-management-staging.vercel.app | Supabase |
-| **Production** | https://form-management-seven.vercel.app | Supabase |
+| **Production** | https://nas-rsv.com | Supabase |
 
 **環境自動切り替え**: すべてのAPIは環境を自動判定し、適切なデータストアを使用します。
 
@@ -129,8 +129,10 @@
       "theme_color": "#3B82F6"
     },
     "static_deploy": {
-      "blob_url": "https://...",
-      "deployed_at": "2025-01-15T00:00:00Z"
+      "deploy_url": "https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{formId}/config/current.html",
+      "storage_url": "https://[project-ref].supabase.co/storage/v1/object/public/forms/...",
+      "deployed_at": "2025-01-15T00:00:00Z",
+      "status": "deployed"
     },
     "created_at": "2025-01-15T00:00:00Z",
     "updated_at": "2025-01-15T00:00:00Z"
@@ -180,7 +182,7 @@
 ```
 
 ### `POST /api/forms/{formId}/deploy`
-フォームを静的HTMLとしてVercel Blobにデプロイ
+フォームを静的HTMLとしてSupabase Storageにデプロイ
 
 **リクエストボディ**:
 ```json
@@ -193,11 +195,18 @@
 ```json
 {
   "success": true,
-  "deployUrl": "https://blob.vercel-storage.com/...",
+  "deployUrl": "https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{formId}/config/current.html?v=1234567890",
+  "storageUrl": "https://[project-ref].supabase.co/storage/v1/object/public/forms/prod/forms/{storeId}/{formId}/config/current.html",
   "deployedAt": "2025-01-15T00:00:00Z",
-  "environment": "staging"
+  "environment": "production"
 }
 ```
+
+**注意**: 
+- 環境に応じて自動的に適切なSupabaseプロジェクトのStorageにデプロイされます
+- Staging環境: `staging/forms/{storeId}/{formId}/config/current.html`
+- Production環境: `prod/forms/{storeId}/{formId}/config/current.html`
+- プロキシURL (`/api/public-form/*`) 経由でアクセスすることで、正しいContent-Typeで配信されます
 
 ---
 
@@ -262,10 +271,142 @@
 
 ---
 
+## 📋 アンケートフォーム（Survey Forms）API
+
+### `GET /api/stores/{storeId}/surveys`
+店舗のアンケートフォーム一覧を取得
+
+**レスポンス**:
+```json
+[
+  {
+    "id": "abc123def456",
+    "store_id": "xyz789",
+    "name": "顧客アンケート",
+    "status": "active",
+    "draft_status": "none",
+    "config": {
+      "basic_info": {
+        "title": "顧客アンケート",
+        "liff_id": "1234567890-abcdefgh",
+        "theme_color": "#13ca5e"
+      },
+      "questions": [ ... ],
+      "ui_settings": { ... }
+    },
+    "static_deploy": {
+      "deploy_url": "https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{id}/config/current.html",
+      "storage_url": "https://[project-ref].supabase.co/storage/v1/object/public/forms/...",
+      "deployed_at": "2025-01-15T00:00:00Z",
+      "status": "deployed"
+    },
+    "created_at": "2025-01-15T00:00:00Z",
+    "updated_at": "2025-01-15T00:00:00Z"
+  }
+]
+```
+
+### `POST /api/stores/{storeId}/surveys`
+新規アンケートフォームを作成
+
+**リクエストボディ**:
+```json
+{
+  "form_name": "顧客アンケート",
+  "liff_id": "1234567890-abcdefgh",
+  "template_config": {
+    "questions": [ ... ]
+  }
+}
+```
+
+**レスポンス**: 作成されたアンケートフォームオブジェクト（201 Created）
+
+**注意**: `template_config`が指定されない場合、デフォルトの12問の質問テンプレートが使用されます
+
+### `GET /api/surveys/{id}`
+個別アンケートフォームを取得
+
+**パラメータ**:
+- `id` (string): アンケートフォームID（12文字ランダム文字列）
+
+**レスポンス**: アンケートフォームオブジェクト
+
+### `PUT /api/surveys/{id}`
+アンケートフォームを更新
+
+**リクエストボディ**:
+```json
+{
+  "config": {
+    "basic_info": { ... },
+    "questions": [ ... ],
+    "ui_settings": { ... }
+  },
+  "status": "active"
+}
+```
+
+**レスポンス**: 更新されたアンケートフォームオブジェクト
+
+### `DELETE /api/surveys/{id}`
+アンケートフォームを削除
+
+**レスポンス**:
+```json
+{
+  "success": true,
+  "message": "アンケートフォームを削除しました"
+}
+```
+
+### `POST /api/surveys/{id}/deploy`
+アンケートフォームを静的HTMLとしてSupabase Storageにデプロイ
+
+**リクエストボディ**:
+```json
+{
+  "storeId": "xyz789"
+}
+```
+
+**レスポンス**:
+```json
+{
+  "deployed_at": "2025-01-15T00:00:00Z",
+  "deploy_url": "https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{id}/config/current.html",
+  "storage_url": "https://[project-ref].supabase.co/storage/v1/object/public/forms/...",
+  "status": "deployed",
+  "environment": "production"
+}
+```
+
+---
+
+## 🌐 公開フォーム（Public Form）API
+
+### `GET /api/public-form/[...path]`
+Supabase StorageからフォームHTMLをプロキシ配信
+
+**パラメータ**:
+- `path` (string[]): Supabase Storage内のパス（例: `prod/forms/{storeId}/{formId}/config/current.html`）
+
+**クエリパラメータ**:
+- `v` (number, optional): キャッシュバスティング用のタイムスタンプ
+
+**レスポンス**: HTMLコンテンツ（Content-Type: `text/html; charset=utf-8`）
+
+**注意**: 
+- このAPIはSupabase StorageからHTMLファイルを取得し、正しいContent-Typeヘッダーで配信します
+- キャッシュバスティングのため、`v`パラメータが指定されている場合はキャッシュを無効化します
+- 環境に応じて自動的に適切なSupabaseプロジェクトのStorageから取得します
+
+---
+
 ## 🖼️ 画像アップロード（Upload）API
 
 ### `POST /api/upload/menu-image`
-メニュー画像をVercel Blobにアップロード
+メニュー画像をSupabase Storageにアップロード
 
 **リクエスト**: `multipart/form-data`
 - `file` (File): 画像ファイル（最大5MB）
@@ -276,9 +417,11 @@
 **レスポンス**:
 ```json
 {
-  "url": "https://blob.vercel-storage.com/menu_images/..."
+  "url": "https://[project-ref].supabase.co/storage/v1/object/public/forms/menu_images/{storeId}/{menuId}.jpg"
 }
 ```
+
+**注意**: 環境に応じて自動的に適切なSupabaseプロジェクトのStorageにアップロードされます
 
 ---
 
@@ -312,10 +455,11 @@
 | 機能 | Local | Staging/Production |
 |------|-------|-------------------|
 | データストア | JSON ファイル | Supabase |
-| 店舗ID形式 | `st{timestamp}` | UUID |
+| 店舗ID形式 | `st{timestamp}` | 6文字ランダム文字列 `[a-z0-9]{6}` または UUID（既存データ） |
 | フォームID形式 | 12文字ランダム | 12文字ランダム |
 | 認証 | スキップ | 必須 |
 | RLS | 無効 | 有効（一部） |
+| ストレージ | ローカルファイル | Supabase Storage |
 
 ---
 
