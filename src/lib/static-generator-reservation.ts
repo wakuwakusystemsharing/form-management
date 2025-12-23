@@ -435,10 +435,6 @@ class BookingForm {
                 sub.classList.add('selected');
                 this.state.selectedSubmenu = menu.sub_menu_items[idx];
                 // サブメニュー選択後にカレンダーを表示
-                const calendarContainer = document.querySelector('.calendar-container');
-                if (calendarContainer) {
-                    calendarContainer.style.display = 'flex';
-                }
                 this.toggleCalendarVisibility();
                 this.updateSummary();
             });
@@ -1186,7 +1182,7 @@ if (document.readyState === 'loading') {
                     </div>
 
                     <!-- 月移動ボタン -->
-                    <div class="month-button-container" style="display:flex;justify-content:space-between;margin-bottom:0.75rem;gap:0.5rem;">
+                    <div class="month-button-container" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;gap:0.5rem;">
                         <button type="button" onclick="window.bookingForm.navigateMonth('prev')" 
                                 class="month-button" style="flex:1;padding:0.5rem 1.25rem;background:#374151;color:#fff;border:none;border-radius:0.25rem;cursor:pointer;font-weight:500;">
                             前月
@@ -1198,7 +1194,7 @@ if (document.readyState === 'loading') {
                     </div>
 
                     <!-- 週移動ボタン -->
-                    <div class="week-button-container" style="display:flex;justify-content:space-between;margin-bottom:0.75rem;gap:0.5rem;">
+                    <div class="week-button-container" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;gap:0.5rem;">
                         <button type="button" onclick="window.bookingForm.navigateWeek('prev')" 
                                 class="week-button" style="flex:1;padding:0.5rem 1.25rem;background:#374151;color:#fff;border:none;border-radius:0.25rem;cursor:pointer;font-weight:500;">
                             前週
@@ -1568,6 +1564,24 @@ if (document.readyState === 'loading') {
         .calendar-container {
             width: 100%;
             margin-bottom: 1.5rem;
+        }
+        
+        .current-month-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .month-button-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .week-button-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
         
         .calendar-table-wrapper {
