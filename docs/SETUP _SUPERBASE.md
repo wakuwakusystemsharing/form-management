@@ -270,6 +270,10 @@ FOR ALL USING (
    - **anon public**: `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - **service_role**: `SUPABASE_SERVICE_ROLE_KEY` (⚠️ 絶対に公開しない)
 
+**または、Legacy Keys ページから直接取得:**
+- https://supabase.com/dashboard/project/[project-ref]/settings/api-keys/legacy
+- 例: https://supabase.com/dashboard/project/ohplaysshllkinaiqksb/settings/api-keys/legacy
+
 ### 2. .env.local に追加
 
 ```.env

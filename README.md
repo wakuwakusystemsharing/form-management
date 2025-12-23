@@ -445,17 +445,26 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 ```bash
 # Local 開発環境（.env.local）
 NEXT_PUBLIC_APP_ENV=local
+# ローカル環境でログイン画面を確認する場合は、以下も設定:
+# NEXT_PUBLIC_SUPABASE_URL=<SupabaseプロジェクトのURL>
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
+# SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+# 
+# 取得方法: https://supabase.com/dashboard/project/[project-ref]/settings/api-keys/legacy
+# 例: https://supabase.com/dashboard/project/ohplaysshllkinaiqksb/settings/api-keys/legacy
 
 # Staging 環境（Vercel Environment Variables - Preview）
 NEXT_PUBLIC_APP_ENV=staging
 NEXT_PUBLIC_SUPABASE_URL=<既存プロジェクトのURL>  # Staging 用 Supabase プロジェクト
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<既存プロジェクトのanon-key>
 SUPABASE_SERVICE_ROLE_KEY=<既存プロジェクトのservice-role-key>
+# 取得方法: https://supabase.com/dashboard/project/[project-ref]/settings/api-keys/legacy
 
 # Production 環境（Vercel Environment Variables - Production）
 NEXT_PUBLIC_APP_ENV=production
 NEXT_PUBLIC_SUPABASE_URL=<新規プロジェクトのURL>  # Production 用 Supabase プロジェクト（新規作成）
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<新規プロジェクトのanon-key>
 SUPABASE_SERVICE_ROLE_KEY=<新規プロジェクトのservice-role-key>
+# 取得方法: https://supabase.com/dashboard/project/[project-ref]/settings/api-keys/legacy
 ```
 

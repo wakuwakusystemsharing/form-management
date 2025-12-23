@@ -36,6 +36,15 @@ cp .env.local.example .env.local
 NEXT_PUBLIC_APP_ENV=local
 # BLOB_READ_WRITE_TOKEN は未設定でOK (モックモード)
 # Supabase 設定も不要 (JSON ファイル永続化)
+
+# ローカル環境でログイン画面を確認する場合は、以下を設定:
+# NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+# NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+# SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# 
+# 取得方法: Supabase Dashboard → Project Settings → API → Legacy Keys
+# または: https://supabase.com/dashboard/project/[project-ref]/settings/api-keys/legacy
+# 例: https://supabase.com/dashboard/project/ohplaysshllkinaiqksb/settings/api-keys/legacy
 ```
 
 ### 4. 開発サーバー起動
