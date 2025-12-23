@@ -38,7 +38,12 @@ function readAllStoreForms(): Form[] {
   }
   
   const files = fs.readdirSync(DATA_DIR);
-  const storeFormFiles = files.filter(file => file.startsWith('forms_st') && file.endsWith('.json'));
+  // forms_ で始まり、forms.json 以外のファイルを読み込む（forms_st{id}.json と forms_{id}.json の両方に対応）
+  const storeFormFiles = files.filter(file => 
+    file.startsWith('forms_') && 
+    file.endsWith('.json') && 
+    file !== 'forms.json'
+  );
   
   for (const file of storeFormFiles) {
     try {

@@ -192,7 +192,7 @@ export async function DELETE(
         );
       }
 
-      // 関連フォーム数をチェック
+      // 関連予約フォーム数をチェック
       const formsFile = path.join(DATA_DIR, `forms_${storeId}.json`);
       let formCount = 0;
       if (fs.existsSync(formsFile)) {
@@ -200,11 +200,25 @@ export async function DELETE(
         formCount = Array.isArray(formsData) ? formsData.length : 0;
       }
 
+      // 関連アンケートフォーム数をチェック
+      const surveysFile = path.join(DATA_DIR, `surveys_${storeId}.json`);
+      let surveyFormCount = 0;
+      if (fs.existsSync(surveysFile)) {
+        const surveysData = JSON.parse(fs.readFileSync(surveysFile, 'utf-8'));
+        surveyFormCount = Array.isArray(surveysData) ? surveysData.length : 0;
+      }
+
+      const totalFormCount = formCount + surveyFormCount;
+
       // フォーム数が0より大きい場合は削除不可
-      if (formCount > 0) {
+      if (totalFormCount > 0) {
+        const formsMessage = formCount > 0 ? `予約フォーム ${formCount} 件` : '';
+        const surveyMessage = surveyFormCount > 0 ? `アンケートフォーム ${surveyFormCount} 件` : '';
+        const formList = [formsMessage, surveyMessage].filter(Boolean).join('、');
+        
         return NextResponse.json(
           { 
-            error: `店舗を削除できません。関連するフォームが ${formCount} 件存在します。先にすべてのフォームを削除してください。` 
+            error: `店舗を削除できません。関連するフォームが存在します（${formList}）。先にすべてのフォームを削除してください。` 
           },
           { status: 400 }
         );
@@ -213,6 +227,9 @@ export async function DELETE(
       // 関連するフォームファイルを削除（念のため）
       if (fs.existsSync(formsFile)) {
         fs.unlinkSync(formsFile);
+      }
+      if (fs.existsSync(surveysFile)) {
+        fs.unlinkSync(surveysFile);
       }
 
       // 店舗データを削除
