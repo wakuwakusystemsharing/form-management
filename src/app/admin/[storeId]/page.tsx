@@ -794,6 +794,7 @@ export default function StoreDetailPage() {
     setSubmitting(true);
     
     // GASエンドポイントが実際に動作するかテスト
+    let testPassed = false;
     try {
       const testStartTime = new Date();
       testStartTime.setHours(0, 0, 0, 0);
@@ -804,18 +805,44 @@ export default function StoreDetailPage() {
       const testUrl = newFormData.gas_endpoint.trim() + 
         `?startTime=${testStartTime.toISOString()}&endTime=${testEndTime.toISOString()}`;
 
-      const testResponse = await fetch(testUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      // タイムアウトを設定（10秒）
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      if (!testResponse.ok) {
-        throw new Error(`HTTPエラー: ${testResponse.status}`);
+      let testResponse;
+      try {
+        testResponse = await fetch(testUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError instanceof Error) {
+          if (fetchError.name === 'AbortError') {
+            throw new Error('リクエストがタイムアウトしました（10秒）');
+          } else if (fetchError.message.includes('Failed to fetch') || fetchError.message.includes('CORS')) {
+            throw new Error('CORSエラー: GASエンドポイントがCORSを許可していない可能性があります。GAS側でCORS設定を確認してください。');
+          } else {
+            throw new Error(`ネットワークエラー: ${fetchError.message}`);
+          }
+        }
+        throw fetchError;
       }
 
-      const testData = await testResponse.json();
+      if (!testResponse.ok) {
+        throw new Error(`HTTPエラー: ${testResponse.status} ${testResponse.statusText}`);
+      }
+
+      let testData;
+      try {
+        testData = await testResponse.json();
+      } catch (jsonError) {
+        throw new Error('レスポンスのJSON解析に失敗しました');
+      }
       
       // レスポンスが配列かどうかを確認
       if (!Array.isArray(testData)) {
@@ -830,12 +857,13 @@ export default function StoreDetailPage() {
         }
       }
 
-      // テスト成功 - フォーム作成を続行
+      // テスト成功
+      testPassed = true;
       console.log('GASエンドポイントのテスト成功:', testData);
     } catch (error) {
       console.error('GASエンドポイントのテスト失敗:', error);
       const errorMessage = error instanceof Error ? error.message : '不明なエラー';
-      const shouldContinue = confirm(
+      const shouldContinue = window.confirm(
         `GASエンドポイントの接続テストに失敗しました。\n\n` +
         `エラー: ${errorMessage}\n\n` +
         `それでもフォームを作成しますか？\n\n` +
@@ -846,6 +874,7 @@ export default function StoreDetailPage() {
         setSubmitting(false);
         return;
       }
+      // ユーザーが続行を選択した場合は、testPassed = falseのまま続行
     }
 
     // フォーム作成処理
