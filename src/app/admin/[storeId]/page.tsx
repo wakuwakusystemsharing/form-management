@@ -793,7 +793,7 @@ export default function StoreDetailPage() {
 
     setSubmitting(true);
     
-    // GASエンドポイントが実際に動作するかテスト
+    // GASエンドポイントが実際に動作するかテスト（サーバーサイドプロキシ経由）
     let testPassed = false;
     try {
       const testStartTime = new Date();
@@ -802,64 +802,30 @@ export default function StoreDetailPage() {
       testEndTime.setDate(testStartTime.getDate() + 7);
       testEndTime.setHours(23, 59, 59, 999);
 
-      const testUrl = newFormData.gas_endpoint.trim() + 
-        `?startTime=${testStartTime.toISOString()}&endTime=${testEndTime.toISOString()}`;
+      // サーバーサイドプロキシAPIを使用してCORSエラーを回避
+      const testApiUrl = `/api/gas/test?url=${encodeURIComponent(newFormData.gas_endpoint.trim())}&startTime=${encodeURIComponent(testStartTime.toISOString())}&endTime=${encodeURIComponent(testEndTime.toISOString())}`;
 
-      // タイムアウトを設定（10秒）
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      let testResponse;
-      try {
-        testResponse = await fetch(testUrl, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        if (fetchError instanceof Error) {
-          if (fetchError.name === 'AbortError') {
-            throw new Error('リクエストがタイムアウトしました（10秒）');
-          } else if (fetchError.message.includes('Failed to fetch') || fetchError.message.includes('CORS')) {
-            throw new Error('CORSエラー: GASエンドポイントがCORSを許可していない可能性があります。GAS側でCORS設定を確認してください。');
-          } else {
-            throw new Error(`ネットワークエラー: ${fetchError.message}`);
-          }
-        }
-        throw fetchError;
-      }
+      const testResponse = await fetch(testApiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
       if (!testResponse.ok) {
-        throw new Error(`HTTPエラー: ${testResponse.status} ${testResponse.statusText}`);
+        const errorData = await testResponse.json().catch(() => ({ error: '不明なエラー' }));
+        throw new Error(errorData.error || `HTTPエラー: ${testResponse.status}`);
       }
 
-      let testData;
-      try {
-        testData = await testResponse.json();
-      } catch (jsonError) {
-        throw new Error('レスポンスのJSON解析に失敗しました');
-      }
+      const result = await testResponse.json();
       
-      // レスポンスが配列かどうかを確認
-      if (!Array.isArray(testData)) {
-        throw new Error('レスポンスが配列形式ではありません');
-      }
-
-      // レスポンスの構造を確認（startTime, endTime, summary, title などが含まれているか）
-      if (testData.length > 0) {
-        const firstItem = testData[0];
-        if (!firstItem.hasOwnProperty('startTime') || !firstItem.hasOwnProperty('endTime')) {
-          throw new Error('レスポンスの形式が正しくありません（startTime, endTimeが必要です）');
-        }
+      if (!result.success) {
+        throw new Error(result.error || 'テストに失敗しました');
       }
 
       // テスト成功
       testPassed = true;
-      console.log('GASエンドポイントのテスト成功:', testData);
+      console.log('GASエンドポイントのテスト成功:', result.data);
     } catch (error) {
       console.error('GASエンドポイントのテスト失敗:', error);
       const errorMessage = error instanceof Error ? error.message : '不明なエラー';
