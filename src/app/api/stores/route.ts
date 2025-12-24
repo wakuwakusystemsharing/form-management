@@ -149,6 +149,7 @@ export async function POST(request: NextRequest) {
         address: address || '',
         description: description || '',
         website_url: website_url || '',
+        status: 'active',
         created_at: now,
         updated_at: now
       }
@@ -270,7 +271,8 @@ export async function POST(request: NextRequest) {
         phone: phone || '',
         address: address || '',
         description: description || '',
-        website_url: website_url || ''
+        website_url: website_url || '',
+        status: 'active'
       }])
       .select()
       .single()
