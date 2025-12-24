@@ -9,8 +9,11 @@ export class StaticReservationGenerator {
   /**
    * FormConfigから静的HTMLを生成
    * プレビュー画面と完全一致
+   * @param config フォーム設定
+   * @param formId フォームID
+   * @param storeId 店舗ID
    */
-  generateHTML(config: FormConfig): string {
+  generateHTML(config: FormConfig, formId: string, storeId: string): string {
     // config は immutable に扱うため、深くコピーして修正
     const safeConfig: FormConfig = JSON.parse(JSON.stringify(config));
 
@@ -146,6 +149,8 @@ export class StaticReservationGenerator {
     
     <script>
 const FORM_CONFIG = ${JSON.stringify(safeConfig, null, 2)};
+const FORM_ID = ${JSON.stringify(formId)};
+const STORE_ID = ${JSON.stringify(storeId)};
 
 class BookingForm {
     constructor(config) {
@@ -1066,8 +1071,113 @@ class BookingForm {
         }
         
         try {
-            // 日時を日本語形式に変換
+            // メニュー情報を構造化
+            const selectedMenus = [];
+            if (this.state.selectedMenu) {
+                // カテゴリー名を取得
+                const category = this.config.menu_structure.categories.find(c => 
+                    c.menus.some(m => m.id === this.state.selectedMenu.id)
+                );
+                
+                const menuData = {
+                    menu_id: this.state.selectedMenu.id,
+                    menu_name: this.state.selectedMenu.name || '',
+                    category_name: category?.name || '',
+                    price: this.state.selectedMenu.price || 0,
+                    duration: this.state.selectedMenu.duration || 0
+                };
+                
+                // サブメニューが選択されている場合
+                if (this.state.selectedSubmenu) {
+                    menuData.submenu_id = this.state.selectedSubmenu.id;
+                    menuData.submenu_name = this.state.selectedSubmenu.name || '';
+                    if (this.state.selectedSubmenu.price) {
+                        menuData.price = this.state.selectedSubmenu.price;
+                    }
+                    if (this.state.selectedSubmenu.duration) {
+                        menuData.duration = this.state.selectedSubmenu.duration;
+                    }
+                }
+                
+                selectedMenus.push(menuData);
+            }
+            
+            // オプション情報を構造化
+            const selectedOptions = [];
+            if (this.state.selectedMenu) {
+                const menuId = this.state.selectedMenu.id;
+                if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
+                    const menu = this.state.selectedMenu;
+                    const selectedOptionIds = this.state.selectedOptions[menuId];
+                    selectedOptionIds.forEach(optionId => {
+                        const option = menu.options?.find(o => o.id === optionId);
+                        if (option) {
+                            selectedOptions.push({
+                                option_id: option.id,
+                                option_name: option.name || '',
+                                menu_id: menuId
+                            });
+                        }
+                    });
+                }
+            }
+            
+            // 顧客属性情報を構築
+            const customerInfo = {};
+            if (this.config.gender_selection?.enabled && this.state.gender) {
+                customerInfo.gender = this.state.gender;
+            }
+            if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
+                customerInfo.visit_count = this.state.visitCount;
+            }
+            if (this.config.coupon_selection?.enabled && this.state.coupon) {
+                customerInfo.coupon = this.state.coupon;
+            }
+            
+            // 日付をYYYY-MM-DD形式に変換
             const dateObj = new Date(this.state.selectedDate);
+            const reservationDate = \`\${dateObj.getFullYear()}-\${String(dateObj.getMonth() + 1).padStart(2, '0')}-\${String(dateObj.getDate()).padStart(2, '0')}\`;
+            
+            // APIに送信するデータを構築
+            const reservationData = {
+                form_id: FORM_ID,
+                store_id: STORE_ID,
+                customer_name: this.state.name,
+                customer_phone: this.state.phone,
+                customer_email: null, // メールアドレスフィールドがない場合はnull
+                selected_menus: selectedMenus,
+                selected_options: selectedOptions,
+                reservation_date: reservationDate,
+                reservation_time: this.state.selectedTime,
+                customer_info: customerInfo
+            };
+            
+            // /api/reservationsにPOSTリクエストを送信
+            let apiSuccess = false;
+            try {
+                const apiUrl = window.location.origin + '/api/reservations';
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(reservationData)
+                });
+                
+                if (response.ok) {
+                    apiSuccess = true;
+                    console.log('予約データをデータベースに保存しました');
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    console.error('予約データの保存に失敗しました:', errorData);
+                    // API送信失敗でもLINEメッセージは送信する（既存の動作を維持）
+                }
+            } catch (apiError) {
+                console.error('API送信エラー:', apiError);
+                // API送信失敗でもLINEメッセージは送信する（既存の動作を維持）
+            }
+            
+            // 日時を日本語形式に変換（LINEメッセージ用）
             const formattedDate = \`\${dateObj.getFullYear()}年\${String(dateObj.getMonth() + 1).padStart(2, '0')}月\${String(dateObj.getDate()).padStart(2, '0')}日 \${this.state.selectedTime}\`;
             
             // メッセージ本文を構築（old_index.htmlとbooking.gsのparseReservationFormに合わせた形式）
