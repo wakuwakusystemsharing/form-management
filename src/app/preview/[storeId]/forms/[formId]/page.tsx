@@ -745,9 +745,9 @@ export default function PreviewFormPage() {
   // 予約完了画面
   if (submitted) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="min-h-screen bg-gray-50 py-4 px-2 sm:py-8 sm:px-4">
         <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+          <div className="bg-white rounded-lg shadow-sm p-6 sm:p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 bg-green-100 rounded-full flex items-center justify-center">
               <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1157,11 +1157,11 @@ export default function PreviewFormPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className="min-h-screen bg-gray-50 py-4 px-2 sm:py-8 sm:px-4">
       <div className="max-w-2xl mx-auto">
         {/* プレビューモードバナー */}
         {isPreviewMode && (
-          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 sm:p-4">
             <div className="flex items-start">
               <div className="flex-shrink-0">
                 <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
@@ -1192,7 +1192,7 @@ export default function PreviewFormPage() {
 
         {/* ヘッダー */}
         <div 
-          className="rounded-lg shadow-sm p-6 mb-6 text-white"
+          className="rounded-lg shadow-sm p-4 sm:p-6 mb-6 text-white"
           style={{ backgroundColor: form.config?.basic_info?.theme_color || '#3B82F6' }}
         >
           <h1 className="text-2xl font-bold mb-2">
@@ -1265,6 +1265,12 @@ export default function PreviewFormPage() {
             table-layout: fixed;
           }
 
+          .calendar {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+
           .calendar th,
           .calendar td {
             font-size: 12px;
@@ -1294,8 +1300,12 @@ export default function PreviewFormPage() {
             }
           }
 
-          /* iPhone SEより狭い画面（LINEアプリ内など） */
-          @media (max-width: 375px) {
+          /* iPhone SE〜さらに狭い画面（LINEアプリ内など） */
+          @media (max-width: 420px) {
+            .calendar table {
+              min-width: 420px;
+            }
+
             .calendar th,
             .calendar td {
               font-size: 8px !important;
@@ -1314,7 +1324,7 @@ export default function PreviewFormPage() {
         `}</style>
 
         {/* 予約フォーム */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-6">
+        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-6">ご予約内容</h2>
           
           {/* お客様名 */}
@@ -1767,7 +1777,7 @@ export default function PreviewFormPage() {
                   </div>
 
                   {/* カレンダーテーブル */}
-                  <div className="calendar bg-white border border-gray-300 rounded shadow-sm overflow-hidden">
+                  <div className="calendar bg-white border border-gray-300 rounded shadow-sm">
                     <table className="w-full border-collapse">
                       <thead>
                         <tr>

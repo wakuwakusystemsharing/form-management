@@ -722,19 +722,19 @@ class BookingForm {
         }
         
         const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
-        const bgColor = isSelected ? '#10b981' : (isAvailable && !isPast ? '#fff' : '#f3f4f6');
-        const textColor = isSelected ? '#fff' : (isAvailable && !isPast ? '#111827' : '#9ca3af');
-        const cursor = isAvailable && !isPast ? 'pointer' : 'not-allowed';
-        const hoverStyle = isAvailable && !isPast ? 'onmouseover="this.style.backgroundColor=&quot;#e5e7eb&quot;" onmouseout="if(!this.classList.contains(&quot;selected&quot;)){this.style.backgroundColor=&quot;#fff&quot;}"' : '';
-        
-        bodyHTML += \`<td 
-            data-date="\${dateStr}" 
-            data-time="\${time}"
-            class="calendar-cell \${isSelected ? 'selected' : ''}"
-            style="text-align:center;padding:0.25rem;border:1px solid #9ca3af;font-size:0.75rem;cursor:\${cursor};background:\${bgColor};color:\${textColor};"
-            \${hoverStyle}
-            onclick="window.bookingForm.handleDateTimeSelect('\${dateStr}', '\${time}', \${isAvailable && !isPast})"
-        >\${isAvailable && !isPast ? '○' : '×'}</td>\`;
+                const bgColor = isSelected ? '#10b981' : (isAvailable && !isPast ? '#fff' : '#f3f4f6');
+                const textColor = isSelected ? '#fff' : (isAvailable && !isPast ? '#111827' : '#9ca3af');
+                const cursor = isAvailable && !isPast ? 'pointer' : 'not-allowed';
+                const hoverStyle = isAvailable && !isPast ? 'onmouseover="this.style.backgroundColor=&quot;#e5e7eb&quot;" onmouseout="if(!this.classList.contains(&quot;selected&quot;)){this.style.backgroundColor=&quot;#fff&quot;}"' : '';
+                
+                bodyHTML += \`<td 
+                    data-date="\${dateStr}" 
+                    data-time="\${time}"
+                    class="calendar-cell \${isSelected ? 'selected' : ''}"
+                    style="text-align:center;padding:0.25rem;border:1px solid #9ca3af;font-size:0.75rem;cursor:\${cursor};background:\${bgColor};color:\${textColor};"
+                    \${hoverStyle}
+                    onclick="window.bookingForm.handleDateTimeSelect('\${dateStr}', '\${time}', \${isAvailable && !isPast})"
+                >\${isAvailable && !isPast ? '○' : '×'}</td>\`;
             });
             
             bodyHTML += '</tr>';
@@ -775,7 +775,7 @@ class BookingForm {
         this.state.currentWeekStart = newWeekStart;
         // 空き状況を取得してからカレンダーをレンダリング
         this.fetchAvailability(this.state.currentWeekStart).then(() => {
-            this.renderCalendar();
+        this.renderCalendar();
         }).catch(() => {
             // エラー時もカレンダーをレンダリング（営業時間のみで判定）
             this.renderCalendar();
@@ -789,7 +789,7 @@ class BookingForm {
         this.state.currentWeekStart = this.getWeekStart(newDate);
         // 空き状況を取得してからカレンダーをレンダリング
         this.fetchAvailability(this.state.currentWeekStart).then(() => {
-            this.renderCalendar();
+        this.renderCalendar();
         }).catch(() => {
             // エラー時もカレンダーをレンダリング（営業時間のみで判定）
             this.renderCalendar();
@@ -1209,7 +1209,7 @@ class BookingForm {
                     datetimeField.style.display = 'block';
                     // 空き状況を取得してからカレンダーをレンダリング
                     this.fetchAvailability(this.state.currentWeekStart).then(() => {
-                        this.renderCalendar();
+                    this.renderCalendar();
                     }).catch(() => {
                         // エラー時もカレンダーをレンダリング（営業時間のみで判定）
                         this.renderCalendar();
