@@ -323,7 +323,7 @@ export async function POST(
         gas_endpoint: baseConfig.gas_endpoint
       };
       
-      const html = generator.generateHTML(formConfig);
+      const html = generator.generateHTML(formConfig, newFormId, storeId);
       const deployResult = await deployer.deployForm(storeId, newFormId, html);
       
       console.log(`✅ フォーム作成と同時にStorageにデプロイ: ${deployResult.storage_url || deployResult.url}`);
@@ -466,8 +466,8 @@ export async function POST(
 
       // FormConfigをそのまま使用してHTMLを生成
       // supabaseConfig は FormConfig 型で構築済み
-      const html = generator.generateHTML(supabaseConfig);
       const createdFormId = (newForm as Form).id;
+      const html = generator.generateHTML(supabaseConfig, createdFormId, storeId);
       const deployResult = await deployer.deployForm(storeId, createdFormId, html);
 
       console.log(`✅ [${env}] フォーム作成と同時にStorageにデプロイ: ${deployResult.storage_url || deployResult.url}`);

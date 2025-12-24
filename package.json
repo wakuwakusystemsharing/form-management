@@ -9,7 +9,10 @@
 		"lint": "eslint . --ext .js,.jsx,.ts,.tsx",
 		"type-check": "tsc --noEmit",
 		"clean": "rm -rf .next",
-		"vercel:build": "pnpm run build"
+		"vercel:build": "pnpm run build",
+		"seed:local": "tsx scripts/seed-dummy-stores.ts local",
+		"seed:staging": "tsx scripts/seed-dummy-stores.ts staging",
+		"seed:staging-demo": "NEXT_PUBLIC_APP_ENV=staging tsx scripts/seed-staging-demo.ts"
 	},
 	"dependencies": {
 		"@headlessui/react": "^2.2.8",
@@ -30,9 +33,11 @@
 		"@types/node": "^20",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
+		"dotenv": "^16.4.7",
 		"eslint": "^9",
 		"eslint-config-next": "16.0.10",
 		"tailwindcss": "^4",
+		"tsx": "^4.19.2",
 		"typescript": "^5",
 		"vercel": "^48.2.9"
 	}

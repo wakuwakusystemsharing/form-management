@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAppEnvironment } from '../../../lib/env'
 import { getSupabaseClient, createAdminClient, isServiceAdmin } from '../../../lib/supabase'
 import { generateStoreId } from '../../../lib/store-id-generator'
+import { Store } from '../../../types/store'
 import { promises as fs } from 'fs'
 import path from 'path'
 
@@ -10,19 +11,6 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
-
-interface Store {
-  id: string
-  name: string
-  owner_name: string
-  owner_email: string
-  phone?: string
-  address?: string
-  description?: string
-  website_url?: string
-  created_at: string
-  updated_at: string
-}
 
 // data ディレクトリ初期化
 async function ensureDataDir() {
@@ -149,6 +137,7 @@ export async function POST(request: NextRequest) {
         address: address || '',
         description: description || '',
         website_url: website_url || '',
+        status: 'active',
         created_at: now,
         updated_at: now
       }
@@ -270,7 +259,8 @@ export async function POST(request: NextRequest) {
         phone: phone || '',
         address: address || '',
         description: description || '',
-        website_url: website_url || ''
+        website_url: website_url || '',
+        status: 'active'
       }])
       .select()
       .single()

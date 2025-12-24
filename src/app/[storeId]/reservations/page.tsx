@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import ReservationAnalytics from '@/components/ReservationAnalytics';
 
 interface Reservation {
   id: string;
@@ -24,6 +25,7 @@ export default function StoreReservationsPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
 
   useEffect(() => {
     fetchReservations();
@@ -98,6 +100,40 @@ export default function StoreReservationsPage() {
           </div>
         </div>
 
+        {/* Tabs */}
+        <div className="border-b border-gray-700 mb-6">
+          <nav className="flex space-x-8">
+            <button
+              onClick={() => setActiveTab('list')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'list'
+                  ? 'border-cyan-500 text-cyan-400'
+                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
+              }`}
+            >
+              予約一覧
+            </button>
+            <button
+              onClick={() => setActiveTab('analytics')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'analytics'
+                  ? 'border-cyan-500 text-cyan-400'
+                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
+              }`}
+            >
+              分析
+            </button>
+          </nav>
+        </div>
+
+        {/* Analytics Tab */}
+        {activeTab === 'analytics' && (
+          <ReservationAnalytics storeId={storeId} />
+        )}
+
+        {/* List Tab */}
+        {activeTab === 'list' && (
+          <>
         {/* Filters */}
         <div className="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
           <div className="flex flex-wrap gap-4">
@@ -191,6 +227,8 @@ export default function StoreReservationsPage() {
               合計 <span className="font-bold text-cyan-400">{reservations.length}</span> 件の予約
             </p>
           </div>
+        )}
+          </>
         )}
       </div>
     </div>

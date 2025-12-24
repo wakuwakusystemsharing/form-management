@@ -17,6 +17,8 @@ export default function AdminPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
+  const [filteredStores, setFilteredStores] = useState<Store[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -40,7 +42,9 @@ export default function AdminPage() {
       const response = await fetch('/api/stores');
       if (response.ok) {
         const data = await response.json();
-        setStores(data.stores || []);
+        const loadedStores = data.stores || [];
+        setStores(loadedStores);
+        setFilteredStores(loadedStores);
       } else {
         console.error('Failed to load stores');
       }
@@ -50,6 +54,24 @@ export default function AdminPage() {
       setLoading(false);
     }
   }, []);
+
+  // 検索クエリでフィルタリング
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredStores(stores);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase().trim();
+    const filtered = stores.filter(store => 
+      store.name.toLowerCase().includes(query) ||
+      store.owner_name.toLowerCase().includes(query) ||
+      store.owner_email.toLowerCase().includes(query) ||
+      (store.phone && store.phone.toLowerCase().includes(query)) ||
+      (store.address && store.address.toLowerCase().includes(query))
+    );
+    setFilteredStores(filtered);
+  }, [searchQuery, stores]);
 
   // 認証チェック
   useEffect(() => {
@@ -363,14 +385,48 @@ export default function AdminPage() {
 
         {/* 店舗管理セクション */}
         <div className="bg-gray-800 rounded-lg shadow-sm p-6 border border-gray-600">
-          <h2 className="text-xl font-semibold text-gray-100 mb-4">店舗管理</h2>
-          
-          <button 
-            onClick={() => setShowAddStore(!showAddStore)}
-            className="mb-6 px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors font-medium"
-          >
-            {showAddStore ? 'キャンセル' : '+ 新しい店舗を追加'}
-          </button>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-100">店舗管理</h2>
+            <button 
+              onClick={() => setShowAddStore(!showAddStore)}
+              className="px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors font-medium"
+            >
+              {showAddStore ? 'キャンセル' : '+ 新しい店舗を追加'}
+            </button>
+          </div>
+
+          {/* 検索バー */}
+          <div className="mb-6">
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="店舗名、オーナー名、メールアドレスで検索..."
+                className="w-full pl-10 pr-4 py-3 bg-gray-700 border border-gray-500 rounded-lg text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-200"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {searchQuery && (
+              <p className="mt-2 text-sm text-gray-400">
+                {filteredStores.length}件の店舗が見つかりました
+              </p>
+            )}
+          </div>
 
           {/* 店舗追加フォーム */}
           {showAddStore && (
@@ -489,12 +545,24 @@ export default function AdminPage() {
 
           {/* 店舗一覧 */}
           <div className="space-y-4">
-            {stores.length === 0 ? (
+            {filteredStores.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
-                まだ店舗が登録されていません。上のボタンから新しい店舗を追加してください。
+                {searchQuery ? (
+                  <>
+                    「{searchQuery}」に一致する店舗が見つかりませんでした。
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="ml-2 text-cyan-400 hover:text-cyan-300 underline"
+                    >
+                      検索をクリア
+                    </button>
+                  </>
+                ) : (
+                  'まだ店舗が登録されていません。上のボタンから新しい店舗を追加してください。'
+                )}
               </div>
             ) : (
-              stores.map(store => (
+              filteredStores.map(store => (
                 <div 
                   key={store.id} 
                   onClick={() => handleStoreClick(store.id)}

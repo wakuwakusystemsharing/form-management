@@ -91,7 +91,7 @@ export async function POST(
 
     // 静的HTMLを生成
     const generator = new StaticReservationGenerator();
-    const staticHtml = generator.generateHTML(formConfig);
+    const staticHtml = generator.generateHTML(formConfig, formId, storeId);
     
     // Supabase Storageにデプロイ（環境に応じて自動判定）
     const deployer = new SupabaseStorageDeployer();
