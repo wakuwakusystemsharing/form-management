@@ -1712,7 +1712,15 @@ export default function StoreDetailPage() {
 
         {/* 予約履歴 */}
         <div className="bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-700 mb-12">
-          <h2 className="text-xl font-semibold text-white mb-4">最近の予約</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-white">最近の予約</h2>
+            <button
+              onClick={() => router.push(`/${storeId}/reservations`)}
+              className="text-cyan-400 hover:text-cyan-300 text-sm font-medium transition-colors"
+            >
+              予約一覧・分析を見る →
+            </button>
+          </div>
           <div className="text-gray-400 text-center py-8">
             まだ予約がありません
           </div>
