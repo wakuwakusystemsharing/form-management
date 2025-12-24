@@ -776,7 +776,74 @@ export default function StoreDetailPage() {
       return;
     }
 
+    // GASエンドポイントのバリデーション（URL形式チェック）
+    try {
+      new URL(newFormData.gas_endpoint.trim());
+    } catch {
+      alert('有効なURL形式ではありません');
+      return;
+    }
+
+    // Google Apps ScriptのURLパターンチェック
+    const gasUrlPattern = /^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec/;
+    if (!gasUrlPattern.test(newFormData.gas_endpoint.trim())) {
+      alert('Google Apps ScriptのURL形式が正しくありません（例: https://script.google.com/macros/s/xxx/exec）');
+      return;
+    }
+
     setSubmitting(true);
+    
+    // GASエンドポイントが実際に動作するかテスト（サーバーサイドプロキシ経由）
+    let testPassed = false;
+    try {
+      const testStartTime = new Date();
+      testStartTime.setHours(0, 0, 0, 0);
+      const testEndTime = new Date(testStartTime);
+      testEndTime.setDate(testStartTime.getDate() + 7);
+      testEndTime.setHours(23, 59, 59, 999);
+
+      // サーバーサイドプロキシAPIを使用してCORSエラーを回避
+      const testApiUrl = `/api/gas/test?url=${encodeURIComponent(newFormData.gas_endpoint.trim())}&startTime=${encodeURIComponent(testStartTime.toISOString())}&endTime=${encodeURIComponent(testEndTime.toISOString())}`;
+
+      const testResponse = await fetch(testApiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!testResponse.ok) {
+        const errorData = await testResponse.json().catch(() => ({ error: '不明なエラー' }));
+        throw new Error(errorData.error || `HTTPエラー: ${testResponse.status}`);
+      }
+
+      const result = await testResponse.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'テストに失敗しました');
+      }
+
+      // テスト成功
+      testPassed = true;
+      console.log('GASエンドポイントのテスト成功:', result.data);
+    } catch (error) {
+      console.error('GASエンドポイントのテスト失敗:', error);
+      const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+      const shouldContinue = window.confirm(
+        `GASエンドポイントの接続テストに失敗しました。\n\n` +
+        `エラー: ${errorMessage}\n\n` +
+        `それでもフォームを作成しますか？\n\n` +
+        `（注意: カレンダー空き状況が取得できない可能性があります）`
+      );
+      
+      if (!shouldContinue) {
+        setSubmitting(false);
+        return;
+      }
+      // ユーザーが続行を選択した場合は、testPassed = falseのまま続行
+    }
+
+    // フォーム作成処理
     try {
       // 選択されたテンプレートを取得
       const selectedTemplate = FORM_TEMPLATES[newFormData.template as keyof typeof FORM_TEMPLATES];
@@ -1440,7 +1507,7 @@ export default function StoreDetailPage() {
                     placeholder="例：https://script.google.com/macros/s/xxx/exec"
                     className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
                   />
-                  <p className="text-xs text-gray-400 mt-1">予約データ送信用のGASエンドポイント</p>
+                  <p className="text-xs text-gray-400 mt-1">カレンダー空き状況取得用のGASエンドポイント</p>
                 </div>
               </div>
               <div className="flex items-center space-x-3 mt-6">
