@@ -9,10 +9,17 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 全履歴を取得（マージコミット検出のため）
+
       - name: Check if push is from PR merge
         run: |
           # PRマージの場合はスキップ（GitHubが自動的にマージコミットを作成）
-          if git log -1 --pretty=format:"%P" | grep -q " "; then
+          # マージコミットは複数の親コミットを持つ
+          PARENT_COUNT=$(git log -1 --pretty=format:"%P" | wc -w)
+          if [ "$PARENT_COUNT" -gt 1 ]; then
             echo "✅ This appears to be a merge commit (likely from PR)"
             exit 0
           fi
