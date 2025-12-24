@@ -776,7 +776,79 @@ export default function StoreDetailPage() {
       return;
     }
 
+    // GASエンドポイントのバリデーション（URL形式チェック）
+    try {
+      new URL(newFormData.gas_endpoint.trim());
+    } catch {
+      alert('有効なURL形式ではありません');
+      return;
+    }
+
+    // Google Apps ScriptのURLパターンチェック
+    const gasUrlPattern = /^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec/;
+    if (!gasUrlPattern.test(newFormData.gas_endpoint.trim())) {
+      alert('Google Apps ScriptのURL形式が正しくありません（例: https://script.google.com/macros/s/xxx/exec）');
+      return;
+    }
+
     setSubmitting(true);
+    
+    // GASエンドポイントが実際に動作するかテスト
+    try {
+      const testStartTime = new Date();
+      testStartTime.setHours(0, 0, 0, 0);
+      const testEndTime = new Date(testStartTime);
+      testEndTime.setDate(testStartTime.getDate() + 7);
+      testEndTime.setHours(23, 59, 59, 999);
+
+      const testUrl = newFormData.gas_endpoint.trim() + 
+        `?startTime=${testStartTime.toISOString()}&endTime=${testEndTime.toISOString()}`;
+
+      const testResponse = await fetch(testUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!testResponse.ok) {
+        throw new Error(`HTTPエラー: ${testResponse.status}`);
+      }
+
+      const testData = await testResponse.json();
+      
+      // レスポンスが配列かどうかを確認
+      if (!Array.isArray(testData)) {
+        throw new Error('レスポンスが配列形式ではありません');
+      }
+
+      // レスポンスの構造を確認（startTime, endTime, summary, title などが含まれているか）
+      if (testData.length > 0) {
+        const firstItem = testData[0];
+        if (!firstItem.hasOwnProperty('startTime') || !firstItem.hasOwnProperty('endTime')) {
+          throw new Error('レスポンスの形式が正しくありません（startTime, endTimeが必要です）');
+        }
+      }
+
+      // テスト成功 - フォーム作成を続行
+      console.log('GASエンドポイントのテスト成功:', testData);
+    } catch (error) {
+      console.error('GASエンドポイントのテスト失敗:', error);
+      const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+      const shouldContinue = confirm(
+        `GASエンドポイントの接続テストに失敗しました。\n\n` +
+        `エラー: ${errorMessage}\n\n` +
+        `それでもフォームを作成しますか？\n\n` +
+        `（注意: カレンダー空き状況が取得できない可能性があります）`
+      );
+      
+      if (!shouldContinue) {
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    // フォーム作成処理
     try {
       // 選択されたテンプレートを取得
       const selectedTemplate = FORM_TEMPLATES[newFormData.template as keyof typeof FORM_TEMPLATES];

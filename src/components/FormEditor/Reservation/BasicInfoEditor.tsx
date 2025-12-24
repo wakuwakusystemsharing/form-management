@@ -156,7 +156,7 @@ const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({
               placeholder="例：https://script.google.com/macros/s/xxx/exec"
               required
             />
-            <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>予約データ送信用のGASエンドポイント</p>
+            <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>カレンダー空き取得用のGASエンドポイント</p>
           </div>
         </>
       )}

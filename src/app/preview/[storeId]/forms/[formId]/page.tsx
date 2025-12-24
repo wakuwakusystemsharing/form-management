@@ -49,6 +49,11 @@ export default function PreviewFormPage() {
   });
   const [selectedDateTime, setSelectedDateTime] = useState<Date | null>(null);
 
+  // カレンダー空き状況の状態
+  const [availabilityData, setAvailabilityData] = useState<any[] | null>(null);
+  const [businessDays, setBusinessDays] = useState<Array<{ start: Date; end: Date }>>([]);
+  const [availabilityCache, setAvailabilityCache] = useState<Record<string, { availability: any[]; businessDays: Array<{ start: Date; end: Date }> }>>({});
+
   // 週の開始日を取得（月曜日）
   function getWeekStart(date: Date) {
     const d = new Date(date);
@@ -569,6 +574,63 @@ export default function PreviewFormPage() {
     return dates;
   };
 
+  // カレンダー空き状況を取得
+  const fetchCalendarAvailability = useCallback(async (date: Date) => {
+    if (!form?.config?.gas_endpoint) {
+      return;
+    }
+
+    const startTime = new Date(date);
+    startTime.setHours(0, 0, 0, 0);
+    const endTime = new Date(date);
+    endTime.setDate(endTime.getDate() + 7);
+    endTime.setHours(23, 59, 59, 999);
+
+    const cacheKey = startTime.toISOString() + endTime.toISOString();
+
+    // キャッシュを確認
+    if (availabilityCache[cacheKey]) {
+      console.log('Using cached availability data');
+      setAvailabilityData(availabilityCache[cacheKey].availability);
+      setBusinessDays(availabilityCache[cacheKey].businessDays);
+      return;
+    }
+
+    const url = form.config.gas_endpoint + 
+      `?startTime=${startTime.toISOString()}&endTime=${endTime.toISOString()}`;
+
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log('Calendar availability data:', data);
+
+      // 営業日の情報を抽出
+      const businessDaysData = data.filter((event: any) => event.summary === "営業日").map((event: any) => {
+        return {
+          start: new Date(event.startTime),
+          end: new Date(event.endTime)
+        };
+      });
+
+      // データをキャッシュに保存
+      const newCache = {
+        ...availabilityCache,
+        [cacheKey]: { availability: data, businessDays: businessDaysData }
+      };
+      setAvailabilityCache(newCache);
+      setAvailabilityData(data);
+      setBusinessDays(businessDaysData);
+    } catch (error) {
+      console.error('Error fetching calendar availability:', error);
+      // エラー時は空き状況データをnullにして、営業時間のみで判定
+      setAvailabilityData(null);
+      setBusinessDays([]);
+    }
+  }, [form?.config?.gas_endpoint, availabilityCache]);
+
   // 営業時間に基づいて時間選択肢を生成
   const getAvailableTimeSlots = (date?: Date) => {
     if (!form || (!formData.selectedDate && !date)) return [];
@@ -619,9 +681,11 @@ export default function PreviewFormPage() {
     const maxWeekStart = getWeekStart(getMaxBookingDate());
     if (direction === 'next' && newWeekStart > maxWeekStart) {
       setCurrentWeekStart(maxWeekStart);
+      fetchCalendarAvailability(maxWeekStart);
       return;
     }
     setCurrentWeekStart(newWeekStart);
+    fetchCalendarAvailability(newWeekStart);
   };
 
   // 月の移動
@@ -634,6 +698,7 @@ export default function PreviewFormPage() {
       nextWeekStart = maxWeekStart;
     }
     setCurrentWeekStart(nextWeekStart);
+    fetchCalendarAvailability(nextWeekStart);
   };
 
   // メニューが選択されているかチェック
@@ -646,6 +711,13 @@ export default function PreviewFormPage() {
     
     return hasSelectedMenus || hasSelectedSubMenus;
   };
+
+  // カレンダー表示時に空き状況を取得
+  useEffect(() => {
+    if (form && isMenuSelected() && form.config?.calendar_settings?.booking_mode !== 'multiple_dates') {
+      fetchCalendarAvailability(currentWeekStart);
+    }
+  }, [form, formData.selectedMenus, formData.selectedSubMenus, currentWeekStart, fetchCalendarAvailability]);
 
   if (loading) {
     return (
@@ -1720,24 +1792,161 @@ export default function PreviewFormPage() {
                                 {time}
                               </td>
                               {getWeekDates(currentWeekStart).map((date, dateIndex) => {
-                                const availableSlots = getAvailableTimeSlots(date);
-                                const isAvailable = availableSlots.includes(time);
+                                // 空き状況の判定
+                                const now = new Date();
+                                const slotStart = new Date(date);
+                                slotStart.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
+                                const isPast = slotStart < now;
+                                
+                                // メニュー時間とオプション時間を計算
+                                let menuDuration = 0;
+                                const selectedMenuIds = Object.values(formData.selectedMenus).flat();
+                                if (selectedMenuIds.length > 0) {
+                                  const menuId = selectedMenuIds[0];
+                                  const category = form.config.menu_structure.categories.find(c => 
+                                    c.menus.some(m => m.id === menuId)
+                                  );
+                                  const menu = category?.menus.find(m => m.id === menuId);
+                                  if (formData.selectedSubMenus[menuId]) {
+                                    const submenu = menu?.sub_menu_items?.find(s => s.id === formData.selectedSubMenus[menuId]);
+                                    menuDuration = submenu?.duration || menu?.duration || 0;
+                                  } else {
+                                    menuDuration = menu?.duration || 0;
+                                  }
+                                  
+                                  // オプション時間を合計
+                                  const selectedOptionIds = formData.selectedMenuOptions[menuId] || [];
+                                  selectedOptionIds.forEach(optionId => {
+                                    const option = menu?.options?.find(o => o.id === optionId);
+                                    if (option) {
+                                      menuDuration += option.duration || 0;
+                                    }
+                                  });
+                                }
+                                
+                                // 終了時間を計算
+                                const slotEnd = new Date(slotStart);
+                                slotEnd.setMinutes(slotStart.getMinutes() + menuDuration);
+                                
+                                // 終了時間が翌日になる場合は不可
+                                const isNextDay = slotEnd.getDate() !== slotStart.getDate();
+                                
+                                // 18時以降に終了する予約を不可にする
+                                let endsAfter18 = false;
+                                if (slotEnd.getHours() === 18 && slotEnd.getMinutes() > 0) {
+                                  endsAfter18 = true;
+                                } else if (slotEnd.getHours() > 18) {
+                                  endsAfter18 = true;
+                                }
+                                
+                                // 営業時間チェック
+                                const dayOfWeek = date.getDay();
+                                const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                                const dayName = dayNames[dayOfWeek] as keyof typeof form.config.calendar_settings.business_hours;
+                                const businessHours = form.config.calendar_settings.business_hours[dayName];
+                                const isClosed = businessHours?.closed === true;
+                                
+                                let isWithinBusinessHours = true;
+                                if (!isClosed && businessHours) {
+                                  const timeHour = parseInt(time.split(':')[0]);
+                                  const timeMinute = parseInt(time.split(':')[1]);
+                                  const timeMinutes = timeHour * 60 + timeMinute;
+                                  
+                                  const openTime = businessHours.open || '09:00';
+                                  const closeTime = businessHours.close || '18:00';
+                                  const openHour = parseInt(openTime.split(':')[0]);
+                                  const openMinute = parseInt(openTime.split(':')[1]);
+                                  const openMinutes = openHour * 60 + openMinute;
+                                  
+                                  const closeHour = parseInt(closeTime.split(':')[0]);
+                                  const closeMinute = parseInt(closeTime.split(':')[1]);
+                                  const closeMinutes = closeHour * 60 + closeMinute;
+                                  
+                                  isWithinBusinessHours = timeMinutes >= openMinutes && timeMinutes < closeMinutes;
+                                }
+                                
+                                // 予約可能期間の判定
+                                const withinWindow = isWithinAdvanceWindow(date);
+                                
+                                // 空き状況の判定
+                                let isAvailable = false;
+                                
+                                if (isPast || isNextDay || endsAfter18 || !withinWindow || isClosed || !isWithinBusinessHours) {
+                                  isAvailable = false;
+                                } else if (availabilityData && availabilityData.length > 0) {
+                                  // GASから取得したデータがある場合
+                                  const day = new Date(date);
+                                  day.setHours(0, 0, 0, 0);
+                                  
+                                  // 営業日のイベント時間帯を取得
+                                  let businessEventTimes: Array<{ start: Date; end: Date }> = [];
+                                  availabilityData.forEach((slot: any) => {
+                                    const eventStart = new Date(slot.startTime);
+                                    const eventEnd = new Date(slot.endTime);
+                                    if (eventStart.toDateString() === day.toDateString() && slot.title === "営業日") {
+                                      businessEventTimes.push({ start: eventStart, end: eventEnd });
+                                    }
+                                  });
+                                  
+                                  // 営業日チェック
+                                  const isBusinessDay = businessDays.some(businessDay => {
+                                    const businessDayStart = new Date(businessDay.start);
+                                    const businessDayEnd = new Date(businessDay.end);
+                                    return slotStart >= businessDayStart && slotEnd <= businessDayEnd;
+                                  });
+                                  
+                                  // 営業日のイベント時間内かチェック
+                                  const isBusinessEventTime = businessEventTimes.some(event => {
+                                    return slotStart < event.end && event.start < slotEnd;
+                                  });
+                                  
+                                  // 予約済みイベントの数をカウント
+                                  const count = availabilityData.reduce((acc: number, slot: any) => {
+                                    const eventStart = new Date(slot.startTime);
+                                    const eventEnd = new Date(slot.endTime);
+                                    if (eventStart < slotEnd && slotStart < eventEnd && slot.title !== "営業日") {
+                                      return acc + 1;
+                                    }
+                                    return acc;
+                                  }, 0);
+                                  
+                                  // 空き状況の判定ロジック
+                                  if (isBusinessEventTime && count > 0) {
+                                    isAvailable = false;
+                                  } else if (isBusinessEventTime) {
+                                    isAvailable = true;
+                                  } else if (businessEventTimes.length > 0) {
+                                    isAvailable = false;
+                                  } else if (slotStart.getDay() === 0 && !isBusinessDay && businessEventTimes.length === 0) {
+                                    isAvailable = false;
+                                  } else if (isBusinessDay && count === 0) {
+                                    isAvailable = true;
+                                  } else if (count <= 0) {
+                                    isAvailable = true;
+                                  } else {
+                                    isAvailable = false;
+                                  }
+                                } else {
+                                  // GASから取得したデータがない場合、営業時間のみで判定
+                                  isAvailable = true;
+                                }
+                                
                                 const isSelected = selectedDateTime && 
                                   selectedDateTime.toDateString() === date.toDateString() &&
                                   selectedDateTime.toTimeString().slice(0, 5) === time;
-                                const isPast = new Date() > new Date(date.getFullYear(), date.getMonth(), date.getDate(), 
-                                  parseInt(time.split(':')[0]), parseInt(time.split(':')[1]));
                                 
                                 return (
                                   <td 
                                     key={dateIndex}
                                     onClick={() => isAvailable && !isPast ? handleDateTimeSelect(date, time) : null}
-                                    className={`text-center p-1 border border-gray-400 text-xs cursor-pointer ${
+                                    className={`text-center p-1 border border-gray-400 text-xs ${
+                                      isAvailable && !isPast ? 'cursor-pointer' : 'cursor-not-allowed'
+                                    } ${
                                       isSelected 
                                         ? 'bg-green-500 text-white' 
                                         : isAvailable && !isPast
                                           ? 'hover:bg-gray-200 bg-white'
-                                          : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                          : 'bg-gray-100 text-gray-400'
                                     }`}
                                   >
                                     {isAvailable && !isPast ? '○' : '×'}

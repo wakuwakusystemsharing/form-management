@@ -164,6 +164,9 @@ class BookingForm {
             message: ''
         };
         this.currentDate = new Date();
+        this.availabilityCache = {}; // カレンダー空き状況のキャッシュ
+        this.availabilityData = null; // 現在の空き状況データ
+        this.businessDays = []; // 営業日の情報
         this.init();
     }
     
@@ -467,6 +470,65 @@ class BookingForm {
         return dates;
     }
     
+    // カレンダー空き状況を取得
+    async fetchAvailability(date) {
+        // GASエンドポイントが未設定の場合はスキップ
+        if (!this.config.gas_endpoint) {
+            return;
+        }
+        
+        const startTime = new Date(date);
+        startTime.setHours(0, 0, 0, 0);
+        const endTime = new Date(date);
+        endTime.setDate(endTime.getDate() + 7);
+        endTime.setHours(23, 59, 59, 999);
+        
+        const cacheKey = startTime.toISOString() + endTime.toISOString();
+        
+        // キャッシュを確認
+        if (this.availabilityCache[cacheKey]) {
+            console.log('Using cached availability data');
+            this.availabilityData = this.availabilityCache[cacheKey].availability;
+            this.businessDays = this.availabilityCache[cacheKey].businessDays;
+            this.renderCalendar();
+            return;
+        }
+        
+        const url = this.config.gas_endpoint + 
+            \`?startTime=\${startTime.toISOString()}&endTime=\${endTime.toISOString()}\`;
+        
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(\`HTTP error! status: \${response.status}\`);
+            }
+            const data = await response.json();
+            console.log('Calendar availability data:', data);
+            
+            // 営業日の情報を抽出
+            const businessDays = data.filter(event => event.summary === "営業日").map(event => {
+                return {
+                    start: new Date(event.startTime),
+                    end: new Date(event.endTime)
+                };
+            });
+            
+            // データをキャッシュに保存
+            this.availabilityCache[cacheKey] = { availability: data, businessDays: businessDays };
+            this.availabilityData = data;
+            this.businessDays = businessDays;
+            
+            // カレンダーを再レンダリング
+            this.renderCalendar();
+        } catch (error) {
+            console.error('Error fetching calendar availability:', error);
+            // エラー時は空き状況データをnullにして、営業時間のみで判定
+            this.availabilityData = null;
+            this.businessDays = [];
+            this.renderCalendar();
+        }
+    }
+    
     // カレンダーをレンダリング
     renderCalendar() {
         const table = document.getElementById('calendar-table');
@@ -545,25 +607,134 @@ class BookingForm {
         
         // 予約可能期間の判定
         const withinWindow = date.getTime() <= max.getTime();
-        // 空き状況（後でAPI連携）と営業時間・定休日のチェックを組み合わせ
-        const isAvailable = withinWindow && !isClosed && isWithinBusinessHours && (Math.random() > 0.3);
-                const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
-                const isPast = new Date() > new Date(date.getFullYear(), date.getMonth(), date.getDate(), 
-                    parseInt(time.split(':')[0]), parseInt(time.split(':')[1]));
-                
-                const bgColor = isSelected ? '#10b981' : (isAvailable && !isPast ? '#fff' : '#f3f4f6');
-                const textColor = isSelected ? '#fff' : (isAvailable && !isPast ? '#111827' : '#9ca3af');
-                const cursor = isAvailable && !isPast ? 'pointer' : 'not-allowed';
-                const hoverStyle = isAvailable && !isPast ? 'onmouseover="this.style.backgroundColor=&quot;#e5e7eb&quot;" onmouseout="if(!this.classList.contains(&quot;selected&quot;)){this.style.backgroundColor=&quot;#fff&quot;}"' : '';
-                
-                bodyHTML += \`<td 
-                    data-date="\${dateStr}" 
-                    data-time="\${time}"
-                    class="calendar-cell \${isSelected ? 'selected' : ''}"
-                    style="text-align:center;padding:0.25rem;border:1px solid #9ca3af;font-size:0.75rem;cursor:\${cursor};background:\${bgColor};color:\${textColor};"
-                    \${hoverStyle}
-                    onclick="window.bookingForm.handleDateTimeSelect('\${dateStr}', '\${time}', \${isAvailable && !isPast})"
-                >\${isAvailable && !isPast ? '○' : '×'}</td>\`;
+        
+        // 現在の日時を取得
+        const now = new Date();
+        const slotStart = new Date(date);
+        slotStart.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
+        
+        // 過去の時間帯チェック
+        const isPast = slotStart < now;
+        
+        // メニュー時間とオプション時間を計算
+        let menuDuration = 0;
+        if (this.state.selectedSubmenu) {
+            menuDuration = this.state.selectedSubmenu.duration || 0;
+        } else if (this.state.selectedMenu) {
+            menuDuration = this.state.selectedMenu.duration || 0;
+        }
+        
+        // オプション時間を合計
+        let optionsDuration = 0;
+        if (this.state.selectedMenu) {
+            const menuId = this.state.selectedMenu.id;
+            const selectedOptionIds = this.state.selectedOptions[menuId] || [];
+            selectedOptionIds.forEach(optionId => {
+                const option = this.state.selectedMenu.options?.find(o => o.id === optionId);
+                if (option) {
+                    optionsDuration += option.duration || 0;
+                }
+            });
+        }
+        
+        // 終了時間を計算
+        const slotEnd = new Date(slotStart);
+        slotEnd.setMinutes(slotStart.getMinutes() + menuDuration + optionsDuration);
+        
+        // 終了時間が翌日になる場合は不可
+        let isNextDay = slotEnd.getDate() !== slotStart.getDate();
+        
+        // 18時以降に終了する予約を不可にする（17:30は可）
+        let endsAfter18 = false;
+        if (slotEnd.getHours() === 18 && slotEnd.getMinutes() > 0) {
+            endsAfter18 = true;
+        } else if (slotEnd.getHours() > 18) {
+            endsAfter18 = true;
+        }
+        
+        // 空き状況の判定
+        let isAvailable = false;
+        
+        if (isPast || isNextDay || endsAfter18 || !withinWindow || isClosed || !isWithinBusinessHours) {
+            isAvailable = false;
+        } else if (this.availabilityData && this.availabilityData.length > 0) {
+            // GASから取得したデータがある場合
+            const day = new Date(date);
+            day.setHours(0, 0, 0, 0);
+            
+            // 営業日のイベント時間帯を取得
+            let businessEventTimes = [];
+            this.availabilityData.forEach(slot => {
+                const eventStart = new Date(slot.startTime);
+                const eventEnd = new Date(slot.endTime);
+                if (eventStart.toDateString() === day.toDateString() && slot.title === "営業日") {
+                    businessEventTimes.push({ start: eventStart, end: eventEnd });
+                }
+            });
+            
+            // 営業日チェック
+            const isBusinessDay = this.businessDays.some(businessDay => {
+                const businessDayStart = new Date(businessDay.start);
+                const businessDayEnd = new Date(businessDay.end);
+                return slotStart >= businessDayStart && slotEnd <= businessDayEnd;
+            });
+            
+            // 営業日のイベント時間内かチェック
+            const isBusinessEventTime = businessEventTimes.some(event => {
+                return slotStart < event.end && event.start < slotEnd;
+            });
+            
+            // 予約済みイベントの数をカウント
+            const count = this.availabilityData.reduce((acc, slot) => {
+                const eventStart = new Date(slot.startTime);
+                const eventEnd = new Date(slot.endTime);
+                if (eventStart < slotEnd && slotStart < eventEnd && slot.title !== "営業日") {
+                    return acc + 1;
+                }
+                return acc;
+            }, 0);
+            
+            // 空き状況の判定ロジック
+            if (isBusinessEventTime && count > 0) {
+                // 営業日のイベント時間内に他のイベントがある場合
+                isAvailable = false;
+            } else if (isBusinessEventTime) {
+                // 営業日のイベント時間（他のイベントがない場合）
+                isAvailable = true;
+            } else if (businessEventTimes.length > 0) {
+                // 営業日で、指定されている時間以外の時間は×
+                isAvailable = false;
+            } else if (slotStart.getDay() === 0 && !isBusinessDay && businessEventTimes.length === 0) {
+                // 日曜日で、営業日ではない場合
+                isAvailable = false;
+            } else if (isBusinessDay && count === 0) {
+                // 営業日でかつ他のイベントがない場合
+                isAvailable = true;
+            } else if (count <= 0) {
+                // それ以外の条件
+                isAvailable = true;
+            } else {
+                isAvailable = false;
+            }
+        } else {
+            // GASから取得したデータがない場合、営業時間のみで判定
+            isAvailable = true;
+        }
+        
+        const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
+        const bgColor = isSelected ? '#10b981' : (isAvailable && !isPast ? '#fff' : '#f3f4f6');
+        const textColor = isSelected ? '#fff' : (isAvailable && !isPast ? '#111827' : '#9ca3af');
+        const cursor = isAvailable && !isPast ? 'pointer' : 'not-allowed';
+        const hoverStyle = isAvailable && !isPast ? 'onmouseover="this.style.backgroundColor=&quot;#e5e7eb&quot;" onmouseout="if(!this.classList.contains(&quot;selected&quot;)){this.style.backgroundColor=&quot;#fff&quot;}"' : '';
+        
+        bodyHTML += \`<td 
+            data-date="\${dateStr}" 
+            data-time="\${time}"
+            class="calendar-cell \${isSelected ? 'selected' : ''}"
+            style="text-align:center;padding:0.25rem;border:1px solid #9ca3af;font-size:0.75rem;cursor:\${cursor};background:\${bgColor};color:\${textColor};"
+            \${hoverStyle}
+            onclick="window.bookingForm.handleDateTimeSelect('\${dateStr}', '\${time}', \${isAvailable && !isPast})"
+        >\${isAvailable && !isPast ? '○' : '×'}</td>\`;
             });
             
             bodyHTML += '</tr>';
@@ -602,7 +773,13 @@ class BookingForm {
         const newWeekStart = new Date(this.state.currentWeekStart);
         newWeekStart.setDate(this.state.currentWeekStart.getDate() + (direction === 'next' ? 7 : -7));
         this.state.currentWeekStart = newWeekStart;
-        this.renderCalendar();
+        // 空き状況を取得してからカレンダーをレンダリング
+        this.fetchAvailability(this.state.currentWeekStart).then(() => {
+            this.renderCalendar();
+        }).catch(() => {
+            // エラー時もカレンダーをレンダリング（営業時間のみで判定）
+            this.renderCalendar();
+        });
     }
     
     // 月移動
@@ -610,7 +787,13 @@ class BookingForm {
         const newDate = new Date(this.state.currentWeekStart);
         newDate.setMonth(this.state.currentWeekStart.getMonth() + (direction === 'next' ? 1 : -1));
         this.state.currentWeekStart = this.getWeekStart(newDate);
-        this.renderCalendar();
+        // 空き状況を取得してからカレンダーをレンダリング
+        this.fetchAvailability(this.state.currentWeekStart).then(() => {
+            this.renderCalendar();
+        }).catch(() => {
+            // エラー時もカレンダーをレンダリング（営業時間のみで判定）
+            this.renderCalendar();
+        });
     }
     
     // 前回と同じメニューで予約する
@@ -1024,8 +1207,13 @@ class BookingForm {
             if (datetimeField) {
                 if (this.state.selectedMenu || this.state.selectedSubmenu) {
                     datetimeField.style.display = 'block';
-                    // カレンダーを初めて表示する際にレンダリング
-                    this.renderCalendar();
+                    // 空き状況を取得してからカレンダーをレンダリング
+                    this.fetchAvailability(this.state.currentWeekStart).then(() => {
+                        this.renderCalendar();
+                    }).catch(() => {
+                        // エラー時もカレンダーをレンダリング（営業時間のみで判定）
+                        this.renderCalendar();
+                    });
                 } else {
                     datetimeField.style.display = 'none';
                 }
