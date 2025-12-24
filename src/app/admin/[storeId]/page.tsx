@@ -708,6 +708,8 @@ export default function StoreDetailPage() {
   const [editingStore, setEditingStore] = useState<Store | null>(null);
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [recentReservations, setRecentReservations] = useState<any[]>([]);
+  const [loadingReservations, setLoadingReservations] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -745,6 +747,16 @@ export default function StoreDetailPage() {
         if (surveysResponse.ok) {
           const surveysData = await surveysResponse.json();
           setSurveyForms(surveysData);
+        }
+
+        // 最近の予約取得（最新10件）
+        const reservationsResponse = await fetch(`/api/stores/${storeId}/reservations`, {
+          credentials: 'include',
+        });
+        if (reservationsResponse.ok) {
+          const reservationsData = await reservationsResponse.json();
+          // 最新10件に制限（作成日時の降順でソート済み）
+          setRecentReservations(reservationsData.slice(0, 10));
         }
         
       } catch (err) {
@@ -1187,11 +1199,11 @@ export default function StoreDetailPage() {
             📋 フォーム一覧
           </h2>
           
-          {/* フォームURLカード（4列グリッドレイアウト） */}
+          {/* フォームURLカード（2列グリッドレイアウト） */}
           {urls.formUrls.length > 0 && (
             <div className="mb-6">
               <h3 className="text-sm font-medium text-gray-400 mb-2">予約フォーム</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {urls.formUrls.map((form) => (
                   <div key={form.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
                     {/* フォーム名とステータス */}
@@ -1256,7 +1268,7 @@ export default function StoreDetailPage() {
           {urls.surveyUrls.length > 0 && (
             <div>
               <h3 className="text-sm font-medium text-gray-400 mb-2">アンケートフォーム</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {urls.surveyUrls.map((form) => (
                   <div key={form.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
                     {/* フォーム名とステータス */}
@@ -1721,9 +1733,52 @@ export default function StoreDetailPage() {
               予約一覧・分析を見る →
             </button>
           </div>
-          <div className="text-gray-400 text-center py-8">
-            まだ予約がありません
-          </div>
+          {loadingReservations ? (
+            <div className="text-gray-400 text-center py-8">
+              読み込み中...
+            </div>
+          ) : recentReservations.length === 0 ? (
+            <div className="text-gray-400 text-center py-8">
+              まだ予約がありません
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentReservations.map((reservation) => {
+                const selectedMenus = reservation.selected_menus || [];
+                const menuInfo = selectedMenus.length > 0 ? selectedMenus[0] : null;
+                const menuName = menuInfo?.menu_name || reservation.menu_name || '未選択';
+                const submenuName = menuInfo?.submenu_name || reservation.submenu_name;
+                const fullMenuName = submenuName ? `${menuName} > ${submenuName}` : menuName;
+                
+                return (
+                  <div key={reservation.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="text-gray-100 font-medium">{reservation.customer_name}</span>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            reservation.status === 'pending' 
+                              ? 'bg-yellow-900/50 text-yellow-200 border border-yellow-700'
+                              : reservation.status === 'confirmed'
+                              ? 'bg-green-900/50 text-green-200 border border-green-700'
+                              : 'bg-red-900/50 text-red-200 border border-red-700'
+                          }`}>
+                            {reservation.status === 'pending' ? '保留中' : 
+                             reservation.status === 'confirmed' ? '確認済み' : 'キャンセル'}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-400 space-y-1">
+                          <div>📅 {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}</div>
+                          <div>📋 {fullMenuName}</div>
+                          <div>📞 {reservation.customer_phone}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* 危険ゾーン: 店舗削除 */}

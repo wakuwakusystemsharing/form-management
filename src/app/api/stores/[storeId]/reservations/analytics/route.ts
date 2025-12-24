@@ -1,6 +1,20 @@
 import { NextResponse } from 'next/server';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import fs from 'fs';
+import path from 'path';
+
+// ローカル環境用: 予約データの読み込み
+const DATA_DIR = path.join(process.cwd(), 'data');
+const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
+
+function readReservations(): any[] {
+  if (!fs.existsSync(RESERVATIONS_FILE)) {
+    return [];
+  }
+  const data = fs.readFileSync(RESERVATIONS_FILE, 'utf-8');
+  return JSON.parse(data);
+}
 
 /**
  * GET /api/stores/[storeId]/reservations/analytics
@@ -17,37 +31,65 @@ export async function GET(
     const dateTo = searchParams.get('date_to');
 
     const env = getAppEnvironment();
-    const adminClient = createAdminClient();
+    let reservations: any[] = [];
 
-    if (!adminClient) {
-      return NextResponse.json(
-        { error: 'Supabase 接続エラー' },
-        { status: 500 }
-      );
-    }
+    // ローカル環境: JSON から読み込み
+    if (env === 'local') {
+      let allReservations = readReservations();
 
-    // 予約データを取得
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let query = (adminClient as any)
-      .from('reservations')
-      .select('*')
-      .eq('store_id', storeId);
+      // 店舗IDでフィルタ（必須）
+      reservations = allReservations.filter((r: any) => r.store_id === storeId);
 
-    if (dateFrom) {
-      query = query.gte('reservation_date', dateFrom);
-    }
-    if (dateTo) {
-      query = query.lte('reservation_date', dateTo);
-    }
+      // 日付フィルタ
+      if (dateFrom) {
+        reservations = reservations.filter((r: any) => r.reservation_date >= dateFrom);
+      }
+      if (dateTo) {
+        reservations = reservations.filter((r: any) => r.reservation_date <= dateTo);
+      }
 
-    const { data: reservations, error } = await query;
+      // 予約日時でソート（新しい順）
+      reservations.sort((a: any, b: any) => {
+        const dateA = new Date(`${a.reservation_date}T${a.reservation_time}`);
+        const dateB = new Date(`${b.reservation_date}T${b.reservation_time}`);
+        return dateB.getTime() - dateA.getTime();
+      });
+    } else {
+      // staging/production: Supabase から取得
+      const adminClient = createAdminClient();
 
-    if (error) {
-      console.error('[API] Analytics fetch error:', error);
-      return NextResponse.json(
-        { error: '予約データの取得に失敗しました' },
-        { status: 500 }
-      );
+      if (!adminClient) {
+        return NextResponse.json(
+          { error: 'Supabase 接続エラー' },
+          { status: 500 }
+        );
+      }
+
+      // 予約データを取得
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let query = (adminClient as any)
+        .from('reservations')
+        .select('*')
+        .eq('store_id', storeId);
+
+      if (dateFrom) {
+        query = query.gte('reservation_date', dateFrom);
+      }
+      if (dateTo) {
+        query = query.lte('reservation_date', dateTo);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('[API] Analytics fetch error:', error);
+        return NextResponse.json(
+          { error: '予約データの取得に失敗しました' },
+          { status: 500 }
+        );
+      }
+
+      reservations = data || [];
     }
 
     if (!reservations || reservations.length === 0) {
