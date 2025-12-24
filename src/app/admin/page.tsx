@@ -117,7 +117,20 @@ export default function AdminPage() {
           if (isMounted) {
             setUser(currentUser);
           }
-          if (currentUser) {
+          if (currentUser && session) {
+            // クッキーにアクセストークンを設定
+            try {
+              await fetch('/api/auth/set-cookie', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({ accessToken: session.access_token }),
+              });
+            } catch (error) {
+              console.error('Failed to set cookie:', error);
+            }
             await loadStores();
           } else if (isMounted) {
             setLoading(false);
@@ -133,7 +146,7 @@ export default function AdminPage() {
 
     initialize();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const nextUser = session?.user ?? null;
 
       if (nextUser && !ADMIN_EMAILS.includes(nextUser.email || '')) {
@@ -141,7 +154,20 @@ export default function AdminPage() {
         setUser(null);
       } else {
         setUser(nextUser);
-        if (nextUser) {
+        if (nextUser && session) {
+          // クッキーにアクセストークンを設定
+          try {
+            await fetch('/api/auth/set-cookie', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({ accessToken: session.access_token }),
+            });
+          } catch (error) {
+            console.error('Failed to set cookie:', error);
+          }
           loadStores();
         }
       }
@@ -171,14 +197,33 @@ export default function AdminPage() {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: loginForm.email,
       password: loginForm.password,
     });
 
     if (error) {
       setLoginError('メールアドレスまたはパスワードが正しくありません');
+      setIsLoggingIn(false);
+      return;
     }
+
+    // ログイン成功後、クッキーにアクセストークンを設定
+    if (data.session) {
+      try {
+        await fetch('/api/auth/set-cookie', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ accessToken: data.session.access_token }),
+        });
+      } catch (error) {
+        console.error('Failed to set cookie:', error);
+      }
+    }
+    
     setIsLoggingIn(false);
   };
 
@@ -186,6 +231,8 @@ export default function AdminPage() {
     const supabase = getSupabaseClient();
     if (supabase) {
       await supabase.auth.signOut();
+      // クッキーを削除
+      document.cookie = 'sb-access-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     }
   };
 
