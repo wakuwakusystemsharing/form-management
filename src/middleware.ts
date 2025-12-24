@@ -98,16 +98,26 @@ export async function middleware(request: NextRequest) {
   const storeIdMatch = pathname.match(/\/([a-z0-9]{6}|st\d{4})\//);
   const storeId = storeIdMatch ? storeIdMatch[1] : null;
   
+  // /{storeId}/reservations はサービス管理者のみアクセス可能
+  const isReservationsRoute = pathname.match(/^\/([a-z0-9]{6}|st\d{4})\/reservations/);
+  
   if (storeId) {
-    // 店舗アクセス権限チェック
-    const hasAccess = await checkStoreAccess(user.id, storeId);
-    
-    if (!hasAccess) {
-      // アクセス権限なし → 403
-      return new NextResponse(
-        JSON.stringify({ error: 'この店舗へのアクセス権限がありません' }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } }
-      );
+    // reservations ルートの場合はサービス管理者チェック
+    if (isReservationsRoute) {
+      if (!ADMIN_EMAILS.includes(user.email || '')) {
+        return NextResponse.redirect(new URL('/admin', request.url));
+      }
+    } else {
+      // その他の店舗管理画面は店舗アクセス権限チェック
+      const hasAccess = await checkStoreAccess(user.id, storeId);
+      
+      if (!hasAccess) {
+        // アクセス権限なし → 403
+        return new NextResponse(
+          JSON.stringify({ error: 'この店舗へのアクセス権限がありません' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
     }
   }
 
