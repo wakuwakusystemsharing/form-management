@@ -1282,11 +1282,12 @@ export default function PreviewFormPage() {
           }
 
           .calendar th:not(:first-child) {
-            font-size: 11px;
-            line-height: 1.2;
+            font-size: 0.7rem;
+            line-height: 1.3;
             word-break: keep-all;
             white-space: normal;
             min-width: 0;
+            padding: 0.4rem 0.3rem;
           }
 
           .calendar th:first-child,
@@ -1308,9 +1309,9 @@ export default function PreviewFormPage() {
             }
 
             .calendar th:not(:first-child) {
-              font-size: 9px;
-              line-height: 1.15;
-              padding: 3px 1px;
+              font-size: 0.55rem;
+              line-height: 1.25;
+              padding: 0.35rem 0.1rem;
             }
           }
 
@@ -1327,9 +1328,9 @@ export default function PreviewFormPage() {
             }
 
             .calendar th:not(:first-child) {
-              font-size: 7px !important;
-              line-height: 1.1 !important;
-              padding: 2px 0.5px !important;
+              font-size: 0.45rem !important;
+              line-height: 1.25 !important;
+              padding: 0.25rem 0.05rem !important;
             }
 
             .calendar th {
@@ -1803,13 +1804,10 @@ export default function PreviewFormPage() {
                         <tr>
                           <th className="text-center p-2 bg-gray-100 border border-gray-400 text-xs">時間</th>
                           {getWeekDates(currentWeekStart).map((date, index) => (
-                            <th key={index} className="text-center p-2 bg-gray-100 border border-gray-400 text-xs" style={{ fontSize: 'inherit', lineHeight: '1.2' }}>
-                              <div style={{ fontSize: 'inherit', lineHeight: '1.1' }}>
-                                {date.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
-                              </div>
-                              <div style={{ fontSize: 'inherit', lineHeight: '1.1', marginTop: '1px' }}>
-                                ({['日', '月', '火', '水', '木', '金', '土'][date.getDay()]})
-                              </div>
+                            <th key={index} className="text-center bg-gray-100 border border-gray-400" style={{ fontSize: '0.7rem', lineHeight: '1.3', padding: '0.4rem 0.3rem' }}>
+                              {date.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
+                              <br style={{ lineHeight: '0.8' }} />
+                              ({['日', '月', '火', '水', '木', '金', '土'][date.getDay()]})
                             </th>
                           ))}
                         </tr>

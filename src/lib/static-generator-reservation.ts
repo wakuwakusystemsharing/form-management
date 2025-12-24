@@ -560,7 +560,7 @@ class BookingForm {
         weekDates.forEach(date => {
             const dayOfWeek = date.getDay();
             const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
-            headerHTML += \`<th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:1px solid #9ca3af;font-size:0.75rem;vertical-align:middle;line-height:1.2;width:calc((100% - 17%) / 7);box-sizing:border-box;word-break:keep-all;white-space:normal;"><div style="font-size:inherit;line-height:1.1;">\${date.getMonth() + 1}/\${date.getDate()}</div><div style="font-size:inherit;line-height:1.1;margin-top:1px;">(\${dayNames[dayOfWeek]})</div></th>\`;
+            headerHTML += \`<th style="text-align:center;padding:0.4rem 0.3rem;background:#f3f4f6;border:1px solid #9ca3af;font-size:0.7rem;vertical-align:middle;line-height:1.3;width:calc((100% - 17%) / 7);box-sizing:border-box;word-break:keep-all;white-space:normal;">\${date.getMonth() + 1}/\${date.getDate()}<br style="line-height:0.8;" />(\${dayNames[dayOfWeek]})</th>\`;
         });
         headerHTML += '</tr></thead>';
         
@@ -1809,10 +1809,11 @@ if (document.readyState === 'loading') {
         #calendar-table th:not(:first-child) {
             width: calc((100% - 17%) / 7);
             font-size: 0.7rem;
-            line-height: 1.2;
+            line-height: 1.3;
             word-break: keep-all;
             white-space: normal;
             min-width: 0;
+            padding: 0.4rem 0.3rem;
         }
         
         #calendar-table td.calendar-cell {
@@ -1858,8 +1859,8 @@ if (document.readyState === 'loading') {
 
             #calendar-table th:not(:first-child) {
                 font-size: 0.55rem;
-                line-height: 1.15;
-                padding: 0.3rem 0.125rem;
+                line-height: 1.25;
+                padding: 0.35rem 0.1rem;
             }
             
             .month-button,
@@ -1879,13 +1880,13 @@ if (document.readyState === 'loading') {
             
             #calendar-table th {
                 padding: 0.3rem 0.1rem !important;
-                line-height: 1.1 !important;
+                line-height: 1.2 !important;
             }
 
             #calendar-table th:not(:first-child) {
                 font-size: 0.45rem !important;
-                line-height: 1.1 !important;
-                padding: 0.2rem 0.05rem !important;
+                line-height: 1.25 !important;
+                padding: 0.25rem 0.05rem !important;
             }
             
             #calendar-table th:first-child,

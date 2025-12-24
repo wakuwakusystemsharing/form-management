@@ -1507,7 +1507,7 @@ export default function StoreDetailPage() {
                     placeholder="例：https://script.google.com/macros/s/xxx/exec"
                     className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
                   />
-                  <p className="text-xs text-gray-400 mt-1">予約データ送信用のGASエンドポイント</p>
+                  <p className="text-xs text-gray-400 mt-1">カレンダー空き状況取得用のGASエンドポイント</p>
                 </div>
               </div>
               <div className="flex items-center space-x-3 mt-6">
