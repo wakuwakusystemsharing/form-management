@@ -708,6 +708,8 @@ export default function StoreDetailPage() {
   const [editingStore, setEditingStore] = useState<Store | null>(null);
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [recentReservations, setRecentReservations] = useState<any[]>([]);
+  const [loadingReservations, setLoadingReservations] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -746,6 +748,16 @@ export default function StoreDetailPage() {
           const surveysData = await surveysResponse.json();
           setSurveyForms(surveysData);
         }
+
+        // 最近の予約取得（最新10件）
+        const reservationsResponse = await fetch(`/api/stores/${storeId}/reservations`, {
+          credentials: 'include',
+        });
+        if (reservationsResponse.ok) {
+          const reservationsData = await reservationsResponse.json();
+          // 最新10件に制限（作成日時の降順でソート済み）
+          setRecentReservations(reservationsData.slice(0, 10));
+        }
         
       } catch (err) {
         console.error('Data fetch error:', err);
@@ -776,7 +788,74 @@ export default function StoreDetailPage() {
       return;
     }
 
+    // GASエンドポイントのバリデーション（URL形式チェック）
+    try {
+      new URL(newFormData.gas_endpoint.trim());
+    } catch {
+      alert('有効なURL形式ではありません');
+      return;
+    }
+
+    // Google Apps ScriptのURLパターンチェック
+    const gasUrlPattern = /^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec/;
+    if (!gasUrlPattern.test(newFormData.gas_endpoint.trim())) {
+      alert('Google Apps ScriptのURL形式が正しくありません（例: https://script.google.com/macros/s/xxx/exec）');
+      return;
+    }
+
     setSubmitting(true);
+    
+    // GASエンドポイントが実際に動作するかテスト（サーバーサイドプロキシ経由）
+    let testPassed = false;
+    try {
+      const testStartTime = new Date();
+      testStartTime.setHours(0, 0, 0, 0);
+      const testEndTime = new Date(testStartTime);
+      testEndTime.setDate(testStartTime.getDate() + 7);
+      testEndTime.setHours(23, 59, 59, 999);
+
+      // サーバーサイドプロキシAPIを使用してCORSエラーを回避
+      const testApiUrl = `/api/gas/test?url=${encodeURIComponent(newFormData.gas_endpoint.trim())}&startTime=${encodeURIComponent(testStartTime.toISOString())}&endTime=${encodeURIComponent(testEndTime.toISOString())}`;
+
+      const testResponse = await fetch(testApiUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!testResponse.ok) {
+        const errorData = await testResponse.json().catch(() => ({ error: '不明なエラー' }));
+        throw new Error(errorData.error || `HTTPエラー: ${testResponse.status}`);
+      }
+
+      const result = await testResponse.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'テストに失敗しました');
+      }
+
+      // テスト成功
+      testPassed = true;
+      console.log('GASエンドポイントのテスト成功:', result.data);
+    } catch (error) {
+      console.error('GASエンドポイントのテスト失敗:', error);
+      const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+      const shouldContinue = window.confirm(
+        `GASエンドポイントの接続テストに失敗しました。\n\n` +
+        `エラー: ${errorMessage}\n\n` +
+        `それでもフォームを作成しますか？\n\n` +
+        `（注意: カレンダー空き状況が取得できない可能性があります）`
+      );
+      
+      if (!shouldContinue) {
+        setSubmitting(false);
+        return;
+      }
+      // ユーザーが続行を選択した場合は、testPassed = falseのまま続行
+    }
+
+    // フォーム作成処理
     try {
       // 選択されたテンプレートを取得
       const selectedTemplate = FORM_TEMPLATES[newFormData.template as keyof typeof FORM_TEMPLATES];
@@ -1120,11 +1199,11 @@ export default function StoreDetailPage() {
             📋 フォーム一覧
           </h2>
           
-          {/* フォームURLカード（4列グリッドレイアウト） */}
+          {/* フォームURLカード（2列グリッドレイアウト） */}
           {urls.formUrls.length > 0 && (
             <div className="mb-6">
               <h3 className="text-sm font-medium text-gray-400 mb-2">予約フォーム</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {urls.formUrls.map((form) => (
                   <div key={form.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
                     {/* フォーム名とステータス */}
@@ -1189,7 +1268,7 @@ export default function StoreDetailPage() {
           {urls.surveyUrls.length > 0 && (
             <div>
               <h3 className="text-sm font-medium text-gray-400 mb-2">アンケートフォーム</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {urls.surveyUrls.map((form) => (
                   <div key={form.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
                     {/* フォーム名とステータス */}
@@ -1440,7 +1519,7 @@ export default function StoreDetailPage() {
                     placeholder="例：https://script.google.com/macros/s/xxx/exec"
                     className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
                   />
-                  <p className="text-xs text-gray-400 mt-1">予約データ送信用のGASエンドポイント</p>
+                  <p className="text-xs text-gray-400 mt-1">カレンダー空き状況取得用のGASエンドポイント</p>
                 </div>
               </div>
               <div className="flex items-center space-x-3 mt-6">
@@ -1645,10 +1724,61 @@ export default function StoreDetailPage() {
 
         {/* 予約履歴 */}
         <div className="bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-700 mb-12">
-          <h2 className="text-xl font-semibold text-white mb-4">最近の予約</h2>
-          <div className="text-gray-400 text-center py-8">
-            まだ予約がありません
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-white">最近の予約</h2>
+            <button
+              onClick={() => router.push(`/${storeId}/reservations`)}
+              className="text-cyan-400 hover:text-cyan-300 text-sm font-medium transition-colors"
+            >
+              予約一覧・分析を見る →
+            </button>
           </div>
+          {loadingReservations ? (
+            <div className="text-gray-400 text-center py-8">
+              読み込み中...
+            </div>
+          ) : recentReservations.length === 0 ? (
+            <div className="text-gray-400 text-center py-8">
+              まだ予約がありません
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentReservations.map((reservation) => {
+                const selectedMenus = reservation.selected_menus || [];
+                const menuInfo = selectedMenus.length > 0 ? selectedMenus[0] : null;
+                const menuName = menuInfo?.menu_name || reservation.menu_name || '未選択';
+                const submenuName = menuInfo?.submenu_name || reservation.submenu_name;
+                const fullMenuName = submenuName ? `${menuName} > ${submenuName}` : menuName;
+                
+                return (
+                  <div key={reservation.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="text-gray-100 font-medium">{reservation.customer_name}</span>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            reservation.status === 'pending' 
+                              ? 'bg-yellow-900/50 text-yellow-200 border border-yellow-700'
+                              : reservation.status === 'confirmed'
+                              ? 'bg-green-900/50 text-green-200 border border-green-700'
+                              : 'bg-red-900/50 text-red-200 border border-red-700'
+                          }`}>
+                            {reservation.status === 'pending' ? '保留中' : 
+                             reservation.status === 'confirmed' ? '確認済み' : 'キャンセル'}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-400 space-y-1">
+                          <div>📅 {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}</div>
+                          <div>📋 {fullMenuName}</div>
+                          <div>📞 {reservation.customer_phone}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* 危険ゾーン: 店舗削除 */}

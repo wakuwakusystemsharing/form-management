@@ -1,0 +1,82 @@
+name: Branch Protection
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, staging]
+
+jobs:
+  validate-branch-flow:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate branch flow
+        run: |
+          BASE_BRANCH="${{ github.event.pull_request.base.ref }}"
+          HEAD_BRANCH="${{ github.event.pull_request.head.ref }}"
+          
+          echo "Base branch: $BASE_BRANCH"
+          echo "Head branch: $HEAD_BRANCH"
+          
+          # Production (main) へのマージ制限
+          if [ "$BASE_BRANCH" == "main" ]; then
+            if [ "$HEAD_BRANCH" != "staging" ]; then
+              echo "❌ Error: main (Production) へのマージは staging ブランチからのみ許可されています"
+              echo "現在のブランチ: $HEAD_BRANCH"
+              echo "許可されているブランチ: staging"
+              exit 1
+            fi
+            echo "✅ Valid: staging → main (Production)"
+          fi
+          
+          # Staging へのマージ制限
+          if [ "$BASE_BRANCH" == "staging" ]; then
+            if [ "$HEAD_BRANCH" != "dev" ] && [[ ! "$HEAD_BRANCH" =~ ^dev/ ]] && [[ ! "$HEAD_BRANCH" =~ ^feature/ ]]; then
+              echo "❌ Error: staging へのマージは dev または feature/* ブランチからのみ許可されています"
+              echo "現在のブランチ: $HEAD_BRANCH"
+              echo "許可されているブランチ: dev, dev/*, feature/*"
+              exit 1
+            fi
+            echo "✅ Valid: $HEAD_BRANCH → staging"
+          fi
+          
+          echo "✅ Branch flow validation passed"
+
+  check-commit-messages:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          
+          echo "Checking commit messages between $BASE_SHA and $HEAD_SHA"
+          
+          # コミットメッセージの形式チェック（Conventional Commits）
+          INVALID_COMMITS=$(git log --format="%H %s" $BASE_SHA..$HEAD_SHA | grep -vE "^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?: " || true)
+          
+          if [ -n "$INVALID_COMMITS" ]; then
+            echo "⚠️  Warning: Some commits don't follow Conventional Commits format:"
+            echo "$INVALID_COMMITS"
+            echo ""
+            echo "推奨フォーマット: type(scope): description"
+            echo "例: feat(auth): ログイン機能を追加"
+            echo ""
+            echo "Type: feat, fix, docs, style, refactor, test, chore, perf, ci, build, revert"
+          else
+            echo "✅ All commit messages follow Conventional Commits format"
+          fi
+

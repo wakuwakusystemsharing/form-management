@@ -5,28 +5,51 @@
 ## 🌳 ブランチ戦略
 
 ```
-main (本番)
-  ↑ merge
-staging (検証環境)
-  ↑ merge
-feature/* (開発ブランチ)
+main (Production - 本番)
+  ↑ PR のみ（staging からのみ）
+staging (Staging - 検証環境)
+  ↑ PR のみ（dev または feature/* からのみ）
+dev (Development - 開発環境)
+  ↑ 直接プッシュ可能
+feature/* (機能開発ブランチ)
+  ↑ dev にマージ、または staging にPR
 ```
 
 ### ブランチの役割
 
 - **`main`**: 本番環境 (Production)
   - 常に安定した状態を保つ
-  - 直接コミット禁止
-  - staging からのマージのみ許可
+  - **直接プッシュ禁止**（ブランチ保護ルール）
+  - **staging からのPRのみ許可**
+  - レビュー必須（1名以上、推奨: 2名）
 
 - **`staging`**: ステージング環境 (Preview)
   - 本番デプロイ前の最終確認
-  - feature ブランチからのマージを受け付ける
+  - **直接プッシュ禁止**（ブランチ保護ルール）
+  - **dev または feature/* からのPRのみ許可**
   - 本番と同じ構成でテスト
+
+- **`dev`**: 開発環境 (Development)
+  - 日常的な開発・実験的機能のテスト
+  - **直接プッシュ可能**（開発用のため）
+  - Supabase Stagingプロジェクトのdevブランチを使用
 
 - **`feature/*`**: 機能開発ブランチ
   - 各機能ごとに作成
   - 例: `feature/add-menu-editor`, `feature/fix-auth`
+  - dev にマージ、または staging にPR
+
+### 🔒 階層的な制限
+
+**Production < Staging < Development** の順序で制限がかかります：
+
+- ✅ `dev` → `staging` へのPR: **許可**
+- ✅ `staging` → `main` へのPR: **許可**
+- ❌ `dev` → `main` への直接PR: **禁止**
+- ❌ `feature/*` → `main` への直接PR: **禁止**
+- ❌ `main` → `staging` への逆方向マージ: **禁止**
+
+詳細は [`BRANCH_PROTECTION.md`](./BRANCH_PROTECTION.md) を参照してください。
 
 ---
 
@@ -34,10 +57,24 @@ feature/* (開発ブランチ)
 
 ### 1. 新機能の開発開始
 
+#### オプションA: devブランチで直接開発（推奨）
+
 ```bash
-# 最新の staging をベースに feature ブランチを作成
-git checkout staging
-git pull origin staging
+# devブランチで開発
+git checkout dev
+git pull origin dev
+# 直接コミット・プッシュ可能
+git add .
+git commit -m "feat: 新機能を追加"
+git push origin dev
+```
+
+#### オプションB: featureブランチで開発
+
+```bash
+# 最新の dev をベースに feature ブランチを作成
+git checkout dev
+git pull origin dev
 git checkout -b feature/your-feature-name
 
 # 例:
@@ -79,18 +116,10 @@ git push -u origin feature/your-feature-name
 
 ```bash
 # GitHub で Pull Request を作成
-# Base: staging ← Compare: feature/your-feature-name
+# Base: staging ← Compare: dev または feature/your-feature-name
 ```
 
-または
-
-```bash
-# 直接 staging にマージ (小規模な変更の場合)
-git checkout staging
-git pull origin staging
-git merge feature/your-feature-name
-git push origin staging
-```
+> ⚠️ **重要**: staging への直接プッシュは**禁止**されています。必ずPR経由でマージしてください。
 
 #### 4-2. Staging 環境で動作確認
 
@@ -113,11 +142,14 @@ https://your-app-git-staging-yourteam.vercel.app
 # タイトル: "Release: v1.2.0" など
 ```
 
+> ⚠️ **重要**: main への直接プッシュは**禁止**されています。必ず staging からのPR経由でマージしてください。
+
 #### 5-2. レビュー & マージ
 
-- コードレビュー
+- **コードレビュー必須**（1名以上、推奨: 2名）
 - CI/CD の成功確認
 - Staging での動作確認完了を確認
+- ブランチ保護ルールの要件を満たしていることを確認
 - **Merge Pull Request**
 
 #### 5-3. 本番デプロイ
@@ -143,29 +175,65 @@ https://your-app.vercel.app
 
 ### 緊急バグ修正 (Hotfix)
 
+> ⚠️ **注意**: 緊急時でも基本的なフロー（dev → staging → main）を守ることを推奨します。
+
+#### 方法1: 通常フロー（推奨）
+
 ```bash
-# main から hotfix ブランチを作成
-git checkout main
-git pull origin main
+# dev ブランチで修正
+git checkout dev
+git pull origin dev
 git checkout -b hotfix/fix-critical-bug
 
 # 修正 & コミット
 git add .
 git commit -m "fix: 予約保存時のエラーを修正"
+git push origin hotfix/fix-critical-bug
 
-# staging にマージ
+# dev にマージ
+git checkout dev
+git merge hotfix/fix-critical-bug
+git push origin dev
+
+# staging へのPRを作成・マージ
+# GitHub: Base: staging ← Compare: hotfix/fix-critical-bug
+
+# Staging で確認後、main へのPRを作成・マージ
+# GitHub: Base: main ← Compare: staging
+```
+
+#### 方法2: 緊急時のみ（管理者権限必要）
+
+```bash
+# 1. GitHub Settings → Branches で一時的に保護ルールを無効化（管理者のみ）
+
+# 2. staging から hotfix ブランチを作成
+git checkout staging
+git pull origin staging
+git checkout -b hotfix/fix-critical-bug
+
+# 3. 修正 & コミット
+git add .
+git commit -m "fix: 予約保存時のエラーを修正"
+git push origin hotfix/fix-critical-bug
+
+# 4. staging にマージ
 git checkout staging
 git merge hotfix/fix-critical-bug
 git push origin staging
 
-# Staging で確認後、main にマージ
+# 5. Staging で確認後、main にマージ
 git checkout main
 git merge hotfix/fix-critical-bug
 git push origin main
 
-# hotfix ブランチを削除
+# 6. 保護ルールを再度有効化（管理者のみ）
+
+# 7. hotfix ブランチを削除
 git branch -d hotfix/fix-critical-bug
 git push origin --delete hotfix/fix-critical-bug
+
+# 8. 事後レビューを実施
 ```
 
 ### 定期リリース (毎週金曜など)

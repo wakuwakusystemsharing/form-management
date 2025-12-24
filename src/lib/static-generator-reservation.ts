@@ -9,8 +9,11 @@ export class StaticReservationGenerator {
   /**
    * FormConfigから静的HTMLを生成
    * プレビュー画面と完全一致
+   * @param config フォーム設定
+   * @param formId フォームID
+   * @param storeId 店舗ID
    */
-  generateHTML(config: FormConfig): string {
+  generateHTML(config: FormConfig, formId: string, storeId: string): string {
     // config は immutable に扱うため、深くコピーして修正
     const safeConfig: FormConfig = JSON.parse(JSON.stringify(config));
 
@@ -146,6 +149,8 @@ export class StaticReservationGenerator {
     
     <script>
 const FORM_CONFIG = ${JSON.stringify(safeConfig, null, 2)};
+const FORM_ID = ${JSON.stringify(formId)};
+const STORE_ID = ${JSON.stringify(storeId)};
 
 class BookingForm {
     constructor(config) {
@@ -164,6 +169,9 @@ class BookingForm {
             message: ''
         };
         this.currentDate = new Date();
+        this.availabilityCache = {}; // カレンダー空き状況のキャッシュ
+        this.availabilityData = null; // 現在の空き状況データ
+        this.businessDays = []; // 営業日の情報
         this.init();
     }
     
@@ -467,6 +475,65 @@ class BookingForm {
         return dates;
     }
     
+    // カレンダー空き状況を取得
+    async fetchAvailability(date) {
+        // GASエンドポイントが未設定の場合はスキップ
+        if (!this.config.gas_endpoint) {
+            return;
+        }
+        
+        const startTime = new Date(date);
+        startTime.setHours(0, 0, 0, 0);
+        const endTime = new Date(date);
+        endTime.setDate(endTime.getDate() + 7);
+        endTime.setHours(23, 59, 59, 999);
+        
+        const cacheKey = startTime.toISOString() + endTime.toISOString();
+        
+        // キャッシュを確認
+        if (this.availabilityCache[cacheKey]) {
+            console.log('Using cached availability data');
+            this.availabilityData = this.availabilityCache[cacheKey].availability;
+            this.businessDays = this.availabilityCache[cacheKey].businessDays;
+            this.renderCalendar();
+            return;
+        }
+        
+        const url = this.config.gas_endpoint + 
+            \`?startTime=\${startTime.toISOString()}&endTime=\${endTime.toISOString()}\`;
+        
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(\`HTTP error! status: \${response.status}\`);
+            }
+            const data = await response.json();
+            console.log('Calendar availability data:', data);
+            
+            // 営業日の情報を抽出
+            const businessDays = data.filter(event => event.summary === "営業日").map(event => {
+                return {
+                    start: new Date(event.startTime),
+                    end: new Date(event.endTime)
+                };
+            });
+            
+            // データをキャッシュに保存
+            this.availabilityCache[cacheKey] = { availability: data, businessDays: businessDays };
+            this.availabilityData = data;
+            this.businessDays = businessDays;
+            
+            // カレンダーを再レンダリング
+            this.renderCalendar();
+        } catch (error) {
+            console.error('Error fetching calendar availability:', error);
+            // エラー時は空き状況データをnullにして、営業時間のみで判定
+            this.availabilityData = null;
+            this.businessDays = [];
+            this.renderCalendar();
+        }
+    }
+    
     // カレンダーをレンダリング
     renderCalendar() {
         const table = document.getElementById('calendar-table');
@@ -498,7 +565,7 @@ class BookingForm {
         weekDates.forEach(date => {
             const dayOfWeek = date.getDay();
             const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
-            headerHTML += \`<th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:1px solid #9ca3af;font-size:0.75rem;vertical-align:middle;line-height:1.3;width:calc((100% - 17%) / 7);box-sizing:border-box;word-break:keep-all;white-space:normal;">\${date.getMonth() + 1}/\${date.getDate()}<br/>(\${dayNames[dayOfWeek]})</th>\`;
+            headerHTML += \`<th style="text-align:center;padding:0.4rem 0.3rem;background:#f3f4f6;border:1px solid #9ca3af;font-size:0.7rem;vertical-align:middle;line-height:1.3;width:calc((100% - 17%) / 7);box-sizing:border-box;word-break:keep-all;white-space:normal;">\${date.getMonth() + 1}/\${date.getDate()}<br style="line-height:0.8;" />(\${dayNames[dayOfWeek]})</th>\`;
         });
         headerHTML += '</tr></thead>';
         
@@ -545,12 +612,121 @@ class BookingForm {
         
         // 予約可能期間の判定
         const withinWindow = date.getTime() <= max.getTime();
-        // 空き状況（後でAPI連携）と営業時間・定休日のチェックを組み合わせ
-        const isAvailable = withinWindow && !isClosed && isWithinBusinessHours && (Math.random() > 0.3);
-                const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
-                const isPast = new Date() > new Date(date.getFullYear(), date.getMonth(), date.getDate(), 
-                    parseInt(time.split(':')[0]), parseInt(time.split(':')[1]));
-                
+        
+        // 現在の日時を取得
+        const now = new Date();
+        const slotStart = new Date(date);
+        slotStart.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
+        
+        // 過去の時間帯チェック
+        const isPast = slotStart < now;
+        
+        // メニュー時間とオプション時間を計算
+        let menuDuration = 0;
+        if (this.state.selectedSubmenu) {
+            menuDuration = this.state.selectedSubmenu.duration || 0;
+        } else if (this.state.selectedMenu) {
+            menuDuration = this.state.selectedMenu.duration || 0;
+        }
+        
+        // オプション時間を合計
+        let optionsDuration = 0;
+        if (this.state.selectedMenu) {
+            const menuId = this.state.selectedMenu.id;
+            const selectedOptionIds = this.state.selectedOptions[menuId] || [];
+            selectedOptionIds.forEach(optionId => {
+                const option = this.state.selectedMenu.options?.find(o => o.id === optionId);
+                if (option) {
+                    optionsDuration += option.duration || 0;
+                }
+            });
+        }
+        
+        // 終了時間を計算
+        const slotEnd = new Date(slotStart);
+        slotEnd.setMinutes(slotStart.getMinutes() + menuDuration + optionsDuration);
+        
+        // 終了時間が翌日になる場合は不可
+        let isNextDay = slotEnd.getDate() !== slotStart.getDate();
+        
+        // 18時以降に終了する予約を不可にする（17:30は可）
+        let endsAfter18 = false;
+        if (slotEnd.getHours() === 18 && slotEnd.getMinutes() > 0) {
+            endsAfter18 = true;
+        } else if (slotEnd.getHours() > 18) {
+            endsAfter18 = true;
+        }
+        
+        // 空き状況の判定
+        let isAvailable = false;
+        
+        if (isPast || isNextDay || endsAfter18 || !withinWindow || isClosed || !isWithinBusinessHours) {
+            isAvailable = false;
+        } else if (this.availabilityData && this.availabilityData.length > 0) {
+            // GASから取得したデータがある場合
+            const day = new Date(date);
+            day.setHours(0, 0, 0, 0);
+            
+            // 営業日のイベント時間帯を取得
+            let businessEventTimes = [];
+            this.availabilityData.forEach(slot => {
+                const eventStart = new Date(slot.startTime);
+                const eventEnd = new Date(slot.endTime);
+                if (eventStart.toDateString() === day.toDateString() && slot.title === "営業日") {
+                    businessEventTimes.push({ start: eventStart, end: eventEnd });
+                }
+            });
+            
+            // 営業日チェック
+            const isBusinessDay = this.businessDays.some(businessDay => {
+                const businessDayStart = new Date(businessDay.start);
+                const businessDayEnd = new Date(businessDay.end);
+                return slotStart >= businessDayStart && slotEnd <= businessDayEnd;
+            });
+            
+            // 営業日のイベント時間内かチェック
+            const isBusinessEventTime = businessEventTimes.some(event => {
+                return slotStart < event.end && event.start < slotEnd;
+            });
+            
+            // 予約済みイベントの数をカウント
+            const count = this.availabilityData.reduce((acc, slot) => {
+                const eventStart = new Date(slot.startTime);
+                const eventEnd = new Date(slot.endTime);
+                if (eventStart < slotEnd && slotStart < eventEnd && slot.title !== "営業日") {
+                    return acc + 1;
+                }
+                return acc;
+            }, 0);
+            
+            // 空き状況の判定ロジック
+            if (isBusinessEventTime && count > 0) {
+                // 営業日のイベント時間内に他のイベントがある場合
+                isAvailable = false;
+            } else if (isBusinessEventTime) {
+                // 営業日のイベント時間（他のイベントがない場合）
+                isAvailable = true;
+            } else if (businessEventTimes.length > 0) {
+                // 営業日で、指定されている時間以外の時間は×
+                isAvailable = false;
+            } else if (slotStart.getDay() === 0 && !isBusinessDay && businessEventTimes.length === 0) {
+                // 日曜日で、営業日ではない場合
+                isAvailable = false;
+            } else if (isBusinessDay && count === 0) {
+                // 営業日でかつ他のイベントがない場合
+                isAvailable = true;
+            } else if (count <= 0) {
+                // それ以外の条件
+                isAvailable = true;
+            } else {
+                isAvailable = false;
+            }
+        } else {
+            // GASから取得したデータがない場合、営業時間のみで判定
+            isAvailable = true;
+        }
+        
+        const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
                 const bgColor = isSelected ? '#10b981' : (isAvailable && !isPast ? '#fff' : '#f3f4f6');
                 const textColor = isSelected ? '#fff' : (isAvailable && !isPast ? '#111827' : '#9ca3af');
                 const cursor = isAvailable && !isPast ? 'pointer' : 'not-allowed';
@@ -602,7 +778,13 @@ class BookingForm {
         const newWeekStart = new Date(this.state.currentWeekStart);
         newWeekStart.setDate(this.state.currentWeekStart.getDate() + (direction === 'next' ? 7 : -7));
         this.state.currentWeekStart = newWeekStart;
+        // 空き状況を取得してからカレンダーをレンダリング
+        this.fetchAvailability(this.state.currentWeekStart).then(() => {
         this.renderCalendar();
+        }).catch(() => {
+            // エラー時もカレンダーをレンダリング（営業時間のみで判定）
+            this.renderCalendar();
+        });
     }
     
     // 月移動
@@ -610,12 +792,18 @@ class BookingForm {
         const newDate = new Date(this.state.currentWeekStart);
         newDate.setMonth(this.state.currentWeekStart.getMonth() + (direction === 'next' ? 1 : -1));
         this.state.currentWeekStart = this.getWeekStart(newDate);
+        // 空き状況を取得してからカレンダーをレンダリング
+        this.fetchAvailability(this.state.currentWeekStart).then(() => {
         this.renderCalendar();
+        }).catch(() => {
+            // エラー時もカレンダーをレンダリング（営業時間のみで判定）
+            this.renderCalendar();
+        });
     }
     
     // 前回と同じメニューで予約する
     handleRepeatBooking() {
-        const formId = this.config.basic_info?.form_name || 'default';
+        const formId = this.config.basic_info?.form_name || this.config.id || 'default';
         const savedData = localStorage.getItem(\`booking_\${formId}\`);
         
         if (!savedData) {
@@ -633,20 +821,137 @@ class BookingForm {
                 return;
             }
             
-            // メニュー選択を復元（簡易版 - 実際の実装は選択状態を再現する必要がある）
+            // 全てのメニューの選択状態をリセット
+            document.querySelectorAll('.menu-item').forEach(m => {
+                m.classList.remove('selected', 'has-submenu');
+            });
+            this.hideSubmenu();
+            document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
+            
+            // 状態をリセット
+            this.state.selectedMenu = null;
+            this.state.selectedSubmenu = null;
+            this.state.selectedOptions = {};
+            
+            // Previewページ形式（selectedMenus/selectedSubMenus）から復元
             if (selectionData.selectedMenus && Object.keys(selectionData.selectedMenus).length > 0) {
-                // メニュー選択の復元ロジックは複雑なため、アラートで通知
-                alert('前回のメニューを復元しました！\\nメニューを再選択してください。');
+                // 最初に見つかったメニューを選択（静的HTMLは単一選択形式）
+                let foundMenu = null;
+                let foundCategoryId = null;
+                let foundSubMenuId = null;
                 
-                // カレンダーセクションにスクロール
-                setTimeout(() => {
-                    const calendarField = document.getElementById('datetime-field');
-                    if (calendarField) {
-                        calendarField.style.display = 'block';
-                        calendarField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        this.renderCalendar();
+                for (const [categoryId, menuIds] of Object.entries(selectionData.selectedMenus)) {
+                    if (menuIds && menuIds.length > 0) {
+                        foundCategoryId = categoryId;
+                        const menuId = menuIds[0];
+                        foundMenu = this.findMenu(categoryId, menuId);
+                        
+                        // サブメニューがあるかチェック
+                        if (selectionData.selectedSubMenus && selectionData.selectedSubMenus[menuId]) {
+                            foundSubMenuId = selectionData.selectedSubMenus[menuId];
+                        }
+                        break;
                     }
-                }, 100);
+                }
+                
+                if (foundMenu && foundCategoryId) {
+                    // メニューアイテムを探して選択状態にする
+                    const menuItem = document.querySelector(\`.menu-item[data-menu-id="\${foundMenu.id}"][data-category-id="\${foundCategoryId}"]\`);
+                    if (menuItem) {
+                        if (foundMenu.has_submenu) {
+                            menuItem.classList.add('selected', 'has-submenu');
+                            this.state.selectedMenu = foundMenu;
+                            this.showSubmenu(foundCategoryId, foundMenu.id);
+                            
+                            // サブメニューを選択
+                            if (foundSubMenuId) {
+                                setTimeout(() => {
+                                    const subMenuItems = document.querySelectorAll('.submenu-item');
+                                    subMenuItems.forEach((sub, idx) => {
+                                        const subMenu = foundMenu.sub_menu_items?.[idx];
+                                        if (subMenu && (subMenu.id === foundSubMenuId || (!subMenu.id && idx === 0))) {
+                                            sub.classList.add('selected');
+                                            this.state.selectedSubmenu = subMenu;
+                                        }
+                                    });
+                                    this.updateSummary();
+                                }, 100);
+                            }
+                        } else {
+                            menuItem.classList.add('selected');
+                            this.state.selectedMenu = foundMenu;
+                            
+                            // オプションコンテナを表示
+                            const optionsContainer = document.getElementById(\`options-\${foundMenu.id}\`);
+                            if (optionsContainer) {
+                                optionsContainer.style.display = 'block';
+                            }
+                            
+                            // オプションを復元
+                            if (selectionData.selectedMenuOptions && selectionData.selectedMenuOptions[foundMenu.id]) {
+                                const optionIds = selectionData.selectedMenuOptions[foundMenu.id];
+                                this.state.selectedOptions[foundMenu.id] = optionIds;
+                                optionIds.forEach(optionId => {
+                                    const optionBtn = document.querySelector(\`.menu-option-item[data-option-id="\${optionId}"]\`);
+                                    if (optionBtn) {
+                                        optionBtn.classList.add('selected');
+                                    }
+                                });
+                            }
+                        }
+                        
+                        // 性別、来店回数、クーポンを復元
+                        if (selectionData.gender) {
+                            this.state.gender = selectionData.gender;
+                            const genderBtn = document.querySelector(\`.gender-button[data-value="\${selectionData.gender}"]\`);
+                            if (genderBtn) {
+                                document.querySelectorAll('.gender-button').forEach(btn => btn.classList.remove('selected'));
+                                genderBtn.classList.add('selected');
+                            }
+                        }
+                        
+                        if (selectionData.visitCount) {
+                            this.state.visitCount = selectionData.visitCount;
+                            const visitBtn = document.querySelector(\`.visit-count-button[data-value="\${selectionData.visitCount}"]\`);
+                            if (visitBtn) {
+                                document.querySelectorAll('.visit-count-button').forEach(btn => btn.classList.remove('selected'));
+                                visitBtn.classList.add('selected');
+                            }
+                        }
+                        
+                        if (selectionData.couponUsage) {
+                            this.state.coupon = selectionData.couponUsage;
+                            const couponBtn = document.querySelector(\`.coupon-button[data-value="\${selectionData.couponUsage}"]\`);
+                            if (couponBtn) {
+                                document.querySelectorAll('.coupon-button').forEach(btn => btn.classList.remove('selected'));
+                                couponBtn.classList.add('selected');
+                            }
+                        }
+                        
+                        this.updateSummary();
+                        this.toggleCalendarVisibility();
+                        
+                        // カレンダーセクションにスクロール
+                        setTimeout(() => {
+                            const calendarField = document.getElementById('datetime-field');
+                            if (calendarField) {
+                                calendarField.style.display = 'block';
+                                calendarField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                if (this.state.currentWeekStart) {
+                                    this.fetchAvailability(this.state.currentWeekStart).then(() => {
+                                        this.renderCalendar();
+                                    });
+                                }
+                            }
+                        }, 200);
+                        
+                        alert('前回のメニューを復元しました！');
+                    } else {
+                        alert('前回のメニューが見つかりません💦');
+                    }
+                } else {
+                    alert('前回のメニューが見つかりません💦');
+                }
             } else {
                 alert('前回のメニューが見つかりません💦');
             }
@@ -766,8 +1071,113 @@ class BookingForm {
         }
         
         try {
-            // 日時を日本語形式に変換
+            // メニュー情報を構造化
+            const selectedMenus = [];
+            if (this.state.selectedMenu) {
+                // カテゴリー名を取得
+                const category = this.config.menu_structure.categories.find(c => 
+                    c.menus.some(m => m.id === this.state.selectedMenu.id)
+                );
+                
+                const menuData = {
+                    menu_id: this.state.selectedMenu.id,
+                    menu_name: this.state.selectedMenu.name || '',
+                    category_name: category?.name || '',
+                    price: this.state.selectedMenu.price || 0,
+                    duration: this.state.selectedMenu.duration || 0
+                };
+                
+                // サブメニューが選択されている場合
+                if (this.state.selectedSubmenu) {
+                    menuData.submenu_id = this.state.selectedSubmenu.id;
+                    menuData.submenu_name = this.state.selectedSubmenu.name || '';
+                    if (this.state.selectedSubmenu.price) {
+                        menuData.price = this.state.selectedSubmenu.price;
+                    }
+                    if (this.state.selectedSubmenu.duration) {
+                        menuData.duration = this.state.selectedSubmenu.duration;
+                    }
+                }
+                
+                selectedMenus.push(menuData);
+            }
+            
+            // オプション情報を構造化
+            const selectedOptions = [];
+            if (this.state.selectedMenu) {
+                const menuId = this.state.selectedMenu.id;
+                if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
+                    const menu = this.state.selectedMenu;
+                    const selectedOptionIds = this.state.selectedOptions[menuId];
+                    selectedOptionIds.forEach(optionId => {
+                        const option = menu.options?.find(o => o.id === optionId);
+                        if (option) {
+                            selectedOptions.push({
+                                option_id: option.id,
+                                option_name: option.name || '',
+                                menu_id: menuId
+                            });
+                        }
+                    });
+                }
+            }
+            
+            // 顧客属性情報を構築
+            const customerInfo = {};
+            if (this.config.gender_selection?.enabled && this.state.gender) {
+                customerInfo.gender = this.state.gender;
+            }
+            if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
+                customerInfo.visit_count = this.state.visitCount;
+            }
+            if (this.config.coupon_selection?.enabled && this.state.coupon) {
+                customerInfo.coupon = this.state.coupon;
+            }
+            
+            // 日付をYYYY-MM-DD形式に変換
             const dateObj = new Date(this.state.selectedDate);
+            const reservationDate = \`\${dateObj.getFullYear()}-\${String(dateObj.getMonth() + 1).padStart(2, '0')}-\${String(dateObj.getDate()).padStart(2, '0')}\`;
+            
+            // APIに送信するデータを構築
+            const reservationData = {
+                form_id: FORM_ID,
+                store_id: STORE_ID,
+                customer_name: this.state.name,
+                customer_phone: this.state.phone,
+                customer_email: null, // メールアドレスフィールドがない場合はnull
+                selected_menus: selectedMenus,
+                selected_options: selectedOptions,
+                reservation_date: reservationDate,
+                reservation_time: this.state.selectedTime,
+                customer_info: customerInfo
+            };
+            
+            // /api/reservationsにPOSTリクエストを送信
+            let apiSuccess = false;
+            try {
+                const apiUrl = window.location.origin + '/api/reservations';
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(reservationData)
+                });
+                
+                if (response.ok) {
+                    apiSuccess = true;
+                    console.log('予約データをデータベースに保存しました');
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    console.error('予約データの保存に失敗しました:', errorData);
+                    // API送信失敗でもLINEメッセージは送信する（既存の動作を維持）
+                }
+            } catch (apiError) {
+                console.error('API送信エラー:', apiError);
+                // API送信失敗でもLINEメッセージは送信する（既存の動作を維持）
+            }
+            
+            // 日時を日本語形式に変換（LINEメッセージ用）
             const formattedDate = \`\${dateObj.getFullYear()}年\${String(dateObj.getMonth() + 1).padStart(2, '0')}月\${String(dateObj.getDate()).padStart(2, '0')}日 \${this.state.selectedTime}\`;
             
             // メッセージ本文を構築（old_index.htmlとbooking.gsのparseReservationFormに合わせた形式）
@@ -1024,8 +1434,13 @@ class BookingForm {
             if (datetimeField) {
                 if (this.state.selectedMenu || this.state.selectedSubmenu) {
                     datetimeField.style.display = 'block';
-                    // カレンダーを初めて表示する際にレンダリング
+                    // 空き状況を取得してからカレンダーをレンダリング
+                    this.fetchAvailability(this.state.currentWeekStart).then(() => {
                     this.renderCalendar();
+                    }).catch(() => {
+                        // エラー時もカレンダーをレンダリング（営業時間のみで判定）
+                        this.renderCalendar();
+                    });
                 } else {
                     datetimeField.style.display = 'none';
                 }
@@ -1620,6 +2035,12 @@ if (document.readyState === 'loading') {
         
         #calendar-table th:not(:first-child) {
             width: calc((100% - 17%) / 7);
+            font-size: 0.7rem;
+            line-height: 1.3;
+            word-break: keep-all;
+            white-space: normal;
+            min-width: 0;
+            padding: 0.4rem 0.3rem;
         }
         
         #calendar-table td.calendar-cell {
@@ -1662,6 +2083,12 @@ if (document.readyState === 'loading') {
                 padding: 0.375rem 0.125rem;
                 line-height: 1.2;
             }
+
+            #calendar-table th:not(:first-child) {
+                font-size: 0.55rem;
+                line-height: 1.25;
+                padding: 0.35rem 0.1rem;
+            }
             
             .month-button,
             .week-button {
@@ -1680,7 +2107,13 @@ if (document.readyState === 'loading') {
             
             #calendar-table th {
                 padding: 0.3rem 0.1rem !important;
-                line-height: 1.1 !important;
+                line-height: 1.2 !important;
+            }
+
+            #calendar-table th:not(:first-child) {
+                font-size: 0.45rem !important;
+                line-height: 1.25 !important;
+                padding: 0.25rem 0.05rem !important;
             }
             
             #calendar-table th:first-child,

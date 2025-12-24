@@ -237,17 +237,43 @@ export async function POST(request: Request) {
       );
     }
 
+    // 既存カラム用のデータを抽出（後方互換性のため）
+    const selectedMenus = body.selected_menus || [];
+    const customerInfo = body.customer_info || {};
+    
+    // menu_nameとsubmenu_nameを抽出（最初のメニューから）
+    let menuName = '';
+    let submenuName: string | null = null;
+    if (selectedMenus.length > 0) {
+      const firstMenu = selectedMenus[0];
+      menuName = firstMenu.menu_name || '';
+      submenuName = firstMenu.submenu_name || null;
+    }
+    
+    // customer_infoから既存カラム用の値を抽出
+    const gender = customerInfo.gender || null;
+    const visitCount = customerInfo.visit_count || null;
+    const coupon = customerInfo.coupon || null;
+    
     const newReservation = {
       form_id: body.form_id,
       store_id: body.store_id,
       customer_name: body.customer_name,
       customer_phone: body.customer_phone,
-      customer_email: body.customer_email,
-      selected_menus: body.selected_menus || [],
+      customer_email: body.customer_email || null,
+      // 既存カラム（後方互換性のため）
+      menu_name: menuName || '未選択',
+      submenu_name: submenuName,
+      gender: gender,
+      visit_count: visitCount,
+      coupon: coupon,
+      message: body.message || null,
+      // 新しいJSONBカラム（分析用）
+      selected_menus: selectedMenus,
       selected_options: body.selected_options || [],
       reservation_date: body.reservation_date,
       reservation_time: body.reservation_time,
-      customer_info: body.customer_info || {},
+      customer_info: customerInfo,
       status: 'pending'
     };
 
