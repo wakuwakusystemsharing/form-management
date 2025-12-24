@@ -798,7 +798,7 @@ class BookingForm {
     
     // 前回と同じメニューで予約する
     handleRepeatBooking() {
-        const formId = this.config.basic_info?.form_name || 'default';
+        const formId = this.config.basic_info?.form_name || this.config.id || 'default';
         const savedData = localStorage.getItem(\`booking_\${formId}\`);
         
         if (!savedData) {
@@ -816,20 +816,137 @@ class BookingForm {
                 return;
             }
             
-            // メニュー選択を復元（簡易版 - 実際の実装は選択状態を再現する必要がある）
+            // 全てのメニューの選択状態をリセット
+            document.querySelectorAll('.menu-item').forEach(m => {
+                m.classList.remove('selected', 'has-submenu');
+            });
+            this.hideSubmenu();
+            document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
+            
+            // 状態をリセット
+            this.state.selectedMenu = null;
+            this.state.selectedSubmenu = null;
+            this.state.selectedOptions = {};
+            
+            // Previewページ形式（selectedMenus/selectedSubMenus）から復元
             if (selectionData.selectedMenus && Object.keys(selectionData.selectedMenus).length > 0) {
-                // メニュー選択の復元ロジックは複雑なため、アラートで通知
-                alert('前回のメニューを復元しました！\\nメニューを再選択してください。');
+                // 最初に見つかったメニューを選択（静的HTMLは単一選択形式）
+                let foundMenu = null;
+                let foundCategoryId = null;
+                let foundSubMenuId = null;
                 
-                // カレンダーセクションにスクロール
-                setTimeout(() => {
-                    const calendarField = document.getElementById('datetime-field');
-                    if (calendarField) {
-                        calendarField.style.display = 'block';
-                        calendarField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        this.renderCalendar();
+                for (const [categoryId, menuIds] of Object.entries(selectionData.selectedMenus)) {
+                    if (menuIds && menuIds.length > 0) {
+                        foundCategoryId = categoryId;
+                        const menuId = menuIds[0];
+                        foundMenu = this.findMenu(categoryId, menuId);
+                        
+                        // サブメニューがあるかチェック
+                        if (selectionData.selectedSubMenus && selectionData.selectedSubMenus[menuId]) {
+                            foundSubMenuId = selectionData.selectedSubMenus[menuId];
+                        }
+                        break;
                     }
-                }, 100);
+                }
+                
+                if (foundMenu && foundCategoryId) {
+                    // メニューアイテムを探して選択状態にする
+                    const menuItem = document.querySelector(\`.menu-item[data-menu-id="\${foundMenu.id}"][data-category-id="\${foundCategoryId}"]\`);
+                    if (menuItem) {
+                        if (foundMenu.has_submenu) {
+                            menuItem.classList.add('selected', 'has-submenu');
+                            this.state.selectedMenu = foundMenu;
+                            this.showSubmenu(foundCategoryId, foundMenu.id);
+                            
+                            // サブメニューを選択
+                            if (foundSubMenuId) {
+                                setTimeout(() => {
+                                    const subMenuItems = document.querySelectorAll('.submenu-item');
+                                    subMenuItems.forEach((sub, idx) => {
+                                        const subMenu = foundMenu.sub_menu_items?.[idx];
+                                        if (subMenu && (subMenu.id === foundSubMenuId || (!subMenu.id && idx === 0))) {
+                                            sub.classList.add('selected');
+                                            this.state.selectedSubmenu = subMenu;
+                                        }
+                                    });
+                                    this.updateSummary();
+                                }, 100);
+                            }
+                        } else {
+                            menuItem.classList.add('selected');
+                            this.state.selectedMenu = foundMenu;
+                            
+                            // オプションコンテナを表示
+                            const optionsContainer = document.getElementById(\`options-\${foundMenu.id}\`);
+                            if (optionsContainer) {
+                                optionsContainer.style.display = 'block';
+                            }
+                            
+                            // オプションを復元
+                            if (selectionData.selectedMenuOptions && selectionData.selectedMenuOptions[foundMenu.id]) {
+                                const optionIds = selectionData.selectedMenuOptions[foundMenu.id];
+                                this.state.selectedOptions[foundMenu.id] = optionIds;
+                                optionIds.forEach(optionId => {
+                                    const optionBtn = document.querySelector(\`.menu-option-item[data-option-id="\${optionId}"]\`);
+                                    if (optionBtn) {
+                                        optionBtn.classList.add('selected');
+                                    }
+                                });
+                            }
+                        }
+                        
+                        // 性別、来店回数、クーポンを復元
+                        if (selectionData.gender) {
+                            this.state.gender = selectionData.gender;
+                            const genderBtn = document.querySelector(\`.gender-button[data-value="\${selectionData.gender}"]\`);
+                            if (genderBtn) {
+                                document.querySelectorAll('.gender-button').forEach(btn => btn.classList.remove('selected'));
+                                genderBtn.classList.add('selected');
+                            }
+                        }
+                        
+                        if (selectionData.visitCount) {
+                            this.state.visitCount = selectionData.visitCount;
+                            const visitBtn = document.querySelector(\`.visit-count-button[data-value="\${selectionData.visitCount}"]\`);
+                            if (visitBtn) {
+                                document.querySelectorAll('.visit-count-button').forEach(btn => btn.classList.remove('selected'));
+                                visitBtn.classList.add('selected');
+                            }
+                        }
+                        
+                        if (selectionData.couponUsage) {
+                            this.state.coupon = selectionData.couponUsage;
+                            const couponBtn = document.querySelector(\`.coupon-button[data-value="\${selectionData.couponUsage}"]\`);
+                            if (couponBtn) {
+                                document.querySelectorAll('.coupon-button').forEach(btn => btn.classList.remove('selected'));
+                                couponBtn.classList.add('selected');
+                            }
+                        }
+                        
+                        this.updateSummary();
+                        this.toggleCalendarVisibility();
+                        
+                        // カレンダーセクションにスクロール
+                        setTimeout(() => {
+                            const calendarField = document.getElementById('datetime-field');
+                            if (calendarField) {
+                                calendarField.style.display = 'block';
+                                calendarField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                if (this.state.currentWeekStart) {
+                                    this.fetchAvailability(this.state.currentWeekStart).then(() => {
+                                        this.renderCalendar();
+                                    });
+                                }
+                            }
+                        }, 200);
+                        
+                        alert('前回のメニューを復元しました！');
+                    } else {
+                        alert('前回のメニューが見つかりません💦');
+                    }
+                } else {
+                    alert('前回のメニューが見つかりません💦');
+                }
             } else {
                 alert('前回のメニューが見つかりません💦');
             }
