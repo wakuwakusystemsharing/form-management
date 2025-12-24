@@ -1281,6 +1281,14 @@ export default function PreviewFormPage() {
             border: 2px solid #696969;
           }
 
+          .calendar th:not(:first-child) {
+            font-size: 11px;
+            line-height: 1.2;
+            word-break: keep-all;
+            white-space: normal;
+            min-width: 0;
+          }
+
           .calendar th:first-child,
           .calendar td:first-child {
             width: 17%;
@@ -1298,6 +1306,12 @@ export default function PreviewFormPage() {
               font-size: 10px;
               padding: 2px;
             }
+
+            .calendar th:not(:first-child) {
+              font-size: 9px;
+              line-height: 1.15;
+              padding: 3px 1px;
+            }
           }
 
           /* iPhone SE〜さらに狭い画面（LINEアプリ内など） */
@@ -1310,6 +1324,12 @@ export default function PreviewFormPage() {
             .calendar td {
               font-size: 8px !important;
               padding: 2px 1px !important;
+            }
+
+            .calendar th:not(:first-child) {
+              font-size: 7px !important;
+              line-height: 1.1 !important;
+              padding: 2px 0.5px !important;
             }
 
             .calendar th {
@@ -1783,10 +1803,13 @@ export default function PreviewFormPage() {
                         <tr>
                           <th className="text-center p-2 bg-gray-100 border border-gray-400 text-xs">時間</th>
                           {getWeekDates(currentWeekStart).map((date, index) => (
-                            <th key={index} className="text-center p-2 bg-gray-100 border border-gray-400 text-xs">
-                              {date.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
-                              <br />
-                              ({['日', '月', '火', '水', '木', '金', '土'][date.getDay()]})
+                            <th key={index} className="text-center p-2 bg-gray-100 border border-gray-400 text-xs" style={{ fontSize: 'inherit', lineHeight: '1.2' }}>
+                              <div style={{ fontSize: 'inherit', lineHeight: '1.1' }}>
+                                {date.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
+                              </div>
+                              <div style={{ fontSize: 'inherit', lineHeight: '1.1', marginTop: '1px' }}>
+                                ({['日', '月', '火', '水', '木', '金', '土'][date.getDay()]})
+                              </div>
                             </th>
                           ))}
                         </tr>
