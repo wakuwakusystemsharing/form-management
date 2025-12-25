@@ -250,115 +250,7 @@ export default function StoreAdminPage() {
     return reservation.status === reservationFilterStatus;
   });
 
-  // 認証チェック中
-  if (checkingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">読み込み中...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // 未認証の場合はログインフォーム
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <SettingsIcon className="w-8 h-8 text-blue-600" />
-            </div>
-            <CardTitle className="text-2xl">店舗管理ログイン</CardTitle>
-            <CardDescription>店舗ID: {storeId}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSignIn} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">メールアドレス</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  value={loginForm.email}
-                  onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="your-email@example.com"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">パスワード</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  value={loginForm.password}
-                  onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                />
-          </div>
-
-              {loginError && (
-                <div className="text-sm text-destructive text-center">{loginError}</div>
-              )}
-
-              <Button type="submit" className="w-full" disabled={isLoggingIn}>
-                {isLoggingIn ? 'ログイン中...' : 'ログイン'}
-              </Button>
-            </form>
-
-            <div className="mt-6 text-xs text-muted-foreground text-center">
-              <p>サービス管理者の方は <a href="/admin" className="text-primary hover:underline">こちら</a></p>
-        </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // ローディング中
-  if (loading) {
-  return (
-      <StoreAdminLayout
-        storeId={storeId}
-        storeName={store?.name}
-        userEmail={user.email}
-        onLogout={handleSignOut}
-      >
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">読み込み中...</p>
-          </div>
-        </div>
-      </StoreAdminLayout>
-    );
-  }
-
-  // エラー
-  if (error || !store) {
-    return (
-      <StoreAdminLayout
-        storeId={storeId}
-        storeName={store?.name}
-        userEmail={user.email}
-        onLogout={handleSignOut}
-      >
-        <div className="flex items-center justify-center h-full p-4">
-          <Card className="w-full max-w-md">
-            <CardContent className="pt-6">
-              <div className="text-center text-destructive">
-                {error || '店舗が見つかりません'}
-            </div>
-            </CardContent>
-          </Card>
-        </div>
-      </StoreAdminLayout>
-    );
-  }
-
-  // 統計情報
+  // 統計情報（早期リターンの前に定義）
   const stats = {
     total: forms.length,
     active: forms.filter(f => f.status === 'active').length,
@@ -368,7 +260,7 @@ export default function StoreAdminPage() {
     recentReservations: reservations.slice(0, 5),
   };
 
-  // タブコンテンツ
+  // タブコンテンツ（早期リターンの前に定義）
   const renderTabContent = useMemo(() => {
     switch (activeTab) {
       case 'dashboard':
@@ -539,211 +431,6 @@ export default function StoreAdminPage() {
                                     <Button
                                       size="sm"
                                       className="flex-1 bg-green-600 hover:bg-green-700"
-                                      onClick={() => window.open((form as any).static_deploy.deploy_url, '_blank')}
-                                    >
-                                      <ExternalLink className="mr-2 h-4 w-4" />
-                                      開く
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => copyToClipboard((form as any).static_deploy.deploy_url)}
-                                    >
-                                      <Copy className="mr-2 h-4 w-4" />
-                                      コピー
-                                    </Button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                  <p className="text-sm text-blue-800">
-                                    📝 準備中 - 数秒後にページを再読み込みしてください
-                                  </p>
-                                </div>
-                              )}
-                          </div>
-                          
-                            <div className="flex flex-col sm:flex-row gap-2 sm:ml-4">
-                              <Button
-                                size="sm"
-                              onClick={() => {
-                                  setEditingForm(form);
-                                  setShowEditModal(true);
-                                }}
-                                className="flex-1 sm:flex-none"
-                              >
-                                <Edit className="mr-2 h-4 w-4" />
-                                編集
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => window.open(`/preview/${storeId}/forms/${form.id}`, '_blank')}
-                                className="flex-1 sm:flex-none"
-                              >
-                                <Eye className="mr-2 h-4 w-4" />
-                                プレビュー
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        );
-
-      case 'reservations':
-        return (
-          <div className="space-y-6 p-4 lg:p-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>予約管理</CardTitle>
-                <CardDescription>予約一覧と分析</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Tabs value={reservationView} onValueChange={(v) => setReservationView(v as 'list' | 'analytics')}>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="list">予約一覧</TabsTrigger>
-                    <TabsTrigger value="analytics">分析</TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="list" className="space-y-4 mt-4">
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      <Select value={reservationFilterStatus} onValueChange={setReservationFilterStatus}>
-                        <SelectTrigger className="w-full sm:w-[200px]">
-                          <SelectValue placeholder="ステータスでフィルター" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">全て</SelectItem>
-                          <SelectItem value="pending">保留中</SelectItem>
-                          <SelectItem value="confirmed">確認済み</SelectItem>
-                          <SelectItem value="cancelled">キャンセル</SelectItem>
-                          <SelectItem value="completed">完了</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="border rounded-lg overflow-hidden">
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>予約日時</TableHead>
-                              <TableHead>顧客名</TableHead>
-                              <TableHead>電話番号</TableHead>
-                              <TableHead>ステータス</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredReservations.length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                                  予約データがありません
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              filteredReservations.map((reservation) => (
-                                <TableRow key={reservation.id}>
-                                  <TableCell>
-                                    {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
-                                  </TableCell>
-                                  <TableCell>{reservation.customer_name}</TableCell>
-                                  <TableCell>{reservation.customer_phone}</TableCell>
-                                  <TableCell>
-                                    <Badge
-                                      variant={
-                                        reservation.status === 'confirmed' ? 'default' :
-                                        reservation.status === 'pending' ? 'secondary' :
-                                        'destructive'
-                                      }
-                                    >
-                                      {reservation.status === 'pending' ? '保留中' :
-                                       reservation.status === 'confirmed' ? '確認済み' :
-                                       reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
-                                    </Badge>
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  </TabsContent>
-                  
-                  <TabsContent value="analytics" className="mt-4">
-                    <ReservationAnalytics storeId={storeId} />
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </div>
-        );
-
-      case 'surveys':
-        return (
-          <div className="space-y-6 p-4 lg:p-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>アンケート管理</CardTitle>
-                <CardDescription>アンケートフォームの編集・管理を行います</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {surveyForms.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <ClipboardList className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg font-medium mb-2">まだアンケートフォームが作成されていません</p>
-                    <p className="text-sm">サービス管理者にアンケートフォーム作成を依頼してください</p>
-                        </div>
-                      ) : (
-                  <div className="space-y-4">
-                    {surveyForms.map((form) => (
-                      <Card key={form.id} className="hover:shadow-md transition-shadow">
-                        <CardContent className="p-4 sm:p-6">
-                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                            <div className="flex-1 space-y-3">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h3 className="text-lg font-semibold">
-                                  {form.config.basic_info.title}
-                                </h3>
-                                <Badge className={getFormStatusColor(form.status)}>
-                                  {getFormStatusText(form.status)}
-                                </Badge>
-                                {form.draft_status === 'draft' && (
-                                  <Badge variant="outline" className="text-orange-600 border-orange-600">
-                                    下書きあり
-                                  </Badge>
-                                )}
-                              </div>
-                              
-                              <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                                <div>
-                                  <span className="font-medium">フォームID:</span>
-                                  <p className="text-xs font-mono">{form.id}</p>
-                                </div>
-                                <div>
-                                  <span className="font-medium">質問数:</span>
-                                  <p>{form.config.questions?.length || 0}個</p>
-                                </div>
-                              </div>
-
-                              {/* デプロイURL */}
-                              {form.static_deploy?.deploy_url ? (
-                                <div className="p-3 bg-green-50 border border-green-200 rounded-lg space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-green-800">顧客向け本番URL</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {new Date(form.static_deploy.deployed_at).toLocaleDateString('ja-JP')}
-                                    </span>
-                                  </div>
-                                  <div className="flex flex-col sm:flex-row gap-2">
-                                    <Button
-                                      size="sm"
-                                      className="flex-1 bg-green-600 hover:bg-green-700"
                                       onClick={() => window.open(form.static_deploy?.deploy_url, '_blank')}
                                     >
                                       <ExternalLink className="mr-2 h-4 w-4" />
@@ -764,38 +451,138 @@ export default function StoreAdminPage() {
                                   <p className="text-sm text-blue-800">
                                     📝 準備中 - 数秒後にページを再読み込みしてください
                                   </p>
-                        </div>
-                      )}
-                    </div>
-
-                            <div className="flex flex-col sm:flex-row gap-2 sm:ml-4">
-                              <Button
-                                size="sm"
-                        onClick={() => {
-                          setEditingForm(form);
-                          setShowEditModal(true);
-                        }}
-                                className="flex-1 sm:flex-none"
-                              >
-                                <Edit className="mr-2 h-4 w-4" />
-                                編集
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => window.open(`/preview/${storeId}/surveys/${form.id}`, '_blank')}
-                                className="flex-1 sm:flex-none"
-                              >
-                                <Eye className="mr-2 h-4 w-4" />
-                        プレビュー
-                              </Button>
+                                </div>
+                              )}
+                      
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingForm(form);
+                                    setShowEditModal(true);
+                                  }}
+                                >
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  編集
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.open(`/preview/${storeId}/forms/${form.id}`, '_blank')}
+                                >
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  プレビュー
+                                </Button>
+                              </div>
                             </div>
-                    </div>
+                          </div>
                         </CardContent>
                       </Card>
                     ))}
                   </div>
-            )}
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        );
+
+      case 'reservations':
+        return (
+          <div className="space-y-6 p-4 lg:p-6">
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div>
+                    <CardTitle>予約管理</CardTitle>
+                    <CardDescription>予約の確認・管理を行います</CardDescription>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Select value={reservationFilterStatus} onValueChange={setReservationFilterStatus}>
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">すべて</SelectItem>
+                        <SelectItem value="pending">保留中</SelectItem>
+                        <SelectItem value="confirmed">確認済み</SelectItem>
+                        <SelectItem value="cancelled">キャンセル</SelectItem>
+                        <SelectItem value="completed">完了</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant={reservationView === 'list' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setReservationView('list')}
+                    >
+                      <ClipboardList className="mr-2 h-4 w-4" />
+                      一覧
+                    </Button>
+                    <Button
+                      variant={reservationView === 'analytics' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setReservationView('analytics')}
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      分析
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {reservationView === 'analytics' ? (
+                  <ReservationAnalytics storeId={storeId} />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>顧客名</TableHead>
+                          <TableHead>電話番号</TableHead>
+                          <TableHead>予約日時</TableHead>
+                          <TableHead>メニュー</TableHead>
+                          <TableHead>ステータス</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredReservations.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                              予約がありません
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          filteredReservations.map((reservation) => (
+                            <TableRow key={reservation.id}>
+                              <TableCell className="font-medium">{reservation.customer_name}</TableCell>
+                              <TableCell>{reservation.customer_phone}</TableCell>
+                              <TableCell>
+                                {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
+                              </TableCell>
+                              <TableCell>
+                                {(reservation as any).menu_name || 'メニュー不明'}
+                                {(reservation as any).submenu_name && ` - ${(reservation as any).submenu_name}`}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    reservation.status === 'confirmed' ? 'default' :
+                                    reservation.status === 'pending' ? 'secondary' :
+                                    'destructive'
+                                  }
+                                >
+                                  {reservation.status === 'pending' ? '保留中' :
+                                   reservation.status === 'confirmed' ? '確認済み' :
+                                   reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -807,24 +594,24 @@ export default function StoreAdminPage() {
             <Card>
               <CardHeader>
                 <CardTitle>店舗設定</CardTitle>
-                <CardDescription>店舗の基本情報</CardDescription>
+                <CardDescription>店舗の基本情報を確認・編集します</CardDescription>
               </CardHeader>
               <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
                     <h3 className="font-medium mb-2">基本情報</h3>
                     <div className="space-y-2 text-sm">
-                <div><span className="font-medium">店舗名:</span> {store.name}</div>
-                <div><span className="font-medium">オーナー:</span> {store.owner_name}</div>
-                <div><span className="font-medium">メール:</span> {store.owner_email}</div>
-                <div><span className="font-medium">電話:</span> {store.phone || '未設定'}</div>
+                <div><span className="font-medium">店舗名:</span> {store?.name}</div>
+                <div><span className="font-medium">オーナー:</span> {store?.owner_name}</div>
+                <div><span className="font-medium">メール:</span> {store?.owner_email}</div>
+                <div><span className="font-medium">電話:</span> {store?.phone || '未設定'}</div>
               </div>
             </div>
             <div>
                     <h3 className="font-medium mb-2">アカウント情報</h3>
                     <div className="space-y-2 text-sm">
-                      <div><span className="font-medium">ログイン中:</span> {user.email}</div>
-                      <div><span className="font-medium">店舗ID:</span> {store.id}</div>
+                      <div><span className="font-medium">ログイン中:</span> {user?.email}</div>
+                      <div><span className="font-medium">店舗ID:</span> {store?.id}</div>
               </div>
             </div>
           </div>
@@ -836,7 +623,115 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationView, forms, surveyForms, setEditingForm, setShowEditModal, copyToClipboard, getFormStatusColor, getFormStatusText]);
+  }, [activeTab, stats, filteredForms, filteredReservations, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationView, setEditingForm, setShowEditModal, copyToClipboard, getFormStatusColor, getFormStatusText]);
+
+  // 認証チェック中
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 未認証の場合はログインフォーム
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <SettingsIcon className="w-8 h-8 text-blue-600" />
+            </div>
+            <CardTitle className="text-2xl">店舗管理ログイン</CardTitle>
+            <CardDescription>店舗ID: {storeId}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSignIn} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">メールアドレス</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  value={loginForm.email}
+                  onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="your-email@example.com"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">パスワード</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
+                />
+          </div>
+
+              {loginError && (
+                <div className="text-sm text-destructive text-center">{loginError}</div>
+              )}
+
+              <Button type="submit" className="w-full" disabled={isLoggingIn}>
+                {isLoggingIn ? 'ログイン中...' : 'ログイン'}
+              </Button>
+            </form>
+
+            <div className="mt-6 text-xs text-muted-foreground text-center">
+              <p>サービス管理者の方は <a href="/admin" className="text-primary hover:underline">こちら</a></p>
+        </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ローディング中
+  if (loading) {
+  return (
+      <StoreAdminLayout
+        storeId={storeId}
+        storeName={store?.name}
+        userEmail={user.email}
+        onLogout={handleSignOut}
+      >
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">読み込み中...</p>
+          </div>
+        </div>
+      </StoreAdminLayout>
+    );
+  }
+
+  // エラー
+  if (error || !store) {
+    return (
+      <StoreAdminLayout
+        storeId={storeId}
+        storeName={store?.name}
+        userEmail={user.email}
+        onLogout={handleSignOut}
+      >
+        <div className="flex items-center justify-center h-full p-4">
+          <Card className="w-full max-w-md">
+            <CardContent className="pt-6">
+              <div className="text-center text-destructive">
+                {error || '店舗が見つかりません'}
+            </div>
+            </CardContent>
+          </Card>
+        </div>
+      </StoreAdminLayout>
+    );
+  }
 
   return (
     <StoreAdminLayout
