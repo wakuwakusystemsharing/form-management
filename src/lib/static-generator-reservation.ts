@@ -477,8 +477,16 @@ class BookingForm {
     
     // カレンダー空き状況を取得
     async fetchAvailability(date) {
+        console.log('[StaticForm] fetchCalendarAvailability called:', { 
+            date: date.toISOString(),
+            dateLocal: date.toLocaleString('ja-JP'),
+            hasGasEndpoint: !!this.config.gas_endpoint,
+            gasEndpoint: this.config.gas_endpoint
+        });
+        
         // GASエンドポイントが未設定の場合はスキップ
         if (!this.config.gas_endpoint) {
+            console.log('[StaticForm] No GAS endpoint, skipping availability fetch');
             return;
         }
         
@@ -489,10 +497,21 @@ class BookingForm {
         endTime.setHours(23, 59, 59, 999);
         
         const cacheKey = startTime.toISOString() + endTime.toISOString();
+        console.log('[StaticForm] Cache key:', cacheKey);
+        console.log('[StaticForm] Time range:', {
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            startTimeLocal: startTime.toLocaleString('ja-JP'),
+            endTimeLocal: endTime.toLocaleString('ja-JP')
+        });
         
         // キャッシュを確認
         if (this.availabilityCache[cacheKey]) {
-            console.log('Using cached availability data');
+            console.log('[StaticForm] Using cached availability data:', {
+                cacheKey,
+                availabilityCount: this.availabilityCache[cacheKey].availability?.length || 0,
+                businessDaysCount: this.availabilityCache[cacheKey].businessDays?.length || 0
+            });
             this.availabilityData = this.availabilityCache[cacheKey].availability;
             this.businessDays = this.availabilityCache[cacheKey].businessDays;
             this.renderCalendar();
@@ -501,6 +520,7 @@ class BookingForm {
         
         const url = this.config.gas_endpoint + 
             \`?startTime=\${startTime.toISOString()}&endTime=\${endTime.toISOString()}\`;
+        console.log('[StaticForm] Fetching from URL:', url);
         
         try {
             const response = await fetch(url);
@@ -508,25 +528,43 @@ class BookingForm {
                 throw new Error(\`HTTP error! status: \${response.status}\`);
             }
             const data = await response.json();
-            console.log('Calendar availability data:', data);
+            console.log('[StaticForm] Availability data received:', {
+                dataCount: data?.length || 0,
+                data: data,
+                sampleEvent: data?.[0]
+            });
             
             // 営業日の情報を抽出
-            const businessDays = data.filter(event => event.summary === "営業日").map(event => {
+            const businessDays = data.filter(event => event.title === "営業日" || event.summary === "営業日").map(event => {
                 return {
                     start: new Date(event.startTime),
                     end: new Date(event.endTime)
                 };
+            });
+            console.log('[StaticForm] Business days extracted:', {
+                businessDaysCount: businessDays.length,
+                businessDays: businessDays.map(bd => ({
+                    start: bd.start.toISOString(),
+                    end: bd.end.toISOString(),
+                    startLocal: bd.start.toLocaleString('ja-JP'),
+                    endLocal: bd.end.toLocaleString('ja-JP')
+                }))
             });
             
             // データをキャッシュに保存
             this.availabilityCache[cacheKey] = { availability: data, businessDays: businessDays };
             this.availabilityData = data;
             this.businessDays = businessDays;
+            console.log('[StaticForm] Availability data set to state:', {
+                availabilityDataCount: data?.length || 0,
+                businessDaysCount: businessDays.length
+            });
             
             // カレンダーを再レンダリング
             this.renderCalendar();
         } catch (error) {
-            console.error('Error fetching calendar availability:', error);
+            console.error('[StaticForm] Error fetching calendar availability:', error);
+            
             // エラー時は空き状況データをnullにして、営業時間のみで判定
             this.availabilityData = null;
             this.businessDays = [];
@@ -538,6 +576,8 @@ class BookingForm {
     renderCalendar() {
         const table = document.getElementById('calendar-table');
         if (!table) return;
+        
+        console.log('[StaticForm] renderCalendar called');
         
     // 事前予約可能日数の上限日を算出
     const days = (this.config?.calendar_settings?.advance_booking_days ?? 30);
@@ -571,7 +611,7 @@ class BookingForm {
         
         // テーブルボディ生成
         let bodyHTML = '<tbody>';
-        timeSlots.forEach(time => {
+        timeSlots.forEach((time, timeIndex) => {
             bodyHTML += '<tr>';
             bodyHTML += \`<td style="text-align:center;padding:0.25rem;border:1px solid #9ca3af;font-size:0.75rem;background:#f9fafb;font-weight:500;">\${time}</td>\`;
             
@@ -615,11 +655,12 @@ class BookingForm {
         
         // 現在の日時を取得
         const now = new Date();
-        const slotStart = new Date(date);
-        slotStart.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
+        // 日付をローカル時間で取得し、時間を設定
+        const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 
+            parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
         
-        // 過去の時間帯チェック
-        const isPast = slotStart < now;
+        // ミリ秒で比較してタイムゾーンの問題を回避
+        const isPast = slotStart.getTime() < now.getTime();
         
         // メニュー時間とオプション時間を計算
         let menuDuration = 0;
@@ -672,7 +713,7 @@ class BookingForm {
             this.availabilityData.forEach(slot => {
                 const eventStart = new Date(slot.startTime);
                 const eventEnd = new Date(slot.endTime);
-                if (eventStart.toDateString() === day.toDateString() && slot.title === "営業日") {
+                if (eventStart.toDateString() === day.toDateString() && (slot.title === "営業日" || slot.summary === "営業日")) {
                     businessEventTimes.push({ start: eventStart, end: eventEnd });
                 }
             });
@@ -693,7 +734,7 @@ class BookingForm {
             const count = this.availabilityData.reduce((acc, slot) => {
                 const eventStart = new Date(slot.startTime);
                 const eventEnd = new Date(slot.endTime);
-                if (eventStart < slotEnd && slotStart < eventEnd && slot.title !== "営業日") {
+                if (eventStart < slotEnd && slotStart < eventEnd && slot.title !== "営業日" && slot.summary !== "営業日") {
                     return acc + 1;
                 }
                 return acc;
@@ -726,6 +767,31 @@ class BookingForm {
             isAvailable = true;
         }
         
+        // デバッグログ（最初の数回のみ）
+        if (dateIndex === 0 && timeIndex === 0) {
+            console.log('[StaticForm] Cell availability check:', {
+                date: date.toISOString(),
+                dateLocal: date.toLocaleString('ja-JP'),
+                time,
+                slotStartUTC: slotStart.toISOString(),
+                slotStartLocal: slotStart.toLocaleString('ja-JP'),
+                nowUTC: now.toISOString(),
+                nowLocal: now.toLocaleString('ja-JP'),
+                slotStartTime: slotStart.getTime(),
+                nowTime: now.getTime(),
+                timeDiff: slotStart.getTime() - now.getTime(),
+                isPast,
+                isNextDay,
+                endsAfter18,
+                withinWindow,
+                isClosed,
+                isWithinBusinessHours,
+                isAvailable,
+                availabilityDataCount: this.availabilityData?.length || 0,
+                businessDaysCount: this.businessDays.length
+            });
+        }
+        
         const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
                 const bgColor = isSelected ? '#10b981' : (isAvailable && !isPast ? '#fff' : '#f3f4f6');
                 const textColor = isSelected ? '#fff' : (isAvailable && !isPast ? '#111827' : '#9ca3af');
@@ -751,7 +817,18 @@ class BookingForm {
     
     // 日時選択ハンドラー
     handleDateTimeSelect(dateStr, time, isAvailable) {
-        if (!isAvailable) return;
+        console.log('[StaticForm] handleDateTimeSelect called:', { 
+            dateStr, 
+            time, 
+            isAvailable,
+            dateStrLocal: new Date(dateStr).toLocaleString('ja-JP'),
+            timeLocal: time
+        });
+        
+        if (!isAvailable) {
+            console.log('[StaticForm] Cell click ignored (not available):', { dateStr, time });
+            return;
+        }
         
         // 以前の選択をクリア
         document.querySelectorAll('.calendar-cell.selected').forEach(cell => {
@@ -770,13 +847,26 @@ class BookingForm {
         
         this.state.selectedDate = dateStr;
         this.state.selectedTime = time;
+        console.log('[StaticForm] formData updated:', {
+            selectedDate: this.state.selectedDate,
+            selectedTime: this.state.selectedTime
+        });
         this.updateSummary();
     }
     
     // 週移動
     navigateWeek(direction) {
+        console.log('[StaticForm] navigateWeek called:', { 
+            direction, 
+            currentWeekStart: this.state.currentWeekStart.toISOString(),
+            currentWeekStartLocal: this.state.currentWeekStart.toLocaleString('ja-JP')
+        });
         const newWeekStart = new Date(this.state.currentWeekStart);
         newWeekStart.setDate(this.state.currentWeekStart.getDate() + (direction === 'next' ? 7 : -7));
+        console.log('[StaticForm] navigateWeek result:', {
+            newWeekStart: newWeekStart.toISOString(),
+            newWeekStartLocal: newWeekStart.toLocaleString('ja-JP')
+        });
         this.state.currentWeekStart = newWeekStart;
         // 空き状況を取得してからカレンダーをレンダリング
         this.fetchAvailability(this.state.currentWeekStart).then(() => {
@@ -789,9 +879,18 @@ class BookingForm {
     
     // 月移動
     navigateMonth(direction) {
+        console.log('[StaticForm] navigateMonth called:', { 
+            direction, 
+            currentWeekStart: this.state.currentWeekStart.toISOString(),
+            currentWeekStartLocal: this.state.currentWeekStart.toLocaleString('ja-JP')
+        });
         const newDate = new Date(this.state.currentWeekStart);
         newDate.setMonth(this.state.currentWeekStart.getMonth() + (direction === 'next' ? 1 : -1));
         this.state.currentWeekStart = this.getWeekStart(newDate);
+        console.log('[StaticForm] navigateMonth result:', {
+            nextWeekStart: this.state.currentWeekStart.toISOString(),
+            nextWeekStartLocal: this.state.currentWeekStart.toLocaleString('ja-JP')
+        });
         // 空き状況を取得してからカレンダーをレンダリング
         this.fetchAvailability(this.state.currentWeekStart).then(() => {
         this.renderCalendar();
