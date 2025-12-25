@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -77,6 +77,11 @@ export default function StoreAdminPage() {
     const checkAuth = async () => {
       try {
         const supabase = getSupabaseClient();
+        if (!supabase) {
+          setUser(null);
+          setCheckingAuth(false);
+          return;
+        }
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session?.user) {
@@ -103,6 +108,11 @@ export default function StoreAdminPage() {
 
     try {
       const supabase = getSupabaseClient();
+      if (!supabase) {
+        setLoginError('Supabaseクライアントの初期化に失敗しました');
+        setIsLoggingIn(false);
+        return;
+      }
       const { data, error } = await supabase.auth.signInWithPassword({
         email: loginForm.email,
         password: loginForm.password,
@@ -140,7 +150,9 @@ export default function StoreAdminPage() {
   const handleSignOut = async () => {
     try {
       const supabase = getSupabaseClient();
-      await supabase.auth.signOut();
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
       document.cookie = 'sb-access-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
       setUser(null);
       setStore(null);
@@ -357,7 +369,7 @@ export default function StoreAdminPage() {
   };
 
   // タブコンテンツ
-  const renderTabContent = () => {
+  const renderTabContent = useMemo(() => {
     switch (activeTab) {
       case 'dashboard':
         return (
@@ -732,7 +744,7 @@ export default function StoreAdminPage() {
                                     <Button
                                       size="sm"
                                       className="flex-1 bg-green-600 hover:bg-green-700"
-                                      onClick={() => window.open(form.static_deploy.deploy_url, '_blank')}
+                                      onClick={() => window.open(form.static_deploy?.deploy_url, '_blank')}
                                     >
                                       <ExternalLink className="mr-2 h-4 w-4" />
                                       開く
@@ -740,7 +752,7 @@ export default function StoreAdminPage() {
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      onClick={() => copyToClipboard(form.static_deploy.deploy_url)}
+                                      onClick={() => copyToClipboard(form.static_deploy?.deploy_url || '')}
                                     >
                                       <Copy className="mr-2 h-4 w-4" />
                                       コピー
@@ -824,7 +836,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  };
+  }, [activeTab, stats, filteredForms, filteredReservations, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationView, forms, surveyForms, setEditingForm, setShowEditModal, copyToClipboard, getFormStatusColor, getFormStatusText]);
 
   return (
     <StoreAdminLayout
@@ -833,7 +845,7 @@ export default function StoreAdminPage() {
       userEmail={user.email}
       onLogout={handleSignOut}
     >
-      {renderTabContent()}
+      {renderTabContent}
 
       {/* フォーム編集モーダル */}
       {editingForm && (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,11 +36,7 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchAdmins();
-  }, [storeId]);
-
-  const fetchAdmins = async () => {
+  const fetchAdmins = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/stores/${storeId}/admins`, {
@@ -67,7 +63,11 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [storeId, toast]);
+
+  useEffect(() => {
+    fetchAdmins();
+  }, [fetchAdmins]);
 
   const handleAddAdmin = async () => {
     if (!newAdminEmail.trim()) {

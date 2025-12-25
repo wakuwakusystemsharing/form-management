@@ -10,8 +10,7 @@ import { Form } from '@/types/form';
  * 旧「フラット形式」(top-level form_name 等) と新 config.* 形式を統一
  */
 export function normalizeForm(form: Form | Record<string, unknown>): Form {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rawForm = form as any;
+  const rawForm = form as Record<string, unknown>;
   
   // Supabase からの JSONB は string になることがあるのでパース
   let existingConfig = rawForm.config;
