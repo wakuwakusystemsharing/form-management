@@ -525,21 +525,6 @@ export default function PreviewFormPage() {
   const handleConfirmSubmit = async () => {
     if (!form) return;
 
-    console.log('[Calendar] handleConfirmSubmit called');
-    console.log('[Calendar] Form submission data:', {
-      formId: form.id,
-      storeId: form.store_id,
-      selectedDate: formData.selectedDate,
-      selectedTime: formData.selectedTime,
-      selectedDate2: formData.selectedDate2,
-      selectedTime2: formData.selectedTime2,
-      selectedDate3: formData.selectedDate3,
-      selectedTime3: formData.selectedTime3,
-      selectedDateTime: selectedDateTime ? selectedDateTime.toISOString() : null,
-      selectedDateTimeLocal: selectedDateTime ? selectedDateTime.toLocaleString('ja-JP') : null,
-      fullFormData: formData
-    });
-
     setSubmitting(true);
     
     try {
@@ -551,10 +536,6 @@ export default function PreviewFormPage() {
           customerData: formData,
           submittedAt: new Date().toISOString()
         };
-        console.log('[Calendar] Sending to GAS endpoint:', {
-          url: form.config.gas_endpoint,
-          payload: payload
-        });
         
         const response = await fetch(form.config.gas_endpoint, {
           method: 'POST',
@@ -564,30 +545,20 @@ export default function PreviewFormPage() {
           body: JSON.stringify(payload),
         });
         
-        console.log('[Calendar] GAS response:', {
-          ok: response.ok,
-          status: response.status,
-          statusText: response.statusText
-        });
-        
         if (response.ok) {
-          const responseData = await response.json().catch(() => null);
-          console.log('[Calendar] GAS response data:', responseData);
+          await response.json().catch(() => null);
           setSubmitted(true);
           setShowConfirmation(false);
         } else {
-          const errorText = await response.text().catch(() => 'Unknown error');
-          console.error('[Calendar] GAS error response:', errorText);
+          await response.text().catch(() => 'Unknown error');
           throw new Error('送信に失敗しました');
         }
       } else {
         // GASエンドポイントが未設定の場合は成功として扱う（デモ用）
-        console.log('[Calendar] No GAS endpoint, treating as success (demo mode)');
         setSubmitted(true);
         setShowConfirmation(false);
       }
     } catch (error) {
-      console.error('[Calendar] Submit error:', error);
       alert('送信に失敗しました。しばらく経ってから再度お試しください。');
     } finally {
       setSubmitting(false);
@@ -609,15 +580,7 @@ export default function PreviewFormPage() {
 
   // カレンダー空き状況を取得
   const fetchCalendarAvailability = useCallback(async (date: Date) => {
-    console.log('[Calendar] fetchCalendarAvailability called:', { 
-      date: date.toISOString(),
-      dateLocal: date.toLocaleString('ja-JP'),
-      hasGasEndpoint: !!form?.config?.gas_endpoint,
-      gasEndpoint: form?.config?.gas_endpoint
-    });
-    
     if (!form?.config?.gas_endpoint) {
-      console.log('[Calendar] No GAS endpoint, skipping availability fetch');
       return;
     }
 
@@ -628,21 +591,9 @@ export default function PreviewFormPage() {
     endTime.setHours(23, 59, 59, 999);
 
     const cacheKey = startTime.toISOString() + endTime.toISOString();
-    console.log('[Calendar] Cache key:', cacheKey);
-    console.log('[Calendar] Time range:', {
-      startTime: startTime.toISOString(),
-      endTime: endTime.toISOString(),
-      startTimeLocal: startTime.toLocaleString('ja-JP'),
-      endTimeLocal: endTime.toLocaleString('ja-JP')
-    });
 
     // キャッシュを確認
     if (availabilityCache[cacheKey]) {
-      console.log('[Calendar] Using cached availability data:', {
-        cacheKey,
-        availabilityCount: availabilityCache[cacheKey].availability?.length || 0,
-        businessDaysCount: availabilityCache[cacheKey].businessDays?.length || 0
-      });
       setAvailabilityData(availabilityCache[cacheKey].availability);
       setBusinessDays(availabilityCache[cacheKey].businessDays);
       return;
@@ -650,7 +601,6 @@ export default function PreviewFormPage() {
 
     const url = form.config.gas_endpoint + 
       `?startTime=${startTime.toISOString()}&endTime=${endTime.toISOString()}`;
-    console.log('[Calendar] Fetching from URL:', url);
 
     try {
       const response = await fetch(url);
@@ -658,11 +608,6 @@ export default function PreviewFormPage() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      console.log('[Calendar] Availability data received:', {
-        dataCount: data?.length || 0,
-        data: data,
-        sampleEvent: data?.[0]
-      });
 
       // 営業日の情報を抽出
       const businessDaysData = data.filter((event: any) => event.summary === "営業日").map((event: any) => {
@@ -670,15 +615,6 @@ export default function PreviewFormPage() {
           start: new Date(event.startTime),
           end: new Date(event.endTime)
         };
-      });
-      console.log('[Calendar] Business days extracted:', {
-        businessDaysCount: businessDaysData.length,
-        businessDays: businessDaysData.map((bd: { start: Date; end: Date }) => ({
-          start: bd.start.toISOString(),
-          end: bd.end.toISOString(),
-          startLocal: bd.start.toLocaleString('ja-JP'),
-          endLocal: bd.end.toLocaleString('ja-JP')
-        }))
       });
 
       // データをキャッシュに保存
@@ -689,18 +625,8 @@ export default function PreviewFormPage() {
       setAvailabilityCache(newCache);
       setAvailabilityData(data);
       setBusinessDays(businessDaysData);
-      console.log('[Calendar] Availability data set to state:', {
-        availabilityDataCount: data?.length || 0,
-        businessDaysCount: businessDaysData.length
-      });
     } catch (error) {
-      console.error('[Calendar] Error fetching calendar availability:', error);
-      
       // エラーメッセージを設定
-      const errorMsg = error instanceof Error 
-        ? error.message 
-        : '空き状況の取得に失敗しました';
-      
       setErrorMessage('カレンダーの空き状況を取得できませんでした。営業時間のみで判定します。');
       
       // 5秒後に自動で非表示
@@ -742,71 +668,25 @@ export default function PreviewFormPage() {
 
   // カレンダーのセル選択
   const handleDateTimeSelect = (date: Date, time: string) => {
-    console.log('[Calendar] handleDateTimeSelect called:', { date, time });
-    
     const dateTime = new Date(date);
     const [hours, minutes] = time.split(':').map(Number);
     dateTime.setHours(hours, minutes, 0, 0);
     
     const dateString = date.toISOString().split('T')[0];
-    console.log('[Calendar] Setting date/time:', { 
-      dateString, 
-      time, 
-      dateTime: dateTime.toISOString(),
-      dateTimeLocal: dateTime.toLocaleString('ja-JP')
-    });
     
     setSelectedDateTime(dateTime);
-    setFormData(prev => {
-      const newData = {
-        ...prev,
-        selectedDate: dateString,
-        selectedTime: time
-      };
-      console.log('[Calendar] formData updated:', {
-        selectedDate: newData.selectedDate,
-        selectedTime: newData.selectedTime,
-        previousDate: prev.selectedDate,
-        previousTime: prev.selectedTime
-      });
-      return newData;
-    });
+    setFormData(prev => ({
+      ...prev,
+      selectedDate: dateString,
+      selectedTime: time
+    }));
   };
 
-  // formDataとselectedDateTimeの変更を監視
-  useEffect(() => {
-    console.log('[Calendar] formData changed:', {
-      selectedDate: formData.selectedDate,
-      selectedTime: formData.selectedTime,
-      selectedDate2: formData.selectedDate2,
-      selectedTime2: formData.selectedTime2,
-      selectedDate3: formData.selectedDate3,
-      selectedTime3: formData.selectedTime3
-    });
-  }, [formData.selectedDate, formData.selectedTime, formData.selectedDate2, formData.selectedTime2, formData.selectedDate3, formData.selectedTime3]);
-
-  useEffect(() => {
-    console.log('[Calendar] selectedDateTime changed:', {
-      selectedDateTime: selectedDateTime ? selectedDateTime.toISOString() : null,
-      selectedDateTimeLocal: selectedDateTime ? selectedDateTime.toLocaleString('ja-JP') : null,
-      dateString: selectedDateTime ? selectedDateTime.toISOString().split('T')[0] : null,
-      timeString: selectedDateTime ? selectedDateTime.toTimeString().slice(0, 5) : null
-    });
-  }, [selectedDateTime]);
 
   // 週の移動
   const navigateWeek = (direction: 'prev' | 'next') => {
-    console.log('[Calendar] navigateWeek called:', { 
-      direction, 
-      currentWeekStart: currentWeekStart.toISOString(),
-      currentWeekStartLocal: currentWeekStart.toLocaleString('ja-JP')
-    });
     const newWeekStart = new Date(currentWeekStart);
     newWeekStart.setDate(currentWeekStart.getDate() + (direction === 'next' ? 7 : -7));
-    console.log('[Calendar] navigateWeek result:', {
-      newWeekStart: newWeekStart.toISOString(),
-      newWeekStartLocal: newWeekStart.toLocaleString('ja-JP')
-    });
     // 上限週を越えないようにクランプ
     const maxWeekStart = getWeekStart(getMaxBookingDate());
     if (direction === 'next' && newWeekStart > maxWeekStart) {
@@ -820,11 +700,6 @@ export default function PreviewFormPage() {
 
   // 月の移動
   const navigateMonth = (direction: 'prev' | 'next') => {
-    console.log('[Calendar] navigateMonth called:', { 
-      direction, 
-      currentWeekStart: currentWeekStart.toISOString(),
-      currentWeekStartLocal: currentWeekStart.toLocaleString('ja-JP')
-    });
     const newDate = new Date(currentWeekStart);
     newDate.setMonth(currentWeekStart.getMonth() + (direction === 'next' ? 1 : -1));
     let nextWeekStart = getWeekStart(newDate);
@@ -832,12 +707,6 @@ export default function PreviewFormPage() {
     if (direction === 'next' && nextWeekStart > maxWeekStart) {
       nextWeekStart = maxWeekStart;
     }
-    console.log('[Calendar] navigateMonth result:', {
-      nextWeekStart: nextWeekStart.toISOString(),
-      nextWeekStartLocal: nextWeekStart.toLocaleString('ja-JP'),
-      maxWeekStart: maxWeekStart.toISOString(),
-      maxWeekStartLocal: maxWeekStart.toLocaleString('ja-JP')
-    });
     setCurrentWeekStart(nextWeekStart);
     fetchCalendarAvailability(nextWeekStart);
   };
@@ -2136,53 +2005,12 @@ export default function PreviewFormPage() {
                                   selectedDateTime.toDateString() === date.toDateString() &&
                                   selectedDateTime.toTimeString().slice(0, 5) === time;
                                 
-                                // デバッグログ（最初の数回のみ）
-                                if (dateIndex === 0 && timeIndex === 0) {
-                                  console.log('[Calendar] Cell availability check:', {
-                                    date: date.toISOString(),
-                                    dateLocal: date.toLocaleString('ja-JP'),
-                                    time,
-                                    slotStartUTC: slotStart.toISOString(),
-                                    slotStartLocal: slotStart.toLocaleString('ja-JP'),
-                                    nowUTC: now.toISOString(),
-                                    nowLocal: now.toLocaleString('ja-JP'),
-                                    slotStartTime: slotStart.getTime(),
-                                    nowTime: now.getTime(),
-                                    timeDiff: slotStart.getTime() - now.getTime(),
-                                    isPast,
-                                    isNextDay,
-                                    endsAfter18,
-                                    withinWindow,
-                                    isClosed,
-                                    isWithinBusinessHours,
-                                    isAvailable,
-                                    isSelected,
-                                    availabilityDataCount: availabilityData?.length || 0,
-                                    businessDaysCount: businessDays.length
-                                  });
-                                }
-                                
                                 return (
                                   <td 
                                     key={dateIndex}
                                     onClick={() => {
                                       if (isAvailable && !isPast) {
-                                        console.log('[Calendar] Cell clicked:', {
-                                          date: date.toISOString(),
-                                          dateLocal: date.toLocaleString('ja-JP'),
-                                          time,
-                                          isAvailable,
-                                          isPast
-                                        });
                                         handleDateTimeSelect(date, time);
-                                      } else {
-                                        console.log('[Calendar] Cell click ignored (not available or past):', {
-                                          date: date.toISOString(),
-                                          dateLocal: date.toLocaleString('ja-JP'),
-                                          time,
-                                          isAvailable,
-                                          isPast
-                                        });
                                       }
                                     }}
                                     className={`text-center p-1 border border-gray-400 text-xs ${

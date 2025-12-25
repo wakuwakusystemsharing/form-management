@@ -1,0 +1,158 @@
+'use client';
+
+import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import { 
+  LayoutDashboard, 
+  FileText, 
+  Calendar, 
+  ClipboardList, 
+  Settings, 
+  Menu,
+  LogOut
+} from 'lucide-react';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { cn } from '@/lib/utils';
+
+interface StoreAdminLayoutProps {
+  children: React.ReactNode;
+  storeId: string;
+  storeName?: string;
+  userEmail?: string;
+  onLogout?: () => void;
+}
+
+const menuItems = [
+  { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
+  { id: 'forms', label: 'フォーム管理', icon: FileText },
+  { id: 'reservations', label: '予約管理', icon: Calendar },
+  { id: 'surveys', label: 'アンケート管理', icon: ClipboardList },
+  { id: 'settings', label: '設定', icon: Settings },
+];
+
+export default function StoreAdminLayout({
+  children,
+  storeId,
+  storeName,
+  userEmail,
+  onLogout,
+}: StoreAdminLayoutProps) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
+  // 現在のアクティブなタブを判定
+  const activeTab = searchParams.get('tab') || 'dashboard';
+  
+  const handleTabChange = (tabId: string) => {
+    router.push(`/${storeId}/admin?tab=${tabId}`);
+    setMobileMenuOpen(false);
+  };
+
+  const MenuContent = ({ onItemClick }: { onItemClick?: () => void }) => (
+    <div className="flex flex-col h-full">
+      <div className="p-4 border-b">
+        <div className="flex items-center space-x-3">
+          <Avatar className="h-10 w-10">
+            <AvatarFallback>{storeName?.charAt(0) || 'S'}</AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold truncate">{storeName || '店舗'}</p>
+            {userEmail && (
+              <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      <nav className="flex-1 p-4 space-y-1">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          
+          return (
+            <button
+              key={item.id}
+              onClick={() => {
+                handleTabChange(item.id);
+                onItemClick?.();
+              }}
+              className={cn(
+                "w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+            >
+              <Icon className="h-5 w-5" />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+      
+      {onLogout && (
+        <div className="p-4 border-t">
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={onLogout}
+          >
+            <LogOut className="h-5 w-5 mr-3" />
+            ログアウト
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="flex h-screen bg-background">
+      {/* デスクトップサイドバー */}
+      <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:border-r">
+        <MenuContent />
+      </aside>
+
+      {/* メインコンテンツ */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* モバイルヘッダー */}
+        <header className="lg:hidden border-b bg-background">
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center space-x-3">
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-64 p-0">
+                  <MenuContent onItemClick={() => setMobileMenuOpen(false)} />
+                </SheetContent>
+              </Sheet>
+              <div>
+                <h1 className="text-lg font-semibold">{storeName || '店舗管理'}</h1>
+                {userEmail && (
+                  <p className="text-xs text-muted-foreground">{userEmail}</p>
+                )}
+              </div>
+            </div>
+            {onLogout && (
+              <Button variant="ghost" size="icon" onClick={onLogout}>
+                <LogOut className="h-5 w-5" />
+              </Button>
+            )}
+          </div>
+        </header>
+
+        {/* コンテンツエリア */}
+        <main className="flex-1 overflow-y-auto">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
