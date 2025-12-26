@@ -7,7 +7,9 @@
     "phone": "1234567890",
     "address": "cnwejknckjen",
     "created_at": "2025-10-03T07:53:45.704Z",
-    "updated_at": "2025-10-03T07:53:45.704Z",
-    "status": "active"
+    "updated_at": "2025-12-26T09:22:40.141Z",
+    "status": "active",
+    "theme_color": "#d51a7e",
+    "logo_url": "https://qiita-user-contents.imgix.net/https%3A%2F%2Fqiita-image-store.s3.ap-northeast-1.amazonaws.com%2F0%2F1022001%2F06a61664-8c31-b3de-9064-080a03c34917.png?ixlib=rb-4.0.0&auto=format&gif-q=60&q=75&s=3e2e736d4ea94d66133f56adc88ab0b6"
   }
 ]

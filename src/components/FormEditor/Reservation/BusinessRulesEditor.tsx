@@ -192,12 +192,12 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     ? 'border border-gray-300 bg-gray-50' 
                     : 'border border-gray-700 bg-gray-900/50'
                 }`}>
-                  <div className="flex items-center space-x-4">
-                    <div className={`w-16 text-sm font-medium ${themeClasses.text.secondary}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                    <div className={`w-full sm:w-16 text-sm font-medium ${themeClasses.text.secondary} flex-shrink-0`}>
                       {label}
                     </div>
                     
-                    <label className="flex items-center space-x-2">
+                    <label className="flex items-center space-x-2 flex-shrink-0">
                       <input
                         type="checkbox"
                         checked={!businessHours[day]?.closed}
@@ -212,21 +212,21 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     </label>
 
                     {!businessHours[day]?.closed && (
-                      <>
+                      <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-1">
                         <input
                           type="time"
                           value={businessHours[day]?.open || '09:00'}
                           onChange={(e) => handleBusinessHoursChange(day, 'open', e.target.value)}
-                          className={themeClasses.timeInput}
+                          className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
                         />
-                        <span className={`text-sm ${themeClasses.text.secondary}`}>〜</span>
+                        <span className={`text-sm ${themeClasses.text.secondary} hidden sm:inline`}>〜</span>
                         <input
                           type="time"
                           value={businessHours[day]?.close || '18:00'}
                           onChange={(e) => handleBusinessHoursChange(day, 'close', e.target.value)}
-                          className={themeClasses.timeInput}
+                          className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
                         />
-                      </>
+                      </div>
                     )}
 
                     {businessHours[day]?.closed && (
