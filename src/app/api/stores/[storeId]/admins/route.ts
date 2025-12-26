@@ -86,7 +86,7 @@ export async function GET(
 
     // ユーザー情報を取得
     const adminsWithUserInfo = await Promise.all(
-      (admins || []).map(async (admin) => {
+      (admins || []).map(async (admin: { id: string; user_id: string; store_id: string; role: string; created_at: string; updated_at: string }) => {
         // Supabase Admin APIでユーザー情報を取得
         const { data: userData, error: userError } = await adminClient.auth.admin.getUserById(admin.user_id);
         
@@ -224,7 +224,7 @@ export async function POST(
         user_id: user.id,
         store_id: storeId,
         role: role as 'admin' | 'staff',
-      })
+      } as never)
       .select()
       .single();
 
@@ -237,7 +237,7 @@ export async function POST(
     }
 
     return NextResponse.json({
-      ...newAdmin,
+      ...(newAdmin as { id: string; user_id: string; store_id: string; role: string; created_at: string; updated_at: string }),
       email: user.email,
     }, { status: 201 });
   } catch (error) {
