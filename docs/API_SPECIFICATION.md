@@ -425,6 +425,127 @@ Supabase StorageからフォームHTMLをプロキシ配信
 
 ---
 
+## 👥 店舗管理者（Store Admins）API
+
+### `GET /api/stores/{storeId}/admins`
+店舗の管理者一覧を取得（サービス管理者用）
+
+**認証**: サービス管理者のみ
+
+**レスポンス**:
+```json
+[
+  {
+    "id": "uuid-here",
+    "user_id": "uuid-here",
+    "store_id": "uuid-here",
+    "email": "admin@example.com",
+    "created_at": "2025-01-15T00:00:00Z"
+  }
+]
+```
+
+### `POST /api/stores/{storeId}/admins`
+店舗管理者を追加
+
+**リクエストボディ**:
+```json
+{
+  "email": "admin@example.com"
+}
+```
+
+**レスポンス**:
+```json
+{
+  "success": true,
+  "admin": {
+    "id": "uuid-here",
+    "user_id": "uuid-here",
+    "store_id": "uuid-here",
+    "email": "admin@example.com",
+    "created_at": "2025-01-15T00:00:00Z"
+  }
+}
+```
+
+### `DELETE /api/stores/{storeId}/admins/{userId}`
+店舗管理者を削除
+
+**レスポンス**:
+```json
+{
+  "success": true,
+  "message": "店舗管理者を削除しました"
+}
+```
+
+---
+
+## 📊 予約分析（Reservation Analytics）API
+
+### `GET /api/stores/{storeId}/reservations/analytics`
+店舗の予約分析データを取得
+
+**認証**: サービス管理者または店舗管理者
+
+**レスポンス**:
+```json
+{
+  "total": 100,
+  "byStatus": {
+    "pending": 10,
+    "confirmed": 70,
+    "cancelled": 15,
+    "completed": 5
+  },
+  "byMonth": [
+    {
+      "month": "2025-01",
+      "count": 30
+    }
+  ],
+  "recentReservations": [ ... ]
+}
+```
+
+---
+
+## 🔐 認証（Auth）API
+
+### `POST /api/auth/set-cookie`
+認証トークンをクッキーに設定
+
+**リクエストボディ**:
+```json
+{
+  "accessToken": "jwt-token-here"
+}
+```
+
+**レスポンス**:
+```json
+{
+  "success": true
+}
+```
+
+### `GET /api/auth/verify`
+認証トークンを検証
+
+**レスポンス**:
+```json
+{
+  "valid": true,
+  "user": {
+    "id": "uuid-here",
+    "email": "user@example.com"
+  }
+}
+```
+
+---
+
 ## 🛡️ エラーレスポンス
 
 すべてのAPIは統一されたエラー形式を返します：
@@ -468,4 +589,8 @@ Supabase StorageからフォームHTMLをプロキシ配信
 - [データベース設計](../README.md#-データベース設計supabase)
 - [認証システム](../README.md#-認証システム)
 - [セットアップガイド](./SETUP.md)
+
+---
+
+**最終更新**: 2025年12月
 

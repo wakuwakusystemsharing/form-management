@@ -9,6 +9,17 @@
 - Vercel アカウント (staging/prod デプロイ用)
 - Supabase プロジェクト (staging/prod 用)
 
+## 📦 主要依存関係
+
+- **Next.js 16.0.10** - React フレームワーク
+- **shadcn/ui** - UIコンポーネントライブラリ（Radix UIベース）
+  - `@radix-ui/react-*` - アクセシブルなUIプリミティブ
+  - `lucide-react` - アイコンライブラリ
+  - `class-variance-authority` - バリアント管理
+  - `tailwind-merge` - Tailwindクラス統合
+- **Supabase** - データベース・認証・ストレージ
+- **Tailwind CSS v4** - スタイリング
+
 ## 🔧 ローカル開発環境 (dev)
 
 ### 1. リポジトリのクローン
@@ -289,3 +300,8 @@ pnpm build
 - [`README.md`](README.md) - プロジェクト概要
 - [Vercel Documentation](https://vercel.com/docs)
 - [Supabase Documentation](https://supabase.com/docs)
+- [shadcn/ui Documentation](https://ui.shadcn.com/)
+
+---
+
+**最終更新**: 2025年12月

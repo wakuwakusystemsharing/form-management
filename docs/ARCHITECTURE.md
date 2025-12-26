@@ -60,17 +60,27 @@ LINE LIFFを活用した予約フォーム管理システムの全体設計、�
 **責務**: ユーザーインターフェース、ユーザー入力の処理、API との通信
 
 **主要ページ**:
-- `/admin` - サービス管理者ダッシュボード（店舗・フォーム・予約一覧）
-- `/[storeId]/admin` - 店舗管理者ダッシュボード
+- `/admin` - サービス管理者ダッシュボード（店舗・フォーム・予約一覧、shadcn/ui刷新）
+- `/admin/[storeId]` - サービス管理者向け店舗詳細管理（フォーム・アンケート・店舗管理者管理）
+- `/[storeId]/admin` - 店舗管理者ダッシュボード（予約一覧・分析・フォーム管理、shadcn/ui刷新）
+- `/[storeId]/reservations` - 予約一覧・分析ページ（shadcn/ui刷新）
 - `/[storeId]/forms/[formId]` - フォーム編集画面（複数タブ対応）
 - `/login` - ログイン画面（Supabase Auth連携）
 - `/form/[formId]` - 顧客向けプレビュー（静的HTML描画）
+
+**UIコンポーネント**:
+- **shadcn/ui**: Radix UIベースのモダンなUIコンポーネントライブラリ
+  - Avatar, Badge, Button, Card, Dialog, DropdownMenu, Input, Label, Select, Sheet, Table, Tabs, Toast, Toaster
+  - `lucide-react` アイコンライブラリ
+  - モバイルファーストデザイン
+  - アクセシビリティ対応
 
 **特徴**:
 - Server Components + Client Components を適切に分離
 - 状態管理は React hooks のみ（Zustand/Redux 不使用）
 - 深くコピーしてイミュータブルな更新
 - 認証は middleware + ログイン画面で制御
+- shadcn/uiによる統一されたUIデザインシステム
 
 ### 2. API 層（Next.js API Routes）
 
@@ -101,10 +111,18 @@ POST /api/surveys/[id]/deploy - アンケートフォーム静的HTML生成・�
 POST /api/reservations - 予約作成
 GET  /api/reservations - 全予約一覧（管理者用）
 GET  /api/stores/[storeId]/reservations - 店舗別予約一覧
+GET  /api/stores/[storeId]/reservations/analytics - 予約分析データ取得
+
+GET  /api/stores/[storeId]/admins - 店舗管理者一覧取得
+POST /api/stores/[storeId]/admins - 店舗管理者追加
+DELETE /api/stores/[storeId]/admins/[userId] - 店舗管理者削除
 
 POST /api/upload/menu-image - メニュー画像アップロード
 
 GET  /api/public-form/[...path] - 公開フォームプロキシ（Supabase Storageから配信）
+
+POST /api/auth/set-cookie - 認証トークンをクッキーに設定
+GET  /api/auth/verify - 認証トークン検証
 ```
 
 **認証方針**:
@@ -405,4 +423,4 @@ SupabaseStorageDeployer:
 
 ---
 
-**最終更新**: 2025年1月
+**最終更新**: 2025年12月
