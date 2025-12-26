@@ -33,26 +33,16 @@ const menuItems = [
   { id: 'settings', label: '設定', icon: Settings },
 ];
 
-export default function StoreAdminLayout({
-  children,
-  storeId,
-  storeName,
-  userEmail,
-  onLogout,
-}: StoreAdminLayoutProps) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  
-  // 現在のアクティブなタブを判定
-  const activeTab = searchParams.get('tab') || 'dashboard';
-  
-  const handleTabChange = (tabId: string) => {
-    router.push(`/${storeId}/admin?tab=${tabId}`);
-    setMobileMenuOpen(false);
-  };
+interface MenuContentProps {
+  onItemClick?: () => void;
+  storeName?: string;
+  userEmail?: string;
+  activeTab: string;
+  onTabChange: (tabId: string) => void;
+  onLogout?: () => void;
+}
 
-  const MenuContent = ({ onItemClick }: { onItemClick?: () => void }) => (
+const MenuContent = ({ onItemClick, storeName, userEmail, activeTab, onTabChange, onLogout }: MenuContentProps) => (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b">
         <div className="flex items-center space-x-3">
@@ -77,7 +67,7 @@ export default function StoreAdminLayout({
             <button
               key={item.id}
               onClick={() => {
-                handleTabChange(item.id);
+                onTabChange(item.id);
                 onItemClick?.();
               }}
               className={cn(
@@ -109,11 +99,36 @@ export default function StoreAdminLayout({
     </div>
   );
 
+export default function StoreAdminLayout({
+  children,
+  storeId,
+  storeName,
+  userEmail,
+  onLogout,
+}: StoreAdminLayoutProps) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
+  // 現在のアクティブなタブを判定
+  const activeTab = searchParams.get('tab') || 'dashboard';
+  
+  const handleTabChange = (tabId: string) => {
+    router.push(`/${storeId}/admin?tab=${tabId}`);
+    setMobileMenuOpen(false);
+  };
+
   return (
     <div className="flex h-screen bg-background">
       {/* デスクトップサイドバー */}
       <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:border-r">
-        <MenuContent />
+        <MenuContent 
+          storeName={storeName}
+          userEmail={userEmail}
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          onLogout={onLogout}
+        />
       </aside>
 
       {/* メインコンテンツ */}
@@ -129,7 +144,14 @@ export default function StoreAdminLayout({
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-64 p-0">
-                  <MenuContent onItemClick={() => setMobileMenuOpen(false)} />
+                  <MenuContent 
+                    onItemClick={() => setMobileMenuOpen(false)}
+                    storeName={storeName}
+                    userEmail={userEmail}
+                    activeTab={activeTab}
+                    onTabChange={handleTabChange}
+                    onLogout={onLogout}
+                  />
                 </SheetContent>
               </Sheet>
               <div>

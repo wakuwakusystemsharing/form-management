@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface AnalyticsData {
   daily_stats: Array<{ date: string; count: number }>;
@@ -41,11 +41,7 @@ export default function ReservationAnalytics({
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'menus' | 'time' | 'customers' | 'revenue'>('overview');
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, [storeId, dateFrom, dateTo]);
-
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -62,7 +58,11 @@ export default function ReservationAnalytics({
     } finally {
       setLoading(false);
     }
-  };
+  }, [storeId, dateFrom, dateTo]);
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ja-JP', {

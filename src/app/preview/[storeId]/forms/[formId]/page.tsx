@@ -123,45 +123,50 @@ export default function PreviewFormPage() {
   }, [formId, storeId]);
 
   // フォームデータ正規化関数
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function normalizeFormData(form: any): Form {
+  function normalizeFormData(form: Record<string, unknown>): Form {
+    const formWithConfig = form as unknown as { config?: Form['config']; [key: string]: unknown };
+    const uiSettings = form.ui_settings as Record<string, unknown> | undefined;
+    const lineSettings = form.line_settings as Record<string, unknown> | undefined;
+    const businessRules = form.business_rules as Record<string, unknown> | undefined;
+    
     // configが存在しない場合は作成
-    if (!form.config) {
-      form.config = {} as Form['config'];
+    if (!formWithConfig.config) {
+      formWithConfig.config = {} as Form['config'];
     }
     
     // basic_infoの正規化
-    if (!form.config.basic_info) {
-      form.config.basic_info = {
-        form_name: form.form_name || 'フォーム',
-        store_name: form.store_name || '',
-        theme_color: form.ui_settings?.theme_color || '#3B82F6',
-        liff_id: form.liff_id || form.line_settings?.liff_id || ''
+    if (!formWithConfig.config.basic_info) {
+      formWithConfig.config.basic_info = {
+        form_name: (form.form_name as string) || 'フォーム',
+        store_name: (form.store_name as string) || '',
+        theme_color: (uiSettings?.theme_color as string) || '#3B82F6',
+        liff_id: (form.liff_id as string) || (lineSettings?.liff_id as string) || ''
       };
     }
     
     // ui_settingsの正規化
-    if (!form.config.ui_settings) {
-      form.config.ui_settings = form.ui_settings || {};
+    if (!formWithConfig.config.ui_settings) {
+      formWithConfig.config.ui_settings = (form.ui_settings as Form['config']['ui_settings']) || {};
     }
     
     // menu_structureの正規化
-    if (!form.config.menu_structure) {
-      form.config.menu_structure = form.menu_structure || { categories: [] };
+    if (!formWithConfig.config.menu_structure) {
+      formWithConfig.config.menu_structure = (form.menu_structure as Form['config']['menu_structure']) || { categories: [] };
     }
     
     // menu_structure.display_optionsの正規化
-    if (!form.config.menu_structure.display_options) {
-      form.config.menu_structure.display_options = {
+    if (!formWithConfig.config.menu_structure.display_options) {
+      formWithConfig.config.menu_structure.display_options = {
         show_price: true,
         show_duration: true,
-        show_description: true
+        show_description: true,
+        show_treatment_info: true
       };
     }
     
     // gender_selectionの正規化
-    if (!form.config.gender_selection) {
-      form.config.gender_selection = {
+    if (!formWithConfig.config.gender_selection) {
+      formWithConfig.config.gender_selection = {
         enabled: false,
         required: false,
         options: [
@@ -172,27 +177,26 @@ export default function PreviewFormPage() {
     }
     
     // calendar_settingsの正規化
-    if (!form.config.calendar_settings) {
-      form.config.calendar_settings = form.business_rules || {
+    if (!formWithConfig.config.calendar_settings) {
+      formWithConfig.config.calendar_settings = (businessRules as Form['config']['calendar_settings']) || {
         advance_booking_days: 30
-      };
+      } as Form['config']['calendar_settings'];
     }
     
     // business_hoursの構造を正規化（古い形式から新しい形式へ）
-    if (form.config.calendar_settings.business_hours) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const hours = form.config.calendar_settings.business_hours as any;
+    if (formWithConfig.config.calendar_settings.business_hours) {
+      const hours = formWithConfig.config.calendar_settings.business_hours as Record<string, unknown>;
       
       // 古い形式 {start: '09:00', end: '18:00'} を検出
       if (hours.start && hours.end && !hours.monday) {
         // 新しい形式に変換
         const defaultHours = {
-          open: hours.start || '09:00',
-          close: hours.end || '18:00',
+          open: (hours.start as string) || '09:00',
+          close: (hours.end as string) || '18:00',
           closed: false
         };
         
-        form.config.calendar_settings.business_hours = {
+        formWithConfig.config.calendar_settings.business_hours = {
           monday: { ...defaultHours },
           tuesday: { ...defaultHours },
           wednesday: { ...defaultHours },
@@ -211,7 +215,7 @@ export default function PreviewFormPage() {
           closed: false
         };
         
-        form.config.calendar_settings.business_hours = {
+        formWithConfig.config.calendar_settings.business_hours = {
           monday: { ...defaultHours },
           tuesday: { ...defaultHours },
           wednesday: { ...defaultHours },
@@ -229,7 +233,7 @@ export default function PreviewFormPage() {
         closed: false
       };
       
-      form.config.calendar_settings.business_hours = {
+      formWithConfig.config.calendar_settings.business_hours = {
         monday: { ...defaultHours },
         tuesday: { ...defaultHours },
         wednesday: { ...defaultHours },
@@ -240,7 +244,7 @@ export default function PreviewFormPage() {
       } as Form['config']['calendar_settings']['business_hours'];
     }
     
-    return form as Form;
+    return formWithConfig as unknown as Form;
   }
 
   // ローカルストレージに選択内容を保存
@@ -712,7 +716,7 @@ export default function PreviewFormPage() {
   };
 
   // メニューが選択されているかチェック
-  const isMenuSelected = () => {
+  const isMenuSelected = useCallback(() => {
     // 通常のメニューが選択されているかチェック
     const hasSelectedMenus = Object.values(formData.selectedMenus).some(menuIds => menuIds.length > 0);
     
@@ -720,14 +724,14 @@ export default function PreviewFormPage() {
     const hasSelectedSubMenus = Object.values(formData.selectedSubMenus).some(subMenuId => subMenuId !== '');
     
     return hasSelectedMenus || hasSelectedSubMenus;
-  };
+  }, [formData.selectedMenus, formData.selectedSubMenus]);
 
   // カレンダー表示時に空き状況を取得
   useEffect(() => {
     if (form && isMenuSelected() && form.config?.calendar_settings?.booking_mode !== 'multiple_dates') {
       fetchCalendarAvailability(currentWeekStart);
     }
-  }, [form, formData.selectedMenus, formData.selectedSubMenus, currentWeekStart, fetchCalendarAvailability]);
+  }, [form, isMenuSelected, currentWeekStart, fetchCalendarAvailability]);
 
   if (loading) {
     return (
