@@ -112,6 +112,17 @@ export async function GET(
   }
 }
 
+// ランダムパスワード生成関数
+function generateRandomPassword(): string {
+  const length = 12;
+  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+  let password = '';
+  for (let i = 0; i < length; i++) {
+    password += charset.charAt(Math.floor(Math.random() * charset.length));
+  }
+  return password;
+}
+
 // POST /api/stores/[storeId]/admins - 店舗管理者追加
 export async function POST(
   request: Request,
@@ -120,7 +131,7 @@ export async function POST(
   try {
     const { storeId } = await params;
     const body = await request.json();
-    const { email, role = 'admin' } = body;
+    const { email, role = 'admin', password, createUser = false } = body;
 
     if (!email) {
       return NextResponse.json(
@@ -194,10 +205,50 @@ export async function POST(
       );
     }
 
-    const user = users.users.find(u => u.email === email);
+    let user = users.users.find(u => u.email === email);
+    let userCreated = false;
+    
+    // ユーザーが見つからない場合、自動的に作成
+    if (!user && createUser) {
+      // パスワードが指定されていない場合は自動生成
+      const userPassword = password || generateRandomPassword();
+      
+      const { data: newUserData, error: createError } = await adminClient.auth.admin.createUser({
+        email: email,
+        password: userPassword,
+        email_confirm: true, // メール確認をスキップ
+      });
+
+      if (createError) {
+        console.error('[API] User creation error:', createError);
+        return NextResponse.json(
+          { error: `ユーザーの作成に失敗しました: ${createError.message}` },
+          { status: 500 }
+        );
+      }
+
+      if (!newUserData.user) {
+        return NextResponse.json(
+          { error: 'ユーザーの作成に失敗しました' },
+          { status: 500 }
+        );
+      }
+
+      user = newUserData.user;
+      userCreated = true;
+      
+      // パスワードが自動生成された場合は、ログに記録
+      if (!password) {
+        console.log(`[API] User created with auto-generated password. Email: ${email}`);
+      }
+    }
+
     if (!user) {
       return NextResponse.json(
-        { error: 'このメールアドレスのユーザーが見つかりません。先にSupabase Authでユーザーを作成してください。' },
+        { 
+          error: 'このメールアドレスのユーザーが見つかりません。',
+          suggestion: '「新規ユーザーを作成して追加」オプションを有効にしてください。'
+        },
         { status: 404 }
       );
     }
@@ -239,6 +290,7 @@ export async function POST(
     return NextResponse.json({
       ...(newAdmin as { id: string; user_id: string; store_id: string; role: string; created_at: string; updated_at: string }),
       email: user.email,
+      userCreated, // 新規作成されたかどうか
     }, { status: 201 });
   } catch (error) {
     console.error('Store Admin create error:', error);

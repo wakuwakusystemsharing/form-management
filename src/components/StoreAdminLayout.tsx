@@ -27,7 +27,6 @@ interface StoreAdminLayoutProps {
 
 const menuItems = [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
-  { id: 'forms', label: 'フォーム管理', icon: FileText },
   { id: 'reservations', label: '予約管理', icon: Calendar },
   { id: 'surveys', label: 'アンケート管理', icon: ClipboardList },
   { id: 'settings', label: '設定', icon: Settings },

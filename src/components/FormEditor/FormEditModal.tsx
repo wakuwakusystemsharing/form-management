@@ -179,6 +179,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
               <SurveyFormEditor
                 form={editingForm}
                 onUpdate={(updatedForm) => setEditingForm(updatedForm)}
+                userRole={userRole}
               />
             </div>
           ) : (

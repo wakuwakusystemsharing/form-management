@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { Store } from '@/types/store';
@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { 
   Search, 
@@ -43,6 +44,9 @@ interface Reservation {
   reservation_time: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
   created_at: string;
+  selected_menus?: unknown[];
+  selected_options?: unknown[];
+  customer_info?: unknown;
 }
 
 export default function StoreAdminPage() {
@@ -60,6 +64,8 @@ export default function StoreAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingForm, setEditingForm] = useState<Form | SurveyForm | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
+  const [showReservationDetail, setShowReservationDetail] = useState(false);
 
   // ログイン関連
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
@@ -71,7 +77,8 @@ export default function StoreAdminPage() {
   const activeTab = searchParams.get('tab') || 'dashboard';
   const [formSearchQuery, setFormSearchQuery] = useState('');
   const [reservationFilterStatus, setReservationFilterStatus] = useState<string>('all');
-  const [reservationView, setReservationView] = useState<'list' | 'analytics'>('list');
+  const router = useRouter();
+  const reservationView = searchParams.get('view') || 'list';
 
   // 認証チェック
   useEffect(() => {
@@ -257,6 +264,15 @@ export default function StoreAdminPage() {
     });
   };
 
+  // フォームIDからフォーム名を取得
+  const getFormName = (formId: string) => {
+    const form = forms.find(f => f.id === formId);
+    if (form) {
+      return (form as any).form_name || form.config?.basic_info?.form_name || 'フォーム';
+    }
+    return 'フォーム不明';
+  };
+
   // フィルタリング
   const filteredForms = forms.filter(form => {
     if (!formSearchQuery) return true;
@@ -434,7 +450,9 @@ export default function StoreAdminPage() {
                         </div>
                         <div>
                                   <span className="font-medium">作成日:</span>
-                                  <p>{new Date(form.created_at).toLocaleDateString('ja-JP')}</p>
+                                  <span className="ml-2">{new Date(form.created_at).toLocaleDateString('ja-JP')}</span>
+                                  <span className="ml-4 font-medium">最終更新:</span>
+                                  <span className="ml-2">{new Date(form.updated_at).toLocaleDateString('ja-JP')}</span>
                         </div>
                       </div>
                       
@@ -533,8 +551,12 @@ export default function StoreAdminPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <Tabs value={reservationView} onValueChange={(v) => setReservationView(v as 'list' | 'analytics')} className="space-y-6">
-                  <TabsList className="grid w-full grid-cols-2">
+                <Tabs value={reservationView} onValueChange={(v) => {
+                  const params = new URLSearchParams(searchParams.toString());
+                  params.set('view', v);
+                  router.push(`/${storeId}/admin?tab=reservations&${params.toString()}`);
+                }} className="space-y-6">
+                  <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="list">
                       <ClipboardList className="mr-2 h-4 w-4" />
                       一覧
@@ -542,6 +564,10 @@ export default function StoreAdminPage() {
                     <TabsTrigger value="analytics">
                       <Calendar className="mr-2 h-4 w-4" />
                       分析
+                    </TabsTrigger>
+                    <TabsTrigger value="forms">
+                      <FileText className="mr-2 h-4 w-4" />
+                      フォーム管理
                     </TabsTrigger>
                   </TabsList>
 
@@ -555,6 +581,7 @@ export default function StoreAdminPage() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>顧客名</TableHead>
+                            <TableHead>フォーム</TableHead>
                             <TableHead>電話番号</TableHead>
                             <TableHead>予約日時</TableHead>
                             <TableHead>メニュー</TableHead>
@@ -564,20 +591,35 @@ export default function StoreAdminPage() {
                         <TableBody>
                           {filteredReservations.length === 0 ? (
                             <TableRow>
-                              <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                              <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                                 予約がありません
                               </TableCell>
                             </TableRow>
                           ) : (
                             filteredReservations.map((reservation) => (
-                              <TableRow key={reservation.id}>
+                              <TableRow 
+                                key={reservation.id}
+                                className="cursor-pointer hover:bg-accent"
+                                onClick={() => {
+                                  setSelectedReservation(reservation);
+                                  setShowReservationDetail(true);
+                                }}
+                              >
                                 <TableCell className="font-medium">{reservation.customer_name}</TableCell>
+                                <TableCell>
+                                  <div className="text-sm">
+                                    <div className="font-medium">{getFormName(reservation.form_id)}</div>
+                                    <div className="text-xs text-muted-foreground font-mono">{reservation.form_id}</div>
+                                  </div>
+                                </TableCell>
                                 <TableCell>{reservation.customer_phone}</TableCell>
                                 <TableCell>
                                   {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
                                 </TableCell>
                                 <TableCell>
-                                  {(reservation as any).menu_name || 'メニュー不明'}
+                                  {(reservation as any).menu_name || (reservation.selected_menus && Array.isArray(reservation.selected_menus) && reservation.selected_menus.length > 0 
+                                    ? (reservation.selected_menus as any[]).map((m: any) => m.menu_name || m.name).join(', ')
+                                    : 'メニュー不明')}
                                   {(reservation as any).submenu_name && ` - ${(reservation as any).submenu_name}`}
                                 </TableCell>
                                 <TableCell>
@@ -598,6 +640,131 @@ export default function StoreAdminPage() {
                           )}
                         </TableBody>
                       </Table>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="forms" className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="relative w-full">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="フォームを検索..."
+                          value={formSearchQuery}
+                          onChange={(e) => setFormSearchQuery(e.target.value)}
+                          className="pl-10"
+                        />
+                      </div>
+                      {filteredForms.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground">
+                          <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p className="text-lg font-medium mb-2">
+                            {formSearchQuery ? '検索結果が見つかりませんでした' : 'まだフォームが作成されていません'}
+                          </p>
+                          {!formSearchQuery && (
+                            <p className="text-sm">サービス管理者にフォーム作成を依頼してください</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {filteredForms.map((form) => (
+                            <Card key={form.id} className="hover:shadow-md transition-shadow">
+                              <CardContent className="p-4 sm:p-6">
+                                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                                  <div className="flex-1 space-y-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <h3 className="text-lg font-semibold">
+                                        {(form as any).form_name || form.config?.basic_info?.form_name || 'フォーム'}
+                                      </h3>
+                                      <Badge className={getFormStatusColor(form.status)}>
+                                        {getFormStatusText(form.status)}
+                                      </Badge>
+                                      {form.draft_status === 'draft' && (
+                                        <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                          下書きあり
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                                      <div>
+                                        <span className="font-medium">フォームID:</span>
+                                        <p className="text-xs font-mono">{form.id}</p>
+                                      </div>
+                                      <div>
+                                        <span className="font-medium">作成日:</span>
+                                        <span className="ml-2">{new Date(form.created_at).toLocaleDateString('ja-JP')}</span>
+                                        <span className="ml-4 font-medium">最終更新:</span>
+                                        <span className="ml-2">{new Date(form.updated_at).toLocaleDateString('ja-JP')}</span>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* デプロイURL */}
+                                    {(form as any).static_deploy?.deploy_url ? (
+                                      <div className="space-y-3">
+                                        <div className="flex items-center">
+                                          <span className="text-sm font-medium">顧客向け本番URL</span>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row gap-2">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="flex-1"
+                                            onClick={() => window.open(form.static_deploy?.deploy_url, '_blank')}
+                                          >
+                                            <ExternalLink className="mr-2 h-4 w-4" />
+                                            開く
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="flex-1"
+                                            onClick={() => copyToClipboard(form.static_deploy?.deploy_url || '')}
+                                          >
+                                            <Copy className="mr-2 h-4 w-4" />
+                                            コピー
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <Card className="bg-blue-50 border-blue-200">
+                                        <CardContent className="p-4">
+                                          <p className="text-sm text-blue-800">
+                                            📝 準備中 - 数秒後にページを再読み込みしてください
+                                          </p>
+                                        </CardContent>
+                                      </Card>
+                                    )}
+                                    
+                                    <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1 sm:flex-initial min-w-[100px]"
+                                        onClick={() => {
+                                          setEditingForm(form);
+                                          setShowEditModal(true);
+                                        }}
+                                      >
+                                        <Edit className="mr-2 h-4 w-4" />
+                                        編集
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1 sm:flex-initial min-w-[100px]"
+                                        onClick={() => window.open(`/preview/${storeId}/forms/${form.id}`, '_blank')}
+                                      >
+                                        <Eye className="mr-2 h-4 w-4" />
+                                        プレビュー
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </TabsContent>
                 </Tabs>
@@ -948,6 +1115,159 @@ export default function StoreAdminPage() {
           userRole="store_admin"
         />
       )}
+
+      {/* 予約詳細モーダル */}
+      <Dialog open={showReservationDetail} onOpenChange={setShowReservationDetail}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>予約詳細</DialogTitle>
+            <DialogDescription>
+              {selectedReservation && (
+                <>予約ID: {selectedReservation.id}</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedReservation && (
+            <div className="space-y-4">
+              {/* 基本情報 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">基本情報</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm text-muted-foreground">顧客名</Label>
+                      <p className="font-medium">{selectedReservation.customer_name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">電話番号</Label>
+                      <p className="font-medium">{selectedReservation.customer_phone}</p>
+                    </div>
+                    {selectedReservation.customer_email && (
+                      <div>
+                        <Label className="text-sm text-muted-foreground">メールアドレス</Label>
+                        <p className="font-medium">{selectedReservation.customer_email}</p>
+                      </div>
+                    )}
+                    <div>
+                      <Label className="text-sm text-muted-foreground">予約日時</Label>
+                      <p className="font-medium">
+                        {new Date(selectedReservation.reservation_date).toLocaleDateString('ja-JP')} {selectedReservation.reservation_time}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">ステータス</Label>
+                      <div className="mt-1">
+                        <Badge
+                          variant={
+                            selectedReservation.status === 'confirmed' ? 'default' :
+                            selectedReservation.status === 'pending' ? 'secondary' :
+                            'destructive'
+                          }
+                        >
+                          {selectedReservation.status === 'pending' ? '保留中' :
+                           selectedReservation.status === 'confirmed' ? '確認済み' :
+                           selectedReservation.status === 'cancelled' ? 'キャンセル' : '完了'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">フォーム</Label>
+                      <p className="font-medium">{getFormName(selectedReservation.form_id)}</p>
+                      <p className="text-xs text-muted-foreground font-mono">{selectedReservation.form_id}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 選択メニュー */}
+              {(() => {
+                const menus = selectedReservation.selected_menus;
+                return menus && Array.isArray(menus) && menus.length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">選択メニュー</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {(menus as any[]).map((menu: any, index: number) => (
+                          <div key={index} className="p-3 border rounded-lg">
+                            <div className="font-medium">{menu.menu_name || menu.name || 'メニュー'}</div>
+                            {menu.submenu_name && (
+                              <div className="text-sm text-muted-foreground">サブメニュー: {menu.submenu_name}</div>
+                            )}
+                            {menu.price && (
+                              <div className="text-sm text-muted-foreground">料金: ¥{menu.price.toLocaleString()}</div>
+                            )}
+                            {menu.duration && (
+                              <div className="text-sm text-muted-foreground">所要時間: {menu.duration}分</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null;
+              })()}
+
+              {/* 選択オプション */}
+              {(() => {
+                const options = selectedReservation.selected_options;
+                return options && Array.isArray(options) && options.length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">選択オプション</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {(options as any[]).map((option: any, index: number) => (
+                          <div key={index} className="p-3 border rounded-lg">
+                            <div className="font-medium">{option.option_name || option.name || 'オプション'}</div>
+                            {option.price && (
+                              <div className="text-sm text-muted-foreground">料金: ¥{option.price.toLocaleString()}</div>
+                            )}
+                            {option.duration && (
+                              <div className="text-sm text-muted-foreground">所要時間: {option.duration}分</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null;
+              })()}
+
+              {/* 顧客情報 */}
+              {(() => {
+                const info = selectedReservation.customer_info;
+                return info && typeof info === 'object' && info !== null && Object.keys(info).length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">その他情報</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {Object.entries(info as Record<string, any>).map(([key, value]) => (
+                          <div key={key} className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">{key}:</span>
+                            <span className="text-sm font-medium">{value != null ? String(value) : ''}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null;
+              })()}
+
+              {/* 作成日時 */}
+              <div className="text-xs text-muted-foreground">
+                作成日時: {new Date(selectedReservation.created_at).toLocaleString('ja-JP')}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </StoreAdminLayout>
   );
 }

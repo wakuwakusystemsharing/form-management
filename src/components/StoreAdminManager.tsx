@@ -32,6 +32,8 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminRole, setNewAdminRole] = useState<'admin' | 'staff'>('admin');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [createNewUser, setCreateNewUser] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -79,6 +81,16 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
       return;
     }
 
+    // 新規ユーザー作成の場合、パスワードをチェック（未入力でもOK、自動生成される）
+    if (createNewUser && newAdminPassword.trim() && newAdminPassword.length < 6) {
+      toast({
+        title: 'エラー',
+        description: 'パスワードは6文字以上で入力してください',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setIsAdding(true);
       const response = await fetch(`/api/stores/${storeId}/admins`, {
@@ -90,6 +102,8 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
         body: JSON.stringify({
           email: newAdminEmail.trim(),
           role: newAdminRole,
+          password: createNewUser && newAdminPassword.trim() ? newAdminPassword : undefined,
+          createUser: createNewUser,
         }),
       });
 
@@ -97,17 +111,21 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
         const newAdmin = await response.json();
         setAdmins([...admins, newAdmin]);
         setNewAdminEmail('');
+        setNewAdminPassword('');
+        setCreateNewUser(false);
         setNewAdminRole('admin');
         setShowAddDialog(false);
         toast({
           title: '追加しました',
-          description: '店舗管理者を追加しました',
+          description: newAdmin.userCreated 
+            ? '新規ユーザーを作成し、店舗管理者として追加しました' 
+            : '店舗管理者を追加しました',
         });
       } else {
         const error = await response.json();
         toast({
           title: 'エラー',
-          description: error.error || '店舗管理者の追加に失敗しました',
+          description: error.error || error.suggestion || '店舗管理者の追加に失敗しました',
           variant: 'destructive',
         });
       }
@@ -232,12 +250,18 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
       </CardContent>
 
       {/* ユーザー追加ダイアログ */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      <Dialog open={showAddDialog} onOpenChange={(open) => {
+        setShowAddDialog(open);
+        if (!open) {
+          setCreateNewUser(false);
+          setNewAdminPassword('');
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>店舗管理者を追加</DialogTitle>
             <DialogDescription>
-              メールアドレスでユーザーを検索して追加します。ユーザーは先にSupabase Authで作成されている必要があります。
+              メールアドレスでユーザーを検索して追加します。新規ユーザーを作成することもできます。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -251,6 +275,38 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
                 onChange={(e) => setNewAdminEmail(e.target.value)}
               />
             </div>
+            
+            {/* 新規ユーザー作成オプション */}
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="createUser"
+                checked={createNewUser}
+                onChange={(e) => setCreateNewUser(e.target.checked)}
+                className="rounded"
+              />
+              <Label htmlFor="createUser" className="cursor-pointer">
+                新規ユーザーを作成して追加
+              </Label>
+            </div>
+            
+            {/* パスワード入力（新規ユーザー作成時のみ表示） */}
+            {createNewUser && (
+              <div className="space-y-2">
+                <Label htmlFor="password">パスワード（オプション）</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="未入力の場合は自動生成されます"
+                  value={newAdminPassword}
+                  onChange={(e) => setNewAdminPassword(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  未入力の場合は自動生成されます。ユーザーにはメールで送信されます。
+                </p>
+              </div>
+            )}
+            
             <div className="space-y-2">
               <Label htmlFor="role">権限</Label>
               <Select value={newAdminRole} onValueChange={(v) => setNewAdminRole(v as 'admin' | 'staff')}>
@@ -265,7 +321,11 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+            <Button variant="outline" onClick={() => {
+              setShowAddDialog(false);
+              setCreateNewUser(false);
+              setNewAdminPassword('');
+            }}>
               キャンセル
             </Button>
             <Button onClick={handleAddAdmin} disabled={isAdding}>
