@@ -9,6 +9,8 @@ export interface Store {
   phone?: string;
   address?: string;
   website_url?: string;
+  logo_url?: string;          // ロゴ画像URL
+  theme_color?: string;       // テーマカラー（HEX形式）
   created_at: string;
   updated_at: string;
   status: 'active' | 'inactive';

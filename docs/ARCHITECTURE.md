@@ -418,6 +418,7 @@ SupabaseStorageDeployer:
 - **API_SPECIFICATION.md** - API 詳細仕様
 - **DATABASE_MIGRATION.md** - DB マイグレーション歴
 - **WORKFLOW.md** - 開発ワークフロー
+- **STORE_ADMIN_MANAGEMENT.md** - 店舗管理者管理ガイド
 - **SUPABASE_BEST_PRACTICES.md** - Supabase ベストプラクティス
 - **MCP_SETUP_GUIDE.md** - MCP サーバ設定
 

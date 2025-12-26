@@ -1279,7 +1279,26 @@ export default function StoreDetailPage() {
           {/* 設定タブ */}
           <TabsContent value="settings" className="space-y-6">
             {/* 店舗管理者管理 */}
-            <StoreAdminManager storeId={storeId} />
+            <Card>
+              <CardHeader>
+                <CardTitle>店舗管理者管理</CardTitle>
+                <CardDescription>
+                  Supabase環境で店舗管理者を追加する場合は、先にSupabase Dashboardでユーザーを作成してください。
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <h4 className="font-medium text-blue-900 mb-2">📝 Supabaseでの追加方法（Staging/Production環境）</h4>
+                  <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
+                    <li>Supabase Dashboard → Authentication → Users にアクセス</li>
+                    <li>「Add user」をクリック</li>
+                    <li>メールアドレスとパスワードを入力して「Create user」をクリック</li>
+                    <li>下記の「店舗管理者を追加」から、作成したユーザーのメールアドレスを入力</li>
+                  </ol>
+                </div>
+                <StoreAdminManager storeId={storeId} />
+              </CardContent>
+            </Card>
 
             {/* 危険ゾーン */}
             <Card className="border-destructive/50">
@@ -1410,7 +1429,7 @@ export default function StoreDetailPage() {
           form={editingForm}
           storeId={storeId}
           onSave={async (updatedForm) => {
-            const isSurvey = 'questions' in updatedForm.config;
+            const isSurvey = updatedForm.config && 'questions' in updatedForm.config;
             const endpoint = isSurvey 
               ? `/api/surveys/${updatedForm.id}`
               : `/api/forms/${updatedForm.id}`;

@@ -351,7 +351,7 @@ export default function AdminPage() {
               <Settings className="w-8 h-8 text-blue-600" />
             </div>
             <CardTitle className="text-2xl">サービス管理者ログイン</CardTitle>
-            <CardDescription>LINE予約フォーム管理システム</CardDescription>
+            <CardDescription>「店舗運営にとって「Need（必要不可欠）」な予約システム」</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSignIn} className="space-y-4">

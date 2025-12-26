@@ -134,15 +134,12 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex-1">
               <DialogTitle className="text-2xl">
-                {isSurvey(editingForm) ? 'アンケートフォーム編集' : '予約フォーム編集'}
-              </DialogTitle>
-              <DialogDescription className="mt-1">
                 {isSurvey(editingForm) 
-                  ? editingForm.config?.basic_info?.title || 'アンケートフォーム'
-                  : (editingForm as Form).config?.basic_info?.form_name || (editingForm as any).form_name || '予約フォーム'}
-              </DialogDescription>
+                  ? `${editingForm.config?.basic_info?.title || 'アンケートフォーム'} 編集`
+                  : `${(editingForm as Form).config?.basic_info?.form_name || (editingForm as any).form_name || '予約フォーム'} 編集`}
+              </DialogTitle>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
               <Badge variant={editingForm.status === 'active' ? 'default' : 'secondary'}>
                 {editingForm.status === 'active' ? '公開中' : '非公開'}
               </Badge>
@@ -152,6 +149,26 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
                 </Badge>
               )}
             </div>
+          </div>
+          {/* プレビュー・更新ボタンをヘッダーの下に配置 */}
+          <div className="flex items-center gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={handlePreview}
+              disabled={isSaving}
+              className="flex-1 sm:flex-initial"
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              プレビュー
+            </Button>
+            <Button
+              onClick={handleSaveAndDeploy}
+              disabled={isSaving}
+              className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              {isSaving ? '更新中...' : '更新'}
+            </Button>
           </div>
         </DialogHeader>
 
@@ -208,37 +225,15 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
         </div>
 
         {/* モーダルフッター */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 sm:p-6 border-t">
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span>ステータス: {editingForm.status === 'active' ? '公開中' : '非公開'}</span>
-          </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-            <Button
-              variant="outline"
-              onClick={handlePreview}
-              disabled={isSaving}
-              className="w-full sm:w-auto"
-            >
-              <Eye className="mr-2 h-4 w-4" />
-              プレビュー
-            </Button>
-            <Button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="w-full sm:w-auto"
-            >
-              <Save className="mr-2 h-4 w-4" />
-              {isSaving ? '保存中...' : '保存'}
-            </Button>
-            <Button
-              onClick={handleSaveAndDeploy}
-              disabled={isSaving}
-              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700"
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              {isSaving ? '更新中...' : '更新'}
-            </Button>
-          </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 p-4 sm:p-6 border-t">
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="w-full sm:w-auto"
+          >
+            <Save className="mr-2 h-4 w-4" />
+            {isSaving ? '保存中...' : '保存'}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

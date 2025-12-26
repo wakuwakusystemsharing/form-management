@@ -28,7 +28,8 @@ import {
   Calendar,
   FileText,
   ClipboardList,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  LogOut
 } from 'lucide-react';
 
 interface Reservation {
@@ -164,7 +165,26 @@ export default function StoreAdminPage() {
     }
   };
 
-  // データ取得
+  // データ取得（ログイン前でも店舗情報は取得）
+  useEffect(() => {
+    const fetchStore = async () => {
+      try {
+        const storeResponse = await fetch(`/api/stores/${storeId}`);
+        if (storeResponse.ok) {
+          const storeData = await storeResponse.json();
+          setStore(storeData);
+        }
+      } catch (err) {
+        console.error('Store fetch error:', err);
+      }
+    };
+
+    if (storeId) {
+      fetchStore();
+    }
+  }, [storeId]);
+
+  // ユーザー認証後のデータ取得
   useEffect(() => {
     const fetchData = async () => {
       if (!user) return;
@@ -264,7 +284,7 @@ export default function StoreAdminPage() {
   const renderTabContent = useMemo(() => {
     switch (activeTab) {
       case 'dashboard':
-        return (
+    return (
           <div className="space-y-6 p-4 lg:p-6">
             {/* 統計カード */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -305,7 +325,7 @@ export default function StoreAdminPage() {
             {/* 最近の予約 */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between">
                   <CardTitle>最近の予約</CardTitle>
                   <Button
                     variant="outline"
@@ -332,8 +352,8 @@ export default function StoreAdminPage() {
                           <p className="font-medium">{reservation.customer_name}</p>
                           <p className="text-sm text-muted-foreground">
                             {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
-                          </p>
-                        </div>
+              </p>
+            </div>
                         <Badge
                           variant={
                             reservation.status === 'confirmed' ? 'default' :
@@ -345,9 +365,9 @@ export default function StoreAdminPage() {
                            reservation.status === 'confirmed' ? '確認済み' :
                            reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
                         </Badge>
-                      </div>
+            </div>
                     ))}
-                  </div>
+          </div>
                 )}
               </CardContent>
             </Card>
@@ -363,7 +383,7 @@ export default function StoreAdminPage() {
                   <div>
                     <CardTitle>フォーム管理</CardTitle>
                     <CardDescription>予約フォームの編集・管理を行います</CardDescription>
-                  </div>
+            </div>
                   <div className="relative w-full sm:w-auto">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -372,7 +392,7 @@ export default function StoreAdminPage() {
                       onChange={(e) => setFormSearchQuery(e.target.value)}
                       className="pl-10"
                     />
-                  </div>
+          </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -420,48 +440,49 @@ export default function StoreAdminPage() {
                       
                               {/* デプロイURL */}
                       {(form as any).static_deploy?.deploy_url ? (
-                                <div className="p-3 bg-green-50 border border-green-200 rounded-lg space-y-2">
-                                  <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-green-800">顧客向け本番URL</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {new Date((form as any).static_deploy.deployed_at).toLocaleDateString('ja-JP')}
-                                    </span>
-                                  </div>
-                                  <div className="flex flex-col sm:flex-row gap-2">
-                                    <Button
-                                      size="sm"
-                                      className="flex-1 bg-green-600 hover:bg-green-700"
-                                      onClick={() => window.open(form.static_deploy?.deploy_url, '_blank')}
-                                    >
-                                      <ExternalLink className="mr-2 h-4 w-4" />
-                                      開く
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => copyToClipboard(form.static_deploy?.deploy_url || '')}
-                                    >
-                                      <Copy className="mr-2 h-4 w-4" />
-                                      コピー
-                                    </Button>
+                                <div className="space-y-3">
+                                    <div className="flex items-center">
+                            <span className="text-sm font-medium">顧客向け本番URL</span>
                             </div>
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="flex-1"
+                                        onClick={() => window.open(form.static_deploy?.deploy_url, '_blank')}
+                                      >
+                                        <ExternalLink className="mr-2 h-4 w-4" />
+                                        開く
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="flex-1"
+                                        onClick={() => copyToClipboard(form.static_deploy?.deploy_url || '')}
+                                      >
+                                        <Copy className="mr-2 h-4 w-4" />
+                                        コピー
+                                      </Button>
                           </div>
-                              ) : (
-                                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                  <p className="text-sm text-blue-800">
-                                    📝 準備中 - 数秒後にページを再読み込みしてください
-                                  </p>
                                 </div>
+                              ) : (
+                                <Card className="bg-blue-50 border-blue-200">
+                                  <CardContent className="p-4">
+                                    <p className="text-sm text-blue-800">
+                                      📝 準備中 - 数秒後にページを再読み込みしてください
+                                    </p>
+                                  </CardContent>
+                                </Card>
                               )}
                       
                               <div className="flex flex-wrap gap-2">
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => {
-                                    setEditingForm(form);
-                                    setShowEditModal(true);
-                                  }}
+                        onClick={() => {
+                          setEditingForm(form);
+                          setShowEditModal(true);
+                        }}
                                 >
                                   <Edit className="mr-2 h-4 w-4" />
                                   編集
@@ -469,10 +490,10 @@ export default function StoreAdminPage() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => window.open(`/preview/${storeId}/forms/${form.id}`, '_blank')}
-                                >
+                        onClick={() => window.open(`/preview/${storeId}/forms/${form.id}`, '_blank')}
+                      >
                                   <Eye className="mr-2 h-4 w-4" />
-                                  プレビュー
+                        プレビュー
                                 </Button>
                               </div>
                             </div>
@@ -484,7 +505,7 @@ export default function StoreAdminPage() {
                 )}
               </CardContent>
             </Card>
-          </div>
+                    </div>
         );
 
       case 'reservations':
@@ -497,92 +518,89 @@ export default function StoreAdminPage() {
                     <CardTitle>予約管理</CardTitle>
                     <CardDescription>予約の確認・管理を行います</CardDescription>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Select value={reservationFilterStatus} onValueChange={setReservationFilterStatus}>
-                      <SelectTrigger className="w-[140px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">すべて</SelectItem>
-                        <SelectItem value="pending">保留中</SelectItem>
-                        <SelectItem value="confirmed">確認済み</SelectItem>
-                        <SelectItem value="cancelled">キャンセル</SelectItem>
-                        <SelectItem value="completed">完了</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant={reservationView === 'list' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setReservationView('list')}
-                    >
-                      <ClipboardList className="mr-2 h-4 w-4" />
-                      一覧
-                    </Button>
-                    <Button
-                      variant={reservationView === 'analytics' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setReservationView('analytics')}
-                    >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      分析
-                    </Button>
-                  </div>
+                  <Select value={reservationFilterStatus} onValueChange={setReservationFilterStatus}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">すべて</SelectItem>
+                      <SelectItem value="pending">保留中</SelectItem>
+                      <SelectItem value="confirmed">確認済み</SelectItem>
+                      <SelectItem value="cancelled">キャンセル</SelectItem>
+                      <SelectItem value="completed">完了</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </CardHeader>
               <CardContent>
-                {reservationView === 'analytics' ? (
-                  <ReservationAnalytics storeId={storeId} />
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>顧客名</TableHead>
-                          <TableHead>電話番号</TableHead>
-                          <TableHead>予約日時</TableHead>
-                          <TableHead>メニュー</TableHead>
-                          <TableHead>ステータス</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredReservations.length === 0 ? (
+                <Tabs value={reservationView} onValueChange={(v) => setReservationView(v as 'list' | 'analytics')} className="space-y-6">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="list">
+                      <ClipboardList className="mr-2 h-4 w-4" />
+                      一覧
+                    </TabsTrigger>
+                    <TabsTrigger value="analytics">
+                      <Calendar className="mr-2 h-4 w-4" />
+                      分析
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="analytics" className="space-y-6">
+                    <ReservationAnalytics storeId={storeId} />
+                  </TabsContent>
+
+                  <TabsContent value="list" className="space-y-6">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
                           <TableRow>
-                            <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                              予約がありません
-                            </TableCell>
+                            <TableHead>顧客名</TableHead>
+                            <TableHead>電話番号</TableHead>
+                            <TableHead>予約日時</TableHead>
+                            <TableHead>メニュー</TableHead>
+                            <TableHead>ステータス</TableHead>
                           </TableRow>
-                        ) : (
-                          filteredReservations.map((reservation) => (
-                            <TableRow key={reservation.id}>
-                              <TableCell className="font-medium">{reservation.customer_name}</TableCell>
-                              <TableCell>{reservation.customer_phone}</TableCell>
-                              <TableCell>
-                                {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
-                              </TableCell>
-                              <TableCell>
-                                {(reservation as any).menu_name || 'メニュー不明'}
-                                {(reservation as any).submenu_name && ` - ${(reservation as any).submenu_name}`}
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    reservation.status === 'confirmed' ? 'default' :
-                                    reservation.status === 'pending' ? 'secondary' :
-                                    'destructive'
-                                  }
-                                >
-                                  {reservation.status === 'pending' ? '保留中' :
-                                   reservation.status === 'confirmed' ? '確認済み' :
-                                   reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
-                                </Badge>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredReservations.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                                予約がありません
                               </TableCell>
                             </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
+                          ) : (
+                            filteredReservations.map((reservation) => (
+                              <TableRow key={reservation.id}>
+                                <TableCell className="font-medium">{reservation.customer_name}</TableCell>
+                                <TableCell>{reservation.customer_phone}</TableCell>
+                                <TableCell>
+                                  {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
+                                </TableCell>
+                                <TableCell>
+                                  {(reservation as any).menu_name || 'メニュー不明'}
+                                  {(reservation as any).submenu_name && ` - ${(reservation as any).submenu_name}`}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      reservation.status === 'confirmed' ? 'default' :
+                                      reservation.status === 'pending' ? 'secondary' :
+                                      'destructive'
+                                    }
+                                  >
+                                    {reservation.status === 'pending' ? '保留中' :
+                                     reservation.status === 'confirmed' ? '確認済み' :
+                                     reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
+                                  </Badge>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           </div>
@@ -617,6 +635,128 @@ export default function StoreAdminPage() {
           </div>
               </CardContent>
             </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>ログイン画面のカスタマイズ</CardTitle>
+                <CardDescription>ログイン画面に表示するロゴとカラーを設定します</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="logo_url">ロゴURL</Label>
+                  <Input
+                    id="logo_url"
+                    type="url"
+                    placeholder="https://example.com/logo.png"
+                    value={store?.logo_url || ''}
+                    onChange={async (e) => {
+                      if (!store) return;
+                      const updatedStore = { ...store, logo_url: e.target.value };
+                      try {
+                        const response = await fetch(`/api/stores/${storeId}`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify(updatedStore),
+                        });
+                        if (response.ok) {
+                          const savedStore = await response.json();
+                          setStore(savedStore);
+                          toast({
+                            title: '保存しました',
+                            description: 'ロゴURLを更新しました',
+                          });
+                        }
+                      } catch (error) {
+                        console.error('Store update error:', error);
+                      }
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    ロゴ画像のURLを入力してください。未設定の場合はアイコンが表示されます。
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="theme_color">テーマカラー</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="theme_color"
+                      type="color"
+                      value={store?.theme_color || '#2563eb'}
+                      onChange={async (e) => {
+                        if (!store) return;
+                        const updatedStore = { ...store, theme_color: e.target.value };
+                        try {
+                          const response = await fetch(`/api/stores/${storeId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(updatedStore),
+                          });
+                          if (response.ok) {
+                            const savedStore = await response.json();
+                            setStore(savedStore);
+                            toast({
+                              title: '保存しました',
+                              description: 'テーマカラーを更新しました',
+                            });
+                          }
+                        } catch (error) {
+                          console.error('Store update error:', error);
+                        }
+                      }}
+                      className="w-20 h-10"
+                    />
+                    <Input
+                      type="text"
+                      placeholder="#2563eb"
+                      value={store?.theme_color || ''}
+                      onChange={async (e) => {
+                        if (!store) return;
+                        const updatedStore = { ...store, theme_color: e.target.value };
+                        try {
+                          const response = await fetch(`/api/stores/${storeId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(updatedStore),
+                          });
+                          if (response.ok) {
+                            const savedStore = await response.json();
+                            setStore(savedStore);
+                            toast({
+                              title: '保存しました',
+                              description: 'テーマカラーを更新しました',
+                            });
+                          }
+                        } catch (error) {
+                          console.error('Store update error:', error);
+                        }
+                      }}
+                      className="flex-1"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    ログイン画面の背景色とアイコン色に使用されます。
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>アカウント管理</CardTitle>
+                <CardDescription>ログアウトを行います</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="outline"
+                  onClick={handleSignOut}
+                  className="w-full sm:w-auto"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  ログアウト
+                </Button>
+              </CardContent>
+            </Card>
         </div>
         );
 
@@ -640,12 +780,37 @@ export default function StoreAdminPage() {
   // 未認証の場合はログインフォーム
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-4">
+      <div 
+        className="min-h-screen flex items-center justify-center p-4"
+        style={{
+          background: store?.theme_color 
+            ? `linear-gradient(to bottom, ${store.theme_color}15, white)`
+            : 'linear-gradient(to bottom, #eff6ff, white)'
+        }}
+      >
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <SettingsIcon className="w-8 h-8 text-blue-600" />
-            </div>
+            {store?.logo_url ? (
+              <div className="w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                <img 
+                  src={store.logo_url} 
+                  alt={store.name || '店舗ロゴ'} 
+                  className="max-w-full max-h-full object-contain"
+                />
+              </div>
+            ) : (
+              <div 
+                className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+                style={{
+                  backgroundColor: store?.theme_color ? `${store.theme_color}20` : '#dbeafe',
+                }}
+              >
+                <SettingsIcon 
+                  className="w-8 h-8" 
+                  style={{ color: store?.theme_color || '#2563eb' }}
+                />
+              </div>
+            )}
             <CardTitle className="text-2xl">店舗管理ログイン</CardTitle>
             <CardDescription>店舗ID: {storeId}</CardDescription>
           </CardHeader>
@@ -684,7 +849,7 @@ export default function StoreAdminPage() {
             </form>
 
             <div className="mt-6 text-xs text-muted-foreground text-center">
-              <p>サービス管理者の方は <a href="/admin" className="text-primary hover:underline">こちら</a></p>
+              <p>「店舗運営にとって「Need（必要不可欠）」な予約システム」</p>
         </div>
           </CardContent>
         </Card>

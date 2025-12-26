@@ -12,7 +12,7 @@ import {
   Menu,
   LogOut
 } from 'lucide-react';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
@@ -144,6 +144,7 @@ export default function StoreAdminLayout({
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-64 p-0">
+                  <SheetTitle className="sr-only">メニュー</SheetTitle>
                   <MenuContent 
                     onItemClick={() => setMobileMenuOpen(false)}
                     storeName={storeName}
@@ -161,11 +162,6 @@ export default function StoreAdminLayout({
                 )}
               </div>
             </div>
-            {onLogout && (
-              <Button variant="ghost" size="icon" onClick={onLogout}>
-                <LogOut className="h-5 w-5" />
-              </Button>
-            )}
           </div>
         </header>
 
