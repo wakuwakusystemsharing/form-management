@@ -127,6 +127,12 @@ export default function AdminPage() {
   useEffect(() => {
     const env = getAppEnvironment();
     
+    // #region agent log
+    if (typeof window !== 'undefined') {
+      fetch('http://127.0.0.1:7242/ingest/ab087972-d09d-414f-a816-733141dc0195',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin/page.tsx:127',message:'AdminPage auth check start',data:{NEXT_PUBLIC_APP_ENV:process.env.NEXT_PUBLIC_APP_ENV,hostname:window.location.hostname,env:env,supabaseUrl:process.env.NEXT_PUBLIC_SUPABASE_URL?process.env.NEXT_PUBLIC_SUPABASE_URL.substring(0,50)+'...':null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    }
+    // #endregion
+    
     // デバッグ: 環境変数の値を確認
     console.log('[AdminPage] Environment check:', {
       NEXT_PUBLIC_APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
