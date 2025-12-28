@@ -78,15 +78,16 @@ export async function middleware(request: NextRequest) {
   
   // サブドメインが検出された場合、パスをリライト
   if (storeIdFromSubdomain) {
-    // ルートパス（/）を店舗管理者ページにリライト
-    if (pathname === '/') {
+    // /admin へのアクセスは拒否（サービス管理者ページはサブドメイン経由ではアクセス不可）
+    // 店舗管理者ページにリダイレクト
+    if (pathname === '/admin' || pathname.startsWith('/admin/')) {
       const url = request.nextUrl.clone();
       url.pathname = `/${storeIdFromSubdomain}/admin`;
-      return NextResponse.rewrite(url);
+      return NextResponse.redirect(url);
     }
     
-    // /admin へのアクセスも店舗管理者ページにリライト
-    if (pathname === '/admin') {
+    // ルートパス（/）を店舗管理者ページにリライト
+    if (pathname === '/') {
       const url = request.nextUrl.clone();
       url.pathname = `/${storeIdFromSubdomain}/admin`;
       return NextResponse.rewrite(url);
