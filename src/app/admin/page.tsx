@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { getAppEnvironment } from '@/lib/env';
+import { getAppEnvironment, isLocal, isDevelopment } from '@/lib/env';
 import type { Store } from '@/types/store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -85,23 +85,26 @@ export default function AdminPage() {
   useEffect(() => {
     const env = getAppEnvironment();
     
+    // ローカル開発環境およびdevelopment環境では認証をスキップ
+    // stagingは認証が必要（productionと同じSupabaseプロジェクトを共有）
+    if (isLocal() || isDevelopment()) {
+      const dummyUser = {
+        id: 'dev-user',
+        email: 'dev@localhost',
+        aud: 'authenticated',
+        role: 'authenticated',
+        created_at: new Date().toISOString(),
+        app_metadata: {},
+        user_metadata: {}
+      } as User;
+      
+      setUser(dummyUser);
+      loadStores();
+      return;
+    }
+    
     const supabase = getSupabaseClient();
     if (!supabase) {
-      if (env === 'local') {
-        const dummyUser = {
-          id: 'local-dev-user',
-          email: 'dev@localhost',
-          aud: 'authenticated',
-          role: 'authenticated',
-          created_at: new Date().toISOString(),
-          app_metadata: {},
-          user_metadata: {}
-        } as User;
-        
-        setUser(dummyUser);
-        loadStores();
-        return;
-      }
       setLoading(false);
       return;
     }
@@ -231,6 +234,13 @@ export default function AdminPage() {
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // ローカル開発環境およびdevelopment環境ではログイン処理をスキップ
+    // stagingは認証が必要（productionと同じSupabaseプロジェクトを共有）
+    if (isLocal() || isDevelopment()) {
+      return;
+    }
+    
     setIsLoggingIn(true);
     setLoginError('');
 

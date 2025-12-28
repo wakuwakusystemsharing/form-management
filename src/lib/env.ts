@@ -2,7 +2,7 @@
  * 環境判定ユーティリティ
  */
 
-export type AppEnvironment = 'local' | 'staging' | 'production';
+export type AppEnvironment = 'local' | 'staging' | 'production' | 'development';
 
 export function getAppEnvironment(): AppEnvironment {
   const env = process.env.NEXT_PUBLIC_APP_ENV || 'local';
@@ -19,6 +19,10 @@ export function isStaging(): boolean {
 
 export function isProduction(): boolean {
   return getAppEnvironment() === 'production';
+}
+
+export function isDevelopment(): boolean {
+  return getAppEnvironment() === 'development';
 }
 
 export function shouldUseMockBlob(): boolean {
@@ -67,6 +71,8 @@ export function getEnvironmentBadge(): { label: string; color: string } {
       return { label: '🔧 ローカル開発', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' };
     case 'staging':
       return { label: '🧪 ステージング', color: 'bg-blue-100 text-blue-800 border-blue-300' };
+    case 'development':
+      return { label: '🔨 開発環境', color: 'bg-purple-100 text-purple-800 border-purple-300' };
     case 'production':
       return { label: '✅ 本番環境', color: 'bg-green-100 text-green-800 border-green-300' };
   }
