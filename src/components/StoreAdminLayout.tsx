@@ -10,7 +10,9 @@ import {
   ClipboardList, 
   Settings, 
   Menu,
-  LogOut
+  LogOut,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -39,25 +41,34 @@ interface MenuContentProps {
   activeTab: string;
   onTabChange: (tabId: string) => void;
   onLogout?: () => void;
+  isCollapsed?: boolean;
 }
 
-const MenuContent = ({ onItemClick, storeName, userEmail, activeTab, onTabChange, onLogout }: MenuContentProps) => (
+const MenuContent = ({ onItemClick, storeName, userEmail, activeTab, onTabChange, onLogout, isCollapsed = false }: MenuContentProps) => (
     <div className="flex flex-col h-full">
-      <div className="p-4 border-b">
-        <div className="flex items-center space-x-3">
-          <Avatar className="h-10 w-10">
-            <AvatarFallback>{storeName?.charAt(0) || 'S'}</AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate">{storeName || '店舗'}</p>
-            {userEmail && (
-              <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
-            )}
+      <div className={cn("border-b", isCollapsed ? "p-2" : "p-4")}>
+        {isCollapsed ? (
+          <div className="flex justify-center">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="text-xs">{storeName?.charAt(0) || 'S'}</AvatarFallback>
+            </Avatar>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center space-x-3">
+            <Avatar className="h-10 w-10">
+              <AvatarFallback>{storeName?.charAt(0) || 'S'}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate">{storeName || '店舗'}</p>
+              {userEmail && (
+                <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className={cn("flex-1 space-y-1", isCollapsed ? "p-2" : "p-4")}>
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -69,29 +80,35 @@ const MenuContent = ({ onItemClick, storeName, userEmail, activeTab, onTabChange
                 onTabChange(item.id);
                 onItemClick?.();
               }}
+              title={isCollapsed ? item.label : undefined}
               className={cn(
-                "w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                "w-full flex items-center rounded-lg text-sm font-medium transition-colors",
+                isCollapsed ? "justify-center px-2 py-2" : "space-x-3 px-3 py-2",
                 isActive
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               )}
             >
               <Icon className="h-5 w-5" />
-              <span>{item.label}</span>
+              {!isCollapsed && <span>{item.label}</span>}
             </button>
           );
         })}
       </nav>
       
       {onLogout && (
-        <div className="p-4 border-t">
+        <div className={cn("border-t", isCollapsed ? "p-2" : "p-4")}>
           <Button
             variant="ghost"
-            className="w-full justify-start"
+            className={cn(
+              "w-full transition-colors",
+              isCollapsed ? "justify-center px-2" : "justify-start"
+            )}
             onClick={onLogout}
+            title={isCollapsed ? "ログアウト" : undefined}
           >
-            <LogOut className="h-5 w-5 mr-3" />
-            ログアウト
+            <LogOut className="h-5 w-5" />
+            {!isCollapsed && <span className="ml-3">ログアウト</span>}
           </Button>
         </div>
       )}
@@ -106,6 +123,7 @@ export default function StoreAdminLayout({
   onLogout,
 }: StoreAdminLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -120,14 +138,37 @@ export default function StoreAdminLayout({
   return (
     <div className="flex h-screen bg-background">
       {/* デスクトップサイドバー */}
-      <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:border-r">
+      <aside className={cn(
+        "hidden lg:flex lg:flex-col lg:border-r transition-all duration-300 relative",
+        sidebarCollapsed ? "lg:w-16" : "lg:w-64"
+      )}>
         <MenuContent 
           storeName={storeName}
           userEmail={userEmail}
           activeTab={activeTab}
           onTabChange={handleTabChange}
           onLogout={onLogout}
+          isCollapsed={sidebarCollapsed}
         />
+        {/* 折りたたみボタン */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "absolute rounded-full border bg-background shadow-sm hover:bg-accent z-10 transition-all",
+            sidebarCollapsed 
+              ? "-right-3 top-4 h-6 w-6" 
+              : "-right-3 top-4 h-6 w-6"
+          )}
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          title={sidebarCollapsed ? "サイドバーを展開" : "サイドバーを折りたたむ"}
+        >
+          {sidebarCollapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
+        </Button>
       </aside>
 
       {/* メインコンテンツ */}

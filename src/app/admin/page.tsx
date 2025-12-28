@@ -110,8 +110,52 @@ export default function AdminPage() {
 
     const initialize = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const currentUser = session?.user ?? null;
+        // まず、クッキーからセッション情報を取得を試みる
+        let session = null;
+        let currentUser = null;
+        
+        try {
+          const verifyResponse = await fetch('/api/auth/verify', {
+            method: 'GET',
+            credentials: 'include',
+          });
+          
+          if (verifyResponse.ok) {
+            const verifyData = await verifyResponse.json();
+            if (verifyData.user && verifyData.accessToken) {
+              // クッキーから取得したトークンでユーザー情報を取得
+              // セッションとして扱うために、一時的なセッションオブジェクトを作成
+              currentUser = {
+                id: verifyData.user.id,
+                email: verifyData.user.email,
+                aud: 'authenticated',
+                role: 'authenticated',
+                created_at: new Date().toISOString(),
+                app_metadata: {},
+                user_metadata: {}
+              } as User;
+              
+              // セッションオブジェクトも作成（アクセストークンを含む）
+              session = {
+                access_token: verifyData.accessToken,
+                refresh_token: '',
+                expires_in: 3600,
+                expires_at: Math.floor(Date.now() / 1000) + 3600,
+                token_type: 'bearer',
+                user: currentUser
+              } as any;
+            }
+          }
+        } catch (error) {
+          console.log('Cookie session not found, checking localStorage session');
+        }
+        
+        // クッキーからセッションが取得できなかった場合、localStorageから取得を試みる
+        if (!session) {
+          const { data: { session: localSession } } = await supabase.auth.getSession();
+          session = localSession;
+          currentUser = session?.user ?? null;
+        }
 
         if (currentUser && !ADMIN_EMAILS.includes(currentUser.email || '')) {
           await supabase.auth.signOut();
@@ -124,6 +168,7 @@ export default function AdminPage() {
           }
           if (currentUser && session) {
             try {
+              // クッキーにアクセストークンを設定（まだ設定されていない場合）
               await fetch('/api/auth/set-cookie', {
                 method: 'POST',
                 headers: {
@@ -363,7 +408,7 @@ export default function AdminPage() {
                   required
                   value={loginForm.email}
                   onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="wakuwakusystemsharing@gmail.com"
+                  
                 />
               </div>
 

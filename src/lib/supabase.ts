@@ -99,7 +99,40 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
   }
 
   // 環境変数が設定されている場合はSupabase接続を試みる（ローカル環境でも）
-  supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey);
+  // ブラウザ環境では、クッキーからセッションを読み取るためにカスタムストレージを使用
+  const authOptions: any = {};
+  
+  // ブラウザ環境の場合、カスタムストレージを使用してクッキーからセッションを読み取る
+  if (typeof window !== 'undefined') {
+    authOptions.storage = {
+      getItem: (key: string) => {
+        // クッキーからアクセストークンを取得
+        if (key === 'sb-access-token') {
+          const cookies = document.cookie.split(';');
+          for (const cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'sb-access-token') {
+              return value;
+            }
+          }
+        }
+        // その他のキーはlocalStorageから取得
+        return localStorage.getItem(key);
+      },
+      setItem: (key: string, value: string) => {
+        // セッション情報はlocalStorageに保存
+        localStorage.setItem(key, value);
+      },
+      removeItem: (key: string) => {
+        localStorage.removeItem(key);
+      }
+    };
+  }
+  
+  supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: authOptions
+  });
+  
   if (isLocal()) {
     console.log('[Supabase] Client initialized for local development (Supabase env vars set)');
   } else {

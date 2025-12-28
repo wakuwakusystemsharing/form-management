@@ -350,7 +350,7 @@ export default function StoreAdminPage() {
                   >
                     すべて見る
                   </Button>
-                </div>
+        </div>
               </CardHeader>
               <CardContent>
                 {stats.recentReservations.length === 0 ? (
@@ -362,26 +362,34 @@ export default function StoreAdminPage() {
                     {stats.recentReservations.map((reservation) => (
                       <div
                         key={reservation.id}
-                        className="flex items-center justify-between p-3 border rounded-lg"
+                        className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-accent transition-colors"
+                        onClick={() => {
+                          setSelectedReservation(reservation);
+                          setShowReservationDetail(true);
+                        }}
                       >
                         <div className="flex-1">
                           <p className="font-medium">{reservation.customer_name}</p>
                           <p className="text-sm text-muted-foreground">
                             {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
-              </p>
-            </div>
+                          </p>
+      </div>
                         <Badge
                           variant={
                             reservation.status === 'confirmed' ? 'default' :
                             reservation.status === 'pending' ? 'secondary' :
+                            reservation.status === 'completed' ? 'default' :
                             'destructive'
+                          }
+                          className={
+                            reservation.status === 'completed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''
                           }
                         >
                           {reservation.status === 'pending' ? '保留中' :
                            reservation.status === 'confirmed' ? '確認済み' :
                            reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
                         </Badge>
-            </div>
+                      </div>
                     ))}
           </div>
                 )}
@@ -391,12 +399,12 @@ export default function StoreAdminPage() {
         );
 
       case 'forms':
-        return (
+  return (
           <div className="space-y-6 p-4 lg:p-6">
             <Card>
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div>
+            <div>
                     <CardTitle>フォーム管理</CardTitle>
                     <CardDescription>予約フォームの編集・管理を行います</CardDescription>
             </div>
@@ -408,8 +416,8 @@ export default function StoreAdminPage() {
                       onChange={(e) => setFormSearchQuery(e.target.value)}
                       className="pl-10"
                     />
+            </div>
           </div>
-                </div>
               </CardHeader>
               <CardContent>
                 {filteredForms.length === 0 ? (
@@ -421,7 +429,7 @@ export default function StoreAdminPage() {
                     {!formSearchQuery && (
                       <p className="text-sm">サービス管理者にフォーム作成を依頼してください</p>
                     )}
-              </div>
+        </div>
             ) : (
                   <div className="space-y-4">
                     {filteredForms.map((form) => (
@@ -441,27 +449,27 @@ export default function StoreAdminPage() {
                             下書きあり
                                   </Badge>
                         )}
-                      </div>
-                      
+          </div>
+          
                               <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
                         <div>
                                   <span className="font-medium">フォームID:</span>
                                   <p className="text-xs font-mono">{form.id}</p>
-                        </div>
+            </div>
                         <div>
                                   <span className="font-medium">作成日:</span>
                                   <span className="ml-2">{new Date(form.created_at).toLocaleDateString('ja-JP')}</span>
                                   <span className="ml-4 font-medium">最終更新:</span>
                                   <span className="ml-2">{new Date(form.updated_at).toLocaleDateString('ja-JP')}</span>
                         </div>
-                      </div>
-                      
+          </div>
+          
                               {/* デプロイURL */}
                       {(form as any).static_deploy?.deploy_url ? (
                                 <div className="space-y-3">
                                     <div className="flex items-center">
                             <span className="text-sm font-medium">顧客向け本番URL</span>
-                            </div>
+          </div>
                                     <div className="flex flex-col sm:flex-row gap-2">
                                       <Button
                                         size="sm"
@@ -481,7 +489,7 @@ export default function StoreAdminPage() {
                                         <Copy className="mr-2 h-4 w-4" />
                                         コピー
                                       </Button>
-                          </div>
+        </div>
                                 </div>
                               ) : (
                                 <Card className="bg-blue-50 border-blue-200">
@@ -513,13 +521,13 @@ export default function StoreAdminPage() {
                                   <Eye className="mr-2 h-4 w-4" />
                         プレビュー
                                 </Button>
-                              </div>
-                            </div>
-                          </div>
+            </div>
+          </div>
+                </div>
                         </CardContent>
                       </Card>
                     ))}
-                  </div>
+                </div>
                 )}
               </CardContent>
             </Card>
@@ -531,243 +539,375 @@ export default function StoreAdminPage() {
           <div className="space-y-6 p-4 lg:p-6">
             <Card>
               <CardHeader>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div>
-                    <CardTitle>予約管理</CardTitle>
-                    <CardDescription>予約の確認・管理を行います</CardDescription>
-                  </div>
-                  <Select value={reservationFilterStatus} onValueChange={setReservationFilterStatus}>
-                    <SelectTrigger className="w-[140px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">すべて</SelectItem>
-                      <SelectItem value="pending">保留中</SelectItem>
-                      <SelectItem value="confirmed">確認済み</SelectItem>
-                      <SelectItem value="cancelled">キャンセル</SelectItem>
-                      <SelectItem value="completed">完了</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <CardTitle>予約管理</CardTitle>
+                <CardDescription>予約の確認・管理を行います</CardDescription>
               </CardHeader>
-              <CardContent>
-                <Tabs value={reservationView} onValueChange={(v) => {
-                  const params = new URLSearchParams(searchParams.toString());
-                  params.set('view', v);
-                  router.push(`/${storeId}/admin?tab=reservations&${params.toString()}`);
-                }} className="space-y-6">
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="list">
-                      <ClipboardList className="mr-2 h-4 w-4" />
-                      一覧
-                    </TabsTrigger>
-                    <TabsTrigger value="analytics">
-                      <Calendar className="mr-2 h-4 w-4" />
-                      分析
-                    </TabsTrigger>
-                    <TabsTrigger value="forms">
-                      <FileText className="mr-2 h-4 w-4" />
-                      フォーム管理
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="analytics" className="space-y-6">
-                    <ReservationAnalytics storeId={storeId} />
-                  </TabsContent>
-
-                  <TabsContent value="list" className="space-y-6">
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>顧客名</TableHead>
-                            <TableHead>フォーム</TableHead>
-                            <TableHead>電話番号</TableHead>
-                            <TableHead>予約日時</TableHead>
-                            <TableHead>メニュー</TableHead>
-                            <TableHead>ステータス</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredReservations.length === 0 ? (
-                            <TableRow>
-                              <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                                予約がありません
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                            filteredReservations.map((reservation) => (
-                              <TableRow 
-                                key={reservation.id}
-                                className="cursor-pointer hover:bg-accent"
-                                onClick={() => {
-                                  setSelectedReservation(reservation);
-                                  setShowReservationDetail(true);
-                                }}
-                              >
-                                <TableCell className="font-medium">{reservation.customer_name}</TableCell>
-                                <TableCell>
-                                  <div className="text-sm">
-                                    <div className="font-medium">{getFormName(reservation.form_id)}</div>
-                                    <div className="text-xs text-muted-foreground font-mono">{reservation.form_id}</div>
-                                  </div>
-                                </TableCell>
-                                <TableCell>{reservation.customer_phone}</TableCell>
-                                <TableCell>
-                                  {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
-                                </TableCell>
-                                <TableCell>
-                                  {(reservation as any).menu_name || (reservation.selected_menus && Array.isArray(reservation.selected_menus) && reservation.selected_menus.length > 0 
-                                    ? (reservation.selected_menus as any[]).map((m: any) => m.menu_name || m.name).join(', ')
-                                    : 'メニュー不明')}
-                                  {(reservation as any).submenu_name && ` - ${(reservation as any).submenu_name}`}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge
-                                    variant={
-                                      reservation.status === 'confirmed' ? 'default' :
-                                      reservation.status === 'pending' ? 'secondary' :
-                                      'destructive'
-                                    }
-                                  >
-                                    {reservation.status === 'pending' ? '保留中' :
-                                     reservation.status === 'confirmed' ? '確認済み' :
-                                     reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
+              <CardContent className="space-y-6">
+                {/* フォーム管理セクション */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">フォーム管理</h3>
+                  {filteredForms.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">まだフォームが作成されていません</p>
+              </div>
+            ) : (
+                    <div className="flex flex-wrap gap-4">
+                      {filteredForms.map((form) => (
+                        <Card key={form.id} className="flex-1 min-w-[300px] max-w-[500px] hover:shadow-md transition-shadow">
+                          <CardContent className="p-4">
+                            <div className="space-y-3">
+                              {/* フォーム名とステータス、右側にID・日付情報 */}
+                              <div className="flex items-center justify-between gap-4 flex-wrap">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="text-base font-semibold">
+                          {(form as any).form_name || form.config?.basic_info?.form_name || 'フォーム'}
+                                  </h4>
+                                  <Badge className={getFormStatusColor(form.status)}>
+                          {getFormStatusText(form.status)}
                                   </Badge>
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="forms" className="space-y-6">
-                    <div className="space-y-4">
-                      <div className="relative w-full">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="フォームを検索..."
-                          value={formSearchQuery}
-                          onChange={(e) => setFormSearchQuery(e.target.value)}
-                          className="pl-10"
-                        />
+                        {form.draft_status === 'draft' && (
+                                    <Badge variant="outline" className="text-orange-600 border-orange-600">
+                            下書きあり
+                                    </Badge>
+                        )}
                       </div>
-                      {filteredForms.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground">
-                          <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                          <p className="text-lg font-medium mb-2">
-                            {formSearchQuery ? '検索結果が見つかりませんでした' : 'まだフォームが作成されていません'}
-                          </p>
-                          {!formSearchQuery && (
-                            <p className="text-sm">サービス管理者にフォーム作成を依頼してください</p>
-                          )}
+                                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                        <div>
+                                    <span className="font-medium">フォームID:</span>
+                                    <span className="ml-1 font-mono">{form.id}</span>
                         </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {filteredForms.map((form) => (
-                            <Card key={form.id} className="hover:shadow-md transition-shadow">
-                              <CardContent className="p-4 sm:p-6">
-                                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                                  <div className="flex-1 space-y-3">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <h3 className="text-lg font-semibold">
-                                        {(form as any).form_name || form.config?.basic_info?.form_name || 'フォーム'}
-                                      </h3>
-                                      <Badge className={getFormStatusColor(form.status)}>
-                                        {getFormStatusText(form.status)}
-                                      </Badge>
-                                      {form.draft_status === 'draft' && (
-                                        <Badge variant="outline" className="text-orange-600 border-orange-600">
-                                          下書きあり
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                                      <div>
-                                        <span className="font-medium">フォームID:</span>
-                                        <p className="text-xs font-mono">{form.id}</p>
-                                      </div>
-                                      <div>
-                                        <span className="font-medium">作成日:</span>
-                                        <span className="ml-2">{new Date(form.created_at).toLocaleDateString('ja-JP')}</span>
-                                        <span className="ml-4 font-medium">最終更新:</span>
-                                        <span className="ml-2">{new Date(form.updated_at).toLocaleDateString('ja-JP')}</span>
-                                      </div>
-                                    </div>
-                                    
-                                    {/* デプロイURL */}
-                                    {(form as any).static_deploy?.deploy_url ? (
-                                      <div className="space-y-3">
-                                        <div className="flex items-center">
-                                          <span className="text-sm font-medium">顧客向け本番URL</span>
-                                        </div>
-                                        <div className="flex flex-col sm:flex-row gap-2">
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="flex-1"
-                                            onClick={() => window.open(form.static_deploy?.deploy_url, '_blank')}
-                                          >
-                                            <ExternalLink className="mr-2 h-4 w-4" />
-                                            開く
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="flex-1"
-                                            onClick={() => copyToClipboard(form.static_deploy?.deploy_url || '')}
-                                          >
-                                            <Copy className="mr-2 h-4 w-4" />
-                                            コピー
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <Card className="bg-blue-50 border-blue-200">
-                                        <CardContent className="p-4">
-                                          <p className="text-sm text-blue-800">
-                                            📝 準備中 - 数秒後にページを再読み込みしてください
-                                          </p>
-                                        </CardContent>
-                                      </Card>
-                                    )}
-                                    
-                                    <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                        <div>
+                                    <span className="font-medium">作成日:</span>
+                                    <span className="ml-1">{new Date(form.created_at).toLocaleDateString('ja-JP')}</span>
+                        </div>
+                        <div>
+                                    <span className="font-medium">最終更新:</span>
+                                    <span className="ml-1">{new Date(form.updated_at).toLocaleDateString('ja-JP')}</span>
+                        </div>
+                        </div>
+                      </div>
+                      
+                              {/* 公開中URL */}
+                      {(form as any).static_deploy?.deploy_url ? (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium">公開中URL</span>
+                                    <div className="flex gap-1">
                                       <Button
                                         variant="outline"
-                                        size="sm"
-                                        className="flex-1 sm:flex-initial min-w-[100px]"
-                                        onClick={() => {
-                                          setEditingForm(form);
-                                          setShowEditModal(true);
-                                        }}
+                                        className="h-7 px-2 text-xs"
+                                        onClick={() => window.open(form.static_deploy?.deploy_url, '_blank')}
                                       >
-                                        <Edit className="mr-2 h-4 w-4" />
-                                        編集
+                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                        開く
                                       </Button>
                                       <Button
                                         variant="outline"
-                                        size="sm"
-                                        className="flex-1 sm:flex-initial min-w-[100px]"
-                                        onClick={() => window.open(`/preview/${storeId}/forms/${form.id}`, '_blank')}
+                                        className="h-7 px-2 text-xs"
+                                        onClick={() => copyToClipboard(form.static_deploy?.deploy_url || '')}
                                       >
-                                        <Eye className="mr-2 h-4 w-4" />
-                                        プレビュー
+                                        <Copy className="h-3 w-3 mr-1" />
+                                        コピー
+                                      </Button>
+                            </div>
+                          </div>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded p-2">
+                                  📝 準備中 - 数秒後にページを再読み込みしてください
+                                </div>
+                              )}
+                              
+                              {/* 編集・プレビューボタン */}
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="flex-1 h-9"
+                              onClick={() => {
+                                    setEditingForm(form);
+                                    setShowEditModal(true);
+                                  }}
+                                >
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  編集
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="flex-1 h-9"
+                                  onClick={() => window.open(`/preview/${storeId}/forms/${form.id}`, '_blank')}
+                                >
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  プレビュー
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                          </div>
+                          
+                {/* 一覧・分析タブ */}
+                <div className="border-t pt-6">
+                  <Tabs value={reservationView === 'forms' ? 'list' : reservationView} onValueChange={(v) => {
+                    const params = new URLSearchParams(searchParams.toString());
+                    params.set('view', v);
+                    router.push(`/${storeId}/admin?tab=reservations&${params.toString()}`);
+                  }} className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <TabsList>
+                        <TabsTrigger value="list">
+                          <ClipboardList className="mr-2 h-4 w-4" />
+                          一覧
+                        </TabsTrigger>
+                        <TabsTrigger value="analytics">
+                          <Calendar className="mr-2 h-4 w-4" />
+                          分析
+                        </TabsTrigger>
+                      </TabsList>
+                      <Select value={reservationFilterStatus} onValueChange={setReservationFilterStatus}>
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">すべて</SelectItem>
+                          <SelectItem value="pending">保留中</SelectItem>
+                          <SelectItem value="confirmed">確認済み</SelectItem>
+                          <SelectItem value="cancelled">キャンセル</SelectItem>
+                          <SelectItem value="completed">完了</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <TabsContent value="analytics" className="space-y-6">
+                      <ReservationAnalytics storeId={storeId} />
+                    </TabsContent>
+
+                    <TabsContent value="list" className="space-y-6">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>顧客名</TableHead>
+                              <TableHead>フォーム</TableHead>
+                              <TableHead>電話番号</TableHead>
+                              <TableHead>予約日時</TableHead>
+                              <TableHead>メニュー</TableHead>
+                              <TableHead>ステータス</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredReservations.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                                  予約がありません
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              filteredReservations.map((reservation) => (
+                                <TableRow 
+                                  key={reservation.id}
+                                  className="cursor-pointer hover:bg-accent"
+                                  onClick={() => {
+                                    setSelectedReservation(reservation);
+                                    setShowReservationDetail(true);
+                                  }}
+                                >
+                                  <TableCell className="font-medium">{reservation.customer_name}</TableCell>
+                                  <TableCell>
+                                    <div className="text-sm">
+                                      <div className="font-medium">{getFormName(reservation.form_id)}</div>
+                                      <div className="text-xs text-muted-foreground font-mono">{reservation.form_id}</div>
+                            </div>
+                                  </TableCell>
+                                  <TableCell>{reservation.customer_phone}</TableCell>
+                                  <TableCell>
+                                    {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
+                                  </TableCell>
+                                  <TableCell>
+                                    {(reservation as any).menu_name || (reservation.selected_menus && Array.isArray(reservation.selected_menus) && reservation.selected_menus.length > 0 
+                                      ? (reservation.selected_menus as any[]).map((m: any) => m.menu_name || m.name).join(', ')
+                                      : 'メニュー不明')}
+                                    {(reservation as any).submenu_name && ` - ${(reservation as any).submenu_name}`}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant={
+                                        reservation.status === 'confirmed' ? 'default' :
+                                        reservation.status === 'pending' ? 'secondary' :
+                                        reservation.status === 'completed' ? 'default' :
+                                        'destructive'
+                                      }
+                                      className={
+                                        reservation.status === 'completed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''
+                                      }
+                                    >
+                                      {reservation.status === 'pending' ? '保留中' :
+                                       reservation.status === 'confirmed' ? '確認済み' :
+                                       reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                        </div>
+                    </TabsContent>
+                  </Tabs>
+                            </div>
+              </CardContent>
+            </Card>
+                          </div>
+        );
+
+      case 'surveys':
+        return (
+          <div className="space-y-6 p-4 lg:p-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>アンケート管理</CardTitle>
+                <CardDescription>アンケートフォームの編集・管理を行います</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* フォーム管理セクション */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">フォーム管理</h3>
+                  {surveyForms.filter(survey => {
+                    if (!formSearchQuery) return true;
+                    const query = formSearchQuery.toLowerCase();
+                    const surveyTitle = survey.config?.basic_info?.title || '';
+                    return surveyTitle.toLowerCase().includes(query);
+                  }).length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">まだアンケートが作成されていません</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-4">
+                      {surveyForms.filter(survey => {
+                        if (!formSearchQuery) return true;
+                        const query = formSearchQuery.toLowerCase();
+                        const surveyTitle = survey.config?.basic_info?.title || '';
+                        return surveyTitle.toLowerCase().includes(query);
+                      }).map((survey) => (
+                        <Card key={survey.id} className="flex-1 min-w-[300px] max-w-[500px] hover:shadow-md transition-shadow">
+                          <CardContent className="p-4">
+                            <div className="space-y-3">
+                              {/* アンケート名とステータス、右側にID・日付情報 */}
+                              <div className="flex items-center justify-between gap-4 flex-wrap">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="text-base font-semibold">
+                                    {survey.config?.basic_info?.title || 'アンケート'}
+                                  </h4>
+                                  <Badge className={getFormStatusColor(survey.status)}>
+                                    {getFormStatusText(survey.status)}
+                                  </Badge>
+                                  {survey.draft_status === 'draft' && (
+                                    <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                      下書きあり
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                                  <div>
+                                    <span className="font-medium">アンケートID:</span>
+                                    <span className="ml-1 font-mono">{survey.id}</span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium">作成日:</span>
+                                    <span className="ml-1">{new Date(survey.created_at).toLocaleDateString('ja-JP')}</span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium">最終更新:</span>
+                                    <span className="ml-1">{new Date(survey.updated_at).toLocaleDateString('ja-JP')}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* 公開中URL */}
+                              {(survey as any).static_deploy?.deploy_url ? (
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium">公開中URL</span>
+                                    <div className="flex gap-1">
+                                      <Button
+                                        variant="outline"
+                                        className="h-7 px-2 text-xs"
+                                        onClick={() => window.open(survey.static_deploy?.deploy_url, '_blank')}
+                                      >
+                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                        開く
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        className="h-7 px-2 text-xs"
+                                        onClick={() => copyToClipboard(survey.static_deploy?.deploy_url || '')}
+                                      >
+                                        <Copy className="h-3 w-3 mr-1" />
+                                        コピー
                                       </Button>
                                     </div>
                                   </div>
                                 </div>
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      )}
+                              ) : (
+                                <div className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded p-2">
+                                  📝 準備中 - 数秒後にページを再読み込みしてください
+                                </div>
+                              )}
+                              
+                              {/* 編集・プレビューボタン */}
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="flex-1 h-9"
+                                  onClick={() => {
+                                    setEditingForm(survey);
+                                    setShowEditModal(true);
+                                  }}
+                                >
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  編集
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="flex-1 h-9"
+                                  onClick={() => window.open(`/preview/${storeId}/surveys/${survey.id}`, '_blank')}
+                                >
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  プレビュー
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
                     </div>
-                  </TabsContent>
-                </Tabs>
+                  )}
+                </div>
+
+                {/* 一覧タブ */}
+                <div className="border-t pt-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>回答一覧</CardTitle>
+                      <CardDescription>アンケートの回答を確認します</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-center py-12 text-muted-foreground">
+                        <ClipboardList className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p className="text-lg font-medium mb-2">まだ回答がありません</p>
+                        <p className="text-sm">アンケートフォームを公開すると、回答がここに表示されます</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -808,7 +948,7 @@ export default function StoreAdminPage() {
                 <CardDescription>ログイン画面に表示するロゴとカラーを設定します</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
+              <div className="space-y-2">
                   <Label htmlFor="logo_url">ロゴURL</Label>
                   <Input
                     id="logo_url"
@@ -841,7 +981,7 @@ export default function StoreAdminPage() {
                   <p className="text-xs text-muted-foreground">
                     ロゴ画像のURLを入力してください。未設定の場合はアイコンが表示されます。
                   </p>
-                </div>
+              </div>
                 <div className="space-y-2">
                   <Label htmlFor="theme_color">テーマカラー</Label>
                   <div className="flex items-center gap-2">
@@ -901,11 +1041,11 @@ export default function StoreAdminPage() {
                       }}
                       className="flex-1"
                     />
-                  </div>
+            </div>
                   <p className="text-xs text-muted-foreground">
                     ログイン画面の背景色とアイコン色に使用されます。
                   </p>
-                </div>
+          </div>
               </CardContent>
             </Card>
             <Card>
@@ -930,7 +1070,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationView, setEditingForm, setShowEditModal, copyToClipboard, getFormStatusColor, getFormStatusText]);
+  }, [activeTab, stats, filteredForms, filteredReservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationView, router, searchParams]);
 
   // 認証チェック中
   if (checkingAuth) {
@@ -939,7 +1079,7 @@ export default function StoreAdminPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
           <p className="mt-4 text-muted-foreground">読み込み中...</p>
-        </div>
+      </div>
       </div>
     );
   }
@@ -1139,7 +1279,7 @@ export default function StoreAdminPage() {
                     <div>
                       <Label className="text-sm text-muted-foreground">顧客名</Label>
                       <p className="font-medium">{selectedReservation.customer_name}</p>
-                    </div>
+    </div>
                     <div>
                       <Label className="text-sm text-muted-foreground">電話番号</Label>
                       <p className="font-medium">{selectedReservation.customer_phone}</p>
@@ -1163,7 +1303,11 @@ export default function StoreAdminPage() {
                           variant={
                             selectedReservation.status === 'confirmed' ? 'default' :
                             selectedReservation.status === 'pending' ? 'secondary' :
+                            selectedReservation.status === 'completed' ? 'default' :
                             'destructive'
+                          }
+                          className={
+                            selectedReservation.status === 'completed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''
                           }
                         >
                           {selectedReservation.status === 'pending' ? '保留中' :
