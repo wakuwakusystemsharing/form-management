@@ -25,6 +25,16 @@ export function isDevelopment(): boolean {
   return getAppEnvironment() === 'development';
 }
 
+/**
+ * 認証をスキップすべきかどうかを判定
+ * ローカル環境のみ認証をスキップ
+ * development環境でも認証は必要（stagingプロジェクトを使用）
+ */
+export function shouldSkipAuth(): boolean {
+  // ローカル環境のみ認証をスキップ
+  return isLocal();
+}
+
 export function shouldUseMockBlob(): boolean {
   // ローカル開発環境でBLOB_READ_WRITE_TOKENがない場合はモック使用
   return isLocal() && !process.env.BLOB_READ_WRITE_TOKEN;

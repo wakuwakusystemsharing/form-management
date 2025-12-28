@@ -16,7 +16,7 @@
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { isLocal, isDevelopment } from './lib/env';
+import { shouldSkipAuth } from './lib/env';
 import { createAuthenticatedClient, checkStoreAccess } from './lib/supabase';
 
 const ADMIN_EMAILS = [
@@ -26,21 +26,20 @@ const ADMIN_EMAILS = [
 ];
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, hostname } = request.nextUrl;
 
   // デバッグ: 環境変数の値を確認
   console.log('[Middleware] Environment check:', {
     NEXT_PUBLIC_APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
-    isLocal: isLocal(),
-    isDevelopment: isDevelopment(),
+    hostname,
+    shouldSkipAuth: shouldSkipAuth(),
     pathname,
   });
 
-  // ローカル開発環境およびdevelopment環境では認証をスキップ
-  // stagingは認証が必要（productionとは別のSupabaseプロジェクト）
-  // developmentはstagingと同じSupabaseプロジェクトを共有しているが認証不要
-  if (isLocal() || isDevelopment()) {
-    console.log('[Middleware] Skipping authentication for dev environment');
+  // ローカル環境のみ認証をスキップ
+  // development環境でも認証は必要（stagingプロジェクトを使用）
+  if (shouldSkipAuth()) {
+    console.log('[Middleware] Skipping authentication for local environment');
     return NextResponse.next();
   }
   
