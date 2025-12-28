@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { getAppEnvironment, isLocal, isDevelopment } from '@/lib/env';
+import { getAppEnvironment, isLocal, isDevelopment, isStaging, isProduction } from '@/lib/env';
 import type { Store } from '@/types/store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -127,10 +127,21 @@ export default function AdminPage() {
   useEffect(() => {
     const env = getAppEnvironment();
     
+    // デバッグ: 環境変数の値を確認
+    console.log('[AdminPage] Environment check:', {
+      NEXT_PUBLIC_APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
+      getAppEnvironment: env,
+      isLocal: isLocal(),
+      isDevelopment: isDevelopment(),
+      isStaging: isStaging(),
+      isProduction: isProduction(),
+    });
+    
     // ローカル開発環境およびdevelopment環境では認証をスキップ
     // stagingは認証が必要（productionとは別のSupabaseプロジェクト）
     // developmentはstagingと同じSupabaseプロジェクトを共有しているが認証不要
     if (isLocal() || isDevelopment()) {
+      console.log('[AdminPage] Skipping authentication for dev environment');
       const dummyUser = {
         id: 'dev-user',
         email: 'dev@localhost',
@@ -145,6 +156,8 @@ export default function AdminPage() {
       loadStores();
       return;
     }
+    
+    console.log('[AdminPage] Authentication required for environment:', env);
     
     const supabase = getSupabaseClient();
     if (!supabase) {

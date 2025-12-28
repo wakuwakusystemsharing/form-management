@@ -28,12 +28,23 @@ const ADMIN_EMAILS = [
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // デバッグ: 環境変数の値を確認
+  console.log('[Middleware] Environment check:', {
+    NEXT_PUBLIC_APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
+    isLocal: isLocal(),
+    isDevelopment: isDevelopment(),
+    pathname,
+  });
+
   // ローカル開発環境およびdevelopment環境では認証をスキップ
   // stagingは認証が必要（productionとは別のSupabaseプロジェクト）
   // developmentはstagingと同じSupabaseプロジェクトを共有しているが認証不要
   if (isLocal() || isDevelopment()) {
+    console.log('[Middleware] Skipping authentication for dev environment');
     return NextResponse.next();
   }
+  
+  console.log('[Middleware] Authentication required');
 
   // 公開APIパスは常に許可
   if (pathname.startsWith('/api/public-form')) {
