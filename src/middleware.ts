@@ -109,14 +109,17 @@ export async function middleware(request: NextRequest) {
       }
     } else {
       // その他の店舗管理画面は店舗アクセス権限チェック
-      const hasAccess = await checkStoreAccess(user.id, storeId);
-      
-      if (!hasAccess) {
-        // アクセス権限なし → 403
-        return new NextResponse(
-          JSON.stringify({ error: 'この店舗へのアクセス権限がありません' }),
-          { status: 403, headers: { 'Content-Type': 'application/json' } }
-        );
+      // サービス管理者の場合は既にチェック済みなので、通常ユーザーのみチェック
+      if (!ADMIN_EMAILS.includes(user.email || '')) {
+        const hasAccess = await checkStoreAccess(user.id, storeId, user.email);
+        
+        if (!hasAccess) {
+          // アクセス権限なし → 403
+          return new NextResponse(
+            JSON.stringify({ error: 'この店舗へのアクセス権限がありません' }),
+            { status: 403, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
       }
     }
   }

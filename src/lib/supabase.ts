@@ -193,13 +193,19 @@ export function createAuthenticatedClient(accessToken: string): SupabaseClient<D
  * ユーザーの店舗アクセス権限を確認
  * @param userId Supabase Auth の user_id
  * @param storeId 店舗 ID
+ * @param userEmail ユーザーのメールアドレス（サービス管理者チェック用）
  * @returns アクセス可能な場合 true
  */
-export async function checkStoreAccess(userId: string, storeId: string): Promise<boolean> {
+export async function checkStoreAccess(userId: string, storeId: string, userEmail?: string): Promise<boolean> {
   const supabase = getSupabaseClient();
   
   if (!supabase) {
     // ローカル環境では認証をスキップ
+    return true;
+  }
+
+  // サービス管理者の場合は常にアクセス可能
+  if (userEmail && isServiceAdmin(userEmail)) {
     return true;
   }
 

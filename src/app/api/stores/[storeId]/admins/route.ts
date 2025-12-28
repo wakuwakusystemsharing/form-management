@@ -64,13 +64,7 @@ export async function GET(
 
     const { data: admins, error } = await adminClient
       .from('store_admins')
-      .select(`
-        id,
-        user_id,
-        store_id,
-        created_at,
-        user:auth.users!store_admins_user_id_fkey(email)
-      `)
+      .select('id, user_id, store_id, created_at')
       .eq('store_id', storeId)
       .order('created_at', { ascending: false });
 
