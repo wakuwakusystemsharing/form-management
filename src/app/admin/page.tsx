@@ -122,6 +122,7 @@ export default function AdminPage() {
           
           if (verifyResponse.ok) {
             const verifyData = await verifyResponse.json();
+            // verifyエンドポイントはトークンがない場合も200を返す（user: null）
             if (verifyData.user && verifyData.accessToken) {
               // クッキーから取得したトークンでユーザー情報を取得
               // セッションとして扱うために、一時的なセッションオブジェクトを作成
@@ -145,9 +146,10 @@ export default function AdminPage() {
                 user: currentUser
               } as any;
             }
+            // verifyData.userがnullの場合は、localStorageからセッションを確認する
           }
         } catch (error) {
-          console.log('Cookie session not found, checking localStorage session');
+          console.log('Verify endpoint error, checking localStorage session:', error);
         }
         
         // クッキーからセッションが取得できなかった場合、localStorageから取得を試みる

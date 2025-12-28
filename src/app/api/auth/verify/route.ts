@@ -10,8 +10,13 @@ export async function GET(req: NextRequest) {
     const authHeader = req.headers.get('authorization')
     const token = accessToken || (authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null)
     
+    // トークンがない場合は、未認証として正常に返す（401ではなく200）
     if (!token) {
-      return NextResponse.json({ error: 'トークンが必要です' }, { status: 401 })
+      return NextResponse.json({ 
+        user: null,
+        accessToken: null,
+        refreshToken: null
+      })
     }
 
     const client = createAuthenticatedClient(token)
@@ -22,8 +27,13 @@ export async function GET(req: NextRequest) {
 
     const { data: { user }, error } = await client.auth.getUser()
     
+    // トークンが無効な場合も、未認証として正常に返す
     if (error || !user) {
-      return NextResponse.json({ error: '無効なトークンです' }, { status: 401 })
+      return NextResponse.json({ 
+        user: null,
+        accessToken: null,
+        refreshToken: null
+      })
     }
 
     // セッション情報も返す（クライアント側でセッションを復元するため）
