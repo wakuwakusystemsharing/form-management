@@ -86,7 +86,8 @@ export default function AdminPage() {
     const env = getAppEnvironment();
     
     // ローカル開発環境およびdevelopment環境では認証をスキップ
-    // stagingは認証が必要（productionと同じSupabaseプロジェクトを共有）
+    // stagingは認証が必要（productionとは別のSupabaseプロジェクト）
+    // developmentはstagingと同じSupabaseプロジェクトを共有しているが認証不要
     if (isLocal() || isDevelopment()) {
       const dummyUser = {
         id: 'dev-user',
@@ -236,7 +237,8 @@ export default function AdminPage() {
     e.preventDefault();
     
     // ローカル開発環境およびdevelopment環境ではログイン処理をスキップ
-    // stagingは認証が必要（productionと同じSupabaseプロジェクトを共有）
+    // stagingは認証が必要（productionとは別のSupabaseプロジェクト）
+    // developmentはstagingと同じSupabaseプロジェクトを共有しているが認証不要
     if (isLocal() || isDevelopment()) {
       return;
     }
