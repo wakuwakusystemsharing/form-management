@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Settings } from 'lucide-react';
+import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Settings, Lock } from 'lucide-react';
 
 const ADMIN_EMAILS = [
   'wakuwakusystemsharing@gmail.com',
@@ -33,6 +33,13 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [showAddStore, setShowAddStore] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  
+  // パスワードリセット関連の状態
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const [passwordResetForm, setPasswordResetForm] = useState({ password: '', confirmPassword: '' });
+  const [passwordResetError, setPasswordResetError] = useState('');
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [resetToken, setResetToken] = useState<string | null>(null);
 
   // 新しいStore用の状態
   const [newStore, setNewStore] = useState({
@@ -80,6 +87,41 @@ export default function AdminPage() {
     );
     setFilteredStores(filtered);
   }, [searchQuery, stores]);
+
+  // URLパラメータからパスワードリセット情報を取得
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    // ハッシュフラグメントからパラメータを取得
+    const hash = window.location.hash.substring(1);
+    const params = new URLSearchParams(hash);
+    
+    const error = params.get('error');
+    const errorCode = params.get('error_code');
+    const errorDescription = params.get('error_description');
+    const accessToken = params.get('access_token');
+    const type = params.get('type');
+    
+    // エラーがある場合
+    if (error) {
+      setPasswordResetError(
+        errorDescription || 
+        (errorCode === 'otp_expired' ? 'パスワードリセットリンクの有効期限が切れています。再度リセットをリクエストしてください。' : 
+         error === 'access_denied' ? 'アクセスが拒否されました。' : 
+         'パスワードリセットに失敗しました。')
+      );
+      // エラー表示後、ハッシュをクリア
+      window.history.replaceState(null, '', '/admin');
+    }
+    
+    // パスワードリセットトークンがある場合
+    if (accessToken && type === 'recovery') {
+      setResetToken(accessToken);
+      setShowPasswordReset(true);
+      // トークンをクリア
+      window.history.replaceState(null, '', '/admin');
+    }
+  }, []);
 
   // 認証チェック
   useEffect(() => {
@@ -296,6 +338,78 @@ export default function AdminPage() {
     }
   };
 
+  // パスワードリセット処理
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsResettingPassword(true);
+    setPasswordResetError('');
+
+    if (passwordResetForm.password !== passwordResetForm.confirmPassword) {
+      setPasswordResetError('パスワードが一致しません');
+      setIsResettingPassword(false);
+      return;
+    }
+
+    if (passwordResetForm.password.length < 6) {
+      setPasswordResetError('パスワードは6文字以上である必要があります');
+      setIsResettingPassword(false);
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setPasswordResetError('認証サービスに接続できません');
+      setIsResettingPassword(false);
+      return;
+    }
+
+    try {
+      // トークンを使ってセッションを確立
+      if (resetToken) {
+        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+          access_token: resetToken,
+          refresh_token: '',
+        });
+
+        if (sessionError || !sessionData.session) {
+          setPasswordResetError('セッションの確立に失敗しました。リンクが無効または期限切れです。');
+          setIsResettingPassword(false);
+          return;
+        }
+      }
+
+      // パスワードを更新
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: passwordResetForm.password,
+      });
+
+      if (updateError) {
+        setPasswordResetError(updateError.message || 'パスワードの更新に失敗しました');
+        setIsResettingPassword(false);
+        return;
+      }
+
+      // 成功メッセージを表示
+      toast({
+        title: '成功',
+        description: 'パスワードが正常に更新されました。ログインしてください。',
+      });
+
+      // フォームをリセット
+      setPasswordResetForm({ password: '', confirmPassword: '' });
+      setShowPasswordReset(false);
+      setResetToken(null);
+      
+      // ログイン画面に戻る
+      router.push('/admin');
+    } catch (error) {
+      console.error('Password reset error:', error);
+      setPasswordResetError('パスワードの更新に失敗しました');
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
   useEffect(() => {
     if (user) {
       loadStores();
@@ -400,6 +514,74 @@ export default function AdminPage() {
     );
   }
 
+  // パスワードリセット画面
+  if (showPasswordReset) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Lock className="w-8 h-8 text-blue-600" />
+            </div>
+            <CardTitle className="text-2xl">パスワードリセット</CardTitle>
+            <CardDescription>新しいパスワードを設定してください</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handlePasswordReset} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">新しいパスワード</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  required
+                  minLength={6}
+                  value={passwordResetForm.password}
+                  onChange={(e) => setPasswordResetForm(prev => ({ ...prev, password: e.target.value }))}
+                  placeholder="6文字以上"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">パスワード（確認）</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  required
+                  minLength={6}
+                  value={passwordResetForm.confirmPassword}
+                  onChange={(e) => setPasswordResetForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                  placeholder="パスワードを再入力"
+                />
+              </div>
+
+              {passwordResetError && (
+                <div className="text-sm text-destructive text-center">{passwordResetError}</div>
+              )}
+
+              <Button type="submit" className="w-full" disabled={isResettingPassword}>
+                {isResettingPassword ? '更新中...' : 'パスワードを更新'}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setShowPasswordReset(false);
+                  setResetToken(null);
+                  setPasswordResetForm({ password: '', confirmPassword: '' });
+                  setPasswordResetError('');
+                }}
+              >
+                キャンセル
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // 未認証時のログイン画面
   if (!user) {
     return (
@@ -413,6 +595,11 @@ export default function AdminPage() {
             <CardDescription>「店舗運営にとって「Need（必要不可欠）」な予約システム」</CardDescription>
           </CardHeader>
           <CardContent>
+            {passwordResetError && (
+              <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                <p className="text-sm text-destructive text-center">{passwordResetError}</p>
+              </div>
+            )}
             <form onSubmit={handleSignIn} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">メールアドレス</Label>
