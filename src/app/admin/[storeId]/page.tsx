@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
+import { getSubdomainBaseDomain } from '@/lib/env';
 import { 
   ArrowLeft, 
   Edit, 
@@ -28,7 +29,8 @@ import {
   ExternalLink, 
   Copy,
   Store as StoreIcon,
-  AlertTriangle
+  AlertTriangle,
+  Globe
 } from 'lucide-react';
 
 // アンケートテンプレート定義（既存のまま）
@@ -732,6 +734,65 @@ export default function StoreDetailPage() {
 
           {/* 概要タブ */}
           <TabsContent value="overview" className="space-y-6">
+            {/* サブドメイン情報 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="h-5 w-5" />
+                  サブドメイン設定
+                </CardTitle>
+                <CardDescription>店舗専用のサブドメインURL</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {store.subdomain ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label className="font-medium">サブドメインURL:</Label>
+                      <code className="px-2 py-1 bg-muted rounded text-sm">
+                        https://{store.subdomain}.{getSubdomainBaseDomain()}
+                      </code>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const url = `https://${store.subdomain}.${getSubdomainBaseDomain()}`;
+                          copyToClipboard(url);
+                          toast({
+                            title: 'コピーしました',
+                            description: 'サブドメインURLをクリップボードにコピーしました',
+                          });
+                        }}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const url = `https://${store.subdomain}.${getSubdomainBaseDomain()}`;
+                          window.open(url, '_blank');
+                        }}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {store.custom_domain && (
+                      <div className="flex items-center gap-2">
+                        <Label className="font-medium">カスタムドメイン:</Label>
+                        <code className="px-2 py-1 bg-muted rounded text-sm">
+                          {store.custom_domain}
+                        </code>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    サブドメインが設定されていません。店舗情報編集から設定できます。
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
             {/* フォームURL一覧 */}
             <Card>
               <CardHeader>
@@ -1376,6 +1437,43 @@ export default function StoreDetailPage() {
                     onChange={(e) => setEditingStore({...editingStore, website_url: e.target.value})}
                     />
                   </div>
+                <div className="md:col-span-2 space-y-2">
+                  <Label htmlFor="edit_subdomain">
+                    サブドメイン
+                    <span className="text-xs text-muted-foreground ml-2">
+                      (例: {storeId} → {storeId}.{getSubdomainBaseDomain()})
+                    </span>
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="edit_subdomain"
+                      type="text"
+                      placeholder={storeId}
+                      value={editingStore.subdomain || ''}
+                      onChange={(e) => setEditingStore({...editingStore, subdomain: e.target.value})}
+                      className="flex-1"
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      .{getSubdomainBaseDomain()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    小文字英数字とハイフンのみ、3-63文字。未指定の場合は店舗IDと同じ値が使用されます。
+                  </p>
+                </div>
+                <div className="md:col-span-2 space-y-2">
+                  <Label htmlFor="edit_custom_domain">カスタムドメイン（オプション）</Label>
+                  <Input
+                    id="edit_custom_domain"
+                    type="text"
+                    placeholder="例: myshop.com"
+                    value={editingStore.custom_domain || ''}
+                    onChange={(e) => setEditingStore({...editingStore, custom_domain: e.target.value})}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    独自のドメインを使用する場合に設定します。DNS設定が必要です。
+                  </p>
+                </div>
                 <div className="md:col-span-2 space-y-2">
                   <Label htmlFor="edit_description">店舗説明</Label>
                     <textarea

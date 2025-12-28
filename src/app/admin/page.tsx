@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { getAppEnvironment, isLocal, shouldSkipAuth } from '@/lib/env';
+import { getAppEnvironment, isLocal, shouldSkipAuth, getSubdomainBaseDomain } from '@/lib/env';
 import type { Store } from '@/types/store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,7 +49,8 @@ export default function AdminPage() {
     phone: '',
     address: '',
     description: '',
-    website_url: ''
+    website_url: '',
+    subdomain: ''
   });
 
   const loadStores = useCallback(async () => {
@@ -418,7 +419,8 @@ export default function AdminPage() {
       phone: '',
       address: '',
       description: '',
-      website_url: ''
+      website_url: '',
+      subdomain: ''
     });
   };
 
@@ -793,6 +795,30 @@ export default function AdminPage() {
                           onChange={(e) => setNewStore({...newStore, website_url: e.target.value})}
                           placeholder="例：https://beauty-b.example.com"
                         />
+                      </div>
+                      <div className="md:col-span-2 space-y-2">
+                        <Label htmlFor="subdomain">
+                          サブドメイン（オプション）
+                          <span className="text-xs text-muted-foreground ml-2">
+                            (未指定の場合は自動生成されます)
+                          </span>
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            id="subdomain"
+                            type="text"
+                            placeholder="例: myshop"
+                            value={newStore.subdomain}
+                            onChange={(e) => setNewStore({...newStore, subdomain: e.target.value.toLowerCase()})}
+                            className="flex-1"
+                          />
+                          <span className="text-sm text-muted-foreground">
+                            .{getSubdomainBaseDomain()}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          小文字英数字とハイフンのみ、3-63文字。プレビュー: {newStore.subdomain ? `https://${newStore.subdomain}.${getSubdomainBaseDomain()}` : '未設定'}
+                        </p>
                       </div>
                       <div className="md:col-span-2 space-y-2">
                         <Label htmlFor="description">店舗説明</Label>

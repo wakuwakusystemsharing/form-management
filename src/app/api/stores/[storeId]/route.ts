@@ -5,6 +5,44 @@ import { Store } from '@/types/store';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 
+// 予約語リスト（サブドメインとして使用不可）
+const RESERVED_SUBDOMAINS = ['www', 'api', 'admin', 'app', 'mail', 'ftp', 'localhost', 'staging', 'dev', 'development', 'production', 'prod', 'test'];
+
+/**
+ * サブドメインのバリデーション
+ * @param subdomain 検証するサブドメイン
+ * @returns 有効な形式かどうか
+ */
+function validateSubdomain(subdomain: string): boolean {
+  // 小文字英数字とハイフンのみ、3-63文字
+  if (!/^[a-z0-9-]{3,63}$/.test(subdomain)) {
+    return false;
+  }
+  
+  // 先頭・末尾はハイフン不可
+  if (subdomain.startsWith('-') || subdomain.endsWith('-')) {
+    return false;
+  }
+  
+  // 予約語チェック
+  if (RESERVED_SUBDOMAINS.includes(subdomain.toLowerCase())) {
+    return false;
+  }
+  
+  return true;
+}
+
+/**
+ * カスタムドメインのバリデーション（簡易版）
+ * @param domain 検証するドメイン
+ * @returns 有効な形式かどうか
+ */
+function validateCustomDomain(domain: string): boolean {
+  // 基本的なドメイン形式チェック
+  const domainRegex = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
+  return domainRegex.test(domain);
+}
+
 // 一時的なJSONファイルでのデータ保存（開発用）
 const DATA_DIR = path.join(process.cwd(), 'data');
 const STORES_FILE = path.join(DATA_DIR, 'stores.json');
@@ -101,6 +139,29 @@ export async function PUT(
     const body = await request.json();
     const env = getAppEnvironment();
 
+    // サブドメインのバリデーション
+    if (body.subdomain !== undefined) {
+      if (body.subdomain === null || body.subdomain === '') {
+        // nullまたは空文字の場合は削除（デフォルトに戻す）
+        body.subdomain = storeId;
+      } else if (!validateSubdomain(body.subdomain)) {
+        return NextResponse.json(
+          { error: 'サブドメインの形式が正しくありません。小文字英数字とハイフンのみ、3-63文字で、先頭・末尾はハイフン不可です。' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // カスタムドメインのバリデーション
+    if (body.custom_domain !== undefined && body.custom_domain !== null && body.custom_domain !== '') {
+      if (!validateCustomDomain(body.custom_domain)) {
+        return NextResponse.json(
+          { error: 'カスタムドメインの形式が正しくありません。' },
+          { status: 400 }
+        );
+      }
+    }
+
     // ローカル環境: JSON を更新
     if (env === 'local') {
       const stores = readStores();
@@ -111,6 +172,28 @@ export async function PUT(
           { error: '店舗が見つかりません' }, 
           { status: 404 }
         );
+      }
+
+      // サブドメインの重複チェック（自分以外）
+      if (body.subdomain) {
+        const subdomainExists = stores.some((s: Store) => s.id !== storeId && s.subdomain === body.subdomain);
+        if (subdomainExists) {
+          return NextResponse.json(
+            { error: 'このサブドメインは既に使用されています。' },
+            { status: 409 }
+          );
+        }
+      }
+
+      // カスタムドメインの重複チェック（自分以外）
+      if (body.custom_domain) {
+        const customDomainExists = stores.some((s: Store) => s.id !== storeId && s.custom_domain === body.custom_domain);
+        if (customDomainExists) {
+          return NextResponse.json(
+            { error: 'このカスタムドメインは既に使用されています。' },
+            { status: 409 }
+          );
+        }
       }
 
       // 更新データをマージ
@@ -136,6 +219,42 @@ export async function PUT(
       );
     }
 
+    // サブドメインの重複チェック（自分以外）
+    if (body.subdomain) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingStore } = await (adminClient as any)
+        .from('stores')
+        .select('id')
+        .eq('subdomain', body.subdomain)
+        .neq('id', storeId)
+        .single();
+      
+      if (existingStore) {
+        return NextResponse.json(
+          { error: 'このサブドメインは既に使用されています。' },
+          { status: 409 }
+        );
+      }
+    }
+
+    // カスタムドメインの重複チェック（自分以外）
+    if (body.custom_domain) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingStore } = await (adminClient as any)
+        .from('stores')
+        .select('id')
+        .eq('custom_domain', body.custom_domain)
+        .neq('id', storeId)
+        .single();
+      
+      if (existingStore) {
+        return NextResponse.json(
+          { error: 'このカスタムドメインは既に使用されています。' },
+          { status: 409 }
+        );
+      }
+    }
+
     const updateData = {
       ...body,
       updated_at: new Date().toISOString()
@@ -155,6 +274,23 @@ export async function PUT(
 
     if (error || !updatedStore) {
       console.error('[API] Store update error:', error);
+      
+      // UNIQUE制約違反のエラー処理
+      if (error?.code === '23505') {
+        if (error.message.includes('subdomain')) {
+          return NextResponse.json(
+            { error: 'このサブドメインは既に使用されています。' },
+            { status: 409 }
+          );
+        }
+        if (error.message.includes('custom_domain')) {
+          return NextResponse.json(
+            { error: 'このカスタムドメインは既に使用されています。' },
+            { status: 409 }
+          );
+        }
+      }
+      
       return NextResponse.json(
         { error: '店舗の更新に失敗しました' },
         { status: 500 }

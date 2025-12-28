@@ -85,3 +85,54 @@ export function getEnvironmentBadge(): { label: string; color: string } {
       return { label: '✅ 本番環境', color: 'bg-green-100 text-green-800 border-green-300' };
   }
 }
+
+/**
+ * サブドメイン用のベースドメインを取得
+ * 環境に応じた適切なドメインを返す
+ */
+export function getSubdomainBaseDomain(): string {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    
+    // プレビューデプロイメントURLの場合（例: form-management-git-dev-...vercel.app）
+    if (hostname.includes('-wakuwakusystems-projects.vercel.app')) {
+      return hostname;
+    }
+    
+    // staging環境
+    if (hostname.includes('form-management-staging.vercel.app')) {
+      return 'form-management-staging.vercel.app';
+    }
+    
+    // 本番環境（カスタムドメイン）
+    if (hostname === 'nas-rsv.com' || hostname.endsWith('.nas-rsv.com')) {
+      return 'nas-rsv.com';
+    }
+    
+    // フォールバック
+    return hostname;
+  }
+  
+  // サーバーサイド
+  const env = getAppEnvironment();
+  
+  if (isLocal()) {
+    return 'localhost:3000';
+  }
+  
+  if (isStaging()) {
+    return process.env.NEXT_PUBLIC_STAGING_URL?.replace('https://', '') || 'form-management-staging.vercel.app';
+  }
+  
+  if (isDevelopment()) {
+    // dev環境のプレビューデプロイメントURLを取得
+    const vercelUrl = process.env.VERCEL_URL;
+    if (vercelUrl) {
+      return vercelUrl;
+    }
+    return 'form-management-git-dev-wakuwakusystems-projects.vercel.app';
+  }
+  
+  // Production
+  return 'nas-rsv.com';
+}
