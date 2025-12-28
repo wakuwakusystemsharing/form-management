@@ -68,9 +68,7 @@ export async function GET(
         id,
         user_id,
         store_id,
-        role,
         created_at,
-        updated_at,
         user:auth.users!store_admins_user_id_fkey(email)
       `)
       .eq('store_id', storeId)
@@ -86,7 +84,7 @@ export async function GET(
 
     // ユーザー情報を取得
     const adminsWithUserInfo = await Promise.all(
-      (admins || []).map(async (admin: { id: string; user_id: string; store_id: string; role: string; created_at: string; updated_at: string }) => {
+      (admins || []).map(async (admin: { id: string; user_id: string; store_id: string; created_at: string }) => {
         // Supabase Admin APIでユーザー情報を取得
         const { data: userData, error: userError } = await adminClient.auth.admin.getUserById(admin.user_id);
         
@@ -94,10 +92,8 @@ export async function GET(
           id: admin.id,
           user_id: admin.user_id,
           store_id: admin.store_id,
-          role: admin.role,
           email: userData?.user?.email || null,
           created_at: admin.created_at,
-          updated_at: admin.updated_at,
         };
       })
     );
@@ -131,18 +127,11 @@ export async function POST(
   try {
     const { storeId } = await params;
     const body = await request.json();
-    const { email, role = 'admin', password, createUser = false } = body;
+    const { email, password, createUser = false } = body;
 
     if (!email) {
       return NextResponse.json(
         { error: 'メールアドレスが必要です' },
-        { status: 400 }
-      );
-    }
-
-    if (!['admin', 'staff'].includes(role)) {
-      return NextResponse.json(
-        { error: '無効な権限です' },
         { status: 400 }
       );
     }
@@ -173,10 +162,8 @@ export async function POST(
         id: `admin_${Date.now()}`,
         user_id: `user_${Date.now()}`,
         store_id: storeId,
-        role,
         email,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       };
       
       admins.push(newAdmin);
@@ -274,7 +261,6 @@ export async function POST(
       .insert({
         user_id: user.id,
         store_id: storeId,
-        role: role as 'admin' | 'staff',
       } as never)
       .select()
       .single();
@@ -288,7 +274,7 @@ export async function POST(
     }
 
     return NextResponse.json({
-      ...(newAdmin as { id: string; user_id: string; store_id: string; role: string; created_at: string; updated_at: string }),
+      ...(newAdmin as { id: string; user_id: string; store_id: string; created_at: string }),
       email: user.email,
       userCreated, // 新規作成されたかどうか
     }, { status: 201 });

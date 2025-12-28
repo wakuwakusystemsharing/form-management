@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { Plus, Trash2, Search, UserPlus } from 'lucide-react';
@@ -16,10 +15,8 @@ interface StoreAdmin {
   id: string;
   user_id: string;
   store_id: string;
-  role: 'admin' | 'staff';
   email: string | null;
   created_at: string;
-  updated_at: string;
 }
 
 interface StoreAdminManagerProps {
@@ -31,7 +28,6 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
   const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newAdminEmail, setNewAdminEmail] = useState('');
-  const [newAdminRole, setNewAdminRole] = useState<'admin' | 'staff'>('admin');
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [createNewUser, setCreateNewUser] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -101,7 +97,6 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
         credentials: 'include',
         body: JSON.stringify({
           email: newAdminEmail.trim(),
-          role: newAdminRole,
           password: createNewUser && newAdminPassword.trim() ? newAdminPassword : undefined,
           createUser: createNewUser,
         }),
@@ -113,7 +108,6 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
         setNewAdminEmail('');
         setNewAdminPassword('');
         setCreateNewUser(false);
-        setNewAdminRole('admin');
         setShowAddDialog(false);
         toast({
           title: '追加しました',
@@ -212,7 +206,6 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>メールアドレス</TableHead>
-                  <TableHead>権限</TableHead>
                   <TableHead>登録日</TableHead>
                   <TableHead className="text-right">操作</TableHead>
                 </TableRow>
@@ -222,11 +215,6 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
                   <TableRow key={admin.id}>
                     <TableCell className="font-medium">
                       {admin.email || 'メールアドレス不明'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={admin.role === 'admin' ? 'default' : 'secondary'}>
-                        {admin.role === 'admin' ? '管理者' : 'スタッフ'}
-                      </Badge>
                     </TableCell>
                     <TableCell>
                       {new Date(admin.created_at).toLocaleDateString('ja-JP')}
@@ -306,19 +294,6 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
                 </p>
               </div>
             )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="role">権限</Label>
-              <Select value={newAdminRole} onValueChange={(v) => setNewAdminRole(v as 'admin' | 'staff')}>
-                <SelectTrigger id="role">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">管理者</SelectItem>
-                  <SelectItem value="staff">スタッフ</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => {
