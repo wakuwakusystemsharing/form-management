@@ -27,6 +27,13 @@ export async function GET(
         const form = forms.find((f: SurveyForm) => f.id === id);
         
         if (form) {
+          // ui_settingsが存在しない場合はデフォルト値を設定
+          if (form.config && !form.config.ui_settings) {
+            form.config.ui_settings = {
+              submit_button_text: '送信',
+              theme_color: form.config.basic_info?.theme_color || '#13ca5e'
+            };
+          }
           return NextResponse.json(form);
         }
       }
@@ -48,6 +55,14 @@ export async function GET(
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // ui_settingsが存在しない場合はデフォルト値を設定
+    if (form && form.config && !form.config.ui_settings) {
+      form.config.ui_settings = {
+        submit_button_text: '送信',
+        theme_color: form.config.basic_info?.theme_color || '#13ca5e'
+      };
     }
 
     return NextResponse.json(form);

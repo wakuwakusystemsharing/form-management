@@ -27,7 +27,24 @@ export async function GET(
       const data = fs.readFileSync(formsPath, 'utf-8');
       const storeForms = JSON.parse(data);
       
-      return NextResponse.json(storeForms);
+      // ui_settingsが存在しない場合はデフォルト値を設定
+      const normalizedForms = storeForms.map((form: SurveyForm) => {
+        if (form.config && !form.config.ui_settings) {
+          return {
+            ...form,
+            config: {
+              ...form.config,
+              ui_settings: {
+                submit_button_text: '送信',
+                theme_color: form.config.basic_info?.theme_color || '#13ca5e'
+              }
+            }
+          };
+        }
+        return form;
+      });
+      
+      return NextResponse.json(normalizedForms);
     }
 
     // staging/production: Supabase から取得
@@ -53,7 +70,24 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(forms || []);
+    // ui_settingsが存在しない場合はデフォルト値を設定
+    const normalizedForms = (forms || []).map((form: any) => {
+      if (form.config && !form.config.ui_settings) {
+        return {
+          ...form,
+          config: {
+            ...form.config,
+            ui_settings: {
+              submit_button_text: '送信',
+              theme_color: form.config.basic_info?.theme_color || '#13ca5e'
+            }
+          }
+        };
+      }
+      return form;
+    });
+
+    return NextResponse.json(normalizedForms);
   } catch (error) {
     console.error('Survey Forms fetch error:', error);
     return NextResponse.json(
