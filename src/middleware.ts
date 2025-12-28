@@ -16,7 +16,7 @@
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { isLocal } from './lib/env';
+import { isLocal, isStaging } from './lib/env';
 import { createAuthenticatedClient, checkStoreAccess } from './lib/supabase';
 
 const ADMIN_EMAILS = [
@@ -28,8 +28,8 @@ const ADMIN_EMAILS = [
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // ローカル開発環境では認証をスキップ
-  if (isLocal()) {
+  // ローカル開発環境およびdev環境（staging）では認証をスキップ
+  if (isLocal() || isStaging()) {
     return NextResponse.next();
   }
 
