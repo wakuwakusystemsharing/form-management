@@ -137,6 +137,16 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
     console.log('[Supabase] Client initialized for local development (Supabase env vars set)');
   } else {
     console.log('[Supabase] Client initialized for staging/production');
+    // デバッグ: 実際に使用されているSupabase URLを確認
+    console.log('[Supabase] Using URL from env:', supabaseUrl);
+    if (supabaseUrl) {
+      try {
+        const urlObj = new URL(supabaseUrl);
+        console.log('[Supabase] URL domain:', urlObj.hostname);
+      } catch (e) {
+        console.log('[Supabase] URL parse error:', e);
+      }
+    }
   }
   
   return supabaseClient;
