@@ -26,24 +26,12 @@ const ADMIN_EMAILS = [
 ];
 
 export async function middleware(request: NextRequest) {
-  const { pathname, hostname } = request.nextUrl;
-
-  // デバッグ: 環境変数の値を確認
-  console.log('[Middleware] Environment check:', {
-    NEXT_PUBLIC_APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
-    hostname,
-    shouldSkipAuth: shouldSkipAuth(),
-    pathname,
-  });
+  const { pathname } = request.nextUrl;
 
   // ローカル環境のみ認証をスキップ
-  // development環境でも認証は必要（stagingプロジェクトを使用）
   if (shouldSkipAuth()) {
-    console.log('[Middleware] Skipping authentication for local environment');
     return NextResponse.next();
   }
-  
-  console.log('[Middleware] Authentication required');
 
   // 公開APIパスは常に許可
   if (pathname.startsWith('/api/public-form')) {

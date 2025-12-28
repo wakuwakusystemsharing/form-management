@@ -87,16 +87,10 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/ab087972-d09d-414f-a816-733141dc0195',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supabase.ts:88',message:'Environment variables check',data:{supabaseUrl:supabaseUrl?supabaseUrl.substring(0,50)+'...':null,supabaseUrlLength:supabaseUrl?.length||0,hasAnonKey:!!supabaseAnonKey,anonKeyLength:supabaseAnonKey?.length||0,allEnvKeys:Object.keys(process.env).filter(k=>k.includes('SUPABASE')).join(',')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
 
   // 環境変数が設定されていない場合
   if (!supabaseUrl || !supabaseAnonKey) {
-    if (isLocal()) {
-      console.log('[Supabase] Local mode: using JSON file storage (Supabase env vars not set)');
-    } else {
+    if (!isLocal()) {
       console.error('[Supabase] Missing environment variables: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
     }
     return null;
@@ -137,33 +131,6 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
     auth: authOptions
   });
   
-  // #region agent log
-  if (supabaseUrl) {
-    try {
-      const urlObj = new URL(supabaseUrl);
-      fetch('http://127.0.0.1:7242/ingest/ab087972-d09d-414f-a816-733141dc0195',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supabase.ts:132',message:'Supabase client created',data:{hostname:urlObj.hostname,fullUrl:supabaseUrl.substring(0,60)+'...',isLocal:isLocal()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    } catch (e) {
-      fetch('http://127.0.0.1:7242/ingest/ab087972-d09d-414f-a816-733141dc0195',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'supabase.ts:132',message:'URL parse error',data:{error:String(e)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    }
-  }
-  // #endregion
-  
-  if (isLocal()) {
-    console.log('[Supabase] Client initialized for local development (Supabase env vars set)');
-  } else {
-    console.log('[Supabase] Client initialized for staging/production');
-    // デバッグ: 実際に使用されているSupabase URLを確認
-    console.log('[Supabase] Using URL from env:', supabaseUrl);
-    if (supabaseUrl) {
-      try {
-        const urlObj = new URL(supabaseUrl);
-        console.log('[Supabase] URL domain:', urlObj.hostname);
-      } catch (e) {
-        console.log('[Supabase] URL parse error:', e);
-      }
-    }
-  }
-  
   return supabaseClient;
 }
 
@@ -174,7 +141,6 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
  */
 export function getSupabaseAdminClient(): SupabaseClient<Database> | null {
   if (isLocal()) {
-    console.log('[Supabase Admin] Local mode: using JSON file storage');
     return null;
   }
 

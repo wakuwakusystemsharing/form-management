@@ -28,10 +28,8 @@ export function isDevelopment(): boolean {
 /**
  * 認証をスキップすべきかどうかを判定
  * ローカル環境のみ認証をスキップ
- * development環境でも認証は必要（stagingプロジェクトを使用）
  */
 export function shouldSkipAuth(): boolean {
-  // ローカル環境のみ認証をスキップ
   return isLocal();
 }
 

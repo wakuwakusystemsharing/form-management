@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { getAppEnvironment, isLocal, shouldSkipAuth, isStaging, isProduction } from '@/lib/env';
+import { getAppEnvironment, isLocal, shouldSkipAuth } from '@/lib/env';
 import type { Store } from '@/types/store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -125,29 +125,8 @@ export default function AdminPage() {
 
   // 認証チェック
   useEffect(() => {
-    const env = getAppEnvironment();
-    
-    // #region agent log
-    if (typeof window !== 'undefined') {
-      fetch('http://127.0.0.1:7242/ingest/ab087972-d09d-414f-a816-733141dc0195',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'admin/page.tsx:127',message:'AdminPage auth check start',data:{NEXT_PUBLIC_APP_ENV:process.env.NEXT_PUBLIC_APP_ENV,hostname:window.location.hostname,env:env,supabaseUrl:process.env.NEXT_PUBLIC_SUPABASE_URL?process.env.NEXT_PUBLIC_SUPABASE_URL.substring(0,50)+'...':null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    }
-    // #endregion
-    
-    // デバッグ: 環境変数の値を確認
-    console.log('[AdminPage] Environment check:', {
-      NEXT_PUBLIC_APP_ENV: process.env.NEXT_PUBLIC_APP_ENV,
-      hostname: typeof window !== 'undefined' ? window.location.hostname : 'N/A',
-      shouldSkipAuth: shouldSkipAuth(),
-      getAppEnvironment: env,
-      isLocal: isLocal(),
-      isStaging: isStaging(),
-      isProduction: isProduction(),
-    });
-    
     // ローカル環境のみ認証をスキップ
-    // development環境でも認証は必要（stagingプロジェクトを使用）
     if (shouldSkipAuth()) {
-      console.log('[AdminPage] Skipping authentication for local environment');
       const dummyUser = {
         id: 'dev-user',
         email: 'dev@localhost',
@@ -162,8 +141,6 @@ export default function AdminPage() {
       loadStores();
       return;
     }
-    
-    console.log('[AdminPage] Authentication required for environment:', env);
     
     const supabase = getSupabaseClient();
     if (!supabase) {
@@ -298,7 +275,6 @@ export default function AdminPage() {
     e.preventDefault();
     
     // ローカル環境のみログイン処理をスキップ
-    // development環境でも認証は必要（stagingプロジェクトを使用）
     if (shouldSkipAuth()) {
       return;
     }
