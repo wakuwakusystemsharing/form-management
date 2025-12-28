@@ -202,7 +202,29 @@ export default function AdminPage() {
           currentUser = session?.user ?? null;
         }
 
+        // サービス管理者でない場合、ログアウトして店舗管理者ページにリダイレクト
         if (currentUser && !ADMIN_EMAILS.includes(currentUser.email || '')) {
+          // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
+          const supabaseClient = getSupabaseClient();
+          if (supabaseClient) {
+            // ユーザーがアクセス権限を持つ店舗を取得
+            const { data: storeAdmins } = await (supabaseClient as any)
+              .from('store_admins')
+              .select('store_id')
+              .limit(1);
+            
+            if (storeAdmins && storeAdmins.length > 0) {
+              const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
+              await supabase.auth.signOut();
+              if (isMounted) {
+                setUser(null);
+              }
+              router.push(`/${firstStoreId}/admin`);
+              return;
+            }
+          }
+          
+          // 店舗管理者として登録されていない場合、ログアウト
           await supabase.auth.signOut();
           if (isMounted) {
             setUser(null);
@@ -243,7 +265,23 @@ export default function AdminPage() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const nextUser = session?.user ?? null;
 
+      // サービス管理者でない場合、ログアウトして店舗管理者ページにリダイレクト
       if (nextUser && !ADMIN_EMAILS.includes(nextUser.email || '')) {
+        // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
+        const { data: storeAdmins } = await (supabase as any)
+          .from('store_admins')
+          .select('store_id')
+          .limit(1);
+        
+        if (storeAdmins && storeAdmins.length > 0) {
+          const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
+          supabase.auth.signOut();
+          setUser(null);
+          router.push(`/${firstStoreId}/admin`);
+          return;
+        }
+        
+        // 店舗管理者として登録されていない場合、ログアウト
         supabase.auth.signOut();
         setUser(null);
       } else {

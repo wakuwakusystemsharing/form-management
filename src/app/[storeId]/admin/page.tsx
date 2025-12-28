@@ -191,13 +191,46 @@ export default function StoreAdminPage() {
     }
   }, [storeId]);
 
-  // ユーザー認証後のデータ取得
+  // ユーザー認証後のデータ取得とアクセス権限チェック
   useEffect(() => {
     const fetchData = async () => {
       if (!user) return;
       
       try {
         setLoading(true);
+        
+        // アクセス権限チェック（サービス管理者はスキップ）
+        const ADMIN_EMAILS = [
+          'wakuwakusystemsharing@gmail.com',
+          'admin@wakuwakusystemsharing.com',
+          'manager@wakuwakusystemsharing.com'
+        ];
+        
+        const isServiceAdmin = ADMIN_EMAILS.includes(user.email || '');
+        
+        if (!isServiceAdmin) {
+          // 店舗管理者の場合、アクセス権限をチェック
+          const accessCheckResponse = await fetch(`/api/stores/${storeId}/admins`, {
+            credentials: 'include',
+          });
+          
+          if (!accessCheckResponse.ok) {
+            // アクセス権限なし
+            setError('この店舗へのアクセス権限がありません');
+            setLoading(false);
+            return;
+          }
+          
+          // 自分の店舗管理者レコードが存在するか確認
+          const admins = await accessCheckResponse.json();
+          const hasAccess = Array.isArray(admins) && admins.some((admin: any) => admin.email === user.email);
+          
+          if (!hasAccess) {
+            setError('この店舗へのアクセス権限がありません');
+            setLoading(false);
+            return;
+          }
+        }
         
         const storeResponse = await fetch(`/api/stores/${storeId}`);
         if (!storeResponse.ok) {

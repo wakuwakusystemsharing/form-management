@@ -132,11 +132,30 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // 店舗管理者ページ（/{storeId}/admin）へのアクセス時は、未認証でもページを表示
+  // ページ内でログイン画面を表示するため
+  const storeAdminPageMatch = pathname.match(/^\/([a-z0-9]{6}|st\d{4})\/admin$/);
+  if (storeAdminPageMatch) {
+    return NextResponse.next();
+  }
+
   // アクセストークン取得
   const accessToken = request.cookies.get('sb-access-token')?.value;
   
   if (!accessToken) {
-    // 未認証 → /admin にリダイレクト
+    // サービス管理者ルートの場合は /admin にリダイレクト
+    // 店舗管理者ルートの場合は既に上で許可されているので、ここには来ない
+    if (isServiceAdminRoute) {
+      return NextResponse.redirect(new URL('/admin', request.url));
+    }
+    // その他の保護されたルート（/{storeId}/forms, /{storeId}/reservations など）は認証必須
+    // 店舗管理者ページにリダイレクト（ログイン後、元のページに戻れるように）
+    const storeIdMatch = pathname.match(/\/([a-z0-9]{6}|st\d{4})\//);
+    if (storeIdMatch) {
+      const storeId = storeIdMatch[1];
+      return NextResponse.redirect(new URL(`/${storeId}/admin`, request.url));
+    }
+    // フォールバック: /admin にリダイレクト
     return NextResponse.redirect(new URL('/admin', request.url));
   }
 
@@ -157,8 +176,27 @@ export async function middleware(request: NextRequest) {
   }
 
   // サービス管理者ルートの場合は管理者アカウント確認
-  if (isServiceAdminRoute && !ADMIN_EMAILS.includes(user.email || '')) {
-    return NextResponse.redirect(new URL('/admin', request.url));
+  if (isServiceAdminRoute) {
+    // サービス管理者でない場合、店舗管理者ページにリダイレクト
+    if (!ADMIN_EMAILS.includes(user.email || '')) {
+      // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
+      // まず、ユーザーがアクセス権限を持つ店舗を取得
+      const { data: storeAdmins } = await (supabase as any)
+        .from('store_admins')
+        .select('store_id')
+        .limit(1);
+      
+      if (storeAdmins && storeAdmins.length > 0) {
+        const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
+        return NextResponse.redirect(new URL(`/${firstStoreId}/admin`, request.url));
+      }
+      
+      // 店舗管理者として登録されていない場合、403エラー
+      return new NextResponse(
+        JSON.stringify({ error: 'アクセス権限がありません' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
   }
 
   // 店舗 ID 抽出（サブドメインまたはパスから）
@@ -186,7 +224,8 @@ export async function middleware(request: NextRequest) {
       // その他の店舗管理画面は店舗アクセス権限チェック
       // サービス管理者の場合は既にチェック済みなので、通常ユーザーのみチェック
       if (!ADMIN_EMAILS.includes(user.email || '')) {
-        const hasAccess = await checkStoreAccess(user.id, storeId, user.email);
+        // 認証済みクライアントを渡してRLSをバイパス
+        const hasAccess = await checkStoreAccess(user.id, storeId, user.email, supabase);
         
         if (!hasAccess) {
           // アクセス権限なし → 403

@@ -190,37 +190,49 @@ export function createAuthenticatedClient(accessToken: string): SupabaseClient<D
 }
 
 /**
- * ユーザーの店舗アクセス権限を確認
- * @param userId Supabase Auth の user_id
+ * ユーザーの店舗アクセス権限を確認（RLSポリシーに従う）
+ * 
+ * RLSポリシー「store_admin_store_admins」により、認証済みユーザー（auth.uid()）が
+ * 指定されたstore_idの店舗管理者として登録されている場合のみアクセス可能。
+ * 
+ * @param userId Supabase Auth の user_id（ログ用、RLSでは使用しない）
  * @param storeId 店舗 ID
  * @param userEmail ユーザーのメールアドレス（サービス管理者チェック用）
+ * @param authenticatedClient 認証済みSupabaseクライアント（必須、RLSが適用される）
  * @returns アクセス可能な場合 true
  */
-export async function checkStoreAccess(userId: string, storeId: string, userEmail?: string): Promise<boolean> {
-  const supabase = getSupabaseClient();
-  
-  if (!supabase) {
-    // ローカル環境では認証をスキップ
-    return true;
-  }
-
-  // サービス管理者の場合は常にアクセス可能
+export async function checkStoreAccess(
+  userId: string, 
+  storeId: string, 
+  userEmail: string | undefined,
+  authenticatedClient: SupabaseClient<Database>
+): Promise<boolean> {
+  // サービス管理者の場合は常にアクセス可能（RLSポリシー「admin_store_admins_all」により許可）
   if (userEmail && isServiceAdmin(userEmail)) {
     return true;
   }
 
-  const { data, error } = await supabase
-    .from('store_admins')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('store_id', storeId)
-    .single();
-
-  if (error || !data) {
+  if (!authenticatedClient) {
+    console.error('[checkStoreAccess] Authenticated client is required');
     return false;
   }
 
-  return true;
+  // RLSポリシーに従って、認証済みユーザーのコンテキストでクエリを実行
+  // RLSポリシー「store_admin_store_admins」により、auth.uid()が自動的に適用される
+  // user_idでの明示的なフィルタリングは不要（RLSが自動的に適用）
+  const { data, error } = await authenticatedClient
+    .from('store_admins')
+    .select('id')
+    .eq('store_id', storeId)
+    .maybeSingle(); // single()ではなくmaybeSingle()を使用（レコードが見つからない場合もエラーにならない）
+
+  if (error) {
+    console.error('[checkStoreAccess] Query error:', { userId, storeId, error: error.message, code: error.code });
+    return false;
+  }
+
+  // データが存在する場合、RLSポリシーによりアクセス可能と判断
+  return !!data;
 }
 
 /**
@@ -243,3 +255,4 @@ export function isServiceAdmin(email: string): boolean {
   ]
   return adminEmails.includes(email)
 }
+
