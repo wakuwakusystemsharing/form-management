@@ -487,7 +487,7 @@ export async function POST(
         status: 'deployed' as const
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error: updateError } = await (adminClient as any)
         .from('reservation_forms')
         .update({ static_deploy: staticDeploy })

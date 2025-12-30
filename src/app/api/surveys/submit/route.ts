@@ -28,7 +28,6 @@ export async function POST(request: Request) {
     }
 
     // アンケート回答を挿入
-    // @ts-expect-error Supabase型定義不足のため
     const { data: survey, error } = await (adminClient as any)
       .from('surveys')
       .insert({

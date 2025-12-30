@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
@@ -300,22 +300,22 @@ export default function StoreAdminPage() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = useCallback((text: string) => {
     navigator.clipboard.writeText(text);
     toast({
       title: 'コピーしました',
       description: 'URLをクリップボードにコピーしました',
     });
-  };
+  }, [toast]);
 
   // フォームIDからフォーム名を取得
-  const getFormName = (formId: string) => {
+  const getFormName = useCallback((formId: string) => {
     const form = forms.find(f => f.id === formId);
     if (form) {
       return (form as any).form_name || form.config?.basic_info?.form_name || 'フォーム';
     }
     return 'フォーム不明';
-  };
+  }, [forms]);
 
   // フィルタリング
   const filteredForms = forms.filter(form => {
@@ -331,14 +331,14 @@ export default function StoreAdminPage() {
   });
 
   // 統計情報（早期リターンの前に定義）
-  const stats = {
+  const stats = useMemo(() => ({
     total: forms.length,
     active: forms.filter(f => f.status === 'active').length,
     draft: forms.filter(f => f.draft_status === 'draft').length,
     surveys: surveyForms.length,
     reservations: reservations.length,
     recentReservations: reservations.slice(0, 5),
-  };
+  }), [forms, surveyForms, reservations]);
 
   // タブコンテンツ（早期リターンの前に定義）
   const renderTabContent = useMemo(() => {
@@ -1189,7 +1189,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationView, router, searchParams]);
+  }, [activeTab, stats, filteredForms, filteredReservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, toast]);
 
   // 認証チェック中
   if (checkingAuth) {

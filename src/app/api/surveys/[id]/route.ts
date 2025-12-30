@@ -64,7 +64,6 @@ export async function GET(
     }
 
     // ui_settingsが存在しない場合はデフォルト値を設定
-    // @ts-expect-error Supabase型定義不足のため
     const formData = form as any;
     if (formData.config && !formData.config.ui_settings) {
       formData.config.ui_settings = {

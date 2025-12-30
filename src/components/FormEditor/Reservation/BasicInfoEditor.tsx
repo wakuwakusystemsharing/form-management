@@ -13,7 +13,7 @@ interface BasicInfoEditorProps {
   userRole?: 'service_admin' | 'store_admin';
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({ 
   form, 

@@ -117,7 +117,7 @@ export default function CustomerFormPage() {
   }, [formId]);
 
   // フォームデータ正規化関数
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   function normalizeFormData(form: any): Form {
     // configが存在しない場合は作成
     if (!form.config) {
@@ -174,7 +174,7 @@ export default function CustomerFormPage() {
     
     // business_hoursの構造を正規化（古い形式から新しい形式へ）
     if (form.config.calendar_settings.business_hours) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const hours = form.config.calendar_settings.business_hours as any;
       
       // 古い形式 {start: '09:00', end: '18:00'} を検出

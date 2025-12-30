@@ -1,3 +1,4 @@
+ 
 import { NextRequest, NextResponse } from 'next/server';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -53,7 +54,6 @@ export async function POST(
           );
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (adminClient as any)
           .from('reservation_forms')
           .select('*')
@@ -133,7 +133,6 @@ export async function POST(
       // staging/production: Supabase を更新
       const adminClient = createAdminClient();
       if (adminClient) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (adminClient as any)
           .from('reservation_forms')
           .update({

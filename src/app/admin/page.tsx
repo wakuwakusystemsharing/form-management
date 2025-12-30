@@ -308,7 +308,7 @@ export default function AdminPage() {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [loadStores]);
+  }, [loadStores, router]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();

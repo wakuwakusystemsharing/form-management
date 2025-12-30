@@ -90,7 +90,7 @@ export async function GET() {
 
   try {
     // サービス管理者の場合は全店舗取得
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: stores, error } = await (adminClient as any)
       .from('stores')
       .select('*')
@@ -250,7 +250,7 @@ export async function POST(request: NextRequest) {
     
     // 重複チェック関数
     const checkStoreExists = async (id: string): Promise<boolean> => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data, error } = await (adminClient as any)
         .from('stores')
         .select('id')
@@ -267,7 +267,7 @@ export async function POST(request: NextRequest) {
     
     // サブドメインの重複チェック関数
     const checkSubdomainExists = async (subdomain: string): Promise<boolean> => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data, error } = await (adminClient as any)
         .from('stores')
         .select('id')
@@ -319,7 +319,7 @@ export async function POST(request: NextRequest) {
     const subdomainToUse = finalSubdomain || storeId
     
     // 店舗を挿入
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data, error } = await (adminClient as any)
       .from('stores')
       .insert([{

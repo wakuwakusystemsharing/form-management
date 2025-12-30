@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 import { NextResponse } from 'next/server';
 import { NextRequest } from 'next/server';
 import fs from 'fs';

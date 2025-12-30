@@ -104,7 +104,7 @@ export async function GET(
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: store, error } = await (adminClient as any)
       .from('stores')
       .select('*')
@@ -221,7 +221,7 @@ export async function PUT(
 
     // サブドメインの重複チェック（自分以外）
     if (body.subdomain) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: existingStore } = await (adminClient as any)
         .from('stores')
         .select('id')
@@ -239,7 +239,7 @@ export async function PUT(
 
     // カスタムドメインの重複チェック（自分以外）
     if (body.custom_domain) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data: existingStore } = await (adminClient as any)
         .from('stores')
         .select('id')
@@ -264,7 +264,7 @@ export async function PUT(
     delete updateData.id;
     delete updateData.created_at;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: updatedStore, error } = await (adminClient as any)
       .from('stores')
       .update(updateData)
@@ -385,7 +385,7 @@ export async function DELETE(
     }
 
     // 関連フォーム数をチェック（予約フォーム）
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { count: formsCount, error: formsCountError } = await (adminClient as any)
       .from('reservation_forms')
       .select('*', { count: 'exact', head: true })
@@ -400,7 +400,7 @@ export async function DELETE(
     }
 
     // 関連アンケートフォーム数をチェック
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { count: surveyFormsCount, error: surveyFormsCountError } = await (adminClient as any)
       .from('survey_forms')
       .select('*', { count: 'exact', head: true })
@@ -431,7 +431,7 @@ export async function DELETE(
     }
 
     // 関連フォームと予約データは CASCADE で自動削除される（migration設定済み）
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { error } = await (adminClient as any)
       .from('stores')
       .delete()

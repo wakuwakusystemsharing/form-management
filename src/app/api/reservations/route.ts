@@ -123,7 +123,7 @@ export async function GET(request: Request) {
     }
 
     // クエリビルド
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let query = (adminClient as any)
       .from('reservations')
       .select('*');
@@ -277,7 +277,7 @@ export async function POST(request: Request) {
       status: 'pending'
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: reservation, error } = await (adminClient as any)
       .from('reservations')
       .insert([newReservation])
