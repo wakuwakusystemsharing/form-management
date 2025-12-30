@@ -95,7 +95,7 @@ export async function POST(
     
     // Supabase Storageにデプロイ（環境に応じて自動判定）
     const deployer = new SupabaseStorageDeployer();
-    const deployResult = await deployer.deployForm(storeId, formId, staticHtml);
+    const deployResult = await deployer.deployForm(storeId, formId, staticHtml, 'reservation');
     
     console.log(`✅ フォーム再デプロイ完了: ${deployResult.storage_url || deployResult.url}`);
 

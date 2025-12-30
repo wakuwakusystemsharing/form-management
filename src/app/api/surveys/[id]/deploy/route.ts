@@ -64,7 +64,7 @@ export async function POST(
     } else {
       // Supabase Storageへアップロード
       const deployer = new SupabaseStorageDeployer();
-      const result = await deployer.deployForm(storeId, id, html);
+      const result = await deployer.deployForm(storeId, id, html, 'survey');
       deployUrl = result.url;
       storageUrl = result.storage_url || '';
     }

@@ -329,7 +329,7 @@ export async function POST(
       };
       
       const html = generator.generateHTML(formConfig, newFormId, storeId);
-      const deployResult = await deployer.deployForm(storeId, newFormId, html);
+      const deployResult = await deployer.deployForm(storeId, newFormId, html, 'reservation');
       
       console.log(`✅ フォーム作成と同時にStorageにデプロイ: ${deployResult.storage_url || deployResult.url}`);
       
@@ -475,7 +475,7 @@ export async function POST(
       // supabaseConfig は FormConfig 型で構築済み
       const createdFormId = (newForm as Form).id;
       const html = generator.generateHTML(supabaseConfig, createdFormId, storeId);
-      const deployResult = await deployer.deployForm(storeId, createdFormId, html);
+      const deployResult = await deployer.deployForm(storeId, createdFormId, html, 'reservation');
 
       console.log(`✅ [${env}] フォーム作成と同時にStorageにデプロイ: ${deployResult.storage_url || deployResult.url}`);
 
