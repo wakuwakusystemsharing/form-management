@@ -34,6 +34,7 @@ export async function POST(request: Request) {
         survey_form_id,
         store_id,
         responses: typeof responses === 'string' ? JSON.parse(responses) : responses,
+        line_user_id: body.line_user_id || null, // LINEユーザーID
         submitted_at: new Date().toISOString()
       })
       .select()

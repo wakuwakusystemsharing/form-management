@@ -53,15 +53,31 @@ export class StaticSurveyGenerator {
 
     <script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
     <script>
+        // LINEユーザーIDを保持する変数
+        let lineUserId = null;
+        
         // LIFF初期化
-        document.addEventListener('DOMContentLoaded', function () {
-            liff.init({
-                liffId: '${safeConfig.basic_info.liff_id}'
-            }).then(() => {
-                console.log('LIFF初期化成功');
-            }).catch((err) => {
+        document.addEventListener('DOMContentLoaded', async function () {
+            const liffId = '${safeConfig.basic_info.liff_id}';
+            if (!liffId || liffId.length < 10) return;
+            
+            try {
+                await liff.init({ liffId });
+                if (liff.isLoggedIn()) {
+                    // LINEユーザーIDを取得
+                    try {
+                        const idToken = await liff.getDecodedIDToken();
+                        if (idToken && idToken.sub) {
+                            lineUserId = idToken.sub;
+                        }
+                    } catch (idTokenError) {
+                        console.warn('LINE User ID取得に失敗しました:', idTokenError);
+                    }
+                    console.log('LIFF初期化成功');
+                }
+            } catch (err) {
                 console.error('LIFF初期化失敗', err);
-            });
+            }
         });
 
         // 選択ボタンの制御
@@ -141,7 +157,8 @@ export class StaticSurveyGenerator {
                     body: JSON.stringify({
                         survey_form_id: surveyFormId,
                         store_id: storeId,
-                        responses: formData
+                        responses: formData,
+                        line_user_id: lineUserId || null // LINEユーザーID
                     })
                 }).catch((err) => {
                     console.error('データベースへの保存に失敗しました', err);

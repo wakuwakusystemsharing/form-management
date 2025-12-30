@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import { getSubdomainBaseDomain } from '@/lib/env';
+import { getSubdomainBaseDomain, getBaseUrl } from '@/lib/env';
 import { 
   ArrowLeft, 
   Edit, 
@@ -227,6 +227,8 @@ export default function StoreDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [recentReservations, setRecentReservations] = useState<any[]>([]);
   const [loadingReservations, setLoadingReservations] = useState(false);
+  const [selectedReservation, setSelectedReservation] = useState<any | null>(null);
+  const [showReservationDetail, setShowReservationDetail] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -812,7 +814,11 @@ export default function StoreDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {forms.map((form) => {
                             const deployInfo = (form as any).static_deploy;
-                            const formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/forms/${form.id}`;
+                            // deploy_urlが相対パスの場合は、環境に応じたベースURLを付与
+                            let formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/forms/${form.id}`;
+                            if (formUrl.startsWith('/') && !formUrl.startsWith('//')) {
+                              formUrl = `${getBaseUrl()}${formUrl}`;
+                            }
                             
                             return (
                               <Card key={form.id}>
@@ -857,7 +863,11 @@ export default function StoreDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {surveyForms.map((form) => {
                             const deployInfo = form.static_deploy;
-                            const formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/surveys/${form.id}`;
+                            // deploy_urlが相対パスの場合は、環境に応じたベースURLを付与
+                            let formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/surveys/${form.id}`;
+                            if (formUrl.startsWith('/') && !formUrl.startsWith('//')) {
+                              formUrl = `${getBaseUrl()}${formUrl}`;
+                            }
                             
                             return (
                               <Card key={form.id}>
@@ -967,7 +977,14 @@ export default function StoreDetailPage() {
                       const fullMenuName = submenuName ? `${menuName} > ${submenuName}` : menuName;
                       
                       return (
-                        <div key={reservation.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div 
+                          key={reservation.id} 
+                          className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-accent transition-colors"
+                          onClick={() => {
+                            setSelectedReservation(reservation);
+                            setShowReservationDetail(true);
+                          }}
+                        >
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-medium">{reservation.customer_name}</span>
@@ -1551,7 +1568,7 @@ export default function StoreDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <p>
-フォーム「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === deletingFormId) as any).form_name || forms.find(f => f.id === deletingFormId)?.config?.basic_info?.form_name) : ''}」を削除しますか？
+Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === deletingFormId) as any).form_name || forms.find(f => f.id === deletingFormId)?.config?.basic_info?.form_name) : ''}」を削除しますか？
                 </p>
             <p className="text-sm text-muted-foreground">
                   削除すると、このフォームに関連する予約データも全て削除されます。
@@ -1565,6 +1582,167 @@ export default function StoreDetailPage() {
               削除する
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 予約詳細モーダル */}
+      <Dialog open={showReservationDetail} onOpenChange={setShowReservationDetail}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>予約詳細</DialogTitle>
+            <DialogDescription>
+              {selectedReservation && (
+                <>予約ID: {selectedReservation.id}</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedReservation && (
+            <div className="space-y-4">
+              {/* 基本情報 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">基本情報</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm text-muted-foreground">顧客名</Label>
+                      <p className="font-medium">{selectedReservation.customer_name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">電話番号</Label>
+                      <p className="font-medium">{selectedReservation.customer_phone}</p>
+                    </div>
+                    {selectedReservation.customer_email && (
+                      <div>
+                        <Label className="text-sm text-muted-foreground">メールアドレス</Label>
+                        <p className="font-medium">{selectedReservation.customer_email}</p>
+                      </div>
+                    )}
+                    <div>
+                      <Label className="text-sm text-muted-foreground">予約日時</Label>
+                      <p className="font-medium">
+                        {new Date(selectedReservation.reservation_date).toLocaleDateString('ja-JP')} {selectedReservation.reservation_time}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">ステータス</Label>
+                      <div className="mt-1">
+                        <Badge
+                          variant={
+                            selectedReservation.status === 'confirmed' ? 'default' :
+                            selectedReservation.status === 'pending' ? 'secondary' :
+                            selectedReservation.status === 'completed' ? 'default' :
+                            'destructive'
+                          }
+                          className={
+                            selectedReservation.status === 'completed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''
+                          }
+                        >
+                          {selectedReservation.status === 'pending' ? '保留中' :
+                           selectedReservation.status === 'confirmed' ? '確認済み' :
+                           selectedReservation.status === 'cancelled' ? 'キャンセル' : '完了'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">フォーム</Label>
+                      <p className="font-medium">
+                        {forms.find(f => f.id === selectedReservation.form_id) 
+                          ? ((forms.find(f => f.id === selectedReservation.form_id) as any)?.form_name || forms.find(f => f.id === selectedReservation.form_id)?.config?.basic_info?.form_name || 'フォーム')
+                          : 'フォーム不明'}
+                      </p>
+                      <p className="text-xs text-muted-foreground font-mono">{selectedReservation.form_id}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 選択メニュー */}
+              {(() => {
+                const menus = selectedReservation.selected_menus;
+                return menus && Array.isArray(menus) && menus.length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">選択メニュー</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {(menus as any[]).map((menu: any, index: number) => (
+                          <div key={index} className="p-3 border rounded-lg">
+                            <div className="font-medium">{menu.menu_name || menu.name || 'メニュー'}</div>
+                            {menu.submenu_name && (
+                              <div className="text-sm text-muted-foreground">サブメニュー: {menu.submenu_name}</div>
+                            )}
+                            {menu.price && (
+                              <div className="text-sm text-muted-foreground">料金: ¥{menu.price.toLocaleString()}</div>
+                            )}
+                            {menu.duration && (
+                              <div className="text-sm text-muted-foreground">所要時間: {menu.duration}分</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null;
+              })()}
+
+              {/* 選択オプション */}
+              {(() => {
+                const options = selectedReservation.selected_options;
+                return options && Array.isArray(options) && options.length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">選択オプション</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {(options as any[]).map((option: any, index: number) => (
+                          <div key={index} className="p-3 border rounded-lg">
+                            <div className="font-medium">{option.option_name || option.name || 'オプション'}</div>
+                            {option.price && (
+                              <div className="text-sm text-muted-foreground">料金: ¥{option.price.toLocaleString()}</div>
+                            )}
+                            {option.duration && (
+                              <div className="text-sm text-muted-foreground">所要時間: {option.duration}分</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null;
+              })()}
+
+              {/* 顧客情報 */}
+              {(() => {
+                const info = selectedReservation.customer_info;
+                return info && typeof info === 'object' && info !== null && Object.keys(info).length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">その他情報</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {Object.entries(info as Record<string, any>).map(([key, value]) => (
+                          <div key={key} className="flex justify-between">
+                            <span className="text-sm text-muted-foreground">{key}:</span>
+                            <span className="text-sm font-medium">{value != null ? String(value) : ''}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null;
+              })()}
+
+              {/* 作成日時 */}
+              <div className="text-xs text-muted-foreground">
+                作成日時: {new Date(selectedReservation.created_at).toLocaleString('ja-JP')}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

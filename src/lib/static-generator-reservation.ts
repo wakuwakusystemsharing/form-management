@@ -166,7 +166,8 @@ class BookingForm {
             selectedOptions: {}, // メニューIDをキーとしたオプションID配列
             selectedDate: '',
             selectedTime: '',
-            message: ''
+            message: '',
+            lineUserId: null // LINEユーザーID
         };
         this.currentDate = new Date();
         this.availabilityCache = {}; // カレンダー空き状況のキャッシュ
@@ -213,6 +214,16 @@ class BookingForm {
                 const profile = await liff.getProfile();
                 this.state.name = profile.displayName || '';
                 document.getElementById('customer-name').value = this.state.name;
+                
+                // LINEユーザーIDを取得
+                try {
+                    const idToken = await liff.getDecodedIDToken();
+                    if (idToken && idToken.sub) {
+                        this.state.lineUserId = idToken.sub;
+                    }
+                } catch (idTokenError) {
+                    console.warn('LINE User ID取得に失敗しました:', idTokenError);
+                }
             }
         } catch (error) {
             console.warn('LIFF init failed:', error);
@@ -1147,7 +1158,8 @@ class BookingForm {
                 selected_options: selectedOptions,
                 reservation_date: reservationDate,
                 reservation_time: this.state.selectedTime,
-                customer_info: customerInfo
+                customer_info: customerInfo,
+                line_user_id: this.state.lineUserId || null // LINEユーザーID
             };
             
             // /api/reservationsにPOSTリクエストを送信
@@ -1675,7 +1687,6 @@ if (document.readyState === 'loading') {
             <!-- メッセージ -->
             <div class="field" id="message-field">
                 <label class="field-label">メッセージ（任意）</label>
-                <textarea id="customer-message" class="input" rows="3" placeholder="ご質問やご要望がございましたらこちらにご記入ください"></textarea>
             </div>`;
   }
 

@@ -327,6 +327,7 @@ export interface Database {
           reservation_date: string;
           reservation_time: string;
           customer_info: Json;
+          line_user_id: string | null; // LINEユーザーID
           status: 'pending' | 'confirmed' | 'cancelled';
           created_at: string;
           updated_at: string;
@@ -343,6 +344,7 @@ export interface Database {
           reservation_date: string;
           reservation_time: string;
           customer_info: Json;
+          line_user_id?: string | null; // LINEユーザーID
           status?: 'pending' | 'confirmed' | 'cancelled';
           created_at?: string;
           updated_at?: string;
@@ -359,6 +361,7 @@ export interface Database {
           reservation_date?: string;
           reservation_time?: string;
           customer_info?: Json;
+          line_user_id?: string | null; // LINEユーザーID
           status?: 'pending' | 'confirmed' | 'cancelled';
           created_at?: string;
           updated_at?: string;

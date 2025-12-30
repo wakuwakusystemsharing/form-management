@@ -30,6 +30,7 @@ interface Reservation {
   reservation_date: string;
   reservation_time: string;
   customer_info?: Record<string, string>;
+  line_user_id?: string | null; // LINEユーザーID
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
   created_at: string;
   updated_at: string;
@@ -216,6 +217,7 @@ export async function POST(request: Request) {
         reservation_date: body.reservation_date,
         reservation_time: body.reservation_time,
         customer_info: body.customer_info,
+        line_user_id: body.line_user_id || null, // LINEユーザーID
         status: 'pending',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -274,6 +276,7 @@ export async function POST(request: Request) {
       reservation_date: body.reservation_date,
       reservation_time: body.reservation_time,
       customer_info: customerInfo,
+      line_user_id: body.line_user_id || null, // LINEユーザーID
       status: 'pending'
     };
 

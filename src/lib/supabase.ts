@@ -50,6 +50,7 @@ export type Database = {
           visit_count: string | null;
           coupon: string | null;
           message: string | null;
+          line_user_id: string | null; // LINEユーザーID
           status: 'pending' | 'confirmed' | 'cancelled';
           created_at: string;
           updated_at: string;
