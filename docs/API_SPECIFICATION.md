@@ -38,7 +38,7 @@
 {
   "stores": [
     {
-      "id": "uuid-here",
+      "id": "abc123",
       "name": "店舗名",
       "owner_name": "オーナー名",
       "owner_email": "owner@example.com",
@@ -46,6 +46,9 @@
       "address": "東京都...",
       "website_url": "https://...",
       "description": "店舗説明",
+      "subdomain": "st0001",
+      "custom_domain": null,
+      "status": "active",
       "created_at": "2025-01-15T00:00:00Z",
       "updated_at": "2025-01-15T00:00:00Z"
     }
@@ -92,7 +95,27 @@
 ### `PUT /api/stores/{storeId}`
 店舗情報を更新
 
+**認証**: サービス管理者
+
 **リクエストボディ**: 更新したいフィールドのみ
+```json
+{
+  "name": "更新された店舗名",
+  "owner_name": "更新されたオーナー名",
+  "owner_email": "updated@example.com",
+  "phone": "03-9876-5432",
+  "address": "更新された住所",
+  "website_url": "https://updated.com",
+  "description": "更新された説明",
+  "subdomain": "st0001",
+  "custom_domain": "example.com"
+}
+```
+
+**注意**: 
+- `subdomain`: 小文字英数字とハイフンのみ、3-63文字、予約語不可（`www`, `api`, `admin`など）
+- `custom_domain`: 基本的なドメイン形式チェックを実施
+- 両方ともユニーク制約あり（重複不可）
 
 ### `DELETE /api/stores/{storeId}`
 店舗を削除（関連フォーム・予約も削除）
@@ -129,7 +152,7 @@
       "theme_color": "#3B82F6"
     },
     "static_deploy": {
-      "deploy_url": "https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{formId}/config/current.html",
+      "deploy_url": "https://nas-rsv.com/api/public-form/reservations/{storeId}/{formId}/index.html",
       "storage_url": "https://[project-ref].supabase.co/storage/v1/object/public/forms/...",
       "deployed_at": "2025-01-15T00:00:00Z",
       "status": "deployed"
@@ -195,17 +218,18 @@
 ```json
 {
   "success": true,
-  "deployUrl": "https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{formId}/config/current.html?v=1234567890",
-  "storageUrl": "https://[project-ref].supabase.co/storage/v1/object/public/forms/prod/forms/{storeId}/{formId}/config/current.html",
+  "deployUrl": "https://nas-rsv.com/api/public-form/reservations/{storeId}/{formId}/index.html?v=1234567890",
+  "storageUrl": "https://[project-ref].supabase.co/storage/v1/object/public/forms/reservations/{storeId}/{formId}/index.html",
   "deployedAt": "2025-01-15T00:00:00Z",
   "environment": "production"
 }
 ```
 
 **注意**: 
-- 環境に応じて自動的に適切なSupabaseプロジェクトのStorageにデプロイされます
-- Staging環境: `staging/forms/{storeId}/{formId}/config/current.html`
-- Production環境: `prod/forms/{storeId}/{formId}/config/current.html`
+- 環境に応じて自動的に適切なSupabaseプロジェクトのStorageにデプロイされます（プロジェクトレベルで分離）
+- 予約フォーム: `reservations/{storeId}/{formId}/index.html`
+- アンケートフォーム: `surveys/{storeId}/{formId}/index.html`
+- 環境プレフィックス（`staging/`, `prod/`, `dev/`）は不要
 - プロキシURL (`/api/public-form/*`) 経由でアクセスすることで、正しいContent-Typeで配信されます
 
 ---
@@ -295,7 +319,7 @@
       "ui_settings": { ... }
     },
     "static_deploy": {
-      "deploy_url": "https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{id}/config/current.html",
+      "deploy_url": "https://nas-rsv.com/api/public-form/surveys/{storeId}/{id}/index.html",
       "storage_url": "https://[project-ref].supabase.co/storage/v1/object/public/forms/...",
       "deployed_at": "2025-01-15T00:00:00Z",
       "status": "deployed"
@@ -389,7 +413,7 @@
 Supabase StorageからフォームHTMLをプロキシ配信
 
 **パラメータ**:
-- `path` (string[]): Supabase Storage内のパス（例: `prod/forms/{storeId}/{formId}/config/current.html`）
+- `path` (string[]): Supabase Storage内のパス（例: `reservations/{storeId}/{formId}/index.html` または `surveys/{storeId}/{formId}/index.html`）
 
 **クエリパラメータ**:
 - `v` (number, optional): キャッシュバスティング用のタイムスタンプ
@@ -577,6 +601,8 @@ Supabase StorageからフォームHTMLをプロキシ配信
 |------|-------|-------------------|
 | データストア | JSON ファイル | Supabase |
 | 店舗ID形式 | `st{timestamp}` | 6文字ランダム文字列 `[a-z0-9]{6}` または UUID（既存データ） |
+| サブドメイン | 未対応 | 対応（例: `st0001.nas-rsv.com`） |
+| カスタムドメイン | 未対応 | 対応（例: `example.com`） |
 | フォームID形式 | 12文字ランダム | 12文字ランダム |
 | 認証 | スキップ | 必須 |
 | RLS | 無効 | 有効（一部） |
