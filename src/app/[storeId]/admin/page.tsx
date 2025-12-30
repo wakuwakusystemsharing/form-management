@@ -942,8 +942,8 @@ export default function StoreAdminPage() {
                     <CardHeader>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
-                          <CardTitle>回答一覧</CardTitle>
-                          <CardDescription>アンケートの回答を確認します</CardDescription>
+                      <CardTitle>回答一覧</CardTitle>
+                      <CardDescription>アンケートの回答を確認します</CardDescription>
                         </div>
                         <Select 
                           value={selectedSurveyFormId || 'all'} 
@@ -971,10 +971,10 @@ export default function StoreAdminPage() {
 
                         if (filteredResponses.length === 0) {
                           return (
-                            <div className="text-center py-12 text-muted-foreground">
-                              <ClipboardList className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                              <p className="text-lg font-medium mb-2">まだ回答がありません</p>
-                              <p className="text-sm">アンケートフォームを公開すると、回答がここに表示されます</p>
+                      <div className="text-center py-12 text-muted-foreground">
+                        <ClipboardList className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p className="text-lg font-medium mb-2">まだ回答がありません</p>
+                        <p className="text-sm">アンケートフォームを公開すると、回答がここに表示されます</p>
                             </div>
                           );
                         }
@@ -1016,9 +1016,9 @@ export default function StoreAdminPage() {
                                           </div>
                                         </div>
                                       ))}
-                                    </div>
-                                  </CardContent>
-                                </Card>
+                      </div>
+                    </CardContent>
+                  </Card>
                               );
                             })}
                           </div>

@@ -1900,7 +1900,7 @@ if (document.readyState === 'loading') {
         }
         
         .menu-item-name {
-            font-weight: 600;
+            font-weight: 400;
             color: #111827;
             font-size: 0.95rem;
         }
@@ -2166,7 +2166,7 @@ if (document.readyState === 'loading') {
         
         .summary-title {
             font-size: 1.125rem;
-            font-weight: 600;
+            font-weight: 400;
             color: #111827;
             margin-bottom: 1rem;
         }

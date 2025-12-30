@@ -128,20 +128,20 @@ export default function AdminPage() {
   useEffect(() => {
     // ローカル環境のみ認証をスキップ
     if (shouldSkipAuth()) {
-      const dummyUser = {
+        const dummyUser = {
         id: 'dev-user',
-        email: 'dev@localhost',
-        aud: 'authenticated',
-        role: 'authenticated',
-        created_at: new Date().toISOString(),
-        app_metadata: {},
-        user_metadata: {}
-      } as User;
-      
-      setUser(dummyUser);
-      loadStores();
-      return;
-    }
+          email: 'dev@localhost',
+          aud: 'authenticated',
+          role: 'authenticated',
+          created_at: new Date().toISOString(),
+          app_metadata: {},
+          user_metadata: {}
+        } as User;
+        
+        setUser(dummyUser);
+        loadStores();
+        return;
+      }
     
     const supabase = getSupabaseClient();
     if (!supabase) {

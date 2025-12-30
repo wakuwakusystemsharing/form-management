@@ -51,6 +51,16 @@ export function getBaseUrl(): string {
     return process.env.NEXT_PUBLIC_STAGING_URL || 'https://form-management-staging.vercel.app';
   }
   
+  if (isDevelopment()) {
+    // dev環境のプレビューデプロイメントURLを取得
+    const vercelUrl = process.env.VERCEL_URL;
+    if (vercelUrl) {
+      return `https://${vercelUrl}`;
+    }
+    // フォールバック
+    return 'https://form-management-git-dev-wakuwakusystems-projects.vercel.app';
+  }
+  
   // Production環境: カスタムドメインを優先使用
   // VERCEL_URL がプレビューデプロイメントURL（-wakuwakusystems-projects.vercel.app）の場合でも
   // カスタムドメインを強制的に使用
