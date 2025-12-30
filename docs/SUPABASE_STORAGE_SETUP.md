@@ -121,27 +121,31 @@ git push origin staging
 3. デプロイ成功後、返却されたURLにアクセス
 4. フォームHTMLが正しくブラウザで表示されることを確認
 
-**期待されるURL形式:**
+**期待されるURL形式（2025-01-31更新）:**
 
 **直接URL（Supabase Storage）:**
 ```
-https://[project-ref].supabase.co/storage/v1/object/public/forms/staging/forms/[storeId]/[formId]/config/current.html
+予約フォーム: https://[project-ref].supabase.co/storage/v1/object/public/forms/reservations/[storeId]/[formId]/index.html
+アンケートフォーム: https://[project-ref].supabase.co/storage/v1/object/public/forms/surveys/[storeId]/[formId]/index.html
 ```
 
 **プロキシURL（推奨、正しいContent-Typeで配信）:**
 ```
-https://form-management-staging.vercel.app/api/public-form/staging/forms/[storeId]/[formId]/config/current.html
+予約フォーム: https://form-management-staging.vercel.app/api/public-form/reservations/[storeId]/[formId]/index.html
+アンケートフォーム: https://form-management-staging.vercel.app/api/public-form/surveys/[storeId]/[formId]/index.html
 ```
 
 **Production環境の場合:**
 ```
-https://nas-rsv.com/api/public-form/prod/forms/[storeId]/[formId]/config/current.html
+予約フォーム: https://nas-rsv.com/api/public-form/reservations/[storeId]/[formId]/index.html
+アンケートフォーム: https://nas-rsv.com/api/public-form/surveys/[storeId]/[formId]/index.html
 ```
 
 **注意**: 
-- 環境に応じて自動的に適切なパスプレフィックスが使用されます
-  - Staging: `staging/forms/{storeId}/{formId}/config/current.html`
-  - Production: `prod/forms/{storeId}/{formId}/config/current.html`
+- フォームタイプ別にパスが分離されています
+  - 予約フォーム: `reservations/{storeId}/{formId}/index.html`
+  - アンケートフォーム: `surveys/{storeId}/{formId}/index.html`
+- 環境プレフィックス（`staging/`, `prod/`, `dev/`）は不要（プロジェクトレベルで分離されているため）
 - プロキシURL (`/api/public-form/*`) 経由でアクセスすることで、正しいContent-Type (`text/html; charset=utf-8`) で配信されます
 - キャッシュバスティングのため、`?v={timestamp}` パラメータが自動的に追加されます
 
@@ -182,19 +186,26 @@ https://nas-rsv.com/api/public-form/prod/forms/[storeId]/[formId]/config/current
 - プロキシURL経由でアクセスすることで、正しいContent-Type (`text/html; charset=utf-8`) で配信されます
 - 直接Supabase Storage URLを使用する場合、ブラウザによってはダウンロードされる可能性があります
 
-#### 環境別のパス構造
+#### パス構造（2025-01-31更新）
 
-**Staging環境:**
-- ストレージパス: `staging/forms/{storeId}/{formId}/config/current.html`
-- プロキシURL: `https://form-management-staging.vercel.app/api/public-form/staging/forms/{storeId}/{formId}/config/current.html`
+**予約フォーム:**
+- ストレージパス: `reservations/{storeId}/{formId}/index.html`
+- プロキシURL: `https://[base-url]/api/public-form/reservations/{storeId}/{formId}/index.html`
 
-**Production環境:**
-- ストレージパス: `prod/forms/{storeId}/{formId}/config/current.html`
-- プロキシURL: `https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{formId}/config/current.html`
+**アンケートフォーム:**
+- ストレージパス: `surveys/{storeId}/{formId}/index.html`
+- プロキシURL: `https://[base-url]/api/public-form/surveys/{storeId}/{formId}/index.html`
 
 **Local環境:**
 - ローカルファイル: `public/static-forms/{formId}.html`
 - アクセスURL: `http://localhost:3000/static-forms/{formId}.html`
+
+**変更点:**
+- 環境プレフィックス（`staging/`, `prod/`, `dev/`）を削除（プロジェクトレベルで分離されているため）
+- `forms/` ディレクトリを削除
+- `config/` ディレクトリを削除
+- `current.html` → `index.html` に変更
+- フォームタイプ別にディレクトリを分離（`reservations/`, `surveys/`）
 
 ### カスタムドメインの設定
 
