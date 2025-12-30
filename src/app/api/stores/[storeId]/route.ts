@@ -387,7 +387,7 @@ export async function DELETE(
     // 関連フォーム数をチェック（予約フォーム）
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { count: formsCount, error: formsCountError } = await (adminClient as any)
-      .from('forms')
+      .from('reservation_forms')
       .select('*', { count: 'exact', head: true })
       .eq('store_id', storeId);
 

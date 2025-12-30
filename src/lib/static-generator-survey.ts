@@ -7,7 +7,7 @@ export class StaticSurveyGenerator {
   /**
    * SurveyConfigから静的HTMLを生成
    */
-  generateHTML(config: SurveyConfig): string {
+  generateHTML(config: SurveyConfig, surveyFormId?: string, storeId?: string): string {
     const safeConfig: SurveyConfig = JSON.parse(JSON.stringify(config));
     
     // CSS生成
@@ -124,6 +124,28 @@ export class StaticSurveyGenerator {
             let messageText = \`≪\${document.title}≫\\n\`;
             for (const [key, val] of Object.entries(formData)) {
                 messageText += \`【\${key}】\\n・\${val}\\n\\n\`;
+            }
+
+            // データベースに保存
+            const surveyFormId = '${surveyFormId || ''}';
+            const storeId = '${storeId || ''}';
+            
+            if (surveyFormId && storeId) {
+                // 現在のURLからベースパスを取得
+                const baseUrl = window.location.origin;
+                fetch(\`\${baseUrl}/api/surveys/submit\`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        survey_form_id: surveyFormId,
+                        store_id: storeId,
+                        responses: formData
+                    })
+                }).catch((err) => {
+                    console.error('データベースへの保存に失敗しました', err);
+                });
             }
 
             // LINEトークにメッセージを送信

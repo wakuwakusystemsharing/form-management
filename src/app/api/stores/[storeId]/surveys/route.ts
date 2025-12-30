@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { SurveyForm, SurveyConfig, SurveyQuestion } from '@/types/survey';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { getCurrentUserId } from '@/lib/auth-helper';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -109,7 +111,7 @@ function generateRandomFormId(): string {
 
 // POST /api/stores/[storeId]/surveys - 新しいアンケートフォーム作成
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ storeId: string }> }
 ) {
   try {
@@ -117,6 +119,9 @@ export async function POST(
     const body = await request.json();
     const { form_name, liff_id, template_config } = body;
     const env = getAppEnvironment();
+    
+    // 現在のユーザーIDを取得
+    const currentUserId = await getCurrentUserId(request);
 
     // デフォルトの質問テンプレート（要件に基づく）
     const defaultQuestions = [
@@ -230,7 +235,9 @@ export async function POST(
         name: form_name || 'アンケートフォーム',
         config: newConfig,
         status: 'active',
-        draft_status: 'none'
+        draft_status: 'none',
+        created_by: currentUserId,
+        updated_by: currentUserId
       })
       .select()
       .single();

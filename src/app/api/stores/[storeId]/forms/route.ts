@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { Form, FormConfig } from '@/types/form';
@@ -6,6 +7,7 @@ import { StaticReservationGenerator } from '@/lib/static-generator-reservation';
 import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { getCurrentUserId } from '@/lib/auth-helper';
 
 // テンプレート型定義
 type FormTemplate = {
@@ -82,7 +84,7 @@ export async function GET(
     }
 
     const { data: forms, error } = await adminClient
-      .from('forms')
+      .from('reservation_forms')
       .select('*')
       .eq('store_id', storeId)
       .order('created_at', { ascending: false });
@@ -117,7 +119,7 @@ function generateRandomFormId(): string {
 
 // POST /api/stores/[storeId]/forms - 新しいフォーム作成
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ storeId: string }> }
 ) {
   try {
@@ -125,6 +127,9 @@ export async function POST(
     const body = await request.json();
     const { form_name, liff_id, gas_endpoint, template } = body;
     const env = getAppEnvironment();
+    
+    // 現在のユーザーIDを取得
+    const currentUserId = await getCurrentUserId(request);
 
     // ローカル環境: JSON に保存
     if (env === 'local') {
@@ -441,11 +446,13 @@ export async function POST(
       status: 'active' as const,
       draft_status: 'none' as const,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      created_by: currentUserId,
+      updated_by: currentUserId
     };
 
     const { data: newForm, error } = await adminClient
-      .from('forms')
+      .from('reservation_forms')
       // @ts-expect-error Supabase型の制限をバイパス
       .insert([newFormData as Record<string, unknown>])
       .select()
@@ -482,7 +489,7 @@ export async function POST(
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: updateError } = await (adminClient as any)
-        .from('forms')
+        .from('reservation_forms')
         .update({ static_deploy: staticDeploy })
         .eq('id', createdFormId);
 

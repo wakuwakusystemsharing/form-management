@@ -60,6 +60,8 @@ export default function StoreAdminPage() {
   const [forms, setForms] = useState<Form[]>([]);
   const [surveyForms, setSurveyForms] = useState<SurveyForm[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [surveyResponses, setSurveyResponses] = useState<any[]>([]);
+  const [selectedSurveyFormId, setSelectedSurveyFormId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingForm, setEditingForm] = useState<Form | SurveyForm | null>(null);
@@ -256,6 +258,15 @@ export default function StoreAdminPage() {
         if (reservationsResponse.ok) {
           const reservationsData = await reservationsResponse.json();
           setReservations(reservationsData);
+        }
+
+        // アンケート回答を取得
+        const surveyResponsesResponse = await fetch(`/api/stores/${storeId}/surveys/responses`, {
+          credentials: 'include',
+        });
+        if (surveyResponsesResponse.ok) {
+          const surveyResponsesData = await surveyResponsesResponse.json();
+          setSurveyResponses(surveyResponsesData);
         }
         
       } catch (err) {
@@ -925,19 +936,94 @@ export default function StoreAdminPage() {
                   )}
                 </div>
 
-                {/* 一覧タブ */}
+                {/* 回答一覧セクション */}
                 <div className="border-t pt-6">
                   <Card>
                     <CardHeader>
-                      <CardTitle>回答一覧</CardTitle>
-                      <CardDescription>アンケートの回答を確認します</CardDescription>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                          <CardTitle>回答一覧</CardTitle>
+                          <CardDescription>アンケートの回答を確認します</CardDescription>
+                        </div>
+                        <Select 
+                          value={selectedSurveyFormId || 'all'} 
+                          onValueChange={(value) => setSelectedSurveyFormId(value === 'all' ? null : value)}
+                        >
+                          <SelectTrigger className="w-[200px]">
+                            <SelectValue placeholder="すべてのアンケート" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">すべてのアンケート</SelectItem>
+                            {surveyForms.map((form) => (
+                              <SelectItem key={form.id} value={form.id}>
+                                {form.config?.basic_info?.title || 'アンケート'}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-center py-12 text-muted-foreground">
-                        <ClipboardList className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p className="text-lg font-medium mb-2">まだ回答がありません</p>
-                        <p className="text-sm">アンケートフォームを公開すると、回答がここに表示されます</p>
-                      </div>
+                      {(() => {
+                        const filteredResponses = selectedSurveyFormId
+                          ? surveyResponses.filter((r: any) => r.survey_form_id === selectedSurveyFormId)
+                          : surveyResponses;
+
+                        if (filteredResponses.length === 0) {
+                          return (
+                            <div className="text-center py-12 text-muted-foreground">
+                              <ClipboardList className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                              <p className="text-lg font-medium mb-2">まだ回答がありません</p>
+                              <p className="text-sm">アンケートフォームを公開すると、回答がここに表示されます</p>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="space-y-4">
+                            {filteredResponses.map((response: any) => {
+                              const surveyForm = surveyForms.find(f => f.id === response.survey_form_id);
+                              const responses = typeof response.responses === 'string' 
+                                ? JSON.parse(response.responses) 
+                                : response.responses;
+
+                              return (
+                                <Card key={response.id} className="hover:shadow-md transition-shadow">
+                                  <CardHeader>
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <CardTitle className="text-base">
+                                          {surveyForm?.config?.basic_info?.title || 'アンケート'}
+                                        </CardTitle>
+                                        <CardDescription className="mt-1">
+                                          送信日時: {new Date(response.submitted_at).toLocaleString('ja-JP')}
+                                        </CardDescription>
+                                      </div>
+                                      <Badge variant="outline">
+                                        ID: {response.id.substring(0, 8)}...
+                                      </Badge>
+                                    </div>
+                                  </CardHeader>
+                                  <CardContent>
+                                    <div className="space-y-3">
+                                      {Object.entries(responses).map(([key, value]: [string, any]) => (
+                                        <div key={key} className="border-b pb-2 last:border-0">
+                                          <div className="font-medium text-sm text-muted-foreground mb-1">
+                                            {key}
+                                          </div>
+                                          <div className="text-sm">
+                                            {typeof value === 'string' ? value : JSON.stringify(value)}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </CardContent>
                   </Card>
                 </div>

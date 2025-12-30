@@ -699,7 +699,7 @@ export default function StoreDetailPage() {
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button
                   variant="outline"
-                onClick={() => router.push(`/${storeId}/reservations`)}
+                onClick={() => router.push(`/admin/${storeId}/reservations`)}
                 >
                   <Calendar className="mr-2 h-4 w-4" />
                   予約一覧
@@ -946,7 +946,7 @@ export default function StoreDetailPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => router.push(`/${storeId}/reservations`)}
+                    onClick={() => router.push(`/admin/${storeId}/reservations`)}
                   >
                     すべて見る
                   </Button>

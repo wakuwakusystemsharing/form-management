@@ -332,7 +332,9 @@ export async function POST(request: NextRequest) {
         description: description || '',
         website_url: website_url || '',
         subdomain: subdomainToUse,
-        status: 'active'
+        status: 'active',
+        created_by: user.id,
+        updated_by: user.id
       }])
       .select()
       .single()
