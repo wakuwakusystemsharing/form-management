@@ -23,10 +23,10 @@ const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
  */
 export async function GET(
   request: Request,
-  { params }: { params: { storeId: string } }
+  { params }: { params: Promise<{ storeId: string }> }
 ) {
   try {
-    const { storeId } = params;
+    const { storeId } = await params;
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
     const customerType = searchParams.get('customer_type');
@@ -154,10 +154,10 @@ export async function GET(
  */
 export async function POST(
   request: Request,
-  { params }: { params: { storeId: string } }
+  { params }: { params: Promise<{ storeId: string }> }
 ) {
   try {
-    const { storeId } = params;
+    const { storeId } = await params;
     const body = await request.json();
 
     // バリデーション

@@ -16,10 +16,10 @@ const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
  */
 export async function GET(
   request: Request,
-  { params }: { params: { storeId: string } }
+  { params }: { params: Promise<{ storeId: string }> }
 ) {
   try {
-    const { storeId } = params;
+    const { storeId } = await params;
     const env = getAppEnvironment();
 
     let customers: Customer[] = [];

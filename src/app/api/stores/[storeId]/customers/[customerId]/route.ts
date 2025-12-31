@@ -18,10 +18,10 @@ const VISITS_FILE = path.join(DATA_DIR, 'customer_visits.json');
  */
 export async function GET(
   request: Request,
-  { params }: { params: { storeId: string; customerId: string } }
+  { params }: { params: Promise<{ storeId: string; customerId: string }> }
 ) {
   try {
-    const { storeId, customerId } = params;
+    const { storeId, customerId } = await params;
     const env = getAppEnvironment();
 
     // ローカル環境: JSON から読み込み
@@ -123,10 +123,10 @@ export async function GET(
  */
 export async function PATCH(
   request: Request,
-  { params }: { params: { storeId: string; customerId: string } }
+  { params }: { params: Promise<{ storeId: string; customerId: string }> }
 ) {
   try {
-    const { storeId, customerId } = params;
+    const { storeId, customerId } = await params;
     const body = await request.json();
 
     const updateData: CustomerUpdate = {};
