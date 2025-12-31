@@ -167,7 +167,13 @@ class BookingForm {
             selectedDate: '',
             selectedTime: '',
             message: '',
-            lineUserId: null // LINEユーザーID
+            lineUserId: null, // LINEユーザーID
+            lineDisplayName: null, // LINE表示名
+            linePictureUrl: null, // LINEプロフィール画像URL
+            lineStatusMessage: null, // LINEステータスメッセージ
+            lineEmail: null, // LINEメールアドレス
+            lineLanguage: null, // LINE言語設定
+            lineOs: null // デバイスOS
         };
         this.currentDate = new Date();
         this.availabilityCache = {}; // カレンダー空き状況のキャッシュ
@@ -207,19 +213,45 @@ class BookingForm {
     async initializeLIFF() {
         const liffId = this.config.basic_info.liff_id;
         if (!liffId || liffId.length < 10) return;
-        
+
         try {
             await liff.init({ liffId });
             if (liff.isLoggedIn()) {
                 const profile = await liff.getProfile();
                 this.state.name = profile.displayName || '';
                 document.getElementById('customer-name').value = this.state.name;
-                
-                // LINEユーザーIDを取得
+
+                // LINEプロフィール情報を取得
+                this.state.lineDisplayName = profile.displayName || null;
+                this.state.linePictureUrl = profile.pictureUrl || null;
+                this.state.lineStatusMessage = profile.statusMessage || null;
+
+                // デバイスOSを取得
+                try {
+                    if (liff.isInClient()) {
+                        const os = liff.getOS();
+                        this.state.lineOs = os === 'ios' ? 'ios' : 'android';
+                    } else {
+                        this.state.lineOs = 'web';
+                    }
+                } catch (osError) {
+                    console.warn('デバイスOS取得に失敗しました:', osError);
+                    this.state.lineOs = 'unknown';
+                }
+
+                // LINEユーザーIDと追加情報を取得
                 try {
                     const idToken = await liff.getDecodedIDToken();
-                    if (idToken && idToken.sub) {
-                        this.state.lineUserId = idToken.sub;
+                    if (idToken) {
+                        if (idToken.sub) {
+                            this.state.lineUserId = idToken.sub;
+                        }
+                        if (idToken.email) {
+                            this.state.lineEmail = idToken.email;
+                        }
+                        if (idToken.language) {
+                            this.state.lineLanguage = idToken.language;
+                        }
                     }
                 } catch (idTokenError) {
                     console.warn('LINE User ID取得に失敗しました:', idTokenError);
@@ -1153,13 +1185,18 @@ class BookingForm {
                 store_id: STORE_ID,
                 customer_name: this.state.name,
                 customer_phone: this.state.phone,
-                customer_email: null, // メールアドレスフィールドがない場合はnull
+                customer_email: this.state.lineEmail || null, // LINEメールアドレス
                 selected_menus: selectedMenus,
                 selected_options: selectedOptions,
                 reservation_date: reservationDate,
                 reservation_time: this.state.selectedTime,
                 customer_info: customerInfo,
-                line_user_id: this.state.lineUserId || null // LINEユーザーID
+                line_user_id: this.state.lineUserId || null, // LINEユーザーID
+                line_display_name: this.state.lineDisplayName || null, // LINE表示名
+                line_picture_url: this.state.linePictureUrl || null, // LINEプロフィール画像URL
+                line_status_message: this.state.lineStatusMessage || null, // LINEステータスメッセージ
+                line_language: this.state.lineLanguage || null, // LINE言語設定
+                line_os: this.state.lineOs || null // デバイスOS
             };
             
             // /api/reservationsにPOSTリクエストを送信

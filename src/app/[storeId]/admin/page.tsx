@@ -10,6 +10,9 @@ import { SurveyForm } from '@/types/survey';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
 import StoreAdminLayout from '@/components/StoreAdminLayout';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
+import CustomerList from '@/components/CustomerList';
+import CustomerDetail from '@/components/CustomerDetail';
+import CustomerAnalytics from '@/components/CustomerAnalytics';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,17 +23,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { 
-  Search, 
-  Edit, 
-  Eye, 
-  Copy, 
+import {
+  Search,
+  Edit,
+  Eye,
+  Copy,
   ExternalLink,
   Calendar,
   FileText,
   ClipboardList,
   Settings as SettingsIcon,
-  LogOut
+  LogOut,
+  Users
 } from 'lucide-react';
 
 interface Reservation {
@@ -82,6 +86,11 @@ export default function StoreAdminPage() {
   const router = useRouter();
   const reservationView = searchParams.get('view') || 'list';
 
+  // 顧客管理関連
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [showCustomerDetail, setShowCustomerDetail] = useState(false);
+  const customersView = searchParams.get('customersView') || 'list';
+
   // 認証チェック
   useEffect(() => {
     const checkAuth = async () => {
@@ -119,39 +128,87 @@ export default function StoreAdminPage() {
     try {
       const supabase = getSupabaseClient();
       if (!supabase) {
-        setLoginError('Supabaseクライアントの初期化に失敗しました');
+        setLoginError('Supabaseクライアントの初期化に失敗しました。環境変数が正しく設定されているか確認してください。');
         setIsLoggingIn(false);
         return;
       }
+
+      // 入力値のバリデーション
+      if (!loginForm.email || !loginForm.password) {
+        setLoginError('メールアドレスとパスワードを入力してください');
+        setIsLoggingIn(false);
+        return;
+      }
+
+      console.log('[Login] Attempting to sign in with email:', loginForm.email);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: loginForm.email,
+        email: loginForm.email.trim(),
         password: loginForm.password,
       });
 
       if (error) {
-        setLoginError(error.message || 'ログインに失敗しました');
+        console.error('[Login] Supabase auth error:', {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+        });
+        
+        // エラーメッセージを日本語化
+        let errorMessage = 'ログインに失敗しました';
+        if (error.message.includes('Invalid login credentials')) {
+          errorMessage = 'メールアドレスまたはパスワードが正しくありません';
+        } else if (error.message.includes('Email not confirmed')) {
+          errorMessage = 'メールアドレスの確認が完了していません。メールを確認してください';
+        } else if (error.message.includes('User not found')) {
+          errorMessage = 'ユーザーが見つかりません';
+        } else if (error.status === 400) {
+          errorMessage = `認証エラー: ${error.message}`;
+        } else {
+          errorMessage = error.message || 'ログインに失敗しました';
+        }
+        
+        setLoginError(errorMessage);
+        setIsLoggingIn(false);
+        return;
+      }
+
+      if (!data.session) {
+        console.error('[Login] No session returned');
+        setLoginError('セッションの取得に失敗しました');
+        setIsLoggingIn(false);
         return;
       }
 
       if (data.user) {
+        console.log('[Login] Login successful for user:', data.user.email);
         setUser(data.user);
+        
         // クッキーにアクセストークンを設定
         try {
-          await fetch('/api/auth/set-cookie', {
+          const cookieResponse = await fetch('/api/auth/set-cookie', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ accessToken: data.session?.access_token }),
+            body: JSON.stringify({ accessToken: data.session.access_token }),
           });
+
+          if (!cookieResponse.ok) {
+            const cookieError = await cookieResponse.json().catch(() => ({}));
+            console.error('[Login] Failed to set cookie:', cookieError);
+          }
         } catch (err) {
-          console.error('Failed to set cookie:', err);
+          console.error('[Login] Failed to set cookie:', err);
         }
+        
         window.location.reload();
+      } else {
+        setLoginError('ユーザー情報の取得に失敗しました');
+        setIsLoggingIn(false);
       }
     } catch (err) {
-      console.error('Login error:', err);
-      setLoginError('ログインに失敗しました');
-    } finally {
+      console.error('[Login] Unexpected error:', err);
+      setLoginError('予期しないエラーが発生しました。もう一度お試しください');
       setIsLoggingIn(false);
     }
   };
@@ -1032,6 +1089,52 @@ export default function StoreAdminPage() {
           </div>
         );
 
+      case 'customers':
+        return (
+          <div className="space-y-6 p-4 lg:p-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>顧客管理</CardTitle>
+                <CardDescription>顧客情報の確認・管理を行います</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Tabs value={customersView} onValueChange={(v) => {
+                  const params = new URLSearchParams(searchParams.toString());
+                  params.set('customersView', v);
+                  router.push(`/${storeId}/admin?tab=customers&${params.toString()}`);
+                }} className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <TabsList>
+                      <TabsTrigger value="list">
+                        <Users className="mr-2 h-4 w-4" />
+                        一覧
+                      </TabsTrigger>
+                      <TabsTrigger value="analytics">
+                        <Calendar className="mr-2 h-4 w-4" />
+                        分析
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
+
+                  <TabsContent value="list" className="space-y-6">
+                    <CustomerList
+                      storeId={storeId}
+                      onCustomerClick={(customer) => {
+                        setSelectedCustomerId(customer.id);
+                        setShowCustomerDetail(true);
+                      }}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="analytics" className="space-y-6">
+                    <CustomerAnalytics storeId={storeId} />
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          </div>
+        );
+
       case 'settings':
         return (
           <div className="space-y-6 p-4 lg:p-6">
@@ -1531,6 +1634,17 @@ export default function StoreAdminPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 顧客詳細モーダル */}
+      <CustomerDetail
+        storeId={storeId}
+        customerId={selectedCustomerId}
+        open={showCustomerDetail}
+        onClose={() => {
+          setShowCustomerDetail(false);
+          setSelectedCustomerId(null);
+        }}
+      />
     </StoreAdminLayout>
   );
 }

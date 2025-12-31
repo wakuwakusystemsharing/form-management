@@ -92,9 +92,23 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
   // 環境変数が設定されていない場合
   if (!supabaseUrl || !supabaseAnonKey) {
     if (!isLocal()) {
-      console.error('[Supabase] Missing environment variables: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+      console.error('[Supabase] Missing environment variables:', {
+        hasUrl: !!supabaseUrl,
+        hasAnonKey: !!supabaseAnonKey,
+        urlPrefix: supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'missing',
+      });
     }
     return null;
+  }
+
+  // 開発環境でのみURLの形式をチェック
+  if (typeof window !== 'undefined' && !isLocal()) {
+    try {
+      new URL(supabaseUrl);
+    } catch (e) {
+      console.error('[Supabase] Invalid URL format:', supabaseUrl);
+      return null;
+    }
   }
 
   // 環境変数が設定されている場合はSupabase接続を試みる（ローカル環境でも）
@@ -256,4 +270,5 @@ export function isServiceAdmin(email: string): boolean {
   ]
   return adminEmails.includes(email)
 }
+
 

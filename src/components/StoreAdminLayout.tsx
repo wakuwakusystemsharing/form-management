@@ -3,16 +3,17 @@
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  FileText, 
-  Calendar, 
-  ClipboardList, 
-  Settings, 
+import {
+  LayoutDashboard,
+  FileText,
+  Calendar,
+  ClipboardList,
+  Settings,
   Menu,
   LogOut,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Users
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,7 @@ interface StoreAdminLayoutProps {
 const menuItems = [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
   { id: 'reservations', label: '予約管理', icon: Calendar },
+  { id: 'customers', label: '顧客管理', icon: Users },
   { id: 'surveys', label: 'アンケート管理', icon: ClipboardList },
   { id: 'settings', label: '設定', icon: Settings },
 ];
