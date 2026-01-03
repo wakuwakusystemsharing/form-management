@@ -13,7 +13,8 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Users
+  Users,
+  Link2
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ const menuItems = [
   { id: 'reservations', label: '予約管理', icon: Calendar },
   { id: 'customers', label: '顧客管理', icon: Users },
   { id: 'surveys', label: 'アンケート管理', icon: ClipboardList },
+  { id: 'salon-board', label: 'サロンボード連携', icon: Link2 },
   { id: 'settings', label: '設定', icon: Settings },
 ];
 

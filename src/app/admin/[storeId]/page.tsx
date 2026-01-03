@@ -8,6 +8,7 @@ import { Form } from '@/types/form';
 import { SurveyForm } from '@/types/survey';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
 import StoreAdminManager from '@/components/StoreAdminManager';
+import SalonBoardManager from '@/components/SalonBoard/SalonBoardManager';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -727,10 +728,11 @@ export default function StoreDetailPage() {
 
         {/* タブナビゲーション */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">概要</TabsTrigger>
             <TabsTrigger value="forms">予約フォーム</TabsTrigger>
             <TabsTrigger value="surveys">アンケート</TabsTrigger>
+            <TabsTrigger value="hpb">HPB管理</TabsTrigger>
             <TabsTrigger value="settings">設定</TabsTrigger>
           </TabsList>
 
@@ -1352,6 +1354,11 @@ export default function StoreDetailPage() {
           </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* HPB管理タブ */}
+          <TabsContent value="hpb" className="space-y-6">
+            <SalonBoardManager storeId={storeId} />
           </TabsContent>
 
           {/* 設定タブ */}

@@ -12,3 +12,4 @@ ALTER COLUMN id DROP DEFAULT;
 COMMENT ON COLUMN stores.id IS '店舗ID: 6文字のランダム文字列（アプリケーション側で必ず指定）';
 
 
+

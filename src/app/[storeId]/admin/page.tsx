@@ -34,8 +34,10 @@ import {
   ClipboardList,
   Settings as SettingsIcon,
   LogOut,
-  Users
+  Users,
+  Link2
 } from 'lucide-react';
+import { SalonBoardSettings } from '@/components/SalonBoard';
 
 interface Reservation {
   id: string;
@@ -1134,6 +1136,9 @@ export default function StoreAdminPage() {
             </Card>
           </div>
         );
+
+      case 'salon-board':
+        return <SalonBoardSettings storeId={storeId} />;
 
       case 'settings':
         return (
