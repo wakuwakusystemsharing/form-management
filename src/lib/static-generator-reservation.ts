@@ -22,10 +22,15 @@ export class StaticReservationGenerator {
       safeConfig.basic_info = {
         form_name: 'フォーム',
         store_name: '',
-        liff_id: '',
+        liff_id: undefined,
         theme_color: '#3B82F6'
       };
     }
+    
+    // フォームタイプを判定（後方互換性のため）
+    const formType = safeConfig.form_type || 
+      (safeConfig.basic_info.liff_id ? 'line' : 'web');
+    const isLineForm = formType === 'line';
     
     if (!safeConfig.gender_selection) {
       safeConfig.gender_selection = {
@@ -108,7 +113,7 @@ export class StaticReservationGenerator {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${this.escapeHtml(safeConfig.basic_info.form_name)}</title>
-    <script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
+    ${isLineForm ? '<script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>' : ''}
     <style>${this.generateCSS(safeConfig)}</style>
 </head>
 <body>
@@ -207,6 +212,12 @@ class BookingForm {
         const liffId = this.config.basic_info.liff_id;
         if (!liffId || liffId.length < 10) return;
         
+        // LIFF SDKが読み込まれていない場合はスキップ
+        if (typeof liff === 'undefined') {
+            console.warn('LIFF SDK is not loaded');
+            return;
+        }
+        
         try {
             await liff.init({ liffId });
             if (liff.isLoggedIn()) {
@@ -263,7 +274,7 @@ class BookingForm {
         
         // メニュー選択
         document.querySelectorAll('.menu-item').forEach(item => {
-            item.addEventListener('click', (e) => {
+            item.addEventListener('click', async (e) => {
                 // オプションボタンからのイベント伝播を防ぐ
                 if (e.target.closest('.menu-option-item')) {
                     return;
@@ -315,7 +326,7 @@ class BookingForm {
                 }
                 
                 // カレンダーの表示/非表示を切り替え
-                this.toggleCalendarVisibility();
+                await this.toggleCalendarVisibility();
                 this.updateSummary();
             });
         });
@@ -436,14 +447,14 @@ class BookingForm {
         document.querySelector(\`.menu-item[data-menu-id="\${menuId}"]\`).after(container);
         
         container.querySelectorAll('.submenu-item').forEach(sub => {
-            sub.addEventListener('click', (e) => {
+            sub.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const idx = parseInt(sub.dataset.submenuIndex);
                 document.querySelectorAll('.submenu-item').forEach(s => s.classList.remove('selected'));
                 sub.classList.add('selected');
                 this.state.selectedSubmenu = menu.sub_menu_items[idx];
                 // サブメニュー選択後にカレンダーを表示
-                this.toggleCalendarVisibility();
+                await this.toggleCalendarVisibility();
                 this.updateSummary();
             });
         });
@@ -480,13 +491,21 @@ class BookingForm {
         console.log('[StaticForm] fetchCalendarAvailability called:', { 
             date: date.toISOString(),
             dateLocal: date.toLocaleString('ja-JP'),
+            form_type: this.config.form_type,
             hasGasEndpoint: !!this.config.gas_endpoint,
-            gasEndpoint: this.config.gas_endpoint
+            gasEndpoint: this.config.gas_endpoint,
+            hasCalendarUrl: !!this.config.calendar_url,
+            calendarUrl: this.config.calendar_url
         });
         
-        // GASエンドポイントが未設定の場合はスキップ
-        if (!this.config.gas_endpoint) {
-            console.log('[StaticForm] No GAS endpoint, skipping availability fetch');
+        const isLineForm = this.config.form_type === 'line' || 
+            (this.config.basic_info.liff_id && this.config.basic_info.liff_id.length >= 10);
+        
+        // LINE予約フォームは gas_endpoint、Web予約フォームは calendar_url を使用
+        const endpoint = isLineForm ? this.config.gas_endpoint : this.config.calendar_url;
+        
+        if (!endpoint) {
+            console.log('[StaticForm] No availability endpoint, skipping availability fetch');
             return;
         }
         
@@ -518,7 +537,7 @@ class BookingForm {
             return;
         }
         
-        const url = this.config.gas_endpoint + 
+        const url = endpoint + 
             \`?startTime=\${startTime.toISOString()}&endTime=\${endTime.toISOString()}\`;
         console.log('[StaticForm] Fetching from URL:', url);
         
@@ -573,11 +592,14 @@ class BookingForm {
     }
     
     // カレンダーをレンダリング
-    renderCalendar() {
+    async renderCalendar() {
         const table = document.getElementById('calendar-table');
         if (!table) return;
         
         console.log('[StaticForm] renderCalendar called');
+        // フォームタイプを判定（Web/LINE）
+        const isLineForm = this.config.form_type === 'line' || 
+            (this.config.basic_info.liff_id && this.config.basic_info.liff_id.length >= 10);
         
     // 事前予約可能日数の上限日を算出
     const days = (this.config?.calendar_settings?.advance_booking_days ?? 30);
@@ -792,7 +814,8 @@ class BookingForm {
             });
         }
         
-        const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
+                const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
+                
                 const bgColor = isSelected ? '#10b981' : (isAvailable && !isPast ? '#fff' : '#f3f4f6');
                 const textColor = isSelected ? '#fff' : (isAvailable && !isPast ? '#111827' : '#9ca3af');
                 const cursor = isAvailable && !isPast ? 'pointer' : 'not-allowed';
@@ -938,7 +961,7 @@ class BookingForm {
                 let foundMenu = null;
                 let foundCategoryId = null;
                 let foundSubMenuId = null;
-                
+
                 for (const [categoryId, menuIds] of Object.entries(selectionData.selectedMenus)) {
                     if (menuIds && menuIds.length > 0) {
                         foundCategoryId = categoryId;
@@ -1029,16 +1052,16 @@ class BookingForm {
                         
                         this.updateSummary();
                         this.toggleCalendarVisibility();
-                        
-                        // カレンダーセクションにスクロール
-                        setTimeout(() => {
-                            const calendarField = document.getElementById('datetime-field');
-                            if (calendarField) {
-                                calendarField.style.display = 'block';
-                                calendarField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // カレンダーセクションにスクロール
+                setTimeout(() => {
+                    const calendarField = document.getElementById('datetime-field');
+                    if (calendarField) {
+                        calendarField.style.display = 'block';
+                        calendarField.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                 if (this.state.currentWeekStart) {
                                     this.fetchAvailability(this.state.currentWeekStart).then(() => {
-                                        this.renderCalendar();
+                        this.renderCalendar();
                                     });
                                 }
                             }
@@ -1169,6 +1192,10 @@ class BookingForm {
             return;
         }
         
+        // フォームタイプを判定
+        const isLineForm = this.config.form_type === 'line' || 
+            (this.config.basic_info.liff_id && this.config.basic_info.liff_id.length >= 10);
+        
         try {
             // メニュー情報を構造化
             const selectedMenus = [];
@@ -1279,48 +1306,29 @@ class BookingForm {
             // 日時を日本語形式に変換（LINEメッセージ用）
             const formattedDate = \`\${dateObj.getFullYear()}年\${String(dateObj.getMonth() + 1).padStart(2, '0')}月\${String(dateObj.getDate()).padStart(2, '0')}日 \${this.state.selectedTime}\`;
             
-            // メッセージ本文を構築（old_index.htmlとbooking.gsのparseReservationFormに合わせた形式）
-            // booking.gsが期待する順序：お名前、電話番号、ご来店回数、コース、メニュー、希望日時、メッセージ
-            let messageText = '【予約フォーム】\\n';
+            // ISO形式の日時も生成（Web予約フォーム用）
+            const startIso = \`\${dateObj.getFullYear()}-\${String(dateObj.getMonth() + 1).padStart(2, '0')}-\${String(dateObj.getDate()).padStart(2, '0')}T\${this.state.selectedTime}:00+09:00\`;
             
-            // 常に表示：お名前、電話番号
-            messageText += \`お名前：\${this.state.name || ''}\\n\`;
-            messageText += \`電話番号：\${this.state.phone || ''}\\n\`;
-            
-            // ご来店回数（old_index.htmlでは常に表示、booking.gsも期待している）
-            let visitCountText = '';
-            if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
-                const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
-                visitCountText = visitLabel || this.state.visitCount || '';
-            }
-            messageText += \`ご来店回数：\${visitCountText}\\n\`;
-            
-            // メニュー（詳細な予約内容を含める：カテゴリー名 > メニュー名 > サブメニュー名, オプション名）
+            // メニュー名を取得
             let menuText = '';
+            let selectedMenuName = '';
+            if (this.state.selectedSubmenu) {
+                selectedMenuName = this.state.selectedSubmenu.name;
+            } else if (this.state.selectedMenu) {
+                selectedMenuName = this.state.selectedMenu.name;
+            }
             
             if (this.state.selectedMenu) {
-                // カテゴリー名を取得
                 const category = this.config.menu_structure.categories.find(c => 
                     c.menus.some(m => m.id === this.state.selectedMenu.id)
                 );
-                
-                // メニュー詳細を構築：カテゴリー > メニュー > サブメニュー
                 const menuParts = [];
-                if (category?.name) {
-                    menuParts.push(category.name);
-                }
-                if (this.state.selectedMenu.name) {
-                    menuParts.push(this.state.selectedMenu.name);
-                }
-                if (this.state.selectedSubmenu?.name) {
-                    menuParts.push(this.state.selectedSubmenu.name);
-                }
-                
+                if (category?.name) menuParts.push(category.name);
+                if (this.state.selectedMenu.name) menuParts.push(this.state.selectedMenu.name);
+                if (this.state.selectedSubmenu?.name) menuParts.push(this.state.selectedSubmenu.name);
                 if (menuParts.length > 0) {
                     menuText = menuParts.join(' > ');
                 }
-                
-                // オプションを追加（サブメニューが選択されている場合でも親メニューのオプションを表示）
                 const menuId = this.state.selectedMenu.id;
                 if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
                     const menu = this.state.selectedMenu;
@@ -1335,15 +1343,44 @@ class BookingForm {
                 }
             }
             
-            messageText += \`メニュー：\${menuText}\\n\`;
+            // 時間を計算（分単位）
+            let durationMin = 60; // デフォルト
+            if (this.state.selectedSubmenu && this.state.selectedSubmenu.duration) {
+                durationMin = this.state.selectedSubmenu.duration;
+            } else if (this.state.selectedMenu && this.state.selectedMenu.duration) {
+                durationMin = this.state.selectedMenu.duration;
+            }
+            // オプションの時間を追加
+            if (this.state.selectedMenu) {
+                const menuId = this.state.selectedMenu.id;
+                if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
+                    const menu = this.state.selectedMenu;
+                    const selectedOptionIds = this.state.selectedOptions[menuId];
+                    selectedOptionIds.forEach(optionId => {
+                        const option = menu.options?.find(o => o.id === optionId);
+                        if (option && option.duration) {
+                            durationMin += option.duration;
+                        }
+                    });
+                }
+            }
             
-            // 希望日時（常に表示、booking.gsは「希望日時：」の次の行を日時として解析）
-            messageText += \`希望日時：\\n \${formattedDate}\\n\`;
-            
-            // メッセージ（常に表示、空文字列でも）
+            if (isLineForm) {
+                // LINE予約フォーム：LIFF経由でメッセージ送信
+                let messageText = '【予約フォーム】\\n';
+                messageText += \`お名前：\${this.state.name || ''}\\n\`;
+                messageText += \`電話番号：\${this.state.phone || ''}\\n\`;
+                
+                let visitCountText = '';
+                if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
+                    const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
+                    visitCountText = visitLabel || this.state.visitCount || '';
+                }
+                messageText += \`ご来店回数：\${visitCountText}\\n\`;
+                messageText += \`メニュー：\${menuText}\\n\`;
+                messageText += \`希望日時：\\n \${formattedDate}\\n\`;
             messageText += \`メッセージ：\${this.state.message || ''}\`;
             
-            // 性別とクーポンはbooking.gsが解析しないため、メッセージの最後に追加（オプション）
             if (this.config.gender_selection?.enabled && this.state.gender) {
                 const genderLabel = this.config.gender_selection.options.find(o => o.value === this.state.gender)?.label;
                 if (genderLabel) {
@@ -1372,16 +1409,86 @@ class BookingForm {
                     type: 'text',
                     text: messageText
                 }]).then(() => {
-                    // メッセージ送信成功後にウィンドウを閉じる
                     alert('当日キャンセルは無いようにお願いいたします。');
                     liff.closeWindow();
                 }).catch((err) => {
                     console.error('メッセージの送信に失敗しました', err);
+                        alert('送信に失敗しました。もう一度お試しください。');
+                    });
+                } else {
+                    alert('LINEにログインしてください。');
+                }
+            } else {
+                // Web予約フォーム：GASエンドポイントに直接送信
+                if (!this.config.gas_endpoint) {
+                    alert('GASエンドポイントが設定されていません');
+                    return;
+                }
+                
+                // 冪等性キー生成
+                function genRequestId() {
+                    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+                    const rnd = () => Math.floor((1 + Math.random()) * 0x10000).toString(16).slice(-4);
+                    return \`\${rnd()}\${rnd()}-\${rnd()}-\${rnd()}-\${rnd()}-\${rnd()}\${rnd()}\${rnd()}\`;
+                }
+                
+                const payload = {
+                    name: this.state.name,
+                    phone: this.state.phone,
+                    visitCount: this.state.visitCount || '',
+                    selectedMenu: selectedMenuName,
+                    selectedSymptom: menuText ? [menuText] : null,
+                    optiCount: '',
+                    dates: [formattedDate],
+                    message: this.state.message || '',
+                    startIso: startIso,
+                    durationMin: durationMin,
+                    secret: this.config.security_secret || '',
+                    requestId: genRequestId(),
+                    referrer: document.referrer || '',
+                    userAgent: navigator.userAgent || ''
+                };
+                
+                // 送信中の表示
+                const submitButton = document.getElementById('submit-button');
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.textContent = '送信中...';
+                }
+                
+                const res = await fetch(this.config.gas_endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
                 });
+                
+                const text = await res.text();
+                let json = null;
+                try { json = JSON.parse(text); } catch(_) {}
+                
+                if (!res.ok || !json || !json.ok) {
+                    const msg = (json && json.error) ? json.error
+                        : (res.status === 302 || text.includes('ServiceLogin')) ? '認証が必要なURL（/dev等）です'
+                        : \`HTTP \${res.status}\`;
+                    throw new Error(msg);
+                }
+                
+                // 成功画面を表示
+                document.querySelector('.form-content').innerHTML = \`
+                    <div class="success">
+                        <h3>予約が完了しました！</h3>
+                        <p>ご予約ありがとうございます。</p>
+                    </div>
+                \`;
             }
         } catch (error) {
             console.error('Submit error:', error);
-            alert('送信に失敗しました。もう一度お試しください。');
+            alert(error.message || '送信に失敗しました。もう一度お試しください。');
+            const submitButton = document.getElementById('submit-button');
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.textContent = '予約する';
+            }
         }
     }
     

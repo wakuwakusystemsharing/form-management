@@ -123,8 +123,46 @@ export async function POST(
   try {
     const { storeId } = await params;
     const body = await request.json();
-    const { form_name, liff_id, gas_endpoint, template } = body;
+    const { form_name, form_type, liff_id, gas_endpoint, calendar_url, security_secret, template } = body;
     const env = getAppEnvironment();
+
+    // バリデーション
+    if (!form_name || !form_name.trim()) {
+      return NextResponse.json(
+        { error: 'フォーム名は必須です' },
+        { status: 400 }
+      );
+    }
+
+    if (!gas_endpoint || !gas_endpoint.trim()) {
+      return NextResponse.json(
+        { error: 'GASエンドポイントは必須です' },
+        { status: 400 }
+      );
+    }
+
+    // フォームタイプに応じたバリデーション
+    if (form_type === 'line') {
+      if (!liff_id || !liff_id.trim()) {
+        return NextResponse.json(
+          { error: 'LINE予約フォームの場合、LIFF IDは必須です' },
+          { status: 400 }
+        );
+      }
+    } else if (form_type === 'web') {
+      if (!calendar_url || !calendar_url.trim()) {
+        return NextResponse.json(
+          { error: 'Web予約フォームの場合、カレンダー取得URLは必須です' },
+          { status: 400 }
+        );
+      }
+      if (!security_secret || !security_secret.trim()) {
+        return NextResponse.json(
+          { error: 'Web予約フォームの場合、SECURITY_SECRETは必須です' },
+          { status: 400 }
+        );
+      }
+    }
 
     // ローカル環境: JSON に保存
     if (env === 'local') {
@@ -136,12 +174,17 @@ export async function POST(
         newFormId = generateRandomFormId();
       } while (forms.some((form: Form) => form.id === newFormId));
 
+    // フォームタイプを決定（後方互換性のため）
+    const determinedFormType = form_type || (liff_id && liff_id.trim() ? 'line' : 'web');
+
     // テンプレートから基本設定を作成
     const baseConfig = template ? {
       basic_info: {
         form_name: form_name || 'フォーム',
         store_name: '', // TODO: 店舗名を取得
-        liff_id: (template as FormTemplate)?.liff_id || liff_id || '',
+        liff_id: determinedFormType === 'line' 
+          ? ((template as FormTemplate)?.liff_id || liff_id || '')
+          : undefined,
         theme_color: '#3B82F6',
         logo_url: undefined,
         show_gender_selection: template.config?.basic_info?.show_gender_selection || false
@@ -159,12 +202,15 @@ export async function POST(
         show_visit_count: template.config?.ui_settings?.show_visit_count || false,
         show_coupon_selection: template.config?.ui_settings?.show_coupon_selection || false
       },
-      gas_endpoint: (template as FormTemplate)?.gas_endpoint || gas_endpoint || ''
+      gas_endpoint: (template as FormTemplate)?.gas_endpoint || gas_endpoint || '',
+      calendar_url: determinedFormType === 'web' ? (calendar_url || '') : undefined,
+      security_secret: determinedFormType === 'web' ? (security_secret || '') : undefined,
+      form_type: determinedFormType
     } : {
       basic_info: {
         form_name: form_name || 'フォーム',
         store_name: '',
-        liff_id: liff_id || '',
+        liff_id: determinedFormType === 'line' ? (liff_id || '') : undefined,
         theme_color: '#3B82F6',
         logo_url: undefined,
         show_gender_selection: false
@@ -182,7 +228,10 @@ export async function POST(
         show_visit_count: false,
         show_coupon_selection: false
       },
-      gas_endpoint: gas_endpoint || ''
+      gas_endpoint: gas_endpoint || '',
+      calendar_url: determinedFormType === 'web' ? (calendar_url || '') : undefined,
+      security_secret: determinedFormType === 'web' ? (security_secret || '') : undefined,
+      form_type: determinedFormType
     };
 
     const newForm: Form = {
@@ -363,11 +412,16 @@ export async function POST(
     const templateLiffId = (template as FormTemplate)?.liff_id;
     const templateGasEndpoint = (template as FormTemplate)?.gas_endpoint;
     
+    // フォームタイプを決定（後方互換性のため）
+    const determinedFormType = form_type || (liff_id && liff_id.trim() ? 'line' : 'web');
+    
     const supabaseConfig: FormConfig = {
       basic_info: {
         form_name: form_name || 'フォーム',
         store_name: '',
-        liff_id: templateLiffId || liff_id || '',
+        liff_id: determinedFormType === 'line' 
+          ? (templateLiffId || liff_id || '')
+          : undefined,
         theme_color: '#3B82F6',
         logo_url: undefined
       },
@@ -431,7 +485,10 @@ export async function POST(
         phone_format: 'japanese' as const,
         name_max_length: 50
       },
-      gas_endpoint: templateGasEndpoint || gas_endpoint || ''
+      gas_endpoint: templateGasEndpoint || gas_endpoint || '',
+      calendar_url: determinedFormType === 'web' ? (calendar_url || '') : undefined,
+      security_secret: determinedFormType === 'web' ? (security_secret || '') : undefined,
+      form_type: determinedFormType
     };
 
     // 新形式のフォームデータを作成（Supabase用）

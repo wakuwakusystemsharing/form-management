@@ -66,7 +66,7 @@ export interface FormConfig {
   basic_info: {
     form_name: string;
     store_name: string;
-    liff_id: string;
+    liff_id?: string;  // オプショナル：Web予約フォームの場合は不要
     theme_color: string;
     logo_url?: string;
   };
@@ -144,6 +144,11 @@ export interface FormConfig {
 
   // Google App Script エンドポイント
   gas_endpoint?: string;
+  
+  // Web予約フォーム用の設定
+  calendar_url?: string;      // カレンダー取得URL（空き状況取得用）
+  security_secret?: string;   // SECURITY_SECRET（セキュリティ用の秘密鍵）
+  form_type?: 'line' | 'web'; // フォームタイプ（LINE予約フォーム or Web予約フォーム）
 }
 
 export type AppEnvironment = 'local' | 'staging' | 'production';
