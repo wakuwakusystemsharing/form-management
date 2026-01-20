@@ -881,6 +881,7 @@ export default function CustomerFormPage() {
                   selectedMenus: {},
                   selectedSubMenus: {},
                   selectedMenuOptions: {},
+                  customFields: {},
                   selectedDate: '',
                   selectedTime: ''
                 });

@@ -1747,7 +1747,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                         };
                         onUpdate(updatedForm);
                       }}
-                      className={`text-sm ${themeClasses.text.accent} hover:${themeClasses.text.primary}`}
+                      className={`text-sm ${theme === 'light' ? 'text-cyan-600 hover:text-cyan-700' : 'text-cyan-400 hover:text-cyan-300'}`}
                     >
                       + 選択肢を追加
                     </button>

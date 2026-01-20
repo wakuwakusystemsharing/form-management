@@ -1158,6 +1158,7 @@ export default function PreviewFormPage() {
                   selectedMenus: {},
                   selectedSubMenus: {},
                   selectedMenuOptions: {},
+                  customFields: {},
                   selectedDate: '',
                   selectedTime: '',
                   selectedDate2: '',
