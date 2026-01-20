@@ -782,16 +782,9 @@ export default function StoreDetailPage() {
     }
 
     // フォームタイプに応じたバリデーション
-    if (newFormData.form_type === 'line') {
-      if (!newFormData.liff_id.trim()) {
-        alert('LIFF IDを入力してください');
-        return;
-      }
-    } else if (newFormData.form_type === 'web') {
-      if (!newFormData.calendar_url.trim()) {
-        alert('カレンダー取得URLを入力してください');
-        return;
-      }
+    // LIFF IDとカレンダー取得URLは必須から除外（オプショナル）
+    // SECURITY_SECRETはWeb予約フォームの場合のみ必須
+    if (newFormData.form_type === 'web') {
       if (!newFormData.security_secret.trim()) {
         alert('SECURITY_SECRETを入力してください');
         return;
