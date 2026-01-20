@@ -1136,6 +1136,51 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
         </button>
       </div>
 
+      {/* カテゴリーまたいでの複数選択設定 */}
+      <div className={`mb-6 p-4 ${themeClasses.card} rounded-lg`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className={`text-sm font-medium ${themeClasses.text.primary}`}>
+              🔀 カテゴリーまたいでの複数選択
+            </h3>
+            <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
+              複数のカテゴリーからメニューを選択できるようにします
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.config?.menu_structure?.allow_cross_category_selection || false}
+              onChange={(e) => {
+                const updatedForm = {
+                  ...form,
+                  config: {
+                    ...form.config,
+                    menu_structure: {
+                      ...form.config?.menu_structure,
+                      allow_cross_category_selection: e.target.checked
+                    }
+                  }
+                };
+                onUpdate(updatedForm);
+              }}
+              className="sr-only"
+            />
+            <div className={`w-11 h-6 rounded-full transition-colors ${
+              form.config?.menu_structure?.allow_cross_category_selection 
+                ? 'bg-cyan-600' 
+                : 'bg-gray-600'
+            }`}>
+              <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
+                form.config?.menu_structure?.allow_cross_category_selection 
+                  ? 'translate-x-5' 
+                  : 'translate-x-0'
+              } mt-0.5 ml-0.5`}></div>
+            </div>
+          </label>
+        </div>
+      </div>
+
       {/* 性別選択機能設定 */}
       <div className={`${themeClasses.card} rounded-lg p-4`}>
         <div className="flex items-center justify-between">
@@ -1428,6 +1473,295 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             </div>
           </div>
         )}
+      </div>
+
+      {/* カスタムフィールド設定 */}
+      <div className={`mb-6 p-4 ${themeClasses.card} rounded-lg`}>
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h3 className={`text-sm font-medium ${themeClasses.text.primary}`}>
+              📝 カスタムフィールド
+            </h3>
+            <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
+              メニュー選択の後に表示される追加の質問項目を設定できます
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              const currentFields = form.config?.custom_fields || [];
+              const newField = {
+                id: Math.random().toString(36).substr(2, 9),
+                type: 'text' as const,
+                title: '新しい項目',
+                required: false
+              };
+              const updatedForm = {
+                ...form,
+                config: {
+                  ...form.config,
+                  custom_fields: [...currentFields, newField]
+                }
+              };
+              onUpdate(updatedForm);
+            }}
+            className={`px-3 py-1.5 rounded-md text-sm flex items-center space-x-1 ${themeClasses.button.primary}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>項目を追加</span>
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {(form.config?.custom_fields || []).map((field, index) => (
+            <div key={field.id} className={`${themeClasses.card} border rounded-lg p-3`}>
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex items-center space-x-2 flex-1">
+                  <span className={`${themeClasses.badge} px-2 py-1 rounded text-xs`}>
+                    {index + 1}
+                  </span>
+                  <input
+                    type="text"
+                    value={field.title}
+                    onChange={(e) => {
+                      const currentFields = [...(form.config?.custom_fields || [])];
+                      currentFields[index] = { ...currentFields[index], title: e.target.value };
+                      const updatedForm = {
+                        ...form,
+                        config: {
+                          ...form.config,
+                          custom_fields: currentFields
+                        }
+                      };
+                      onUpdate(updatedForm);
+                    }}
+                    className={`flex-1 ${themeClasses.input} text-sm`}
+                    placeholder="項目名"
+                  />
+                </div>
+                <div className="flex items-center space-x-1 ml-2">
+                  <button
+                    onClick={() => {
+                      if (index > 0) {
+                        const currentFields = [...(form.config?.custom_fields || [])];
+                        [currentFields[index - 1], currentFields[index]] = [currentFields[index], currentFields[index - 1]];
+                        const updatedForm = {
+                          ...form,
+                          config: {
+                            ...form.config,
+                            custom_fields: currentFields
+                          }
+                        };
+                        onUpdate(updatedForm);
+                      }
+                    }}
+                    disabled={index === 0}
+                    className={`${themeClasses.text.secondary} hover:${themeClasses.text.primary} disabled:opacity-30`}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (index < (form.config?.custom_fields || []).length - 1) {
+                        const currentFields = [...(form.config?.custom_fields || [])];
+                        [currentFields[index], currentFields[index + 1]] = [currentFields[index + 1], currentFields[index]];
+                        const updatedForm = {
+                          ...form,
+                          config: {
+                            ...form.config,
+                            custom_fields: currentFields
+                          }
+                        };
+                        onUpdate(updatedForm);
+                      }
+                    }}
+                    disabled={index === (form.config?.custom_fields || []).length - 1}
+                    className={`${themeClasses.text.secondary} hover:${themeClasses.text.primary} disabled:opacity-30`}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm('この項目を削除してもよろしいですか？')) {
+                        const currentFields = [...(form.config?.custom_fields || [])];
+                        currentFields.splice(index, 1);
+                        const updatedForm = {
+                          ...form,
+                          config: {
+                            ...form.config,
+                            custom_fields: currentFields
+                          }
+                        };
+                        onUpdate(updatedForm);
+                      }
+                    }}
+                    className={`text-red-400 hover:text-red-300 ml-2`}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>回答タイプ</label>
+                  <select
+                    value={field.type}
+                    onChange={(e) => {
+                      const currentFields = [...(form.config?.custom_fields || [])];
+                      const newType = e.target.value as 'text' | 'textarea' | 'radio' | 'checkbox';
+                      currentFields[index] = {
+                        ...currentFields[index],
+                        type: newType,
+                        options: (newType === 'radio' || newType === 'checkbox') ? (currentFields[index].options || [{ label: '', value: '' }]) : undefined
+                      };
+                      const updatedForm = {
+                        ...form,
+                        config: {
+                          ...form.config,
+                          custom_fields: currentFields
+                        }
+                      };
+                      onUpdate(updatedForm);
+                    }}
+                    className={`w-full ${themeClasses.input} text-sm`}
+                  >
+                    <option value="text">テキスト入力 (1行)</option>
+                    <option value="textarea">テキスト入力 (複数行)</option>
+                    <option value="radio">単一選択 (ボタン)</option>
+                    <option value="checkbox">複数選択 (ボタン)</option>
+                  </select>
+                </div>
+                <div className="flex items-center mt-6">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={field.required}
+                      onChange={(e) => {
+                        const currentFields = [...(form.config?.custom_fields || [])];
+                        currentFields[index] = { ...currentFields[index], required: e.target.checked };
+                        const updatedForm = {
+                          ...form,
+                          config: {
+                            ...form.config,
+                            custom_fields: currentFields
+                          }
+                        };
+                        onUpdate(updatedForm);
+                      }}
+                      className={`h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${
+                        theme === 'light' 
+                          ? 'bg-gray-100 border-gray-300' 
+                          : 'bg-gray-700 border-gray-600'
+                      }`}
+                    />
+                    <span className={`text-sm ${themeClasses.text.secondary}`}>必須項目にする</span>
+                  </label>
+                </div>
+              </div>
+
+              {(field.type === 'text' || field.type === 'textarea') && (
+                <div className="mb-3">
+                  <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>プレースホルダー（任意）</label>
+                  <input
+                    type="text"
+                    value={field.placeholder || ''}
+                    onChange={(e) => {
+                      const currentFields = [...(form.config?.custom_fields || [])];
+                      currentFields[index] = { ...currentFields[index], placeholder: e.target.value };
+                      const updatedForm = {
+                        ...form,
+                        config: {
+                          ...form.config,
+                          custom_fields: currentFields
+                        }
+                      };
+                      onUpdate(updatedForm);
+                    }}
+                    className={`w-full ${themeClasses.input} text-sm`}
+                    placeholder="例: ご希望の時間帯を入力してください"
+                  />
+                </div>
+              )}
+
+              {(field.type === 'radio' || field.type === 'checkbox') && (
+                <div className={`${theme === 'light' ? 'bg-gray-50' : 'bg-gray-900/50'} p-3 rounded border ${theme === 'light' ? 'border-gray-200' : 'border-gray-700'}`}>
+                  <label className={`block text-xs ${themeClasses.text.secondary} mb-2`}>選択肢</label>
+                  <div className="space-y-2">
+                    {(field.options || []).map((opt, optIndex) => (
+                      <div key={optIndex} className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={opt.label}
+                          onChange={(e) => {
+                            const currentFields = [...(form.config?.custom_fields || [])];
+                            const newOptions = [...(currentFields[index].options || [])];
+                            newOptions[optIndex] = { label: e.target.value, value: e.target.value };
+                            currentFields[index] = { ...currentFields[index], options: newOptions };
+                            const updatedForm = {
+                              ...form,
+                              config: {
+                                ...form.config,
+                                custom_fields: currentFields
+                              }
+                            };
+                            onUpdate(updatedForm);
+                          }}
+                          className={`flex-1 ${themeClasses.input} text-sm`}
+                          placeholder={`選択肢 ${optIndex + 1}`}
+                        />
+                        <button
+                          onClick={() => {
+                            const currentFields = [...(form.config?.custom_fields || [])];
+                            const newOptions = [...(currentFields[index].options || [])];
+                            newOptions.splice(optIndex, 1);
+                            currentFields[index] = { ...currentFields[index], options: newOptions };
+                            const updatedForm = {
+                              ...form,
+                              config: {
+                                ...form.config,
+                                custom_fields: currentFields
+                              }
+                            };
+                            onUpdate(updatedForm);
+                          }}
+                          className={`text-red-400 hover:text-red-300`}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => {
+                        const currentFields = [...(form.config?.custom_fields || [])];
+                        const newOptions = [...(currentFields[index].options || [])];
+                        newOptions.push({ label: '', value: '' });
+                        currentFields[index] = { ...currentFields[index], options: newOptions };
+                        const updatedForm = {
+                          ...form,
+                          config: {
+                            ...form.config,
+                            custom_fields: currentFields
+                          }
+                        };
+                        onUpdate(updatedForm);
+                      }}
+                      className={`text-sm ${theme === 'light' ? 'text-cyan-600 hover:text-cyan-700' : 'text-cyan-400 hover:text-cyan-300'}`}
+                    >
+                      + 選択肢を追加
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          {(!form.config?.custom_fields || form.config.custom_fields.length === 0) && (
+            <p className={`text-sm ${themeClasses.text.tertiary} text-center py-4`}>
+              カスタムフィールドがありません。「項目を追加」ボタンで追加してください。
+            </p>
+          )}
+        </div>
       </div>
 
       {menus.length === 0 ? (

@@ -142,20 +142,9 @@ export async function POST(
     }
 
     // フォームタイプに応じたバリデーション
-    if (form_type === 'line') {
-      if (!liff_id || !liff_id.trim()) {
-        return NextResponse.json(
-          { error: 'LINE予約フォームの場合、LIFF IDは必須です' },
-          { status: 400 }
-        );
-      }
-    } else if (form_type === 'web') {
-      if (!calendar_url || !calendar_url.trim()) {
-        return NextResponse.json(
-          { error: 'Web予約フォームの場合、カレンダー取得URLは必須です' },
-          { status: 400 }
-        );
-      }
+    // LIFF IDとカレンダー取得URLは必須から除外（オプショナル）
+    // SECURITY_SECRETはWeb予約フォームの場合のみ必須
+    if (form_type === 'web') {
       if (!security_secret || !security_secret.trim()) {
         return NextResponse.json(
           { error: 'Web予約フォームの場合、SECURITY_SECRETは必須です' },

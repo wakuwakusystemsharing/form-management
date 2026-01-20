@@ -332,8 +332,8 @@ export default function AdminPage() {
   };
 
   const handleCreateStore = async () => {
-    if (!newStore.name || !newStore.owner_name || !newStore.owner_email) {
-      alert('必須項目を入力してください（店舗名、オーナー名、メールアドレス）');
+    if (!newStore.name || !newStore.owner_name) {
+      alert('必須項目を入力してください（店舗名、オーナー名）');
       return;
     }
 
@@ -512,7 +512,7 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    メールアドレス <span className="text-red-400">*</span>
+                    メールアドレス
                   </label>
                   <input
                     type="email"

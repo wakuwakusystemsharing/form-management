@@ -88,6 +88,7 @@ export interface FormConfig {
     options: Array<{
       value: string;            // "first", "repeat"
       label: string;            // "初回", "2回目以降"
+      duration?: number;        // 所要時間（分単位）
     }>;
   };
   
@@ -100,10 +101,23 @@ export interface FormConfig {
     }>;
   };
   
+  custom_fields?: Array<{
+    id: string;
+    type: 'text' | 'textarea' | 'radio' | 'checkbox';
+    title: string;
+    required: boolean;
+    options?: Array<{
+      label: string;
+      value: string;
+    }>;
+    placeholder?: string;
+  }>;
+  
   menu_structure: {
     structure_type: 'category_based' | 'simple';
     categories: MenuCategory[];
     menus?: MenuItem[];  // Simple structure用のメニューリスト
+    allow_cross_category_selection?: boolean;  // カテゴリーまたいでの複数選択を許可
     display_options: {
       show_price: boolean;
       show_duration: boolean;

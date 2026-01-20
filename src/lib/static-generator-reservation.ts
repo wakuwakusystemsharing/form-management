@@ -144,6 +144,7 @@ export class StaticReservationGenerator {
             ${safeConfig.visit_count_selection.enabled ? this.renderVisitCountField(safeConfig) : ''}
             ${safeConfig.coupon_selection.enabled ? this.renderCouponField(safeConfig) : ''}
             ${this.renderMenuField(safeConfig)}
+            ${safeConfig.custom_fields && safeConfig.custom_fields.length > 0 ? this.renderCustomFields(safeConfig) : ''}
             ${this.renderDateTimeFields(safeConfig)}
             ${this.renderMessageField()}
             ${this.renderSummary()}
@@ -169,6 +170,7 @@ class BookingForm {
             selectedMenu: null,
             selectedSubmenu: null,
             selectedOptions: {}, // メニューIDをキーとしたオプションID配列
+            customFields: {}, // カスタムフィールドの値
             selectedDate: '',
             selectedTime: '',
             message: ''
@@ -269,6 +271,59 @@ class BookingForm {
                 btn.classList.add('selected');
                 this.state.coupon = btn.dataset.value;
                 this.updateSummary();
+            });
+        });
+        
+        // カスタムフィールド
+        // テキスト入力
+        document.querySelectorAll('input[type="text"].input, textarea.input').forEach(input => {
+            if (input.id && input.id.startsWith('custom-field-')) {
+                input.addEventListener('input', (e) => {
+                    const fieldId = input.id.replace('custom-field-', '');
+                    this.state.customFields[fieldId] = (e.target as HTMLInputElement).value;
+                });
+            }
+        });
+        
+        // ラジオボタン
+        document.querySelectorAll('.custom-field-radio-button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const fieldId = btn.dataset.fieldId;
+                const value = btn.dataset.value;
+                // 同じフィールドの他のボタンの選択を解除
+                document.querySelectorAll(\`.custom-field-radio-button[data-field-id="\${fieldId}"]\`).forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                this.state.customFields[fieldId] = value;
+                const hiddenInput = document.getElementById(\`custom-field-\${fieldId}\`);
+                if (hiddenInput) {
+                    (hiddenInput as HTMLInputElement).value = value;
+                }
+            });
+        });
+        
+        // チェックボックス
+        document.querySelectorAll('.custom-field-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => {
+                const fieldId = checkbox.dataset.fieldId;
+                const value = checkbox.dataset.value;
+                const checked = (e.target as HTMLInputElement).checked;
+                
+                if (!this.state.customFields[fieldId]) {
+                    this.state.customFields[fieldId] = [];
+                }
+                const currentValues = this.state.customFields[fieldId] as string[];
+                
+                if (checked) {
+                    if (!currentValues.includes(value)) {
+                        currentValues.push(value);
+                    }
+                } else {
+                    const index = currentValues.indexOf(value);
+                    if (index > -1) {
+                        currentValues.splice(index, 1);
+                    }
+                }
+                this.state.customFields[fieldId] = currentValues;
             });
         });
         
@@ -705,9 +760,20 @@ class BookingForm {
             });
         }
         
+        // 訪問回数の時間を取得
+        let visitDuration = 0;
+        if (this.state.visitCount && this.config.visit_count_selection?.enabled) {
+            const visitOption = this.config.visit_count_selection.options.find(
+                opt => opt.value === this.state.visitCount
+            );
+            if (visitOption?.duration) {
+                visitDuration = visitOption.duration;
+            }
+        }
+        
         // 終了時間を計算
         const slotEnd = new Date(slotStart);
-        slotEnd.setMinutes(slotStart.getMinutes() + menuDuration + optionsDuration);
+        slotEnd.setMinutes(slotStart.getMinutes() + menuDuration + optionsDuration + visitDuration);
         
         // 終了時間が翌日になる場合は不可
         let isNextDay = slotEnd.getDate() !== slotStart.getDate();
@@ -1192,6 +1258,19 @@ class BookingForm {
             return;
         }
         
+        // カスタムフィールドのバリデーション
+        if (this.config.custom_fields) {
+            for (const field of this.config.custom_fields) {
+                if (field.required) {
+                    const value = this.state.customFields[field.id];
+                    if (!value || (Array.isArray(value) && value.length === 0) || (typeof value === 'string' && !value.trim())) {
+                        alert(\`\${field.title}を入力してください\`);
+                        return;
+                    }
+                }
+            }
+        }
+        
         // フォームタイプを判定
         const isLineForm = this.config.form_type === 'line' || 
             (this.config.basic_info.liff_id && this.config.basic_info.liff_id.length >= 10);
@@ -1258,6 +1337,10 @@ class BookingForm {
             }
             if (this.config.coupon_selection?.enabled && this.state.coupon) {
                 customerInfo.coupon = this.state.coupon;
+            }
+            // カスタムフィールドの値を追加
+            if (this.config.custom_fields && Object.keys(this.state.customFields).length > 0) {
+                customerInfo.custom_fields = this.state.customFields;
             }
             
             // 日付をYYYY-MM-DD形式に変換
@@ -1696,6 +1779,73 @@ if (document.readyState === 'loading') {
                     ).join('') || ''}
                 </div>
             </div>`;
+  }
+
+  private renderCustomFields(config: FormConfig): string {
+    if (!config.custom_fields || config.custom_fields.length === 0) {
+      return '';
+    }
+    
+    return config.custom_fields.map(field => {
+      let fieldHTML = '';
+      const fieldId = `custom-field-${field.id}`;
+      
+      if (field.type === 'text') {
+        fieldHTML = `
+            <div class="form-group">
+                <label for="${fieldId}" class="label">
+                    ${field.title} ${field.required ? '<span class="required">*</span>' : ''}
+                </label>
+                <input type="text" id="${fieldId}" class="input" placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''}>
+            </div>
+        `;
+      } else if (field.type === 'textarea') {
+        fieldHTML = `
+            <div class="form-group">
+                <label for="${fieldId}" class="label">
+                    ${field.title} ${field.required ? '<span class="required">*</span>' : ''}
+                </label>
+                <textarea id="${fieldId}" class="input" rows="4" placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''}></textarea>
+            </div>
+        `;
+      } else if (field.type === 'radio' && field.options) {
+        const optionsHTML = field.options.map((opt, idx) => `
+            <button type="button" class="custom-field-radio-button" data-value="${opt.value}" data-field-id="${field.id}">
+                ${opt.label}
+            </button>
+        `).join('');
+        fieldHTML = `
+            <div class="form-group">
+                <label class="label">
+                    ${field.title} ${field.required ? '<span class="required">*</span>' : ''}
+                </label>
+                <div class="flex space-x-4">
+                    ${optionsHTML}
+                </div>
+                <input type="hidden" id="${fieldId}" ${field.required ? 'required' : ''}>
+            </div>
+        `;
+      } else if (field.type === 'checkbox' && field.options) {
+        const optionsHTML = field.options.map((opt, idx) => `
+            <label class="flex items-center space-x-2 p-2 border border-gray-300 rounded-md hover:bg-gray-50 cursor-pointer">
+                <input type="checkbox" class="custom-field-checkbox" data-value="${opt.value}" data-field-id="${field.id}">
+                <span class="text-sm text-gray-700">${opt.label}</span>
+            </label>
+        `).join('');
+        fieldHTML = `
+            <div class="form-group">
+                <label class="label">
+                    ${field.title} ${field.required ? '<span class="required">*</span>' : ''}
+                </label>
+                <div class="space-y-2">
+                    ${optionsHTML}
+                </div>
+            </div>
+        `;
+      }
+      
+      return fieldHTML;
+    }).join('');
   }
 
   private renderCouponField(config: FormConfig): string {

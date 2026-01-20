@@ -29,6 +29,7 @@ export default function CustomerFormPage() {
     selectedMenus: {} as Record<string, string[]>,
     selectedSubMenus: {} as Record<string, string>, // メニューIDに対する選択されたサブメニューID
     selectedMenuOptions: {} as Record<string, string[]>, // メニューIDに対するオプションID配列
+    customFields: {} as Record<string, string | string[]>, // カスタムフィールドの値
     selectedDate: '',
     selectedTime: ''
   });
@@ -311,36 +312,46 @@ export default function CustomerFormPage() {
   };
 
   const handleMenuSelection = (categoryId: string, menuId: string, isMultiple: boolean) => {
-    if (isMultiple) {
-      const currentSelection = formData.selectedMenus[categoryId] || [];
-      const newSelection = currentSelection.includes(menuId)
-        ? currentSelection.filter(id => id !== menuId)
-        : [...currentSelection, menuId];
-      
-      // メニューが選択解除された場合、そのメニューのオプションとサブメニューもクリア
-      if (currentSelection.includes(menuId) && !newSelection.includes(menuId)) {
-        setFormData(prev => ({
-          ...prev,
-          selectedMenus: {
-            ...prev.selectedMenus,
-            [categoryId]: newSelection
-          },
-          selectedSubMenus: {
-            ...prev.selectedSubMenus,
-            [menuId]: ''
-          },
-          selectedMenuOptions: {
-            ...prev.selectedMenuOptions,
-            [menuId]: []
-          }
-        }));
-      } else {
-        // メニューが新しく選択された場合、デフォルトオプションを自動選択
-        if (!currentSelection.includes(menuId) && newSelection.includes(menuId) && form) {
-          const menu = form.config.menu_structure.categories
+    const allowCrossCategory = form?.config?.menu_structure?.allow_cross_category_selection || false;
+    
+    if (allowCrossCategory || isMultiple) {
+      // カテゴリーまたいでの複数選択が有効な場合、全カテゴリー横断で管理
+      if (allowCrossCategory) {
+        // 全カテゴリーから選択されたメニューIDを収集
+        const allSelectedMenuIds = Object.values(formData.selectedMenus).flat();
+        const isSelected = allSelectedMenuIds.includes(menuId);
+        
+        if (isSelected) {
+          // 選択解除
+          const newSelectedMenus: Record<string, string[]> = {};
+          Object.entries(formData.selectedMenus).forEach(([catId, menuIds]) => {
+            const filtered = menuIds.filter(id => id !== menuId);
+            if (filtered.length > 0) {
+              newSelectedMenus[catId] = filtered;
+            }
+          });
+          
+          setFormData(prev => ({
+            ...prev,
+            selectedMenus: newSelectedMenus,
+            selectedSubMenus: {
+              ...prev.selectedSubMenus,
+              [menuId]: ''
+            },
+            selectedMenuOptions: {
+              ...prev.selectedMenuOptions,
+              [menuId]: []
+            }
+          }));
+        } else {
+          // 選択追加
+          const currentSelection = formData.selectedMenus[categoryId] || [];
+          const newSelection = [...currentSelection, menuId];
+          
+          // デフォルトオプションを自動選択
+          const menu = form?.config.menu_structure.categories
             .find(cat => cat.id === categoryId)?.menus
             .find(m => m.id === menuId);
-          
           const defaultOptions = menu?.options?.filter(opt => opt.is_default).map(opt => opt.id) || [];
           
           setFormData(prev => {
@@ -355,23 +366,73 @@ export default function CustomerFormPage() {
                 [menuId]: defaultOptions
               }
             };
-            // 選択内容をローカルストレージに保存
             setTimeout(() => saveSelectionToStorage(), 100);
             return newFormData;
           });
+        }
+      } else {
+        // 従来の動作（カテゴリー単位の複数選択）
+        const currentSelection = formData.selectedMenus[categoryId] || [];
+        const newSelection = currentSelection.includes(menuId)
+          ? currentSelection.filter(id => id !== menuId)
+          : [...currentSelection, menuId];
+        
+        // メニューが選択解除された場合、そのメニューのオプションとサブメニューもクリア
+        if (currentSelection.includes(menuId) && !newSelection.includes(menuId)) {
+          setFormData(prev => ({
+            ...prev,
+            selectedMenus: {
+              ...prev.selectedMenus,
+              [categoryId]: newSelection
+            },
+            selectedSubMenus: {
+              ...prev.selectedSubMenus,
+              [menuId]: ''
+            },
+            selectedMenuOptions: {
+              ...prev.selectedMenuOptions,
+              [menuId]: []
+            }
+          }));
         } else {
-          setFormData(prev => {
-            const newFormData = {
-              ...prev,
-              selectedMenus: {
-                ...prev.selectedMenus,
-                [categoryId]: newSelection
-              }
-            };
-            // 選択内容をローカルストレージに保存
-            setTimeout(() => saveSelectionToStorage(), 100);
-            return newFormData;
-          });
+          // メニューが新しく選択された場合、デフォルトオプションを自動選択
+          if (!currentSelection.includes(menuId) && newSelection.includes(menuId) && form) {
+            const menu = form.config.menu_structure.categories
+              .find(cat => cat.id === categoryId)?.menus
+              .find(m => m.id === menuId);
+            
+            const defaultOptions = menu?.options?.filter(opt => opt.is_default).map(opt => opt.id) || [];
+            
+            setFormData(prev => {
+              const newFormData = {
+                ...prev,
+                selectedMenus: {
+                  ...prev.selectedMenus,
+                  [categoryId]: newSelection
+                },
+                selectedMenuOptions: {
+                  ...prev.selectedMenuOptions,
+                  [menuId]: defaultOptions
+                }
+              };
+              // 選択内容をローカルストレージに保存
+              setTimeout(() => saveSelectionToStorage(), 100);
+              return newFormData;
+            });
+          } else {
+            setFormData(prev => {
+              const newFormData = {
+                ...prev,
+                selectedMenus: {
+                  ...prev.selectedMenus,
+                  [categoryId]: newSelection
+                }
+              };
+              // 選択内容をローカルストレージに保存
+              setTimeout(() => saveSelectionToStorage(), 100);
+              return newFormData;
+            });
+          }
         }
       }
     } else {
@@ -492,6 +553,19 @@ export default function CustomerFormPage() {
     if (form.config.gender_selection.enabled && form.config.gender_selection.required && !formData.gender) {
       alert('性別を選択してください');
       return;
+    }
+
+    // カスタムフィールドのバリデーション
+    if (form.config.custom_fields) {
+      for (const field of form.config.custom_fields) {
+        if (field.required) {
+          const value = formData.customFields[field.id];
+          if (!value || (Array.isArray(value) && value.length === 0) || (typeof value === 'string' && !value.trim())) {
+            alert(`${field.title}を入力してください`);
+            return;
+          }
+        }
+      }
     }
 
     // 確認画面を表示
@@ -807,6 +881,7 @@ export default function CustomerFormPage() {
                   selectedMenus: {},
                   selectedSubMenus: {},
                   selectedMenuOptions: {},
+                  customFields: {},
                   selectedDate: '',
                   selectedTime: ''
                 });
@@ -1401,7 +1476,11 @@ export default function CustomerFormPage() {
                             /* 通常のメニュー表示 - ボタンクリック形式 */
                             <button
                               type="button"
-                              onClick={() => handleMenuSelection(category.id, menu.id, category.selection_mode === 'multiple')}
+                              onClick={() => {
+                                const allowCrossCategory = form.config?.menu_structure?.allow_cross_category_selection || false;
+                                const isMultiple = allowCrossCategory || category.selection_mode === 'multiple';
+                                handleMenuSelection(category.id, menu.id, isMultiple);
+                              }}
                               className={`w-full flex items-center justify-between p-3 border-2 rounded-md font-medium transition-all duration-200 ${
                                 formData.selectedMenus[category.id]?.includes(menu.id)
                                   ? 'border-green-500 bg-green-50 text-green-700'
@@ -1476,6 +1555,105 @@ export default function CustomerFormPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* カスタムフィールド - メニュー選択の後、日時選択の前 */}
+          {form.config?.custom_fields && form.config.custom_fields.length > 0 && (
+            <div className="mb-6">
+              {form.config.custom_fields.map((field) => (
+                <div key={field.id} className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {field.title} {field.required && <span className="text-red-500">*</span>}
+                  </label>
+                  {field.type === 'text' && (
+                    <input
+                      type="text"
+                      value={(formData.customFields[field.id] as string) || ''}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        customFields: {
+                          ...prev.customFields,
+                          [field.id]: e.target.value
+                        }
+                      }))}
+                      placeholder={field.placeholder || ''}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required={field.required}
+                    />
+                  )}
+                  {field.type === 'textarea' && (
+                    <textarea
+                      value={(formData.customFields[field.id] as string) || ''}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        customFields: {
+                          ...prev.customFields,
+                          [field.id]: e.target.value
+                        }
+                      }))}
+                      placeholder={field.placeholder || ''}
+                      rows={4}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required={field.required}
+                    />
+                  )}
+                  {field.type === 'radio' && field.options && (
+                    <div className="flex space-x-4">
+                      {field.options.map((option, optionIndex) => (
+                        <button
+                          key={option.value || `option-${optionIndex}`}
+                          type="button"
+                          onClick={() => setFormData(prev => ({
+                            ...prev,
+                            customFields: {
+                              ...prev.customFields,
+                              [field.id]: option.value
+                            }
+                          }))}
+                          className={`flex-1 py-3 px-4 border-2 rounded-md font-medium transition-all duration-200 ${
+                            (formData.customFields[field.id] as string) === option.value
+                              ? 'border-blue-500 bg-blue-50 text-blue-700'
+                              : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {field.type === 'checkbox' && field.options && (
+                    <div className="space-y-2">
+                      {field.options.map((option, optionIndex) => (
+                        <label
+                          key={option.value || `option-${optionIndex}`}
+                          className="flex items-center space-x-2 p-2 border border-gray-300 rounded-md hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={((formData.customFields[field.id] as string[]) || []).includes(option.value)}
+                            onChange={(e) => {
+                              const currentValues = (formData.customFields[field.id] as string[]) || [];
+                              const newValues = e.target.checked
+                                ? [...currentValues, option.value]
+                                : currentValues.filter(v => v !== option.value);
+                              setFormData(prev => ({
+                                ...prev,
+                                customFields: {
+                                  ...prev.customFields,
+                                  [field.id]: newValues
+                                }
+                              }));
+                            }}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span className="text-sm text-gray-700">{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
 

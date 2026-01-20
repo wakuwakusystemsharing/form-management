@@ -135,9 +135,11 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           { value: 'not_use', label: '利用しない' }
         ]
       },
+      custom_fields: existingConfig?.custom_fields || rawForm.config?.custom_fields || [],
       menu_structure: {
         structure_type: existingConfig?.menu_structure?.structure_type || rawForm.config?.menu_structure?.structure_type || 'category_based',
         categories: existingConfig?.menu_structure?.categories || rawForm.config?.menu_structure?.categories || rawForm.menu_structure?.categories || [],
+        allow_cross_category_selection: existingConfig?.menu_structure?.allow_cross_category_selection ?? rawForm.config?.menu_structure?.allow_cross_category_selection ?? false,
         display_options: {
           show_price: existingConfig?.menu_structure?.display_options?.show_price ?? true,
           show_duration: existingConfig?.menu_structure?.display_options?.show_duration ?? true,
