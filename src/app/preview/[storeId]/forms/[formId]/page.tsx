@@ -425,19 +425,20 @@ export default function PreviewFormPage() {
               setTimeout(() => saveSelectionToStorage(), 100);
               return newFormData;
             });
-        } else {
-          setFormData(prev => {
-            const newFormData = {
-              ...prev,
-              selectedMenus: {
-                ...prev.selectedMenus,
-                [categoryId]: newSelection
-              }
-            };
-            // 選択内容をローカルストレージに保存
-            setTimeout(() => saveSelectionToStorage(), 100);
-            return newFormData;
-          });
+          } else {
+            setFormData(prev => {
+              const newFormData = {
+                ...prev,
+                selectedMenus: {
+                  ...prev.selectedMenus,
+                  [categoryId]: newSelection
+                }
+              };
+              // 選択内容をローカルストレージに保存
+              setTimeout(() => saveSelectionToStorage(), 100);
+              return newFormData;
+            });
+          }
         }
       }
     } else {
