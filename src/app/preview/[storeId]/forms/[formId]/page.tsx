@@ -1006,7 +1006,15 @@ export default function PreviewFormPage() {
                               const selectedOptions = formData.selectedMenuOptions[menuId] || [];
                               const optionTexts = selectedOptions.map(optionId => {
                                 const option = menu.options?.find(o => o.id === optionId);
-                                return option ? option.name : '';
+                                if (!option) return '';
+                                let text = option.name;
+                                if (option.price && option.price > 0) {
+                                  text += ` (+¥${option.price.toLocaleString()})`;
+                                }
+                                if (option.duration && option.duration > 0) {
+                                  text += ` (+${option.duration}分)`;
+                                }
+                                return text;
                               }).filter(Boolean);
                               
                               return (
@@ -1055,7 +1063,15 @@ export default function PreviewFormPage() {
                         const selectedOptions = formData.selectedMenuOptions[menuId] || [];
                         const optionTexts = selectedOptions.map(optionId => {
                           const option = parentMenu.options?.find(o => o.id === optionId);
-                          return option ? option.name : '';
+                          if (!option) return '';
+                          let text = option.name;
+                          if (option.price && option.price > 0) {
+                            text += ` (+¥${option.price.toLocaleString()})`;
+                          }
+                          if (option.duration && option.duration > 0) {
+                            text += ` (+${option.duration}分)`;
+                          }
+                          return text;
                         }).filter(Boolean);
                         
                         return (
@@ -1682,6 +1698,105 @@ export default function PreviewFormPage() {
             </div>
           )}
 
+          {/* カスタムフィールド - クーポンの下、メニューの上 */}
+          {form.config?.custom_fields && form.config.custom_fields.length > 0 && (
+            <div className="mb-6">
+              {form.config.custom_fields.map((field) => (
+                <div key={field.id} className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {field.title} {field.required && <span className="text-red-500">*</span>}
+                  </label>
+                  {field.type === 'text' && (
+                    <input
+                      type="text"
+                      value={(formData.customFields[field.id] as string) || ''}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        customFields: {
+                          ...prev.customFields,
+                          [field.id]: e.target.value
+                        }
+                      }))}
+                      placeholder={field.placeholder || ''}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required={field.required}
+                    />
+                  )}
+                  {field.type === 'textarea' && (
+                    <textarea
+                      value={(formData.customFields[field.id] as string) || ''}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        customFields: {
+                          ...prev.customFields,
+                          [field.id]: e.target.value
+                        }
+                      }))}
+                      placeholder={field.placeholder || ''}
+                      rows={4}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required={field.required}
+                    />
+                  )}
+                  {field.type === 'radio' && field.options && (
+                    <div className="flex space-x-4">
+                      {field.options.map((option, optionIndex) => (
+                        <button
+                          key={option.value || `option-${optionIndex}`}
+                          type="button"
+                          onClick={() => setFormData(prev => ({
+                            ...prev,
+                            customFields: {
+                              ...prev.customFields,
+                              [field.id]: option.value
+                            }
+                          }))}
+                          className={`flex-1 py-3 px-4 border-2 rounded-md font-medium transition-all duration-200 ${
+                            (formData.customFields[field.id] as string) === option.value
+                              ? 'border-blue-500 bg-blue-50 text-blue-700'
+                              : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {field.type === 'checkbox' && field.options && (
+                    <div className="space-y-2">
+                      {field.options.map((option, optionIndex) => (
+                        <label
+                          key={option.value || `option-${optionIndex}`}
+                          className="flex items-center space-x-2 p-2 border border-gray-300 rounded-md hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={((formData.customFields[field.id] as string[]) || []).includes(option.value)}
+                            onChange={(e) => {
+                              const currentValues = (formData.customFields[field.id] as string[]) || [];
+                              const newValues = e.target.checked
+                                ? [...currentValues, option.value]
+                                : currentValues.filter(v => v !== option.value);
+                              setFormData(prev => ({
+                                ...prev,
+                                customFields: {
+                                  ...prev.customFields,
+                                  [field.id]: newValues
+                                }
+                              }));
+                            }}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <span className="text-sm text-gray-700">{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* メニュー選択 */}
           {form.config?.menu_structure?.categories && form.config.menu_structure.categories.length > 0 && (
             <div className="mb-6">
@@ -1960,105 +2075,6 @@ export default function PreviewFormPage() {
             </div>
           )}
 
-          {/* カスタムフィールド - メニュー選択の後、日時選択の前 */}
-          {form.config?.custom_fields && form.config.custom_fields.length > 0 && (
-            <div className="mb-6">
-              {form.config.custom_fields.map((field) => (
-                <div key={field.id} className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {field.title} {field.required && <span className="text-red-500">*</span>}
-                  </label>
-                  {field.type === 'text' && (
-                    <input
-                      type="text"
-                      value={(formData.customFields[field.id] as string) || ''}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        customFields: {
-                          ...prev.customFields,
-                          [field.id]: e.target.value
-                        }
-                      }))}
-                      placeholder={field.placeholder || ''}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required={field.required}
-                    />
-                  )}
-                  {field.type === 'textarea' && (
-                    <textarea
-                      value={(formData.customFields[field.id] as string) || ''}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        customFields: {
-                          ...prev.customFields,
-                          [field.id]: e.target.value
-                        }
-                      }))}
-                      placeholder={field.placeholder || ''}
-                      rows={4}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      required={field.required}
-                    />
-                  )}
-                  {field.type === 'radio' && field.options && (
-                    <div className="flex space-x-4">
-                      {field.options.map((option, optionIndex) => (
-                        <button
-                          key={option.value || `option-${optionIndex}`}
-                          type="button"
-                          onClick={() => setFormData(prev => ({
-                            ...prev,
-                            customFields: {
-                              ...prev.customFields,
-                              [field.id]: option.value
-                            }
-                          }))}
-                          className={`flex-1 py-3 px-4 border-2 rounded-md font-medium transition-all duration-200 ${
-                            (formData.customFields[field.id] as string) === option.value
-                              ? 'border-blue-500 bg-blue-50 text-blue-700'
-                              : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {field.type === 'checkbox' && field.options && (
-                    <div className="space-y-2">
-                      {field.options.map((option, optionIndex) => (
-                        <label
-                          key={option.value || `option-${optionIndex}`}
-                          className="flex items-center space-x-2 p-2 border border-gray-300 rounded-md hover:bg-gray-50 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={((formData.customFields[field.id] as string[]) || []).includes(option.value)}
-                            onChange={(e) => {
-                              const currentValues = (formData.customFields[field.id] as string[]) || [];
-                              const newValues = e.target.checked
-                                ? [...currentValues, option.value]
-                                : currentValues.filter(v => v !== option.value);
-                              setFormData(prev => ({
-                                ...prev,
-                                customFields: {
-                                  ...prev.customFields,
-                                  [field.id]: newValues
-                                }
-                              }));
-                            }}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <span className="text-sm text-gray-700">{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
           {/* 希望日時 - メニューが選択された場合のみ表示 */}
           {isMenuSelected() && (
             <>
@@ -2188,7 +2204,11 @@ export default function PreviewFormPage() {
                                   if (menu) {
                                     let duration = 0;
                                     if (formData.selectedSubMenus[menuId]) {
-                                      const submenu = menu.sub_menu_items?.find(s => s.id === formData.selectedSubMenus[menuId]);
+                                      // サブメニューを探す（IDがない場合はインデックスを使用）
+                                      const submenu = menu.sub_menu_items?.find((s, idx) => {
+                                        const smId = s.id || `submenu-${idx}`;
+                                        return smId === formData.selectedSubMenus[menuId];
+                                      });
                                       duration = submenu?.duration || menu.duration || 0;
                                     } else {
                                       duration = menu.duration || 0;
@@ -2789,7 +2809,15 @@ export default function PreviewFormPage() {
                               const selectedOptions = formData.selectedMenuOptions[menuId] || [];
                               const optionTexts = selectedOptions.map(optionId => {
                                 const option = menu.options?.find(o => o.id === optionId);
-                                return option ? option.name : '';
+                                if (!option) return '';
+                                let text = option.name;
+                                if (option.price && option.price > 0) {
+                                  text += ` (+¥${option.price.toLocaleString()})`;
+                                }
+                                if (option.duration && option.duration > 0) {
+                                  text += ` (+${option.duration}分)`;
+                                }
+                                return text;
                               }).filter(Boolean);
                               
                               return (
@@ -2843,7 +2871,15 @@ export default function PreviewFormPage() {
                         const selectedOptions = formData.selectedMenuOptions[menuId] || [];
                         const optionTexts = selectedOptions.map(optionId => {
                           const option = parentMenu.options?.find(o => o.id === optionId);
-                          return option ? option.name : '';
+                          if (!option) return '';
+                          let text = option.name;
+                          if (option.price && option.price > 0) {
+                            text += ` (+¥${option.price.toLocaleString()})`;
+                          }
+                          if (option.duration && option.duration > 0) {
+                            text += ` (+${option.duration}分)`;
+                          }
+                          return text;
                         }).filter(Boolean);
                         
                         return (
@@ -2869,6 +2905,81 @@ export default function PreviewFormPage() {
                     <div className="ml-4 mt-1 text-sm">{formData.message}</div>
                   </div>
                 )}
+                
+                {(() => {
+                  // 合計金額と合計時間を計算
+                  let totalPrice = 0;
+                  let totalDuration = 0;
+                  
+                  // 通常メニューの合計
+                  Object.entries(formData.selectedMenus).forEach(([categoryId, menuIds]) => {
+                    const category = form.config.menu_structure.categories.find(c => c.id === categoryId);
+                    menuIds.forEach(menuId => {
+                      const menu = category?.menus.find(m => m.id === menuId);
+                      if (menu) {
+                        totalPrice += menu.price || 0;
+                        totalDuration += menu.duration || 0;
+                        // オプションの合計
+                        const selectedOptions = formData.selectedMenuOptions[menuId] || [];
+                        selectedOptions.forEach(optionId => {
+                          const option = menu.options?.find(o => o.id === optionId);
+                          if (option) {
+                            totalPrice += option.price || 0;
+                            totalDuration += option.duration || 0;
+                          }
+                        });
+                      }
+                    });
+                  });
+                  
+                  // サブメニューの合計
+                  Object.entries(formData.selectedSubMenus).forEach(([menuId, subMenuId]) => {
+                    if (!subMenuId) return;
+                    for (const category of form.config.menu_structure.categories) {
+                      const foundMenu = category.menus.find(m => m.id === menuId);
+                      if (foundMenu && foundMenu.sub_menu_items) {
+                        const subMenu = foundMenu.sub_menu_items.find((sm, idx) => {
+                          const smId = sm.id || `submenu-${idx}`;
+                          return smId === subMenuId;
+                        });
+                        if (subMenu) {
+                          totalPrice += subMenu.price || 0;
+                          totalDuration += subMenu.duration || 0;
+                          // オプションの合計
+                          const selectedOptions = formData.selectedMenuOptions[menuId] || [];
+                          selectedOptions.forEach(optionId => {
+                            const option = foundMenu.options?.find(o => o.id === optionId);
+                            if (option) {
+                              totalPrice += option.price || 0;
+                              totalDuration += option.duration || 0;
+                            }
+                          });
+                        }
+                        break;
+                      }
+                    }
+                  });
+                  
+                  if (totalPrice > 0 || totalDuration > 0) {
+                    return (
+                      <div className="mt-4 pt-4 border-t border-gray-300">
+                        {totalPrice > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 font-semibold">合計金額:</span>
+                            <span className="font-bold text-lg">¥{totalPrice.toLocaleString()}</span>
+                          </div>
+                        )}
+                        {totalDuration > 0 && (
+                          <div className="flex justify-between mt-2">
+                            <span className="text-gray-600 font-semibold">合計時間:</span>
+                            <span className="font-bold text-lg">{totalDuration}分</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             </div>
           )}

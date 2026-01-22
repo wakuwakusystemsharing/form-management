@@ -143,8 +143,8 @@ export class StaticReservationGenerator {
             ${safeConfig.gender_selection.enabled ? this.renderGenderField(safeConfig) : ''}
             ${safeConfig.visit_count_selection.enabled ? this.renderVisitCountField(safeConfig) : ''}
             ${safeConfig.coupon_selection.enabled ? this.renderCouponField(safeConfig) : ''}
-            ${this.renderMenuField(safeConfig)}
             ${safeConfig.custom_fields && safeConfig.custom_fields.length > 0 ? this.renderCustomFields(safeConfig) : ''}
+            ${this.renderMenuField(safeConfig)}
             ${this.renderDateTimeFields(safeConfig)}
             ${this.renderMessageField()}
             ${this.renderSummary()}
@@ -747,15 +747,15 @@ class BookingForm {
             menuDuration = this.state.selectedMenu.duration || 0;
         }
         
-        // オプション時間を合計
+        // オプション時間を合計（サブメニューが選択されている場合でも、親メニューのオプションを使用）
         let optionsDuration = 0;
         if (this.state.selectedMenu) {
             const menuId = this.state.selectedMenu.id;
             const selectedOptionIds = this.state.selectedOptions[menuId] || [];
             selectedOptionIds.forEach(optionId => {
                 const option = this.state.selectedMenu.options?.find(o => o.id === optionId);
-                if (option) {
-                    optionsDuration += option.duration || 0;
+                if (option && option.duration) {
+                    optionsDuration += option.duration;
                 }
             });
         }
@@ -1792,53 +1792,61 @@ if (document.readyState === 'loading') {
       
       if (field.type === 'text') {
         fieldHTML = `
-            <div class="form-group">
-                <label for="${fieldId}" class="label">
-                    ${field.title} ${field.required ? '<span class="required">*</span>' : ''}
-                </label>
-                <input type="text" id="${fieldId}" class="input" placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''}>
+            <div class="field mb-6">
+                <div class="mb-4">
+                    <label for="${fieldId}" class="field-label">
+                        ${field.title} ${field.required ? '<span class="required">*</span>' : ''}
+                    </label>
+                    <input type="text" id="${fieldId}" class="input custom-field-input" data-field-id="${field.id}" placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''}>
+                </div>
             </div>
         `;
       } else if (field.type === 'textarea') {
         fieldHTML = `
-            <div class="form-group">
-                <label for="${fieldId}" class="label">
-                    ${field.title} ${field.required ? '<span class="required">*</span>' : ''}
-                </label>
-                <textarea id="${fieldId}" class="input" rows="4" placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''}></textarea>
+            <div class="field mb-6">
+                <div class="mb-4">
+                    <label for="${fieldId}" class="field-label">
+                        ${field.title} ${field.required ? '<span class="required">*</span>' : ''}
+                    </label>
+                    <textarea id="${fieldId}" class="input custom-field-input" data-field-id="${field.id}" rows="4" placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''}></textarea>
+                </div>
             </div>
         `;
       } else if (field.type === 'radio' && field.options) {
         const optionsHTML = field.options.map((opt, idx) => `
-            <button type="button" class="custom-field-radio-button" data-value="${opt.value}" data-field-id="${field.id}">
+            <button type="button" class="choice-button custom-field-radio-button" data-value="${opt.value}" data-field-id="${field.id}">
                 ${opt.label}
             </button>
         `).join('');
         fieldHTML = `
-            <div class="form-group">
-                <label class="label">
-                    ${field.title} ${field.required ? '<span class="required">*</span>' : ''}
-                </label>
-                <div class="flex space-x-4">
-                    ${optionsHTML}
+            <div class="field mb-6">
+                <div class="mb-4">
+                    <label class="field-label">
+                        ${field.title} ${field.required ? '<span class="required">*</span>' : ''}
+                    </label>
+                    <div class="button-group">
+                        ${optionsHTML}
+                    </div>
+                    <input type="hidden" id="${fieldId}" class="custom-field-hidden" data-field-id="${field.id}" ${field.required ? 'required' : ''}>
                 </div>
-                <input type="hidden" id="${fieldId}" ${field.required ? 'required' : ''}>
             </div>
         `;
       } else if (field.type === 'checkbox' && field.options) {
         const optionsHTML = field.options.map((opt, idx) => `
-            <label class="flex items-center space-x-2 p-2 border border-gray-300 rounded-md hover:bg-gray-50 cursor-pointer">
+            <label class="flex items-center space-x-2 p-2 border border-gray-300 rounded-md hover:bg-gray-50 cursor-pointer custom-field-checkbox-label">
                 <input type="checkbox" class="custom-field-checkbox" data-value="${opt.value}" data-field-id="${field.id}">
                 <span class="text-sm text-gray-700">${opt.label}</span>
             </label>
         `).join('');
         fieldHTML = `
-            <div class="form-group">
-                <label class="label">
-                    ${field.title} ${field.required ? '<span class="required">*</span>' : ''}
-                </label>
-                <div class="space-y-2">
-                    ${optionsHTML}
+            <div class="field mb-6">
+                <div class="mb-4">
+                    <label class="field-label">
+                        ${field.title} ${field.required ? '<span class="required">*</span>' : ''}
+                    </label>
+                    <div class="space-y-2">
+                        ${optionsHTML}
+                    </div>
                 </div>
             </div>
         `;
@@ -2171,6 +2179,10 @@ if (document.readyState === 'loading') {
         .button-group {
             display: flex;
             gap: 1rem;
+        }
+        
+        .space-y-2 > * + * {
+            margin-top: 0.5rem;
         }
         
         .choice-button {
