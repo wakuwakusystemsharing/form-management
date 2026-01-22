@@ -782,7 +782,7 @@ export default function StoreDetailPage() {
     }
 
     // フォームタイプに応じたバリデーション
-    // LIFF IDとカレンダー取得URLは必須から除外（オプショナル）
+    // GASエンドポイント、LIFF ID、カレンダー取得URLは必須から除外（オプショナル）
     // SECURITY_SECRETはWeb予約フォームの場合のみ必須
     if (newFormData.form_type === 'web') {
       if (!newFormData.security_secret.trim()) {
@@ -791,76 +791,76 @@ export default function StoreDetailPage() {
       }
     }
 
-    if (!newFormData.gas_endpoint.trim()) {
-      alert('Google App Script エンドポイントを入力してください');
-      return;
-    }
+    // GASエンドポイントが入力されている場合のみ、URL形式をチェック
+    if (newFormData.gas_endpoint.trim()) {
+      // GASエンドポイントのバリデーション（URL形式チェック）
+      try {
+        new URL(newFormData.gas_endpoint.trim());
+      } catch {
+        alert('有効なURL形式ではありません');
+        return;
+      }
 
-    // GASエンドポイントのバリデーション（URL形式チェック）
-    try {
-      new URL(newFormData.gas_endpoint.trim());
-    } catch {
-      alert('有効なURL形式ではありません');
-      return;
-    }
-
-    // Google Apps ScriptのURLパターンチェック
-    const gasUrlPattern = /^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec/;
-    if (!gasUrlPattern.test(newFormData.gas_endpoint.trim())) {
-      alert('Google Apps ScriptのURL形式が正しくありません（例: https://script.google.com/macros/s/xxx/exec）');
-      return;
+      // Google Apps ScriptのURLパターンチェック
+      const gasUrlPattern = /^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec/;
+      if (!gasUrlPattern.test(newFormData.gas_endpoint.trim())) {
+        alert('Google Apps ScriptのURL形式が正しくありません（例: https://script.google.com/macros/s/xxx/exec）');
+        return;
+      }
     }
 
     setSubmitting(true);
     
-    // GASエンドポイントが実際に動作するかテスト（サーバーサイドプロキシ経由）
+    // GASエンドポイントが入力されている場合のみ、実際に動作するかテスト（サーバーサイドプロキシ経由）
     let testPassed = false;
-    try {
-      const testStartTime = new Date();
-      testStartTime.setHours(0, 0, 0, 0);
-      const testEndTime = new Date(testStartTime);
-      testEndTime.setDate(testStartTime.getDate() + 7);
-      testEndTime.setHours(23, 59, 59, 999);
+    if (newFormData.gas_endpoint.trim()) {
+      try {
+        const testStartTime = new Date();
+        testStartTime.setHours(0, 0, 0, 0);
+        const testEndTime = new Date(testStartTime);
+        testEndTime.setDate(testStartTime.getDate() + 7);
+        testEndTime.setHours(23, 59, 59, 999);
 
-      // サーバーサイドプロキシAPIを使用してCORSエラーを回避
-      const testApiUrl = `/api/gas/test?url=${encodeURIComponent(newFormData.gas_endpoint.trim())}&startTime=${encodeURIComponent(testStartTime.toISOString())}&endTime=${encodeURIComponent(testEndTime.toISOString())}`;
+        // サーバーサイドプロキシAPIを使用してCORSエラーを回避
+        const testApiUrl = `/api/gas/test?url=${encodeURIComponent(newFormData.gas_endpoint.trim())}&startTime=${encodeURIComponent(testStartTime.toISOString())}&endTime=${encodeURIComponent(testEndTime.toISOString())}`;
 
-      const testResponse = await fetch(testApiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+        const testResponse = await fetch(testApiUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
 
-      if (!testResponse.ok) {
-        const errorData = await testResponse.json().catch(() => ({ error: '不明なエラー' }));
-        throw new Error(errorData.error || `HTTPエラー: ${testResponse.status}`);
+        if (!testResponse.ok) {
+          const errorData = await testResponse.json().catch(() => ({ error: '不明なエラー' }));
+          throw new Error(errorData.error || `HTTPエラー: ${testResponse.status}`);
+        }
+
+        const result = await testResponse.json();
+        
+        if (!result.success) {
+          throw new Error(result.error || 'テストに失敗しました');
+        }
+
+        // テスト成功
+        testPassed = true;
+        console.log('GASエンドポイントのテスト成功:', result.data);
+      } catch (error) {
+        console.error('GASエンドポイントのテスト失敗:', error);
+        const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+        const shouldContinue = window.confirm(
+          `GASエンドポイントの接続テストに失敗しました。\n\n` +
+          `エラー: ${errorMessage}\n\n` +
+          `それでもフォームを作成しますか？\n\n` +
+          `（注意: カレンダー空き状況が取得できない可能性があります）`
+        );
+        
+        if (!shouldContinue) {
+          setSubmitting(false);
+          return;
+        }
+        // ユーザーが続行を選択した場合は、testPassed = falseのまま続行
       }
-
-      const result = await testResponse.json();
-      
-      if (!result.success) {
-        throw new Error(result.error || 'テストに失敗しました');
-      }
-
-      // テスト成功
-      testPassed = true;
-      console.log('GASエンドポイントのテスト成功:', result.data);
-    } catch (error) {
-      console.error('GASエンドポイントのテスト失敗:', error);
-      const errorMessage = error instanceof Error ? error.message : '不明なエラー';
-      const shouldContinue = window.confirm(
-        `GASエンドポイントの接続テストに失敗しました。\n\n` +
-        `エラー: ${errorMessage}\n\n` +
-        `それでもフォームを作成しますか？\n\n` +
-        `（注意: カレンダー空き状況が取得できない可能性があります）`
-      );
-      
-      if (!shouldContinue) {
-        setSubmitting(false);
-        return;
-      }
-      // ユーザーが続行を選択した場合は、testPassed = falseのまま続行
     }
 
     // フォーム作成処理
@@ -1185,7 +1185,7 @@ export default function StoreDetailPage() {
           <div className="flex items-center justify-between">
             <div>
               <button
-                onClick={() => router.back()}
+                onClick={() => router.push('/admin')}
                 className="text-blue-400 hover:text-blue-300 mb-2 transition-colors"
               >
                 ← 戻る
@@ -1606,7 +1606,7 @@ export default function StoreDetailPage() {
                 {newFormData.form_type === 'line' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1">
-                      LIFF ID <span className="text-red-400">*</span>
+                      LIFF ID
                     </label>
                     <input
                       type="text"
@@ -1620,7 +1620,7 @@ export default function StoreDetailPage() {
                 )}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Google App Script エンドポイント（予約送信用） <span className="text-red-400">*</span>
+                    Google App Script エンドポイント（予約送信用）
                   </label>
                   <input
                     type="url"
@@ -1639,7 +1639,7 @@ export default function StoreDetailPage() {
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-1">
-                        カレンダー取得URL <span className="text-red-400">*</span>
+                        カレンダー取得URL
                       </label>
                       <input
                         type="url"

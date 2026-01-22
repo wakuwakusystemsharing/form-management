@@ -127,6 +127,7 @@ export async function POST(
     const env = getAppEnvironment();
 
     // バリデーション
+    // フォーム名のみ必須
     if (!form_name || !form_name.trim()) {
       return NextResponse.json(
         { error: 'フォーム名は必須です' },
@@ -134,15 +135,7 @@ export async function POST(
       );
     }
 
-    if (!gas_endpoint || !gas_endpoint.trim()) {
-      return NextResponse.json(
-        { error: 'GASエンドポイントは必須です' },
-        { status: 400 }
-      );
-    }
-
-    // フォームタイプに応じたバリデーション
-    // LIFF IDとカレンダー取得URLは必須から除外（オプショナル）
+    // GASエンドポイント、LIFF ID、カレンダー取得URLは必須から除外（オプショナル）
     // SECURITY_SECRETはWeb予約フォームの場合のみ必須
     if (form_type === 'web') {
       if (!security_secret || !security_secret.trim()) {
