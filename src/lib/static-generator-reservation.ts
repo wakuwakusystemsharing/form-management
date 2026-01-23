@@ -328,61 +328,80 @@ class BookingForm {
         });
         
         // メニュー選択
-        document.querySelectorAll('.menu-item').forEach(item => {
+        const menuItems = document.querySelectorAll('.menu-item');
+        if (menuItems.length === 0) {
+            console.warn('[StaticForm] No menu items found');
+        }
+        menuItems.forEach(item => {
             item.addEventListener('click', async (e) => {
-                // オプションボタンからのイベント伝播を防ぐ
-                if (e.target.closest('.menu-option-item')) {
-                    return;
-                }
-                
-                const menuId = item.dataset.menuId;
-                const categoryId = item.dataset.categoryId;
-                const menu = this.findMenu(categoryId, menuId);
-                
-                // クリックされたメニューが既に選択されているかチェック
-                const wasSelected = item.classList.contains('selected') && 
-                                   this.state.selectedMenu && 
-                                   this.state.selectedMenu.id === menuId;
-                
-                // 全てのメニューの選択状態をリセット（常に実行）
-                document.querySelectorAll('.menu-item').forEach(m => {
-                    m.classList.remove('selected', 'has-submenu');
-                });
-                
-                // 全てのサブメニューコンテナを削除
-                this.hideSubmenu();
-                
-                // 全てのオプションコンテナを非表示
-                document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
-                
-                // 以前の選択をリセット
-                this.state.selectedMenu = null;
-                this.state.selectedSubmenu = null;
-                this.state.selectedOptions = {};
-                
-                // 同じメニューを再度クリックした場合は選択解除のみ（wasSelectedがtrueの場合は何もしない）
-                if (!wasSelected) {
-                    if (menu.has_submenu) {
-                        // サブメニューがある場合
-                        item.classList.add('selected', 'has-submenu');
-                        this.state.selectedMenu = menu;
-                        this.showSubmenu(categoryId, menuId);
-                    } else {
-                        // 通常メニュー
-                        item.classList.add('selected');
-                        this.state.selectedMenu = menu;
-                        
-                        // このメニューのオプションコンテナを表示
-                        const optionsContainer = document.getElementById(\`options-\${menuId}\`);
-                        if (optionsContainer) {
-                            optionsContainer.style.display = 'block';
+                try {
+                    // オプションボタンからのイベント伝播を防ぐ
+                    if (e.target.closest('.menu-option-item')) {
+                        return;
+                    }
+                    
+                    const menuId = item.dataset.menuId;
+                    const categoryId = item.dataset.categoryId;
+                    
+                    if (!menuId || !categoryId) {
+                        console.error('[StaticForm] Missing menuId or categoryId', { menuId, categoryId });
+                        return;
+                    }
+                    
+                    const menu = this.findMenu(categoryId, menuId);
+                    
+                    if (!menu) {
+                        console.error('[StaticForm] Menu not found', { categoryId, menuId });
+                        return;
+                    }
+                    
+                    // クリックされたメニューが既に選択されているかチェック
+                    const wasSelected = item.classList.contains('selected') && 
+                                       this.state.selectedMenu && 
+                                       this.state.selectedMenu.id === menuId;
+                    
+                    // 全てのメニューの選択状態をリセット（常に実行）
+                    document.querySelectorAll('.menu-item').forEach(m => {
+                        m.classList.remove('selected', 'has-submenu');
+                    });
+                    
+                    // 全てのサブメニューコンテナを削除
+                    this.hideSubmenu();
+                    
+                    // 全てのオプションコンテナを非表示
+                    document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
+                    
+                    // 以前の選択をリセット
+                    this.state.selectedMenu = null;
+                    this.state.selectedSubmenu = null;
+                    this.state.selectedOptions = {};
+                    
+                    // 同じメニューを再度クリックした場合は選択解除のみ（wasSelectedがtrueの場合は何もしない）
+                    if (!wasSelected) {
+                        if (menu.has_submenu) {
+                            // サブメニューがある場合
+                            item.classList.add('selected', 'has-submenu');
+                            this.state.selectedMenu = menu;
+                            this.showSubmenu(categoryId, menuId);
+                        } else {
+                            // 通常メニュー
+                            item.classList.add('selected');
+                            this.state.selectedMenu = menu;
+                            
+                            // このメニューのオプションコンテナを表示
+                            const optionsContainer = document.getElementById(\`options-\${menuId}\`);
+                            if (optionsContainer) {
+                                optionsContainer.style.display = 'block';
+                            }
                         }
                     }
+                    
+                    // カレンダーの表示/非表示を切り替え
+                    await this.toggleCalendarVisibility();
+                    this.updateSummary();
+                } catch (error) {
+                    console.error('[StaticForm] Error in menu selection:', error);
                 }
-                
-                // カレンダーの表示/非表示を切り替え
-                await this.toggleCalendarVisibility();
-                this.updateSummary();
             });
         });
         
@@ -1740,12 +1759,14 @@ class BookingForm {
 
 // 初期化
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            window.bookingForm = new BookingForm(FORM_CONFIG);
+        });
+    } else {
+        // DOMContentLoadedが既に発火している場合、即座に実行
         window.bookingForm = new BookingForm(FORM_CONFIG);
-    });
-} else {
-    window.bookingForm = new BookingForm(FORM_CONFIG);
-}
+    }
     </script>
 </body>
 </html>`;

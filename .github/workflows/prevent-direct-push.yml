@@ -2,7 +2,7 @@ name: Prevent Direct Push
 
 on:
   push:
-    branches: [main, staging]
+    branches: [main]
 
 jobs:
   check-push-method:
@@ -25,16 +25,11 @@ jobs:
           fi
           
           # 直接プッシュの場合はエラー
-          echo "❌ Error: 直接プッシュは許可されていません"
+          echo "❌ Error: main (Production) への直接プッシュは許可されていません"
           echo ""
           echo "main (Production) への変更:"
-          echo "  1. dev ブランチで開発"
-          echo "  2. dev → staging へのPRを作成・マージ"
-          echo "  3. staging → main へのPRを作成・マージ"
-          echo ""
-          echo "staging への変更:"
-          echo "  1. dev または feature/* ブランチで開発"
-          echo "  2. dev/feature/* → staging へのPRを作成・マージ"
+          echo "  1. staging ブランチで開発・検証"
+          echo "  2. staging → main へのPRを作成・マージ"
           echo ""
           exit 1
 

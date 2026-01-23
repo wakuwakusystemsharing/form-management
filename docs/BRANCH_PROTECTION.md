@@ -10,7 +10,7 @@
 Production (main)
   ↑ PR のみ（staging からのみ）
 Staging
-  ↑ PR のみ（dev または feature/* からのみ）
+  ↑ 直接プッシュ可能、または PR（dev または feature/* からのみ）
 Development (dev)
   ↑ 直接プッシュ可能
 ```
@@ -78,27 +78,19 @@ staging
 
 #### 保護設定
 
-✅ **Require a pull request before merging**
-- ✅ Require approvals: `1` (オプション)
-- ✅ Dismiss stale pull request approvals when new commits are pushed
+⚠️ **Require a pull request before merging**: ❌ **無効化**（直接プッシュを許可）
 
-✅ **Require status checks to pass before merging**
+✅ **Require status checks to pass before merging** (PR作成時のみ)
 - ✅ Require branches to be up to date before merging
 - Status checks:
   - `lint-and-type-check`
   - `build`
   - `validate-branch-flow` (branch-protection.yml)
 
-✅ **Require conversation resolution before merging** (オプション)
+✅ **Allow force pushes**: ❌ **無効化**（推奨）
+✅ **Allow deletions**: ❌ **無効化**（推奨）
 
-✅ **Restrict who can push to matching branches**
-- 管理者のみ許可（オプション）
-
-✅ **Do not allow bypassing the above settings**
-- 管理者も含めて全員に適用
-
-✅ **Allow force pushes**: ❌ **無効化**
-✅ **Allow deletions**: ❌ **無効化**
+> **注意**: stagingブランチは直接プッシュ可能ですが、PR経由でのマージも引き続き利用できます。
 
 ---
 
@@ -174,14 +166,13 @@ dev
 以下のブランチへの直接プッシュは**禁止**です：
 
 - `main` (Production)
-- `staging`
 
 ```bash
 # ❌ 禁止
 git push origin main
-git push origin staging
 
 # ✅ 許可
+git push origin staging
 git push origin dev
 ```
 
