@@ -225,7 +225,10 @@ class BookingForm {
             if (liff.isLoggedIn()) {
                 const profile = await liff.getProfile();
                 this.state.name = profile.displayName || '';
-                document.getElementById('customer-name').value = this.state.name;
+                const nameInput = document.getElementById('customer-name') as HTMLInputElement;
+                if (nameInput) {
+                    nameInput.value = this.state.name;
+                }
             }
         } catch (error) {
             console.warn('LIFF init failed:', error);
@@ -234,15 +237,21 @@ class BookingForm {
     
     attachEventListeners() {
         // 名前・電話番号
-        document.getElementById('customer-name').addEventListener('input', (e) => {
-            this.state.name = e.target.value;
-            this.updateSummary();
-        });
+        const nameInput = document.getElementById('customer-name');
+        if (nameInput) {
+            nameInput.addEventListener('input', (e) => {
+                this.state.name = (e.target as HTMLInputElement).value;
+                this.updateSummary();
+            });
+        }
         
-        document.getElementById('customer-phone').addEventListener('input', (e) => {
-            this.state.phone = e.target.value;
-            this.updateSummary();
-        });
+        const phoneInput = document.getElementById('customer-phone');
+        if (phoneInput) {
+            phoneInput.addEventListener('input', (e) => {
+                this.state.phone = (e.target as HTMLInputElement).value;
+                this.updateSummary();
+            });
+        }
         
         // 性別選択
         document.querySelectorAll('.gender-button').forEach(btn => {
@@ -448,9 +457,12 @@ class BookingForm {
         });
         
         // メッセージ
-        document.getElementById('customer-message').addEventListener('input', (e) => {
-            this.state.message = e.target.value;
-        });
+        const messageInput = document.getElementById('customer-message');
+        if (messageInput) {
+            messageInput.addEventListener('input', (e) => {
+                this.state.message = (e.target as HTMLTextAreaElement).value;
+            });
+        }
         
         // 前回と同じメニューで予約するボタン
         const repeatButton = document.getElementById('repeat-booking-button');
@@ -469,9 +481,12 @@ class BookingForm {
         }
         
         // 送信
-        document.getElementById('submit-button').addEventListener('click', () => {
-            this.handleSubmit();
-        });
+        const submitButton = document.getElementById('submit-button');
+        if (submitButton) {
+            submitButton.addEventListener('click', () => {
+                this.handleSubmit();
+            });
+        }
         
         // サマリー修正ボタン
         document.querySelectorAll('.summary-edit-button').forEach(btn => {
