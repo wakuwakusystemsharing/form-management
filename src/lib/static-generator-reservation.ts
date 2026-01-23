@@ -107,7 +107,7 @@ export class StaticReservationGenerator {
       };
     }
 
-    return `<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
@@ -225,7 +225,7 @@ class BookingForm {
             if (liff.isLoggedIn()) {
                 const profile = await liff.getProfile();
                 this.state.name = profile.displayName || '';
-                const nameInput = document.getElementById('customer-name') as HTMLInputElement;
+                const nameInput = document.getElementById('customer-name');
                 if (nameInput) {
                     nameInput.value = this.state.name;
                 }
@@ -240,7 +240,7 @@ class BookingForm {
         const nameInput = document.getElementById('customer-name');
         if (nameInput) {
             nameInput.addEventListener('input', (e) => {
-                this.state.name = (e.target as HTMLInputElement).value;
+                this.state.name = e.target.value;
                 this.updateSummary();
             });
         }
@@ -248,7 +248,7 @@ class BookingForm {
         const phoneInput = document.getElementById('customer-phone');
         if (phoneInput) {
             phoneInput.addEventListener('input', (e) => {
-                this.state.phone = (e.target as HTMLInputElement).value;
+                this.state.phone = e.target.value;
                 this.updateSummary();
             });
         }
@@ -289,7 +289,7 @@ class BookingForm {
             if (input.id && input.id.startsWith('custom-field-')) {
                 input.addEventListener('input', (e) => {
                     const fieldId = input.id.replace('custom-field-', '');
-                    this.state.customFields[fieldId] = (e.target as HTMLInputElement).value;
+                    this.state.customFields[fieldId] = e.target.value;
                 });
             }
         });
@@ -305,7 +305,7 @@ class BookingForm {
                 this.state.customFields[fieldId] = value;
                 const hiddenInput = document.getElementById(\`custom-field-\${fieldId}\`);
                 if (hiddenInput) {
-                    (hiddenInput as HTMLInputElement).value = value;
+                    hiddenInput.value = value;
                 }
             });
         });
@@ -315,12 +315,12 @@ class BookingForm {
             checkbox.addEventListener('change', (e) => {
                 const fieldId = checkbox.dataset.fieldId;
                 const value = checkbox.dataset.value;
-                const checked = (e.target as HTMLInputElement).checked;
+                const checked = e.target.checked;
                 
                 if (!this.state.customFields[fieldId]) {
                     this.state.customFields[fieldId] = [];
                 }
-                const currentValues = this.state.customFields[fieldId] as string[];
+                const currentValues = this.state.customFields[fieldId];
                 
                 if (checked) {
                     if (!currentValues.includes(value)) {
@@ -460,7 +460,7 @@ class BookingForm {
         const messageInput = document.getElementById('customer-message');
         if (messageInput) {
             messageInput.addEventListener('input', (e) => {
-                this.state.message = (e.target as HTMLTextAreaElement).value;
+                this.state.message = e.target.value;
             });
         }
         
@@ -1774,17 +1774,18 @@ class BookingForm {
 
 // 初期化
 if (document.readyState === 'loading') {
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            window.bookingForm = new BookingForm(FORM_CONFIG);
-        });
-    } else {
-        // DOMContentLoadedが既に発火している場合、即座に実行
+    document.addEventListener('DOMContentLoaded', () => {
         window.bookingForm = new BookingForm(FORM_CONFIG);
-    }
+    });
+} else {
+    // DOMContentLoadedが既に発火している場合、即座に実行
+    window.bookingForm = new BookingForm(FORM_CONFIG);
+}
     </script>
 </body>
 </html>`;
+    
+    return html;
   }
 
   private renderGenderField(config: FormConfig): string {
