@@ -1960,7 +1960,16 @@ export default function PreviewFormPage() {
                                 handleMenuSelection(category.id, menu.id, isMultiple);
                               }}
                               className={`w-full text-left border-2 rounded-md font-medium transition-all duration-200 overflow-hidden ${
-                                formData.selectedMenus[category.id]?.includes(menu.id)
+                                (() => {
+                                  const allowCrossCategory = form.config?.menu_structure?.allow_cross_category_selection || false;
+                                  if (allowCrossCategory) {
+                                    // カテゴリーまたいでの複数選択が有効な場合、全カテゴリーから選択されたメニューIDを収集
+                                    const allSelectedMenuIds = Object.values(formData.selectedMenus).flat();
+                                    return allSelectedMenuIds.includes(menu.id);
+                                  } else {
+                                    return formData.selectedMenus[category.id]?.includes(menu.id);
+                                  }
+                                })()
                                   ? 'border-green-500 bg-green-50'
                                   : 'border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50'
                               }`}
@@ -1980,7 +1989,15 @@ export default function PreviewFormPage() {
                                     />
                                   </div>
                                   <div className="p-3">
-                                    <div className={`font-semibold mb-1 ${formData.selectedMenus[category.id]?.includes(menu.id) ? 'text-green-700' : 'text-gray-900'}`}>
+                                    <div className={`font-semibold mb-1 ${(() => {
+                                      const allowCrossCategory = form.config?.menu_structure?.allow_cross_category_selection || false;
+                                      if (allowCrossCategory) {
+                                        const allSelectedMenuIds = Object.values(formData.selectedMenus).flat();
+                                        return allSelectedMenuIds.includes(menu.id);
+                                      } else {
+                                        return formData.selectedMenus[category.id]?.includes(menu.id);
+                                      }
+                                    })() ? 'text-green-700' : 'text-gray-900'}`}>
                                       {menu.name}
                                     </div>
                                     {menu.description && (
@@ -2000,7 +2017,15 @@ export default function PreviewFormPage() {
                                 // 画像がない場合：従来のレイアウト
                                 <div className="flex items-center justify-between p-3">
                                   <div>
-                                    <div className={`text-left ${formData.selectedMenus[category.id]?.includes(menu.id) ? 'text-green-700' : ''}`}>{menu.name}</div>
+                                    <div className={`text-left ${(() => {
+                                      const allowCrossCategory = form.config?.menu_structure?.allow_cross_category_selection || false;
+                                      if (allowCrossCategory) {
+                                        const allSelectedMenuIds = Object.values(formData.selectedMenus).flat();
+                                        return allSelectedMenuIds.includes(menu.id);
+                                      } else {
+                                        return formData.selectedMenus[category.id]?.includes(menu.id);
+                                      }
+                                    })() ? 'text-green-700' : ''}`}>{menu.name}</div>
                                     {menu.description && (
                                       <div className="text-sm opacity-70 text-left">{menu.description}</div>
                                     )}
@@ -2023,7 +2048,15 @@ export default function PreviewFormPage() {
                           
                           {/* メニューオプション（サブメニューを使わない場合のみ表示） */}
                           {!menu.has_submenu && menu.options && menu.options.length > 0 && 
-                           formData.selectedMenus[category.id]?.includes(menu.id) && (
+                           (() => {
+                             const allowCrossCategory = form.config?.menu_structure?.allow_cross_category_selection || false;
+                             if (allowCrossCategory) {
+                               const allSelectedMenuIds = Object.values(formData.selectedMenus).flat();
+                               return allSelectedMenuIds.includes(menu.id);
+                             } else {
+                               return formData.selectedMenus[category.id]?.includes(menu.id);
+                             }
+                           })() && (
                             <div className="ml-6 pl-4 border-l-2 border-green-200 space-y-2">
                               <div className="text-sm font-medium text-gray-700 mb-3">オプション</div>
                               {menu.options.map((option, optionIndex) => (

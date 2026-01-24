@@ -167,8 +167,10 @@ class BookingForm {
             gender: '',
             visitCount: '',
             coupon: '',
-            selectedMenu: null,
+            selectedMenu: null, // 後方互換性のため保持
+            selectedMenus: {}, // カテゴリーIDをキーとしたメニューID配列（複数選択対応）
             selectedSubmenu: null,
+            selectedSubMenus: {}, // メニューIDをキーとしたサブメニューID（複数選択対応）
             selectedOptions: {}, // メニューIDをキーとしたオプションID配列
             customFields: {}, // カスタムフィールドの値
             selectedDate: '',
@@ -364,43 +366,143 @@ class BookingForm {
                         return;
                     }
                     
-                    // クリックされたメニューが既に選択されているかチェック
-                    const wasSelected = item.classList.contains('selected') && 
-                                       this.state.selectedMenu && 
-                                       this.state.selectedMenu.id === menuId;
+                    // カテゴリーまたいでの複数選択が有効かチェック
+                    const allowCrossCategory = this.config.menu_structure?.allow_cross_category_selection || false;
+                    const category = this.config.menu_structure.categories.find(c => c.id === categoryId);
+                    const isMultiple = allowCrossCategory || (category?.selection_mode === 'multiple');
                     
-                    // 全てのメニューの選択状態をリセット（常に実行）
-                    document.querySelectorAll('.menu-item').forEach(m => {
-                        m.classList.remove('selected', 'has-submenu');
-                    });
-                    
-                    // 全てのサブメニューコンテナを削除
-                    this.hideSubmenu();
-                    
-                    // 全てのオプションコンテナを非表示
-                    document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
-                    
-                    // 以前の選択をリセット
-                    this.state.selectedMenu = null;
-                    this.state.selectedSubmenu = null;
-                    this.state.selectedOptions = {};
-                    
-                    // 同じメニューを再度クリックした場合は選択解除のみ（wasSelectedがtrueの場合は何もしない）
-                    if (!wasSelected) {
-                        if (menu.has_submenu) {
-                            // サブメニューがある場合
-                            item.classList.add('selected', 'has-submenu');
-                            this.state.selectedMenu = menu;
-                            this.showSubmenu(categoryId, menuId);
-                        } else {
-                            // 通常メニュー
-                            item.classList.add('selected');
-                            this.state.selectedMenu = menu;
+                    if (isMultiple) {
+                        // 複数選択モード
+                        if (allowCrossCategory) {
+                            // カテゴリーまたいでの複数選択
+                            const allSelectedMenuIds = Object.values(this.state.selectedMenus).flat();
+                            const isSelected = allSelectedMenuIds.includes(menuId);
                             
-                            // このメニューのオプションコンテナを表示
-                            const optionsContainer = document.getElementById(\`options-\${menuId}\`);
-                            if (optionsContainer) {
-                                optionsContainer.style.display = 'block';
+                            if (isSelected) {
+                                // 選択解除
+                                Object.keys(this.state.selectedMenus).forEach(catId => {
+                                    this.state.selectedMenus[catId] = (this.state.selectedMenus[catId] || []).filter(id => id !== menuId);
+                                    if (this.state.selectedMenus[catId].length === 0) {
+                                        delete this.state.selectedMenus[catId];
+                                    }
+                                });
+                                item.classList.remove('selected', 'has-submenu');
+                                this.state.selectedSubMenus[menuId] = null;
+                                this.state.selectedOptions[menuId] = [];
+                                
+                                // オプションコンテナを非表示
+                                const optionsContainer = document.getElementById(\`options-\${menuId}\`);
+                                if (optionsContainer) {
+                                    optionsContainer.style.display = 'none';
+                                }
+                                this.hideSubmenu();
+                            } else {
+                                // 選択追加
+                                if (!this.state.selectedMenus[categoryId]) {
+                                    this.state.selectedMenus[categoryId] = [];
+                                }
+                                this.state.selectedMenus[categoryId].push(menuId);
+                                
+                                if (menu.has_submenu) {
+                                    item.classList.add('selected', 'has-submenu');
+                                    this.state.selectedMenu = menu;
+                                    this.showSubmenu(categoryId, menuId);
+                                } else {
+                                    item.classList.add('selected');
+                                    this.state.selectedMenu = menu;
+                                    
+                                    // オプションコンテナを表示
+                                    const optionsContainer = document.getElementById(\`options-\${menuId}\`);
+                                    if (optionsContainer) {
+                                        optionsContainer.style.display = 'block';
+                                    }
+                                }
+                            }
+                        } else {
+                            // カテゴリー内での複数選択
+                            const categoryMenus = this.state.selectedMenus[categoryId] || [];
+                            const isSelected = categoryMenus.includes(menuId);
+                            
+                            if (isSelected) {
+                                // 選択解除
+                                this.state.selectedMenus[categoryId] = categoryMenus.filter(id => id !== menuId);
+                                if (this.state.selectedMenus[categoryId].length === 0) {
+                                    delete this.state.selectedMenus[categoryId];
+                                }
+                                item.classList.remove('selected', 'has-submenu');
+                                this.state.selectedSubMenus[menuId] = null;
+                                this.state.selectedOptions[menuId] = [];
+                                
+                                // オプションコンテナを非表示
+                                const optionsContainer = document.getElementById(\`options-\${menuId}\`);
+                                if (optionsContainer) {
+                                    optionsContainer.style.display = 'none';
+                                }
+                                this.hideSubmenu();
+                            } else {
+                                // 選択追加
+                                if (!this.state.selectedMenus[categoryId]) {
+                                    this.state.selectedMenus[categoryId] = [];
+                                }
+                                this.state.selectedMenus[categoryId].push(menuId);
+                                
+                                if (menu.has_submenu) {
+                                    item.classList.add('selected', 'has-submenu');
+                                    this.state.selectedMenu = menu;
+                                    this.showSubmenu(categoryId, menuId);
+                                } else {
+                                    item.classList.add('selected');
+                                    this.state.selectedMenu = menu;
+                                    
+                                    // オプションコンテナを表示
+                                    const optionsContainer = document.getElementById(\`options-\${menuId}\`);
+                                    if (optionsContainer) {
+                                        optionsContainer.style.display = 'block';
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // 単一選択モード（既存の動作）
+                        const wasSelected = item.classList.contains('selected') && 
+                                           this.state.selectedMenu && 
+                                           this.state.selectedMenu.id === menuId;
+                        
+                        // 全てのメニューの選択状態をリセット（常に実行）
+                        document.querySelectorAll('.menu-item').forEach(m => {
+                            m.classList.remove('selected', 'has-submenu');
+                        });
+                        
+                        // 全てのサブメニューコンテナを削除
+                        this.hideSubmenu();
+                        
+                        // 全てのオプションコンテナを非表示
+                        document.querySelectorAll('.menu-options-container').forEach(c => c.style.display = 'none');
+                        
+                        // 以前の選択をリセット
+                        this.state.selectedMenu = null;
+                        this.state.selectedMenus = {};
+                        this.state.selectedSubmenu = null;
+                        this.state.selectedSubMenus = {};
+                        this.state.selectedOptions = {};
+                        
+                        // 同じメニューを再度クリックした場合は選択解除のみ（wasSelectedがtrueの場合は何もしない）
+                        if (!wasSelected) {
+                            if (menu.has_submenu) {
+                                // サブメニューがある場合
+                                item.classList.add('selected', 'has-submenu');
+                                this.state.selectedMenu = menu;
+                                this.showSubmenu(categoryId, menuId);
+                            } else {
+                                // 通常メニュー
+                                item.classList.add('selected');
+                                this.state.selectedMenu = menu;
+                                
+                                // このメニューのオプションコンテナを表示
+                                const optionsContainer = document.getElementById(\`options-\${menuId}\`);
+                                if (optionsContainer) {
+                                    optionsContainer.style.display = 'block';
+                                }
                             }
                         }
                     }
@@ -1204,12 +1306,84 @@ class BookingForm {
             const label = this.config.coupon_selection?.options.find(o => o.value === this.state.coupon)?.label;
             items.push(\`<div class="summary-item"><span><strong>クーポン:</strong> \${label}</span><button class="summary-edit-button" data-field="coupon-field">修正</button></div>\`);
         }
-        if (this.state.selectedMenu || this.state.selectedSubmenu) {
+        // 選択されたメニューを取得（複数選択対応）
+        const hasSelectedMenus = Object.keys(this.state.selectedMenus).length > 0 || 
+                                 this.state.selectedMenu || 
+                                 this.state.selectedSubmenu ||
+                                 Object.keys(this.state.selectedSubMenus).length > 0;
+        
+        if (hasSelectedMenus) {
             let menuText = '';
             let totalPrice = 0;
             let totalDuration = 0;
             
-            if (this.state.selectedSubmenu) {
+            // 複数選択モードの場合
+            if (Object.keys(this.state.selectedMenus).length > 0) {
+                const allSelectedMenuIds = Object.values(this.state.selectedMenus).flat();
+                const menuItems = [];
+                
+                allSelectedMenuIds.forEach(menuId => {
+                    // カテゴリーからメニューを検索
+                    let foundMenu = null;
+                    let foundCategory = null;
+                    for (const category of this.config.menu_structure.categories) {
+                        const menu = category.menus.find(m => m.id === menuId);
+                        if (menu) {
+                            foundMenu = menu;
+                            foundCategory = category;
+                            break;
+                        }
+                    }
+                    
+                    if (!foundMenu) return;
+                    
+                    // サブメニューが選択されているかチェック
+                    const selectedSubMenuId = this.state.selectedSubMenus[menuId];
+                    let subMenu = null;
+                    if (selectedSubMenuId && foundMenu.sub_menu_items) {
+                        subMenu = foundMenu.sub_menu_items.find(sm => sm.id === selectedSubMenuId);
+                    }
+                    
+                    if (subMenu) {
+                        totalPrice += subMenu.price || 0;
+                        totalDuration += subMenu.duration || 0;
+                        menuItems.push(\`
+                            <div style="margin-bottom:0.5rem;">
+                                <div style="font-size:0.875rem;color:#6b7280;">\${foundMenu.name} &gt;</div>
+                                <div>\${subMenu.name}</div>
+                                <div style="font-size:0.875rem;color:#6b7280;">¥\${subMenu.price.toLocaleString()} / \${subMenu.duration}分</div>
+                            </div>
+                        \`);
+                    } else {
+                        totalPrice += foundMenu.price || 0;
+                        totalDuration += foundMenu.duration || 0;
+                        menuItems.push(\`
+                            <div style="margin-bottom:0.5rem;">
+                                <div>\${foundMenu.name}</div>
+                                \${foundMenu.price ? \`<div style="font-size:0.875rem;color:#6b7280;">¥\${foundMenu.price.toLocaleString()} / \${foundMenu.duration}分</div>\` : ''}
+                            </div>
+                        \`);
+                    }
+                    
+                    // オプションを追加
+                    if (this.state.selectedOptions[menuId] && this.state.selectedOptions[menuId].length > 0) {
+                        const selectedOptionIds = this.state.selectedOptions[menuId];
+                        const optionTexts = selectedOptionIds.map(optionId => {
+                            const option = foundMenu.options?.find(o => o.id === optionId);
+                            if (option) {
+                                totalPrice += option.price || 0;
+                                totalDuration += option.duration || 0;
+                                return \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ \${option.name}\${option.price > 0 ? \` (+¥\${option.price.toLocaleString()})\` : ''}\${option.duration > 0 ? \` (+\${option.duration}分)\` : ''}</div>\`;
+                            }
+                            return '';
+                        }).join('');
+                        menuItems[menuItems.length - 1] += optionTexts;
+                    }
+                });
+                
+                menuText = menuItems.join('');
+            } else if (this.state.selectedSubmenu) {
+                // 単一選択モード（サブメニュー）
                 totalPrice = this.state.selectedSubmenu.price || 0;
                 totalDuration = this.state.selectedSubmenu.duration || 0;
                 menuText = \`
@@ -1217,30 +1391,48 @@ class BookingForm {
                     <div>\${this.state.selectedSubmenu.name}</div>
                     <div style="font-size:0.875rem;color:#6b7280;">¥\${this.state.selectedSubmenu.price.toLocaleString()} / \${this.state.selectedSubmenu.duration}分</div>
                 \`;
+                
+                // オプションを追加
+                const menuId = this.state.selectedMenu?.id;
+                if (menuId && this.state.selectedOptions[menuId] && this.state.selectedOptions[menuId].length > 0) {
+                    const menu = this.state.selectedMenu;
+                    const selectedOptionIds = this.state.selectedOptions[menuId];
+                    const optionTexts = selectedOptionIds.map(optionId => {
+                        const option = menu.options?.find(o => o.id === optionId);
+                        if (option) {
+                            totalPrice += option.price || 0;
+                            totalDuration += option.duration || 0;
+                            return \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ \${option.name}\${option.price > 0 ? \` (+¥\${option.price.toLocaleString()})\` : ''}\${option.duration > 0 ? \` (+\${option.duration}分)\` : ''}</div>\`;
+                        }
+                        return '';
+                    }).join('');
+                    menuText += optionTexts;
+                }
             } else if (this.state.selectedMenu) {
+                // 単一選択モード（通常メニュー）
                 totalPrice = this.state.selectedMenu.price || 0;
                 totalDuration = this.state.selectedMenu.duration || 0;
                 menuText = \`
                     <div>\${this.state.selectedMenu.name}</div>
                     \${this.state.selectedMenu.price ? \`<div style="font-size:0.875rem;color:#6b7280;">¥\${this.state.selectedMenu.price.toLocaleString()} / \${this.state.selectedMenu.duration}分</div>\` : ''}
                 \`;
-            }
-            
-            // オプションを追加
-            const menuId = this.state.selectedMenu?.id;
-            if (menuId && this.state.selectedOptions[menuId] && this.state.selectedOptions[menuId].length > 0) {
-                const menu = this.state.selectedMenu;
-                const selectedOptionIds = this.state.selectedOptions[menuId];
-                const optionTexts = selectedOptionIds.map(optionId => {
-                    const option = menu.options?.find(o => o.id === optionId);
-                    if (option) {
-                        totalPrice += option.price || 0;
-                        totalDuration += option.duration || 0;
-                        return \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ \${option.name}\${option.price > 0 ? \` (+¥\${option.price.toLocaleString()})\` : ''}\${option.duration > 0 ? \` (+\${option.duration}分)\` : ''}</div>\`;
-                    }
-                    return '';
-                }).join('');
-                menuText += optionTexts;
+                
+                // オプションを追加
+                const menuId = this.state.selectedMenu?.id;
+                if (menuId && this.state.selectedOptions[menuId] && this.state.selectedOptions[menuId].length > 0) {
+                    const menu = this.state.selectedMenu;
+                    const selectedOptionIds = this.state.selectedOptions[menuId];
+                    const optionTexts = selectedOptionIds.map(optionId => {
+                        const option = menu.options?.find(o => o.id === optionId);
+                        if (option) {
+                            totalPrice += option.price || 0;
+                            totalDuration += option.duration || 0;
+                            return \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ \${option.name}\${option.price > 0 ? \` (+¥\${option.price.toLocaleString()})\` : ''}\${option.duration > 0 ? \` (+\${option.duration}分)\` : ''}</div>\`;
+                        }
+                        return '';
+                    }).join('');
+                    menuText += optionTexts;
+                }
             }
             
             items.push(\`<div class="summary-item" style="align-items:flex-start;"><div><strong>メニュー:</strong><div style="margin-top:0.25rem;">\${menuText}</div></div><button class="summary-edit-button" data-field="menu-field">修正</button></div>\`);
@@ -1742,20 +1934,26 @@ class BookingForm {
     toggleCalendarVisibility() {
         const bookingMode = this.config.calendar_settings?.booking_mode || 'calendar';
         
+        // 選択されたメニューがあるかチェック（複数選択対応）
+        const hasSelectedMenu = this.state.selectedMenu || 
+                               Object.keys(this.state.selectedMenus).length > 0 ||
+                               this.state.selectedSubmenu ||
+                               Object.keys(this.state.selectedSubMenus).length > 0;
+        
         if (bookingMode === 'multiple_dates') {
             // 第三希望日時モード
             const fields = ['datetime-field-1', 'datetime-field-2', 'datetime-field-3'];
             fields.forEach(fieldId => {
                 const field = document.getElementById(fieldId);
                 if (field) {
-                    field.style.display = (this.state.selectedMenu || this.state.selectedSubmenu) ? 'block' : 'none';
+                    field.style.display = hasSelectedMenu ? 'block' : 'none';
                 }
             });
         } else {
             // カレンダーモード（既存ロジック）
             const datetimeField = document.getElementById('datetime-field');
             if (datetimeField) {
-                if (this.state.selectedMenu || this.state.selectedSubmenu) {
+                if (hasSelectedMenu) {
                     datetimeField.style.display = 'block';
                     // 空き状況を取得してからカレンダーをレンダリング
                     this.fetchAvailability(this.state.currentWeekStart).then(() => {
@@ -1870,9 +2068,9 @@ if (document.readyState === 'loading') {
         `;
       } else if (field.type === 'checkbox' && field.options) {
         const optionsHTML = field.options.map((opt, idx) => `
-            <label class="flex items-center space-x-2 p-2 border border-gray-300 rounded-md hover:bg-gray-50 cursor-pointer custom-field-checkbox-label">
-                <input type="checkbox" class="custom-field-checkbox" data-value="${opt.value}" data-field-id="${field.id}">
-                <span class="text-sm text-gray-700">${opt.label}</span>
+            <label class="custom-field-checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.15s;">
+                <input type="checkbox" class="custom-field-checkbox" data-value="${opt.value}" data-field-id="${field.id}" style="width: 1rem; height: 1rem; cursor: pointer;">
+                <span style="font-size: 0.875rem; color: #374151;">${this.escapeHtml(opt.label)}</span>
             </label>
         `).join('');
         fieldHTML = `
@@ -2220,6 +2418,10 @@ if (document.readyState === 'loading') {
         
         .space-y-2 > * + * {
             margin-top: 0.5rem;
+        }
+        
+        .custom-field-checkbox-label:hover {
+            background-color: #f9fafb;
         }
         
         .choice-button {
