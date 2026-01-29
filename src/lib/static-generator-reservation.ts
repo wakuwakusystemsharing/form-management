@@ -17,95 +17,13 @@ export class StaticReservationGenerator {
     // config は immutable に扱うため、深くコピーして修正
     const safeConfig: FormConfig = JSON.parse(JSON.stringify(config));
 
-    // 必須フィールドの初期化
-    if (!safeConfig.basic_info) {
-      safeConfig.basic_info = {
-        form_name: 'フォーム',
-        store_name: '',
-        liff_id: undefined,
-        theme_color: '#3B82F6'
-      };
-    }
-    
+    // config の後方互換性/必須フィールドを正規化
+    this.normalizeConfig(safeConfig);
+
     // フォームタイプを判定（後方互換性のため）
     const formType = safeConfig.form_type || 
       (safeConfig.basic_info.liff_id ? 'line' : 'web');
     const isLineForm = formType === 'line';
-    
-    if (!safeConfig.gender_selection) {
-      safeConfig.gender_selection = {
-        enabled: false,
-        required: false,
-        options: [
-          { value: 'male', label: '男性' },
-          { value: 'female', label: '女性' }
-        ]
-      };
-    } else {
-      safeConfig.gender_selection.enabled = safeConfig.gender_selection.enabled ?? false;
-    }
-    
-    if (!safeConfig.visit_count_selection) {
-      safeConfig.visit_count_selection = {
-        enabled: false,
-        required: false,
-        options: [
-          { value: 'first', label: '初回' },
-          { value: 'repeat', label: '2回目以降' }
-        ]
-      };
-    } else {
-      safeConfig.visit_count_selection.enabled = safeConfig.visit_count_selection.enabled ?? false;
-    }
-    
-    if (!safeConfig.coupon_selection) {
-      safeConfig.coupon_selection = {
-        enabled: false,
-        options: [
-          { value: 'use', label: '利用する' },
-          { value: 'not_use', label: '利用しない' }
-        ]
-      };
-    } else {
-      safeConfig.coupon_selection.enabled = safeConfig.coupon_selection.enabled ?? false;
-    }
-    
-    if (!safeConfig.menu_structure) {
-      safeConfig.menu_structure = {
-        structure_type: 'category_based',
-        categories: [],
-        display_options: {
-          show_price: true,
-          show_duration: true,
-          show_description: true,
-          show_treatment_info: false
-        }
-      };
-    }
-    
-    if (!safeConfig.calendar_settings) {
-      safeConfig.calendar_settings = {
-        business_hours: {
-          monday: { open: '09:00', close: '18:00', closed: false },
-          tuesday: { open: '09:00', close: '18:00', closed: false },
-          wednesday: { open: '09:00', close: '18:00', closed: false },
-          thursday: { open: '09:00', close: '18:00', closed: false },
-          friday: { open: '09:00', close: '18:00', closed: false },
-          saturday: { open: '09:00', close: '18:00', closed: false },
-          sunday: { open: '09:00', close: '18:00', closed: true }
-        },
-        advance_booking_days: 30
-      };
-    }
-    
-    if (!safeConfig.ui_settings) {
-      safeConfig.ui_settings = {
-        theme_color: '#3B82F6',
-        button_style: 'rounded',
-        show_repeat_booking: false,
-        show_side_nav: true
-      };
-    }
 
     const html = `<!DOCTYPE html>
 <html lang="ja">
@@ -183,6 +101,58 @@ class BookingForm {
         this.businessDays = []; // 営業日の情報
         this.init();
     }
+
+    // ---------------------------
+    // Helpers (duplication cleanup)
+    // ---------------------------
+    clearSelectedButtons(selector) {
+        document.querySelectorAll(selector).forEach(b => b.classList.remove('selected'));
+    }
+
+    bindSingleSelectButtons({ selector, stateKey }) {
+        document.querySelectorAll(selector).forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.clearSelectedButtons(selector);
+                btn.classList.add('selected');
+                this.state[stateKey] = btn.dataset.value;
+                this.updateSummary();
+            });
+        });
+    }
+
+    applySingleSelectValue({ selector, stateKey, value }) {
+        if (!value) return;
+        this.state[stateKey] = value;
+        const btn = document.querySelector(selector + '[data-value="' + value + '"]');
+        if (btn) {
+            this.clearSelectedButtons(selector);
+            btn.classList.add('selected');
+        }
+    }
+
+    getSelectedOptionObjects(menu, optionIds) {
+        if (!menu || !menu.options || !optionIds || optionIds.length === 0) return [];
+        return optionIds.map(optionId => menu.options.find(o => o.id === optionId)).filter(Boolean);
+    }
+
+    formatOptionSummaryLine(option) {
+        const price = Number(option?.price || 0);
+        const duration = Number(option?.duration || 0);
+        return '<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ '
+            + option.name
+            + (price > 0 ? ' (+¥' + price.toLocaleString() + ')' : '')
+            + (duration > 0 ? ' (+' + duration + '分)' : '')
+            + '</div>';
+    }
+
+    fetchAndRenderCalendar() {
+        // 空き状況を取得してからカレンダーをレンダリング（失敗時も営業時間のみで判定して描画）
+        return this.fetchAvailability(this.state.currentWeekStart).then(() => {
+            this.renderCalendar();
+        }).catch(() => {
+            this.renderCalendar();
+        });
+    }
     
     async init() {
         try {
@@ -255,35 +225,10 @@ class BookingForm {
             });
         }
         
-        // 性別選択
-        document.querySelectorAll('.gender-button').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.gender-button').forEach(b => b.classList.remove('selected'));
-                btn.classList.add('selected');
-                this.state.gender = btn.dataset.value;
-                this.updateSummary();
-            });
-        });
-        
-        // 来店回数選択
-        document.querySelectorAll('.visit-count-button').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.visit-count-button').forEach(b => b.classList.remove('selected'));
-                btn.classList.add('selected');
-                this.state.visitCount = btn.dataset.value;
-                this.updateSummary();
-            });
-        });
-        
-        // クーポン選択
-        document.querySelectorAll('.coupon-button').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.coupon-button').forEach(b => b.classList.remove('selected'));
-                btn.classList.add('selected');
-                this.state.coupon = btn.dataset.value;
-                this.updateSummary();
-            });
-        });
+        // 性別/来店回数/クーポン（単一選択ボタン）
+        this.bindSingleSelectButtons({ selector: '.gender-button', stateKey: 'gender' });
+        this.bindSingleSelectButtons({ selector: '.visit-count-button', stateKey: 'visitCount' });
+        this.bindSingleSelectButtons({ selector: '.coupon-button', stateKey: 'coupon' });
         
         // カスタムフィールド
         // テキスト入力
@@ -1093,13 +1038,7 @@ class BookingForm {
             newWeekStartLocal: newWeekStart.toLocaleString('ja-JP')
         });
         this.state.currentWeekStart = newWeekStart;
-        // 空き状況を取得してからカレンダーをレンダリング
-        this.fetchAvailability(this.state.currentWeekStart).then(() => {
-        this.renderCalendar();
-        }).catch(() => {
-            // エラー時もカレンダーをレンダリング（営業時間のみで判定）
-            this.renderCalendar();
-        });
+        this.fetchAndRenderCalendar();
     }
     
     // 月移動
@@ -1116,13 +1055,7 @@ class BookingForm {
             nextWeekStart: this.state.currentWeekStart.toISOString(),
             nextWeekStartLocal: this.state.currentWeekStart.toLocaleString('ja-JP')
         });
-        // 空き状況を取得してからカレンダーをレンダリング
-        this.fetchAvailability(this.state.currentWeekStart).then(() => {
-        this.renderCalendar();
-        }).catch(() => {
-            // エラー時もカレンダーをレンダリング（営業時間のみで判定）
-            this.renderCalendar();
-        });
+        this.fetchAndRenderCalendar();
     }
     
     // 前回と同じメニューで予約する
@@ -1225,32 +1158,9 @@ class BookingForm {
                         }
                         
                         // 性別、来店回数、クーポンを復元
-                        if (selectionData.gender) {
-                            this.state.gender = selectionData.gender;
-                            const genderBtn = document.querySelector(\`.gender-button[data-value="\${selectionData.gender}"]\`);
-                            if (genderBtn) {
-                                document.querySelectorAll('.gender-button').forEach(btn => btn.classList.remove('selected'));
-                                genderBtn.classList.add('selected');
-                            }
-                        }
-                        
-                        if (selectionData.visitCount) {
-                            this.state.visitCount = selectionData.visitCount;
-                            const visitBtn = document.querySelector(\`.visit-count-button[data-value="\${selectionData.visitCount}"]\`);
-                            if (visitBtn) {
-                                document.querySelectorAll('.visit-count-button').forEach(btn => btn.classList.remove('selected'));
-                                visitBtn.classList.add('selected');
-                            }
-                        }
-                        
-                        if (selectionData.couponUsage) {
-                            this.state.coupon = selectionData.couponUsage;
-                            const couponBtn = document.querySelector(\`.coupon-button[data-value="\${selectionData.couponUsage}"]\`);
-                            if (couponBtn) {
-                                document.querySelectorAll('.coupon-button').forEach(btn => btn.classList.remove('selected'));
-                                couponBtn.classList.add('selected');
-                            }
-                        }
+                        this.applySingleSelectValue({ selector: '.gender-button', stateKey: 'gender', value: selectionData.gender });
+                        this.applySingleSelectValue({ selector: '.visit-count-button', stateKey: 'visitCount', value: selectionData.visitCount });
+                        this.applySingleSelectValue({ selector: '.coupon-button', stateKey: 'coupon', value: selectionData.couponUsage });
                         
                         this.updateSummary();
                         this.toggleCalendarVisibility();
@@ -1262,9 +1172,7 @@ class BookingForm {
                         calendarField.style.display = 'block';
                         calendarField.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                 if (this.state.currentWeekStart) {
-                                    this.fetchAvailability(this.state.currentWeekStart).then(() => {
-                        this.renderCalendar();
-                                    });
+                                    this.fetchAndRenderCalendar();
                                 }
                             }
                         }, 200);
@@ -1368,15 +1276,12 @@ class BookingForm {
                     // オプションを追加
                     if (this.state.selectedOptions[menuId] && this.state.selectedOptions[menuId].length > 0) {
                         const selectedOptionIds = this.state.selectedOptions[menuId];
-                        const optionTexts = selectedOptionIds.map(optionId => {
-                            const option = foundMenu.options?.find(o => o.id === optionId);
-                            if (option) {
-                                totalPrice += option.price || 0;
-                                totalDuration += option.duration || 0;
-                                return \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ \${option.name}\${option.price > 0 ? \` (+¥\${option.price.toLocaleString()})\` : ''}\${option.duration > 0 ? \` (+\${option.duration}分)\` : ''}</div>\`;
-                            }
-                            return '';
-                        }).join('');
+                        const optionObjs = this.getSelectedOptionObjects(foundMenu, selectedOptionIds);
+                        optionObjs.forEach(option => {
+                            totalPrice += option.price || 0;
+                            totalDuration += option.duration || 0;
+                        });
+                        const optionTexts = optionObjs.map(option => this.formatOptionSummaryLine(option)).join('');
                         menuItems[menuItems.length - 1] += optionTexts;
                     }
                 });
@@ -1397,15 +1302,12 @@ class BookingForm {
                 if (menuId && this.state.selectedOptions[menuId] && this.state.selectedOptions[menuId].length > 0) {
                     const menu = this.state.selectedMenu;
                     const selectedOptionIds = this.state.selectedOptions[menuId];
-                    const optionTexts = selectedOptionIds.map(optionId => {
-                        const option = menu.options?.find(o => o.id === optionId);
-                        if (option) {
-                            totalPrice += option.price || 0;
-                            totalDuration += option.duration || 0;
-                            return \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ \${option.name}\${option.price > 0 ? \` (+¥\${option.price.toLocaleString()})\` : ''}\${option.duration > 0 ? \` (+\${option.duration}分)\` : ''}</div>\`;
-                        }
-                        return '';
-                    }).join('');
+                    const optionObjs = this.getSelectedOptionObjects(menu, selectedOptionIds);
+                    optionObjs.forEach(option => {
+                        totalPrice += option.price || 0;
+                        totalDuration += option.duration || 0;
+                    });
+                    const optionTexts = optionObjs.map(option => this.formatOptionSummaryLine(option)).join('');
                     menuText += optionTexts;
                 }
             } else if (this.state.selectedMenu) {
@@ -1422,15 +1324,12 @@ class BookingForm {
                 if (menuId && this.state.selectedOptions[menuId] && this.state.selectedOptions[menuId].length > 0) {
                     const menu = this.state.selectedMenu;
                     const selectedOptionIds = this.state.selectedOptions[menuId];
-                    const optionTexts = selectedOptionIds.map(optionId => {
-                        const option = menu.options?.find(o => o.id === optionId);
-                        if (option) {
-                            totalPrice += option.price || 0;
-                            totalDuration += option.duration || 0;
-                            return \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">+ \${option.name}\${option.price > 0 ? \` (+¥\${option.price.toLocaleString()})\` : ''}\${option.duration > 0 ? \` (+\${option.duration}分)\` : ''}</div>\`;
-                        }
-                        return '';
-                    }).join('');
+                    const optionObjs = this.getSelectedOptionObjects(menu, selectedOptionIds);
+                    optionObjs.forEach(option => {
+                        totalPrice += option.price || 0;
+                        totalDuration += option.duration || 0;
+                    });
+                    const optionTexts = optionObjs.map(option => this.formatOptionSummaryLine(option)).join('');
                     menuText += optionTexts;
                 }
             }
@@ -1540,15 +1439,13 @@ class BookingForm {
                 if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
                     const menu = this.state.selectedMenu;
                     const selectedOptionIds = this.state.selectedOptions[menuId];
-                    selectedOptionIds.forEach(optionId => {
-                        const option = menu.options?.find(o => o.id === optionId);
-                        if (option) {
-                            selectedOptions.push({
-                                option_id: option.id,
-                                option_name: option.name || '',
-                                menu_id: menuId
-                            });
-                        }
+                    const optionObjs = this.getSelectedOptionObjects(menu, selectedOptionIds);
+                    optionObjs.forEach(option => {
+                        selectedOptions.push({
+                            option_id: option.id,
+                            option_name: option.name || '',
+                            menu_id: menuId
+                        });
                     });
                 }
             }
@@ -1642,10 +1539,9 @@ class BookingForm {
                 if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
                     const menu = this.state.selectedMenu;
                     const selectedOptionIds = this.state.selectedOptions[menuId];
-                    const optionNames = selectedOptionIds.map(optionId => {
-                        const option = menu.options?.find(o => o.id === optionId);
-                        return option?.name || '';
-                    }).filter(Boolean);
+                    const optionNames = this.getSelectedOptionObjects(menu, selectedOptionIds)
+                        .map(option => option?.name || '')
+                        .filter(Boolean);
                     if (optionNames.length > 0) {
                         menuText += (menuText ? ', ' : '') + optionNames.join(', ');
                     }
@@ -1665,8 +1561,8 @@ class BookingForm {
                 if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
                     const menu = this.state.selectedMenu;
                     const selectedOptionIds = this.state.selectedOptions[menuId];
-                    selectedOptionIds.forEach(optionId => {
-                        const option = menu.options?.find(o => o.id === optionId);
+                    const optionObjs = this.getSelectedOptionObjects(menu, selectedOptionIds);
+                    optionObjs.forEach(option => {
                         if (option && option.duration) {
                             durationMin += option.duration;
                         }
@@ -1986,34 +1882,138 @@ if (document.readyState === 'loading') {
     return html;
   }
 
-  private renderGenderField(config: FormConfig): string {
-    if (!config.gender_selection) return '';
-    const genderSel = config.gender_selection;
+  private normalizeConfig(safeConfig: FormConfig): void {
+    // 必須フィールドの初期化
+    if (!safeConfig.basic_info) {
+      safeConfig.basic_info = {
+        form_name: 'フォーム',
+        store_name: '',
+        liff_id: undefined,
+        theme_color: '#3B82F6'
+      };
+    }
+
+    if (!safeConfig.gender_selection) {
+      safeConfig.gender_selection = {
+        enabled: false,
+        required: false,
+        options: [
+          { value: 'male', label: '男性' },
+          { value: 'female', label: '女性' }
+        ]
+      };
+    } else {
+      safeConfig.gender_selection.enabled = safeConfig.gender_selection.enabled ?? false;
+    }
+
+    if (!safeConfig.visit_count_selection) {
+      safeConfig.visit_count_selection = {
+        enabled: false,
+        required: false,
+        options: [
+          { value: 'first', label: '初回' },
+          { value: 'repeat', label: '2回目以降' }
+        ]
+      };
+    } else {
+      safeConfig.visit_count_selection.enabled = safeConfig.visit_count_selection.enabled ?? false;
+    }
+
+    if (!safeConfig.coupon_selection) {
+      safeConfig.coupon_selection = {
+        enabled: false,
+        options: [
+          { value: 'use', label: '利用する' },
+          { value: 'not_use', label: '利用しない' }
+        ]
+      };
+    } else {
+      safeConfig.coupon_selection.enabled = safeConfig.coupon_selection.enabled ?? false;
+    }
+
+    if (!safeConfig.menu_structure) {
+      safeConfig.menu_structure = {
+        structure_type: 'category_based',
+        categories: [],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
+      };
+    }
+
+    if (!safeConfig.calendar_settings) {
+      safeConfig.calendar_settings = {
+        business_hours: {
+          monday: { open: '09:00', close: '18:00', closed: false },
+          tuesday: { open: '09:00', close: '18:00', closed: false },
+          wednesday: { open: '09:00', close: '18:00', closed: false },
+          thursday: { open: '09:00', close: '18:00', closed: false },
+          friday: { open: '09:00', close: '18:00', closed: false },
+          saturday: { open: '09:00', close: '18:00', closed: false },
+          sunday: { open: '09:00', close: '18:00', closed: true }
+        },
+        advance_booking_days: 30
+      };
+    }
+
+    if (!safeConfig.ui_settings) {
+      safeConfig.ui_settings = {
+        theme_color: '#3B82F6',
+        button_style: 'rounded',
+        show_repeat_booking: false,
+        show_side_nav: true
+      };
+    }
+  }
+
+  private renderChoiceField(params: {
+    comment: string;
+    fieldId: string;
+    labelHtml: string;
+    requiredMarkHtml?: string;
+    options?: Array<{ value: string; label: string }>;
+    buttonClass: string;
+  }): string {
+    const requiredMark = params.requiredMarkHtml ?? '';
     return `
-            <!-- 性別選択 -->
-            <div class="field" id="gender-field">
-                <label class="field-label">性別 ${genderSel.required ? '<span class="required">*</span>' : ''}</label>
+            <!-- ${params.comment} -->
+            <div class="field" id="${params.fieldId}">
+                <label class="field-label">${params.labelHtml}${requiredMark}</label>
                 <div class="button-group">
-                    ${genderSel.options?.map(opt => 
-                        `<button type="button" class="choice-button gender-button" data-value="${opt.value}">${opt.label}</button>`
+                    ${params.options?.map(opt => 
+                        `<button type="button" class="choice-button ${params.buttonClass}" data-value="${opt.value}">${opt.label}</button>`
                     ).join('') || ''}
                 </div>
             </div>`;
   }
 
+  private renderGenderField(config: FormConfig): string {
+    if (!config.gender_selection) return '';
+    const genderSel = config.gender_selection;
+    return this.renderChoiceField({
+      comment: '性別選択',
+      fieldId: 'gender-field',
+      labelHtml: '性別',
+      requiredMarkHtml: ` ${genderSel.required ? '<span class="required">*</span>' : ''}`,
+      options: genderSel.options,
+      buttonClass: 'gender-button'
+    });
+  }
+
   private renderVisitCountField(config: FormConfig): string {
     if (!config.visit_count_selection) return '';
     const visitSel = config.visit_count_selection;
-    return `
-            <!-- 来店回数選択 -->
-            <div class="field" id="visit-count-field">
-                <label class="field-label">ご来店回数 ${visitSel.required ? '<span class="required">*</span>' : ''}</label>
-                <div class="button-group">
-                    ${visitSel.options?.map(opt =>
-                        `<button type="button" class="choice-button visit-count-button" data-value="${opt.value}">${opt.label}</button>`
-                    ).join('') || ''}
-                </div>
-            </div>`;
+    return this.renderChoiceField({
+      comment: '来店回数選択',
+      fieldId: 'visit-count-field',
+      labelHtml: 'ご来店回数',
+      requiredMarkHtml: ` ${visitSel.required ? '<span class="required">*</span>' : ''}`,
+      options: visitSel.options,
+      buttonClass: 'visit-count-button'
+    });
   }
 
   private renderCustomFields(config: FormConfig): string {
@@ -2095,16 +2095,13 @@ if (document.readyState === 'loading') {
     if (!config.coupon_selection) return '';
     const couponSel = config.coupon_selection;
     const couponName = couponSel.coupon_name ? `${couponSel.coupon_name}クーポン利用有無` : 'クーポン利用有無';
-    return `
-            <!-- クーポン選択 -->
-            <div class="field" id="coupon-field">
-                <label class="field-label">${couponName}</label>
-                <div class="button-group">
-                    ${couponSel.options?.map(opt =>
-                        `<button type="button" class="choice-button coupon-button" data-value="${opt.value}">${opt.label}</button>`
-                    ).join('') || ''}
-                </div>
-            </div>`;
+    return this.renderChoiceField({
+      comment: 'クーポン選択',
+      fieldId: 'coupon-field',
+      labelHtml: couponName,
+      options: couponSel.options,
+      buttonClass: 'coupon-button'
+    });
   }
 
   private renderMenuField(config: FormConfig): string {
