@@ -54,7 +54,8 @@ export async function GET(
           ? 'no-cache, no-store, must-revalidate' 
           : 'public, max-age=3600',
         'X-Content-Type-Options': 'nosniff',
-        'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline' 'unsafe-eval' https://static.line-scdn.net https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.line.me https://liff.line.me https://script.google.com https://script.googleusercontent.com;",
+        // LIFF SDK が内部で取得する manifest を許可するため、liffsdk.line-scdn.net を connect-src に追加
+        'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline' 'unsafe-eval' https://static.line-scdn.net https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.line.me https://liff.line.me https://liffsdk.line-scdn.net https://script.google.com https://script.googleusercontent.com;",
       }
     });
   } catch (error) {
