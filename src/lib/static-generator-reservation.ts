@@ -261,9 +261,9 @@ class BookingForm {
         // ラジオボタン
         document.querySelectorAll('.custom-field-radio-button').forEach(btn => {
             btn.addEventListener('click', () => {
-                const fieldId = btn.dataset.fieldIdUsing cached availability data;
+                const fieldId = btn.dataset.fieldId;
                 const value = btn.dataset.value;
-                // 同じフィールドの他のボタンの選択を解除Using cached availability data
+                // 同じフィールドの他のボタンの選択を解除
                 document.querySelectorAll(\`.custom-field-radio-button[data-field-id="\${fieldId}"]\`).forEach(b => b.classList.remove('selected'));
                 btn.classList.add('selected');
                 this.state.customFields[fieldId] = value;
