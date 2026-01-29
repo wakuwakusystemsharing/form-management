@@ -153,6 +153,23 @@ class BookingForm {
             this.renderCalendar();
         });
     }
+
+    formatCustomFieldValue(field, value) {
+        if (value === undefined || value === null) return '';
+        if (Array.isArray(value)) {
+            const labels = value.map(v => {
+                const opt = field?.options?.find(o => o.value === v);
+                return (opt && opt.label) ? opt.label : String(v);
+            }).filter(Boolean);
+            return labels.join(', ');
+        }
+        const str = String(value);
+        if (field?.type === 'radio' && field?.options) {
+            const opt = field.options.find(o => o.value === str);
+            return (opt && opt.label) ? opt.label : str;
+        }
+        return str;
+    }
     
     async init() {
         try {
@@ -244,9 +261,9 @@ class BookingForm {
         // ラジオボタン
         document.querySelectorAll('.custom-field-radio-button').forEach(btn => {
             btn.addEventListener('click', () => {
-                const fieldId = btn.dataset.fieldId;
+                const fieldId = btn.dataset.fieldIdUsing cached availability data;
                 const value = btn.dataset.value;
-                // 同じフィールドの他のボタンの選択を解除
+                // 同じフィールドの他のボタンの選択を解除Using cached availability data
                 document.querySelectorAll(\`.custom-field-radio-button[data-field-id="\${fieldId}"]\`).forEach(b => b.classList.remove('selected'));
                 btn.classList.add('selected');
                 this.state.customFields[fieldId] = value;
@@ -254,6 +271,7 @@ class BookingForm {
                 if (hiddenInput) {
                     hiddenInput.value = value;
                 }
+                this.updateSummary();
             });
         });
         
@@ -280,6 +298,7 @@ class BookingForm {
                     }
                 }
                 this.state.customFields[fieldId] = currentValues;
+                this.updateSummary();
             });
         });
         
@@ -1214,6 +1233,17 @@ class BookingForm {
             const label = this.config.coupon_selection?.options.find(o => o.value === this.state.coupon)?.label;
             items.push(\`<div class="summary-item"><span><strong>クーポン:</strong> \${label}</span><button class="summary-edit-button" data-field="coupon-field">修正</button></div>\`);
         }
+
+        // カスタムフィールド（入力/選択内容を表示）
+        if (this.config.custom_fields && this.config.custom_fields.length > 0) {
+            this.config.custom_fields.forEach(field => {
+                const value = this.state.customFields ? this.state.customFields[field.id] : undefined;
+                const formatted = this.formatCustomFieldValue(field, value);
+                if (formatted && String(formatted).trim() !== '') {
+                    items.push(\`<div class="summary-item" style="align-items:flex-start;"><div><strong>\${field.title}:</strong><div style="margin-top:0.25rem;font-size:0.875rem;color:#6b7280;">\${formatted}</div></div><button class="summary-edit-button" data-field="custom-field-\${field.id}">修正</button></div>\`);
+                }
+            });
+        }
         // 選択されたメニューを取得（複数選択対応）
         const hasSelectedMenus = Object.keys(this.state.selectedMenus).length > 0 || 
                                  this.state.selectedMenu || 
@@ -1585,6 +1615,17 @@ class BookingForm {
                 messageText += \`メニュー：\${menuText}\\n\`;
                 messageText += \`希望日時：\\n \${formattedDate}\\n\`;
             messageText += \`メッセージ：\${this.state.message || ''}\`;
+
+            // カスタムフィールド（任意/必須の追加質問）
+            if (this.config.custom_fields && this.config.custom_fields.length > 0) {
+                this.config.custom_fields.forEach(field => {
+                    const value = this.state.customFields ? this.state.customFields[field.id] : undefined;
+                    const formatted = this.formatCustomFieldValue(field, value);
+                    if (formatted && String(formatted).trim() !== '') {
+                        messageText += \`\\n\${field.title}：\${formatted}\`;
+                    }
+                });
+            }
             
             if (this.config.gender_selection?.enabled && this.state.gender) {
                 const genderLabel = this.config.gender_selection.options.find(o => o.value === this.state.gender)?.label;
@@ -2668,9 +2709,10 @@ if (document.readyState === 'loading') {
         
         @media (max-width: 768px) {
             .menu-item-image {
-                width: 50px;
+                /* モバイルでもPCと同様にカード内で画像を自然に表示 */
+                width: 100%;
                 aspect-ratio: 16 / 9;
-                margin-right: 0.5rem;
+                margin-right: 0;
             }
             
             #calendar-table {

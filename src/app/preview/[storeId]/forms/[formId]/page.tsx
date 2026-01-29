@@ -2793,6 +2793,43 @@ export default function PreviewFormPage() {
                     </span>
                   </div>
                 )}
+
+                {/* カスタムフィールド */}
+                {form.config.custom_fields && form.config.custom_fields.length > 0 && (
+                  <>
+                    {form.config.custom_fields.map((field) => {
+                      const value = formData.customFields[field.id];
+                      if (
+                        value === undefined ||
+                        value === null ||
+                        (typeof value === 'string' && value.trim() === '') ||
+                        (Array.isArray(value) && value.length === 0)
+                      ) {
+                        return null;
+                      }
+
+                      const formatValue = () => {
+                        if (Array.isArray(value)) {
+                          const labels = value
+                            .map((v) => field.options?.find((o) => o.value === v)?.label || String(v))
+                            .filter(Boolean);
+                          return labels.join(', ');
+                        }
+                        if (field.type === 'radio' && field.options) {
+                          return field.options.find((o) => o.value === value)?.label || String(value);
+                        }
+                        return String(value);
+                      };
+
+                      return (
+                        <div key={field.id} className="flex justify-between">
+                          <span className="text-gray-600">{field.title}:</span>
+                          <span className="font-medium">{formatValue()}</span>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
                 
                 {/* 日時表示（モード別） */}
                 {form.config?.calendar_settings?.booking_mode === 'multiple_dates' ? (
