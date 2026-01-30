@@ -734,7 +734,7 @@ export default function StoreDetailPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      const calendarUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id)}`;
+                      const calendarUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id ?? '')}`;
                       window.open(calendarUrl, '_blank');
                     }}
                   >

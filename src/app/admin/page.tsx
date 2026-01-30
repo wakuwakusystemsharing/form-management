@@ -987,7 +987,7 @@ export default function AdminPage() {
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const calendarUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id)}`;
+                                const calendarUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id ?? '')}`;
                                 window.open(calendarUrl, '_blank');
                               }}
                               className="flex-1"
