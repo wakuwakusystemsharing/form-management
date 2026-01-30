@@ -39,6 +39,17 @@
 3. **Confirm email** をオフにする（開発時のみ、本番はオン推奨）
 4. **Save** をクリック
 
+### 3. Google Calendar 認証の設定（必須）
+
+Google Calendar API は **Service Account JSON** を使用します。  
+管理画面からの入力は行わず、**Vercel の環境変数**で設定します。
+
+```
+GOOGLE_SERVICE_ACCOUNT_JSON=<service account JSON または base64>
+```
+
+※ JSON が長い場合は base64 化して保存しても動作します。
+
 ---
 
 ## データベーステーブル作成

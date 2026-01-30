@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock } from 'lucide-react';
+import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock, Settings } from 'lucide-react';
 
 const ADMIN_EMAILS = [
   'wakuwakusystemsharing@gmail.com',

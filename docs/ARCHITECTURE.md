@@ -57,6 +57,12 @@ LINE LIFFを活用した予約フォーム管理システムの全体設計、�
 
 GAS は使用せず、店舗作成時に Google Calendar を自動作成し、空き状況取得・予約登録・LINE 通知を Next.js + Supabase で実行します。
 
+### 認証情報の配置（推奨）
+
+- `GOOGLE_SERVICE_ACCOUNT_JSON` を **Vercel の Environment Variables** に設定します。
+- `/admin` からの入力は不要です（UI なし）。
+- `admin_settings` は将来的な拡張用で、現行フローでは利用しません。
+
 ```mermaid
 flowchart TD
   userLINE[LINEUser]
