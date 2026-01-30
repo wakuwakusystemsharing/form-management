@@ -170,6 +170,124 @@ class BookingForm {
         }
         return str;
     }
+
+    getAllSelectedMenuIds() {
+        const ids = [];
+        const map = this.state.selectedMenus || {};
+        Object.keys(map).forEach(catId => {
+            const menuIds = map[catId] || [];
+            menuIds.forEach(menuId => {
+                if (menuId && !ids.includes(menuId)) ids.push(menuId);
+            });
+        });
+        if (ids.length === 0 && this.state.selectedMenu && this.state.selectedMenu.id) {
+            ids.push(this.state.selectedMenu.id);
+        }
+        return ids;
+    }
+
+    findMenuAny(menuId) {
+        if (!menuId) return { menu: null, category: null };
+        for (const category of (this.config.menu_structure?.categories || [])) {
+            const menu = (category.menus || []).find(m => m.id === menuId);
+            if (menu) return { menu, category };
+        }
+        return { menu: null, category: null };
+    }
+
+    getSubMenu(menu, subMenuId) {
+        if (!menu || !menu.sub_menu_items || !subMenuId) return null;
+        const direct = menu.sub_menu_items.find(sm => sm.id === subMenuId);
+        if (direct) return direct;
+        // idがないサブメニュー対策（indexベースのIDも許容）
+        const idxMatch = menu.sub_menu_items.find((sm, idx) => {
+            const fallbackId = sm.id || ('submenu-' + idx);
+            return fallbackId === subMenuId;
+        });
+        return idxMatch || null;
+    }
+
+    buildSelectedMenuPayload() {
+        const result = [];
+        const allMenuIds = this.getAllSelectedMenuIds();
+        allMenuIds.forEach(menuId => {
+            const found = this.findMenuAny(menuId);
+            const menu = found.menu;
+            const category = found.category;
+            if (!menu) return;
+
+            const subMenuId = (this.state.selectedSubMenus && this.state.selectedSubMenus[menuId]) ? this.state.selectedSubMenus[menuId] : null;
+            const subMenu = this.getSubMenu(menu, subMenuId);
+
+            const menuData = {
+                menu_id: menu.id,
+                menu_name: menu.name || '',
+                category_name: (category && category.name) ? category.name : '',
+                price: menu.price || 0,
+                duration: menu.duration || 0
+            };
+
+            if (subMenu) {
+                menuData.submenu_id = subMenu.id || subMenuId;
+                menuData.submenu_name = subMenu.name || '';
+                if (subMenu.price) menuData.price = subMenu.price;
+                if (subMenu.duration) menuData.duration = subMenu.duration;
+            }
+
+            result.push(menuData);
+        });
+        return result;
+    }
+
+    buildSelectedOptionsPayload() {
+        const selectedOptions = [];
+        const allMenuIds = this.getAllSelectedMenuIds();
+        allMenuIds.forEach(menuId => {
+            const found = this.findMenuAny(menuId);
+            const menu = found.menu;
+            if (!menu) return;
+            const optionIds = (this.state.selectedOptions && this.state.selectedOptions[menuId]) ? this.state.selectedOptions[menuId] : [];
+            const optionObjs = this.getSelectedOptionObjects(menu, optionIds);
+            optionObjs.forEach(option => {
+                selectedOptions.push({
+                    option_id: option.id,
+                    option_name: option.name || '',
+                    menu_id: menuId
+                });
+            });
+        });
+        return selectedOptions;
+    }
+
+    buildMenuTextForMessage() {
+        const parts = [];
+        const allMenuIds = this.getAllSelectedMenuIds();
+        allMenuIds.forEach(menuId => {
+            const found = this.findMenuAny(menuId);
+            const menu = found.menu;
+            const category = found.category;
+            if (!menu) return;
+
+            const segs = [];
+            if (category && category.name) segs.push(category.name);
+            if (menu.name) segs.push(menu.name);
+
+            const subMenuId = (this.state.selectedSubMenus && this.state.selectedSubMenus[menuId]) ? this.state.selectedSubMenus[menuId] : null;
+            const subMenu = this.getSubMenu(menu, subMenuId);
+            if (subMenu && subMenu.name) segs.push(subMenu.name);
+
+            let line = segs.join(' > ');
+
+            const optionIds = (this.state.selectedOptions && this.state.selectedOptions[menuId]) ? this.state.selectedOptions[menuId] : [];
+            const optionNames = this.getSelectedOptionObjects(menu, optionIds).map(o => o?.name || '').filter(Boolean);
+            if (optionNames.length > 0) {
+                line += (line ? ', ' : '') + optionNames.join(', ');
+            }
+
+            if (line) parts.push(line);
+        });
+        return parts.join(' / ');
+    }
     
     async init() {
         try {
@@ -608,6 +726,9 @@ class BookingForm {
                 document.querySelectorAll('.submenu-item').forEach(s => s.classList.remove('selected'));
                 sub.classList.add('selected');
                 this.state.selectedSubmenu = menu.sub_menu_items[idx];
+                const selectedId = (this.state.selectedSubmenu && this.state.selectedSubmenu.id) ? this.state.selectedSubmenu.id : ('submenu-' + idx);
+                if (!this.state.selectedSubMenus) this.state.selectedSubMenus = {};
+                this.state.selectedSubMenus[menuId] = selectedId;
                 // サブメニュー選択後にカレンダーを表示
                 await this.toggleCalendarVisibility();
                 this.updateSummary();
@@ -1404,7 +1525,8 @@ class BookingForm {
             alert('お名前と電話番号を入力してください');
             return;
         }
-        if (!this.state.selectedMenu && !this.state.selectedSubmenu) {
+        const hasSelectedMenus = Object.keys(this.state.selectedMenus || {}).length > 0 || !!this.state.selectedMenu || !!this.state.selectedSubmenu;
+        if (!hasSelectedMenus) {
             alert('メニューを選択してください');
             return;
         }
@@ -1431,54 +1553,9 @@ class BookingForm {
             (this.config.basic_info.liff_id && this.config.basic_info.liff_id.length >= 10);
         
         try {
-            // メニュー情報を構造化
-            const selectedMenus = [];
-            if (this.state.selectedMenu) {
-                // カテゴリー名を取得
-                const category = this.config.menu_structure.categories.find(c => 
-                    c.menus.some(m => m.id === this.state.selectedMenu.id)
-                );
-                
-                const menuData = {
-                    menu_id: this.state.selectedMenu.id,
-                    menu_name: this.state.selectedMenu.name || '',
-                    category_name: category?.name || '',
-                    price: this.state.selectedMenu.price || 0,
-                    duration: this.state.selectedMenu.duration || 0
-                };
-                
-                // サブメニューが選択されている場合
-                if (this.state.selectedSubmenu) {
-                    menuData.submenu_id = this.state.selectedSubmenu.id;
-                    menuData.submenu_name = this.state.selectedSubmenu.name || '';
-                    if (this.state.selectedSubmenu.price) {
-                        menuData.price = this.state.selectedSubmenu.price;
-                    }
-                    if (this.state.selectedSubmenu.duration) {
-                        menuData.duration = this.state.selectedSubmenu.duration;
-                    }
-                }
-                
-                selectedMenus.push(menuData);
-            }
-            
-            // オプション情報を構造化
-            const selectedOptions = [];
-            if (this.state.selectedMenu) {
-                const menuId = this.state.selectedMenu.id;
-                if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
-                    const menu = this.state.selectedMenu;
-                    const selectedOptionIds = this.state.selectedOptions[menuId];
-                    const optionObjs = this.getSelectedOptionObjects(menu, selectedOptionIds);
-                    optionObjs.forEach(option => {
-                        selectedOptions.push({
-                            option_id: option.id,
-                            option_name: option.name || '',
-                            menu_id: menuId
-                        });
-                    });
-                }
-            }
+            // メニュー/オプション情報（複数選択対応）
+            const selectedMenus = this.buildSelectedMenuPayload();
+            const selectedOptions = this.buildSelectedOptionsPayload();
             
             // 顧客属性情報を構築
             const customerInfo = {};
@@ -1546,59 +1623,24 @@ class BookingForm {
             const startIso = \`\${dateObj.getFullYear()}-\${String(dateObj.getMonth() + 1).padStart(2, '0')}-\${String(dateObj.getDate()).padStart(2, '0')}T\${this.state.selectedTime}:00+09:00\`;
             
             // メニュー名を取得
-            let menuText = '';
-            let selectedMenuName = '';
-            if (this.state.selectedSubmenu) {
-                selectedMenuName = this.state.selectedSubmenu.name;
-            } else if (this.state.selectedMenu) {
-                selectedMenuName = this.state.selectedMenu.name;
-            }
-            
-            if (this.state.selectedMenu) {
-                const category = this.config.menu_structure.categories.find(c => 
-                    c.menus.some(m => m.id === this.state.selectedMenu.id)
-                );
-                const menuParts = [];
-                if (category?.name) menuParts.push(category.name);
-                if (this.state.selectedMenu.name) menuParts.push(this.state.selectedMenu.name);
-                if (this.state.selectedSubmenu?.name) menuParts.push(this.state.selectedSubmenu.name);
-                if (menuParts.length > 0) {
-                    menuText = menuParts.join(' > ');
-                }
-                const menuId = this.state.selectedMenu.id;
-                if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
-                    const menu = this.state.selectedMenu;
-                    const selectedOptionIds = this.state.selectedOptions[menuId];
-                    const optionNames = this.getSelectedOptionObjects(menu, selectedOptionIds)
-                        .map(option => option?.name || '')
-                        .filter(Boolean);
-                    if (optionNames.length > 0) {
-                        menuText += (menuText ? ', ' : '') + optionNames.join(', ');
-                    }
-                }
-            }
+            const menuText = this.buildMenuTextForMessage();
+            const selectedMenuName = selectedMenus.map(m => (m.submenu_name || m.menu_name || '')).filter(Boolean).join(' / ');
             
             // 時間を計算（分単位）
-            let durationMin = 60; // デフォルト
-            if (this.state.selectedSubmenu && this.state.selectedSubmenu.duration) {
-                durationMin = this.state.selectedSubmenu.duration;
-            } else if (this.state.selectedMenu && this.state.selectedMenu.duration) {
-                durationMin = this.state.selectedMenu.duration;
-            }
-            // オプションの時間を追加
-            if (this.state.selectedMenu) {
-                const menuId = this.state.selectedMenu.id;
-                if (menuId && this.state.selectedOptions[menuId]?.length > 0) {
-                    const menu = this.state.selectedMenu;
-                    const selectedOptionIds = this.state.selectedOptions[menuId];
-                    const optionObjs = this.getSelectedOptionObjects(menu, selectedOptionIds);
-                    optionObjs.forEach(option => {
-                        if (option && option.duration) {
-                            durationMin += option.duration;
-                        }
-                    });
-                }
-            }
+            let durationMin = 0;
+            selectedMenus.forEach(m => { durationMin += (m.duration || 0); });
+            const allMenuIdsForDuration = this.getAllSelectedMenuIds();
+            allMenuIdsForDuration.forEach(menuId => {
+                const found = this.findMenuAny(menuId);
+                const menu = found.menu;
+                if (!menu) return;
+                const optionIds = (this.state.selectedOptions && this.state.selectedOptions[menuId]) ? this.state.selectedOptions[menuId] : [];
+                const optionObjs = this.getSelectedOptionObjects(menu, optionIds);
+                optionObjs.forEach(option => {
+                    if (option && option.duration) durationMin += option.duration;
+                });
+            });
+            if (!durationMin || durationMin <= 0) durationMin = 60;
             
             if (isLineForm) {
                 // LINE予約フォーム：LIFF経由でメッセージ送信
