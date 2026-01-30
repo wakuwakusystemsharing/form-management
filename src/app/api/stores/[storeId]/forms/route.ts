@@ -247,28 +247,32 @@ export async function POST(
             { value: 'female' as const, label: '女性' }
           ]
         },
-        visit_count_selection: { 
-          enabled: baseConfig.ui_settings?.show_visit_count || false, 
-          required: false, 
-          options: [
-            { value: 'first', label: '初回' },
-            { value: 'repeat', label: '2回目以降' }
-          ]
+        visit_count_selection: {
+          enabled: baseConfig.ui_settings?.show_visit_count || false,
+          required: false,
+          options: (template?.config as FormConfig)?.visit_count_selection?.options?.length
+            ? (template.config as FormConfig).visit_count_selection!.options
+            : [
+                { value: 'first', label: '初回' },
+                { value: 'repeat', label: '2回目以降' }
+              ]
         },
-        coupon_selection: { 
-          enabled: baseConfig.ui_settings?.show_coupon_selection || false, 
+        coupon_selection: {
+          enabled: baseConfig.ui_settings?.show_coupon_selection || false,
+          coupon_name: (template?.config as FormConfig)?.coupon_selection?.coupon_name ?? '',
           options: [
             { value: 'use' as const, label: '利用する' },
             { value: 'not_use' as const, label: '利用しない' }
           ]
         },
+        custom_fields: (template?.config as FormConfig)?.custom_fields ?? [],
         menu_structure: {
           ...baseConfig.menu_structure,
           display_options: {
             show_price: true,
             show_duration: true,
             show_description: true,
-            show_treatment_info: false
+            show_treatment_info: (baseConfig.menu_structure as FormConfig['menu_structure'])?.display_options?.show_treatment_info ?? false
           }
         },
         ui_settings: {
@@ -424,18 +428,22 @@ export async function POST(
       visit_count_selection: {
         enabled: visitCountEnabled,
         required: false,
-        options: [
-          { value: 'first', label: '初回' },
-          { value: 'repeat', label: '2回目以降' }
-        ]
+        options: (baseTemplateConfig as FormConfig)?.visit_count_selection?.options?.length
+          ? (baseTemplateConfig as FormConfig).visit_count_selection!.options
+          : [
+              { value: 'first', label: '初回' },
+              { value: 'repeat', label: '2回目以降' }
+            ]
       },
       coupon_selection: {
         enabled: couponEnabled,
+        coupon_name: (baseTemplateConfig as FormConfig)?.coupon_selection?.coupon_name ?? '',
         options: [
           { value: 'use' as const, label: '利用する' },
           { value: 'not_use' as const, label: '利用しない' }
         ]
       },
+      custom_fields: (baseTemplateConfig as FormConfig)?.custom_fields ?? [],
       menu_structure: {
         ...(baseTemplateConfig?.menu_structure || {
           structure_type: 'simple' as const,

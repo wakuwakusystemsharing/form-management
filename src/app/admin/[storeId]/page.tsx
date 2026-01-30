@@ -158,37 +158,132 @@ const FORM_TEMPLATES = {
     }
   },
   debug: {
-    name: '🐛 デバッグ用（全機能）',
-    description: '全ての機能を網羅したデバッグ用テンプレート',
+    name: '🐛 デバッグ用（全機能・画像付き）',
+    description: '性別・来店回数・クーポン・カテゴリ横断・カスタム項目・画像付きメニューを全て含むテンプレート',
     liff_id: '2008098784-5ZQ1LRn3',
     gas_endpoint: 'https://script.google.com/macros/s/AKfycby3QfS2E892nXbS-fnfBVrJX8KyJWTSsisKpe9zVz5QGWzvTH7Zc3PlOay9j60aSQLp/exec',
     config: {
       basic_info: { show_gender_selection: true },
       menu_structure: {
-        structure_type: 'category',
-        categories: [{
-            id: 'cat1',
+        structure_type: 'category_based',
+        allow_cross_category_selection: true,
+        categories: [
+          {
+            id: 'cat_cut',
             name: 'カット',
-          menus: [{
-                id: 'menu1',
+            display_name: '◆カット◆',
+            selection_mode: 'multiple',
+            menus: [
+              {
+                id: 'menu_cut_std',
                 name: 'スタンダードカット',
                 price: 3000,
                 duration: 60,
                 description: '基本的なカットメニュー',
-                gender_filter: 'both',
+                image: 'https://placehold.co/400x300/e2e8f0/64748b?text=スタンダードカット',
                 has_submenu: true,
                 sub_menu_items: [
-              { id: 'sub1', name: 'ショートカット', price: 3000, duration: 60 },
-              { id: 'sub2', name: 'ミディアムカット', price: 3500, duration: 70 },
-              { id: 'sub3', name: 'ロングカット', price: 4000, duration: 80 }
-            ]
-          }]
-        }]
+                  { id: 'sub_short', name: 'ショート', price: 3000, duration: 60 },
+                  { id: 'sub_mid', name: 'ミディアム', price: 3500, duration: 70 },
+                  { id: 'sub_long', name: 'ロング', price: 4000, duration: 80 }
+                ],
+                options: [
+                  { id: 'opt_quick', name: 'クイック仕上げ', price: 500, duration: 10, is_default: false },
+                  { id: 'opt_set', name: 'セット（シャンプー込）', price: 0, duration: 15, is_default: true }
+                ]
+              },
+              {
+                id: 'menu_cut_premium',
+                name: 'プレミアムカット',
+                price: 5000,
+                duration: 90,
+                description: 'トップスタイリストによる丁寧なカット',
+                image: 'https://placehold.co/400x300/cbd5e1/475569?text=プレミアムカット',
+                has_submenu: false,
+                options: [
+                  { id: 'opt_scalp', name: '頭皮ケア', price: 1000, duration: 15, is_default: false }
+                ]
+              }
+            ],
+            options: []
+          },
+          {
+            id: 'cat_color',
+            name: 'カラー',
+            display_name: '◆カラー◆',
+            selection_mode: 'multiple',
+            menus: [
+              {
+                id: 'menu_color_full',
+                name: 'フルカラー',
+                price: 8000,
+                duration: 120,
+                description: '全体カラー',
+                image: 'https://placehold.co/400x300/fce7f3/9d174d?text=フルカラー',
+                has_submenu: false,
+                options: [
+                  { id: 'opt_tone', name: 'トーンアップ', price: 500, duration: 0, is_default: false }
+                ]
+              },
+              {
+                id: 'menu_color_highlight',
+                name: 'ハイライト',
+                price: 6000,
+                duration: 90,
+                description: '部分ハイライト',
+                image: 'https://placehold.co/400x300/fde68a/854d0e?text=ハイライト',
+                has_submenu: false,
+                options: []
+              }
+            ],
+            options: []
+          },
+          {
+            id: 'cat_treatment',
+            name: 'トリートメント',
+            display_name: '◆トリートメント◆',
+            selection_mode: 'multiple',
+            menus: [
+              {
+                id: 'menu_treat_basic',
+                name: 'ベーシックトリートメント',
+                price: 2000,
+                duration: 30,
+                description: '髪質改善',
+                image: 'https://placehold.co/400x300/d1fae5/065f46?text=トリートメント',
+                has_submenu: false,
+                options: []
+              }
+            ],
+            options: []
+          }
+        ],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: true
+        }
       },
+      visit_count_selection: {
+        enabled: true,
+        required: false,
+        options: [
+          { value: 'first', label: '初回（+30分）', duration: 30 },
+          { value: 'repeat', label: '2回目以降', duration: 0 }
+        ]
+      },
+      custom_fields: [
+        { id: 'cf1', type: 'text', title: 'ご希望の時間帯', required: false, placeholder: '例：午前中' },
+        { id: 'cf2', type: 'textarea', title: 'ご要望・備考', required: false, placeholder: '自由記入' },
+        { id: 'cf3', type: 'radio', title: '施術のご希望', required: false, options: [{ label: 'ゆったり', value: 'relax' }, { label: '手早く', value: 'quick' }] },
+        { id: 'cf4', type: 'checkbox', title: 'オプション希望', required: false, options: [{ label: 'ドライ付き', value: 'dry' }, { label: 'セット付き', value: 'set' }] }
+      ],
       ui_settings: {
         show_visit_count: true,
         show_coupon_selection: true,
-        show_repeat_booking: true
+        show_repeat_booking: true,
+        coupon_name: '2周年記念'
       }
     }
   }
@@ -211,8 +306,10 @@ export default function StoreDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [newFormData, setNewFormData] = useState({
     form_name: '',
+    form_type: 'line' as 'line' | 'web',
     liff_id: '',
     gas_endpoint: '',
+    security_secret: '',
     template: 'basic'
   });
   const [showCreateSurveyForm, setShowCreateSurveyForm] = useState(false);
@@ -296,6 +393,15 @@ export default function StoreDetailPage() {
       return;
     }
 
+    if (newFormData.form_type === 'web' && !newFormData.security_secret?.trim()) {
+      toast({
+        title: 'エラー',
+        description: 'Web予約フォームの場合、SECURITY_SECRETを入力してください',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const gasEndpoint = newFormData.gas_endpoint.trim();
     if (gasEndpoint) {
       try {
@@ -370,8 +476,10 @@ export default function StoreDetailPage() {
         credentials: 'include',
         body: JSON.stringify({
           form_name: newFormData.form_name.trim(),
-          liff_id: newFormData.liff_id.trim() || undefined,
+          form_type: newFormData.form_type,
+          liff_id: newFormData.form_type === 'line' ? (newFormData.liff_id.trim() || undefined) : undefined,
           gas_endpoint: newFormData.gas_endpoint.trim() || undefined,
+          security_secret: newFormData.form_type === 'web' ? newFormData.security_secret.trim() : undefined,
           template: selectedTemplate
         }),
       });
@@ -379,7 +487,7 @@ export default function StoreDetailPage() {
       if (response.ok) {
         const newForm = await response.json();
         setForms([...forms, newForm]);
-        setNewFormData({ form_name: '', liff_id: '', gas_endpoint: '', template: 'basic' });
+        setNewFormData({ form_name: '', form_type: 'line', liff_id: '', gas_endpoint: '', security_secret: '', template: 'basic' });
         setShowCreateForm(false);
         const formName = newForm.config?.basic_info?.form_name || newFormData.form_name.trim();
         toast({
@@ -1031,6 +1139,36 @@ export default function StoreDetailPage() {
                   />
                 </div>
                       <div className="space-y-2">
+                        <Label>フォームの種類</Label>
+                        <div className="flex gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="form_type"
+                              checked={newFormData.form_type === 'line'}
+                              onChange={() => setNewFormData({ ...newFormData, form_type: 'line' })}
+                              className="rounded-full border-primary text-primary"
+                            />
+                            <span>LINE予約フォーム</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="form_type"
+                              checked={newFormData.form_type === 'web'}
+                              onChange={() => setNewFormData({ ...newFormData, form_type: 'web' })}
+                              className="rounded-full border-primary text-primary"
+                            />
+                            <span>Web予約フォーム</span>
+                          </label>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {newFormData.form_type === 'web'
+                            ? 'URLだけで予約可能（LIFF ID不要）'
+                            : 'LINEアプリ内で開く予約フォーム'}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
                         <Label>テンプレート選択 <span className="text-destructive">*</span></Label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {Object.entries(FORM_TEMPLATES).map(([key, template]) => (
@@ -1091,16 +1229,34 @@ export default function StoreDetailPage() {
                     ))}
                   </div>
                     </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="liff_id">LIFF ID</Label>
-                        <Input
-                          id="liff_id"
-                    value={newFormData.liff_id}
-                    onChange={(e) => setNewFormData({...newFormData, liff_id: e.target.value})}
-                    placeholder="例：1234567890-abcdefgh"
-                  />
-                        <p className="text-xs text-muted-foreground">LINE Developersで作成したLIFF IDを入力</p>
-                </div>
+                      {newFormData.form_type === 'line' && (
+                        <div className="space-y-2">
+                          <Label htmlFor="liff_id">LIFF ID</Label>
+                          <Input
+                            id="liff_id"
+                            value={newFormData.liff_id}
+                            onChange={(e) => setNewFormData({ ...newFormData, liff_id: e.target.value })}
+                            placeholder="例：1234567890-abcdefgh"
+                          />
+                          <p className="text-xs text-muted-foreground">LINE Developersで作成したLIFF IDを入力（任意）</p>
+                        </div>
+                      )}
+                      {newFormData.form_type === 'web' && (
+                        <div className="space-y-2">
+                          <Label htmlFor="security_secret">
+                            SECURITY_SECRET <span className="text-destructive">*</span>
+                          </Label>
+                          <Input
+                            id="security_secret"
+                            type="password"
+                            autoComplete="off"
+                            value={newFormData.security_secret}
+                            onChange={(e) => setNewFormData({ ...newFormData, security_secret: e.target.value })}
+                            placeholder="Web予約フォーム用の秘密鍵"
+                          />
+                          <p className="text-xs text-muted-foreground">Web予約フォームの認証用。任意の文字列を設定してください。</p>
+                        </div>
+                      )}
                       <div className="space-y-2">
                         <Label htmlFor="gas_endpoint">Google App Script エンドポイント</Label>
                         <Input
