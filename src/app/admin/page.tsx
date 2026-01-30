@@ -9,11 +9,10 @@ import type { Store } from '@/types/store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Settings, Lock } from 'lucide-react';
+import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock } from 'lucide-react';
 
 const ADMIN_EMAILS = [
   'wakuwakusystemsharing@gmail.com',
@@ -34,12 +33,6 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [showAddStore, setShowAddStore] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [googleApiSettings, setGoogleApiSettings] = useState({
-    apiKey: '',
-    serviceAccountJson: ''
-  });
-  const [settingsLoading, setSettingsLoading] = useState(false);
-  const [settingsSaving, setSettingsSaving] = useState(false);
   
   // パスワードリセット関連の状態
   const [showPasswordReset, setShowPasswordReset] = useState(false);
@@ -78,69 +71,6 @@ export default function AdminPage() {
     }
   }, []);
 
-  const isAdminUser = shouldSkipAuth() || (!!user?.email && ADMIN_EMAILS.includes(user.email));
-
-  const loadAdminSettings = useCallback(async () => {
-    if (!isAdminUser) return;
-    setSettingsLoading(true);
-    try {
-      const response = await fetch('/api/admin/settings', {
-        credentials: 'include'
-      });
-      if (!response.ok) {
-        throw new Error('設定の取得に失敗しました');
-      }
-      const data = await response.json();
-      setGoogleApiSettings({
-        apiKey: data.settings?.google_api_key || '',
-        serviceAccountJson: data.settings?.google_service_account_json || ''
-      });
-    } catch (error) {
-      toast({
-        title: 'エラー',
-        description: 'Google API 設定の読み込みに失敗しました',
-        variant: 'destructive',
-      });
-    } finally {
-      setSettingsLoading(false);
-    }
-  }, [isAdminUser, toast]);
-
-  const handleSaveGoogleSettings = async () => {
-    if (!isAdminUser) return;
-    setSettingsSaving(true);
-    try {
-      const response = await fetch('/api/admin/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          settings: {
-            google_api_key: googleApiSettings.apiKey.trim(),
-            google_service_account_json: googleApiSettings.serviceAccountJson.trim()
-          }
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || '保存に失敗しました');
-      }
-
-      toast({
-        title: '保存しました',
-        description: 'Google API 設定を更新しました',
-      });
-    } catch (error) {
-      toast({
-        title: 'エラー',
-        description: error instanceof Error ? error.message : '保存に失敗しました',
-        variant: 'destructive',
-      });
-    } finally {
-      setSettingsSaving(false);
-    }
-  };
 
   // 検索クエリでフィルタリング
   useEffect(() => {
@@ -520,11 +450,6 @@ export default function AdminPage() {
     }
   }, [user, loadStores]);
 
-  useEffect(() => {
-    if (user) {
-      loadAdminSettings();
-    }
-  }, [user, loadAdminSettings]);
 
   const resetNewStore = () => {
     setNewStore({
@@ -965,55 +890,6 @@ export default function AdminPage() {
               </Card>
             )}
 
-            {isAdminUser && (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Settings className="h-5 w-5" />
-                        Google API 設定
-                      </CardTitle>
-                      <CardDescription className="mt-1">
-                        店舗作成時のカレンダー作成に使用します
-                      </CardDescription>
-                    </div>
-                    <Badge variant={googleApiSettings.serviceAccountJson ? 'default' : 'secondary'}>
-                      {googleApiSettings.serviceAccountJson ? '設定済み' : '未設定'}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="google_api_key">Google API Key（任意）</Label>
-                    <Input
-                      id="google_api_key"
-                      type="password"
-                      value={googleApiSettings.apiKey}
-                      onChange={(e) => setGoogleApiSettings(prev => ({ ...prev, apiKey: e.target.value }))}
-                      placeholder="例：AIza..."
-                    />
-                    <p className="text-xs text-muted-foreground">通常は未設定で構いません</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="google_service_account_json">Service Account JSON</Label>
-                    <Textarea
-                      id="google_service_account_json"
-                      value={googleApiSettings.serviceAccountJson}
-                      onChange={(e) => setGoogleApiSettings(prev => ({ ...prev, serviceAccountJson: e.target.value }))}
-                      placeholder='{"type":"service_account", ... }'
-                      rows={6}
-                    />
-                    <p className="text-xs text-muted-foreground">サービスアカウントのJSONをそのまま貼り付けてください</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <Button onClick={handleSaveGoogleSettings} disabled={settingsSaving || settingsLoading}>
-                      {settingsSaving ? '保存中...' : '設定を保存'}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             {/* 店舗一覧 */}
             <div className="space-y-4">
