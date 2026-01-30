@@ -9,6 +9,10 @@ export interface Store {
   phone?: string;
   address?: string;
   website_url?: string;
+  logo_url?: string;          // ロゴ画像URL
+  theme_color?: string;       // テーマカラー（HEX形式）
+  subdomain?: string;         // サブドメイン（例: st0001）
+  custom_domain?: string;     // カスタムドメイン（例: myshop.com）
   created_at: string;
   updated_at: string;
   status: 'active' | 'inactive';

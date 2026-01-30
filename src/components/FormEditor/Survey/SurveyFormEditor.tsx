@@ -1,13 +1,19 @@
+'use client';
+
 import React, { useState } from 'react';
 import { SurveyForm, SurveyConfig } from '@/types/survey';
 import SurveyQuestionEditor from './SurveyQuestionEditor';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 
 interface SurveyFormEditorProps {
   form: SurveyForm;
   onUpdate: (form: SurveyForm) => void;
+  userRole?: 'service_admin' | 'store_admin';
 }
 
-export default function SurveyFormEditor({ form, onUpdate }: SurveyFormEditorProps) {
+export default function SurveyFormEditor({ form, onUpdate, userRole = 'service_admin' }: SurveyFormEditorProps) {
   const [activeTab, setActiveTab] = useState<'basic' | 'questions'>('basic');
 
   const handleBasicInfoUpdate = (updates: Partial<SurveyConfig['basic_info']>) => {
@@ -25,78 +31,71 @@ export default function SurveyFormEditor({ form, onUpdate }: SurveyFormEditorPro
 
   return (
     <div className="flex flex-col h-full">
-      {/* タブナビゲーション */}
-      <div className="flex border-b border-gray-700 mb-6">
-        <button
-          onClick={() => setActiveTab('basic')}
-          className={`px-4 py-2 font-medium text-sm transition-colors ${
-            activeTab === 'basic'
-              ? 'text-blue-400 border-b-2 border-blue-400'
-              : 'text-gray-400 hover:text-gray-200'
-          }`}
-        >
-          基本情報
-        </button>
-        <button
-          onClick={() => setActiveTab('questions')}
-          className={`px-4 py-2 font-medium text-sm transition-colors ${
-            activeTab === 'questions'
-              ? 'text-blue-400 border-b-2 border-blue-400'
-              : 'text-gray-400 hover:text-gray-200'
-          }`}
-        >
-          質問項目
-        </button>
-      </div>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'basic' | 'questions')} className="flex flex-col h-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="basic">基本情報</TabsTrigger>
+          <TabsTrigger value="questions">質問項目</TabsTrigger>
+        </TabsList>
 
-      {/* コンテンツエリア */}
-      <div className="flex-1 overflow-y-auto">
-        {activeTab === 'basic' && (
+        <TabsContent value="basic" className="flex-1 overflow-y-auto mt-6">
           <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                フォーム名 <span className="text-red-400">*</span>
-              </label>
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="survey_title">
+                フォーム名 <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="survey_title"
                 type="text"
                 value={form.config.basic_info.title}
                 onChange={(e) => handleBasicInfoUpdate({ title: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="例：来店アンケート"
+                required
               />
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                LIFF ID <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="text"
-                value={form.config.basic_info.liff_id}
-                onChange={(e) => handleBasicInfoUpdate({ liff_id: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+            {/* システム管理者のみ表示 */}
+            {userRole === 'service_admin' && (
+              <div className="space-y-2">
+                <Label htmlFor="survey_liff_id">
+                  LIFF ID <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="survey_liff_id"
+                  type="text"
+                  value={form.config.basic_info.liff_id}
+                  onChange={(e) => handleBasicInfoUpdate({ liff_id: e.target.value })}
+                  placeholder="例：1234567890-abcdefgh"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">LINE Developersで作成したLIFF ID</p>
+              </div>
+            )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                テーマカラー
-              </label>
+            <div className="space-y-2">
+              <Label htmlFor="survey_theme_color">テーマカラー</Label>
               <div className="flex items-center space-x-3">
-                <input
+                <Input
+                  id="survey_theme_color"
                   type="color"
                   value={form.config.basic_info.theme_color}
                   onChange={(e) => handleBasicInfoUpdate({ theme_color: e.target.value })}
-                  className="w-20 h-10 border border-gray-600 rounded cursor-pointer"
+                  className="w-20 h-10 rounded-md cursor-pointer border"
                 />
-                <span className="text-gray-400 text-sm">{form.config.basic_info.theme_color}</span>
+                <Input
+                  type="text"
+                  value={form.config.basic_info.theme_color}
+                  onChange={(e) => handleBasicInfoUpdate({ theme_color: e.target.value })}
+                  className="flex-1"
+                  placeholder="#3B82F6"
+                />
               </div>
+              <p className="text-xs text-muted-foreground">フォームのメインカラー</p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                送信ボタンのテキスト
-              </label>
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="submit_button_text">送信ボタンのテキスト</Label>
+              <Input
+                id="submit_button_text"
                 type="text"
                 value={form.config.ui_settings.submit_button_text}
                 onChange={(e) => onUpdate({
@@ -109,13 +108,13 @@ export default function SurveyFormEditor({ form, onUpdate }: SurveyFormEditorPro
                     }
                   }
                 })}
-                className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="送信"
               />
             </div>
           </div>
-        )}
+        </TabsContent>
 
-        {activeTab === 'questions' && (
+        <TabsContent value="questions" className="flex-1 overflow-y-auto mt-6">
           <SurveyQuestionEditor
             questions={form.config.questions}
             onChange={(questions) => onUpdate({
@@ -126,8 +125,8 @@ export default function SurveyFormEditor({ form, onUpdate }: SurveyFormEditorPro
               }
             })}
           />
-        )}
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

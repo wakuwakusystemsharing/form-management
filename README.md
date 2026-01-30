@@ -5,7 +5,9 @@ LINE LIFFを活用した予約フォーム管理システムです。サービ�
 ## 🌟 主な機能
 
 ### 🔧 サービス管理者機能
-- **店舗管理**: 店舗の作成・編集・削除
+- **店舗管理**: 店舗の作成・編集・削除（shadcn/ui刷新）
+  - サブドメイン・カスタムドメインの設定
+  - 店舗IDは6文字ランダム文字列（`[a-z0-9]{6}`）で自動生成
 - **テンプレート選択**: 5つのテンプレートから選択してフォーム作成
   - 基本テンプレート（シンプル）
   - スタンダードテンプレート（性別選択あり）
@@ -13,34 +15,43 @@ LINE LIFFを活用した予約フォーム管理システムです。サービ�
   - コンプリートテンプレート（オプション機能あり）
   - アルティメットテンプレート（全機能搭載）
 - **フォーム管理**: 全店舗のフォーム状況監視
-- **予約管理**: 全店舗の予約データ一覧表示
+- **予約管理**: 全店舗の予約データ一覧表示・分析
+- **店舗管理者管理**: 各店舗にアクセス可能なユーザーの追加・削除
 - **店舗削除**: 店舗と関連フォームの一括削除（危険ゾーン）
 
 ### 📋 店舗管理者機能
-- **フォーム基本情報設定**: 店舗名、フォーム名、LIFF ID、テーマカラーの設定
+- **ダッシュボード**: 予約一覧・分析・フォーム管理を統合したダッシュボード（shadcn/ui刷新）
+- **予約管理**: 自店舗の予約データ一覧表示・フィルタリング
+- **予約分析**: 予約状況の統計・グラフ表示（日別・時間帯別・メニュー別）
+- **サブドメインアクセス**: `{subdomain}.{base-domain}` で直接アクセス可能
+- **フォーム基本情報設定**: 店舗名、フォーム名、LIFF ID、テーマカラーの設定（店舗管理者はLIFF ID/GAS Endpoint編集不可）
 - **メニュー・カテゴリ管理**: メニューの追加・編集・削除、カテゴリの作成・管理
 - **画像アップロード**: メニューに画像を添付（Supabase Storage統合）
 - **性別フィルタリング**: 性別によるメニュー表示制御
 - **営業時間設定**: 曜日別営業時間・定休日の設定
 - **プレビュー機能**: 変更内容をリアルタイムで確認
 - **フォーム公開管理**: アクティブ/非アクティブの切り替え
-- **予約管理**: 自店舗の予約データ一覧表示
-- **認証**: ログイン画面経由でのアクセス（実装予定）
+- **アンケートフォーム管理**: アンケートフォームの作成・編集・削除
+- **認証**: ログイン画面経由でのアクセス
 
 ### 👥 顧客向け機能
 - **モバイル最適化**: LINE内での使いやすいインターフェース
 - **性別選択**: 設定に応じたメニューフィルタリング
 - **メニュー選択**: 画像付きメニューから選択
 - **サブメニュー**: 詳細オプション選択
-- **予約日時選択**: カレンダーから日時を選択
+- **予約日時選択**: カレンダーから日時を選択（Google Calendar連携対応）
 - **顧客情報入力**: 名前、電話番号、要望等の入力
 - **Google Apps Script連携**: 予約データの自動送信
+- **Google Calendar連携**: カレンダーの空き状況を確認して予約可能日時を表示
 
 ## 🛠 技術スタック
 
-- **Framework**: Next.js 15.5.3 (App Router)
+- **Framework**: Next.js 16.0.10 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS v4
+- **UI Components**: shadcn/ui (Radix UIベース)
+  - Avatar, Badge, Button, Card, Dialog, DropdownMenu, Input, Label, Select, Sheet, Table, Tabs, Toast, Toaster
+  - `lucide-react` アイコンライブラリ
 - **Database**: Supabase (Staging/Production), JSON ファイル (Local開発)
 - **Authentication**: Supabase Auth
 - **Storage**: Supabase Storage（画像・フォームHTML）
@@ -72,8 +83,29 @@ src/
 ├── components/                  # 再利用可能なコンポーネント
 │   ├── Calendar/               # カレンダー関連
 │   ├── FormEditor/             # フォーム編集コンポーネント
+│   │   ├── FormEditModal.tsx  # フォーム編集モーダル（予約・アンケート共通）
+│   │   ├── Reservation/        # 予約フォーム編集コンポーネント
+│   │   └── Survey/             # アンケートフォーム編集コンポーネント
 │   ├── FormRenderer/           # フォーム表示コンポーネント
-│   └── Layout/                 # レイアウトコンポーネント
+│   ├── Layout/                 # レイアウトコンポーネント
+│   ├── StoreAdminLayout.tsx    # 店舗管理者ダッシュボードレイアウト
+│   ├── StoreAdminManager.tsx  # 店舗管理者管理コンポーネント
+│   ├── ReservationAnalytics.tsx # 予約分析コンポーネント
+│   └── ui/                     # shadcn/uiコンポーネント
+│       ├── avatar.tsx
+│       ├── badge.tsx
+│       ├── button.tsx
+│       ├── card.tsx
+│       ├── dialog.tsx
+│       ├── dropdown-menu.tsx
+│       ├── input.tsx
+│       ├── label.tsx
+│       ├── select.tsx
+│       ├── sheet.tsx
+│       ├── table.tsx
+│       ├── tabs.tsx
+│       ├── toast.tsx
+│       └── toaster.tsx
 ├── lib/                        # ユーティリティ・ビジネスロジック
 │   ├── memory-storage.ts       # 一時データストレージ
 │   ├── static-generator-reservation.ts  # 予約フォーム静的HTML生成
@@ -256,6 +288,9 @@ pnpm dev  # ローカルで開発
 - `/api/stores/{storeId}/forms` - 店舗別フォーム管理
 - `/api/stores/{storeId}/surveys` - 店舗別アンケートフォーム管理
 - `/api/stores/{storeId}/reservations` - 店舗別予約一覧
+- `/api/stores/{storeId}/reservations/analytics` - 予約分析データ取得
+- `/api/stores/{storeId}/admins` - 店舗管理者管理（一覧・追加）
+- `/api/stores/{storeId}/admins/{userId}` - 店舗管理者削除
 - `/api/forms/{formId}` - フォーム個別操作
 - `/api/forms/{formId}/deploy` - Supabase Storageデプロイ
 - `/api/surveys/{id}` - アンケートフォーム個別操作
@@ -263,6 +298,8 @@ pnpm dev  # ローカルで開発
 - `/api/reservations` - 全予約管理（サービス管理者用）
 - `/api/upload/menu-image` - 画像アップロード
 - `/api/public-form/[...path]` - 公開フォームプロキシ（Supabase Storageから配信）
+- `/api/auth/set-cookie` - 認証トークンをクッキーに設定
+- `/api/auth/verify` - 認証トークン検証
 - RESTful設計でCRUD操作対応
 
 ## 🚀 デプロイメント

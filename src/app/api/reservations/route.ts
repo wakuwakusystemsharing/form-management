@@ -3,6 +3,13 @@ import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import {
+  findCustomerByLineOrPhone,
+  createCustomer,
+  updateCustomer,
+  createCustomerVisit,
+  calculateTotalAmount,
+} from '@/lib/customer-utils';
 
 // 予約データの型定義
 interface SelectedMenu {
@@ -30,6 +37,7 @@ interface Reservation {
   reservation_date: string;
   reservation_time: string;
   customer_info?: Record<string, string>;
+  line_user_id?: string | null; // LINEユーザーID
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
   created_at: string;
   updated_at: string;
@@ -123,7 +131,7 @@ export async function GET(request: Request) {
     }
 
     // クエリビルド
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let query = (adminClient as any)
       .from('reservations')
       .select('*');
@@ -201,6 +209,58 @@ export async function POST(request: Request) {
 
     // ローカル環境: JSON に保存
     if (env === 'local') {
+      // === CRM顧客自動統合ロジック ===
+      // 1. LINEユーザーIDまたは電話番号で既存顧客を検索
+      let customerId: string | null = null;
+      try {
+        const existingCustomer = await findCustomerByLineOrPhone(
+          body.store_id,
+          body.line_user_id,
+          body.customer_phone
+        );
+
+        if (existingCustomer) {
+          // 2-a. 既存顧客の情報を更新
+          const totalAmount = calculateTotalAmount(body.selected_menus, body.selected_options);
+          await updateCustomer(existingCustomer.id, {
+            last_visit_date: body.reservation_date,
+            total_visits: existingCustomer.total_visits + 1,
+            total_spent: existingCustomer.total_spent + totalAmount,
+            // LINE情報があれば更新
+            line_display_name: body.line_display_name || existingCustomer.line_display_name,
+            line_picture_url: body.line_picture_url || existingCustomer.line_picture_url,
+            line_status_message: body.line_status_message || existingCustomer.line_status_message,
+            line_os: body.line_os || existingCustomer.line_os,
+          });
+          customerId = existingCustomer.id;
+        } else {
+          // 2-b. 新規顧客を作成
+          const newCustomer = await createCustomer({
+            store_id: body.store_id,
+            line_user_id: body.line_user_id,
+            name: body.customer_name,
+            phone: body.customer_phone,
+            email: body.customer_email,
+            gender: body.customer_info?.gender,
+            line_display_name: body.line_display_name,
+            line_picture_url: body.line_picture_url,
+            line_status_message: body.line_status_message,
+            line_email: body.line_email,
+            line_language: body.line_language,
+            line_os: body.line_os,
+            customer_type: 'new',
+            first_visit_date: body.reservation_date,
+            last_visit_date: body.reservation_date,
+            total_visits: 1,
+            total_spent: calculateTotalAmount(body.selected_menus, body.selected_options),
+          });
+          customerId = newCustomer.id;
+        }
+      } catch (error) {
+        console.error('[CRM] Customer integration error:', error);
+        // エラーが発生しても予約作成は継続
+      }
+
       // 予約ID生成
       const reservationId = `rsv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -216,6 +276,7 @@ export async function POST(request: Request) {
         reservation_date: body.reservation_date,
         reservation_time: body.reservation_time,
         customer_info: body.customer_info,
+        line_user_id: body.line_user_id || null, // LINEユーザーID
         status: 'pending',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -224,6 +285,24 @@ export async function POST(request: Request) {
       const reservations = readReservations();
       reservations.push(newReservation);
       writeReservations(reservations);
+
+      // 3. 来店履歴を作成
+      if (customerId) {
+        try {
+          await createCustomerVisit({
+            customer_id: customerId,
+            store_id: body.store_id,
+            reservation_id: reservationId,
+            visit_date: body.reservation_date,
+            visit_time: body.reservation_time,
+            visit_type: 'reservation',
+            treatment_menus: body.selected_menus,
+            amount: calculateTotalAmount(body.selected_menus, body.selected_options),
+          });
+        } catch (error) {
+          console.error('[CRM] Customer visit creation error:', error);
+        }
+      }
 
       return NextResponse.json(newReservation, { status: 201 });
     }
@@ -237,10 +316,62 @@ export async function POST(request: Request) {
       );
     }
 
+    // === CRM顧客自動統合ロジック ===
+    // 1. LINEユーザーIDまたは電話番号で既存顧客を検索
+    let customerId: string | null = null;
+    try {
+      const existingCustomer = await findCustomerByLineOrPhone(
+        body.store_id,
+        body.line_user_id,
+        body.customer_phone
+      );
+
+      if (existingCustomer) {
+        // 2-a. 既存顧客の情報を更新
+        const totalAmount = calculateTotalAmount(body.selected_menus, body.selected_options);
+        await updateCustomer(existingCustomer.id, {
+          last_visit_date: body.reservation_date,
+          total_visits: existingCustomer.total_visits + 1,
+          total_spent: existingCustomer.total_spent + totalAmount,
+          // LINE情報があれば更新
+          line_display_name: body.line_display_name || existingCustomer.line_display_name,
+          line_picture_url: body.line_picture_url || existingCustomer.line_picture_url,
+          line_status_message: body.line_status_message || existingCustomer.line_status_message,
+          line_os: body.line_os || existingCustomer.line_os,
+        });
+        customerId = existingCustomer.id;
+      } else {
+        // 2-b. 新規顧客を作成
+        const newCustomer = await createCustomer({
+          store_id: body.store_id,
+          line_user_id: body.line_user_id,
+          name: body.customer_name,
+          phone: body.customer_phone,
+          email: body.customer_email,
+          gender: body.customer_info?.gender,
+          line_display_name: body.line_display_name,
+          line_picture_url: body.line_picture_url,
+          line_status_message: body.line_status_message,
+          line_email: body.line_email,
+          line_language: body.line_language,
+          line_os: body.line_os,
+          customer_type: 'new',
+          first_visit_date: body.reservation_date,
+          last_visit_date: body.reservation_date,
+          total_visits: 1,
+          total_spent: calculateTotalAmount(body.selected_menus, body.selected_options),
+        });
+        customerId = newCustomer.id;
+      }
+    } catch (error) {
+      console.error('[CRM] Customer integration error:', error);
+      // エラーが発生しても予約作成は継続
+    }
+
     // 既存カラム用のデータを抽出（後方互換性のため）
     const selectedMenus = body.selected_menus || [];
     const customerInfo = body.customer_info || {};
-    
+
     // menu_nameとsubmenu_nameを抽出（最初のメニューから）
     let menuName = '';
     let submenuName: string | null = null;
@@ -249,12 +380,12 @@ export async function POST(request: Request) {
       menuName = firstMenu.menu_name || '';
       submenuName = firstMenu.submenu_name || null;
     }
-    
+
     // customer_infoから既存カラム用の値を抽出
     const gender = customerInfo.gender || null;
     const visitCount = customerInfo.visit_count || null;
     const coupon = customerInfo.coupon || null;
-    
+
     const newReservation = {
       form_id: body.form_id,
       store_id: body.store_id,
@@ -274,10 +405,12 @@ export async function POST(request: Request) {
       reservation_date: body.reservation_date,
       reservation_time: body.reservation_time,
       customer_info: customerInfo,
+      line_user_id: body.line_user_id || null, // LINEユーザーID
+      customer_id: customerId, // 顧客ID (CRM連携)
       status: 'pending'
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: reservation, error } = await (adminClient as any)
       .from('reservations')
       .insert([newReservation])
@@ -290,6 +423,25 @@ export async function POST(request: Request) {
         { error: '予約の作成に失敗しました' },
         { status: 500 }
       );
+    }
+
+    // 3. 来店履歴を作成
+    if (customerId) {
+      try {
+        await createCustomerVisit({
+          customer_id: customerId,
+          store_id: body.store_id,
+          reservation_id: reservation.id,
+          visit_date: body.reservation_date,
+          visit_time: body.reservation_time,
+          visit_type: 'reservation',
+          treatment_menus: body.selected_menus,
+          amount: calculateTotalAmount(body.selected_menus, body.selected_options),
+        });
+      } catch (error) {
+        console.error('[CRM] Customer visit creation error:', error);
+        // エラーが発生しても予約のレスポンスは返す
+      }
     }
 
     return NextResponse.json(reservation, { status: 201 });

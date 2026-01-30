@@ -124,8 +124,8 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 -- stores テーブルの RLS
 ALTER TABLE stores ENABLE ROW LEVEL SECURITY;
 
--- 店舗管理者は自分の店舗のみ閲覧可能
-CREATE POLICY "店舗管理者は自店舗を閲覧可能" ON stores
+-- Store admins can view only their own stores
+CREATE POLICY "store_admin_stores_select" ON stores
   FOR SELECT
   USING (
     id IN (
@@ -133,11 +133,11 @@ CREATE POLICY "店舗管理者は自店舗を閲覧可能" ON stores
     )
   );
 
--- forms テーブルの RLS
+-- forms table RLS
 ALTER TABLE forms ENABLE ROW LEVEL SECURITY;
 
--- 店舗管理者は自店舗のフォームのみ CRUD 可能
-CREATE POLICY "店舗管理者は自店舗のフォームを閲覧可能" ON forms
+-- Store admins can CRUD forms for their own stores only
+CREATE POLICY "store_admin_forms_select" ON forms
   FOR SELECT
   USING (
     store_id IN (
@@ -145,7 +145,7 @@ CREATE POLICY "店舗管理者は自店舗のフォームを閲覧可能" ON for
     )
   );
 
-CREATE POLICY "店舗管理者は自店舗のフォームを作成可能" ON forms
+CREATE POLICY "store_admin_forms_insert" ON forms
   FOR INSERT
   WITH CHECK (
     store_id IN (
@@ -153,7 +153,7 @@ CREATE POLICY "店舗管理者は自店舗のフォームを作成可能" ON for
     )
   );
 
-CREATE POLICY "店舗管理者は自店舗のフォームを更新可能" ON forms
+CREATE POLICY "store_admin_forms_update" ON forms
   FOR UPDATE
   USING (
     store_id IN (
@@ -161,7 +161,7 @@ CREATE POLICY "店舗管理者は自店舗のフォームを更新可能" ON for
     )
   );
 
-CREATE POLICY "店舗管理者は自店舗のフォームを削除可能" ON forms
+CREATE POLICY "store_admin_forms_delete" ON forms
   FOR DELETE
   USING (
     store_id IN (
@@ -169,11 +169,11 @@ CREATE POLICY "店舗管理者は自店舗のフォームを削除可能" ON for
     )
   );
 
--- reservations テーブルの RLS
+-- reservations table RLS
 ALTER TABLE reservations ENABLE ROW LEVEL SECURITY;
 
--- 店舗管理者は自店舗の予約のみ閲覧可能
-CREATE POLICY "店舗管理者は自店舗の予約を閲覧可能" ON reservations
+-- Store admins can view reservations for their own stores only
+CREATE POLICY "store_admin_reservations_select" ON reservations
   FOR SELECT
   USING (
     store_id IN (
@@ -181,13 +181,13 @@ CREATE POLICY "店舗管理者は自店舗の予約を閲覧可能" ON reservati
     )
   );
 
--- 顧客フォームからの予約作成は公開アクセス許可 (認証不要)
-CREATE POLICY "顧客フォームから予約作成可能" ON reservations
+-- Public access for reservation creation from customer forms (no authentication required)
+CREATE POLICY "public_reservations_insert" ON reservations
   FOR INSERT
   WITH CHECK (true);
 
--- 店舗管理者は自店舗の予約を更新可能
-CREATE POLICY "店舗管理者は自店舗の予約を更新可能" ON reservations
+-- Store admins can update reservations for their own stores
+CREATE POLICY "store_admin_reservations_update" ON reservations
   FOR UPDATE
   USING (
     store_id IN (
@@ -195,11 +195,11 @@ CREATE POLICY "店舗管理者は自店舗の予約を更新可能" ON reservati
     )
   );
 
--- store_admins テーブルの RLS
+-- store_admins table RLS
 ALTER TABLE store_admins ENABLE ROW LEVEL SECURITY;
 
--- 店舗管理者は自分の情報のみ閲覧可能
-CREATE POLICY "店舗管理者は自分の情報を閲覧可能" ON store_admins
+-- Store admins can view only their own information
+CREATE POLICY "store_admin_store_admins_select" ON store_admins
   FOR SELECT
   USING (user_id = auth.uid());
 

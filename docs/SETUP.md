@@ -9,6 +9,17 @@
 - Vercel アカウント (staging/prod デプロイ用)
 - Supabase プロジェクト (staging/prod 用)
 
+## 📦 主要依存関係
+
+- **Next.js 16.0.10** - React フレームワーク
+- **shadcn/ui** - UIコンポーネントライブラリ（Radix UIベース）
+  - `@radix-ui/react-*` - アクセシブルなUIプリミティブ
+  - `lucide-react` - アイコンライブラリ
+  - `class-variance-authority` - バリアント管理
+  - `tailwind-merge` - Tailwindクラス統合
+- **Supabase** - データベース・認証・ストレージ
+- **Tailwind CSS v4** - スタイリング
+
 ## 🔧 ローカル開発環境 (dev)
 
 ### 1. リポジトリのクローン
@@ -114,7 +125,9 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... (Staging プ�
 5. RLSポリシーを設定（詳細は [`SUPABASE_STORAGE_SETUP.md`](SUPABASE_STORAGE_SETUP.md) を参照）
 6. 環境変数は既に設定済み（`NEXT_PUBLIC_SUPABASE_URL` で自動的に staging プロジェクトの Storage に接続）
 
-**注意**: フォームHTMLは `staging/forms/{storeId}/{formId}/config/current.html` のパス構造で保存されます
+**注意**: フォームHTMLは以下のパス構造で保存されます（2025-01-31更新）
+- 予約フォーム: `reservations/{storeId}/{formId}/index.html`
+- アンケートフォーム: `surveys/{storeId}/{formId}/index.html`
 
 ### 4. デプロイ
 
@@ -127,7 +140,7 @@ git push origin staging
 ### 5. 動作確認
 
 - データは Staging 用 Supabase プロジェクトに保存（既存プロジェクト）
-- 静的HTML は Supabase Storage (`staging/forms/{storeId}/{formId}/config/current.html`) に出力
+- 静的HTML は Supabase Storage (`reservations/{storeId}/{formId}/index.html` または `surveys/{storeId}/{formId}/index.html`) に出力
 - RLS で店舗別アクセス制御が有効
 - Production 環境とは完全に分離されていることを確認
 
@@ -210,7 +223,7 @@ git push origin main
 ### 5. 動作確認
 
 - データは本番 Supabase プロジェクトに保存（staging とは別プロジェクト）
-- 静的HTML は Supabase Storage (`prod/forms/{storeId}/{formId}/config/current.html`) に出力
+- 静的HTML は Supabase Storage (`reservations/{storeId}/{formId}/index.html` または `surveys/{storeId}/{formId}/index.html`) に出力
 - RLS で本番データが保護される
 - staging 環境のデータと production 環境のデータは完全に分離されていることを確認
 
@@ -240,7 +253,7 @@ pnpm build
 | 項目 | dev (local) | staging | production |
 |------|-------------|---------|------------|
 | データ永続化 | JSON ファイル | Supabase (既存プロジェクト) | Supabase (新規プロジェクト、Pro プラン) |
-| Storage デプロイ | `/public/static-forms/` | Supabase Storage (`staging/forms/`) | Supabase Storage (`prod/forms/`) |
+| Storage デプロイ | `/public/static-forms/` | Supabase Storage (`reservations/`, `surveys/`) | Supabase Storage (`reservations/`, `surveys/`) |
 | 認証 | 未実装 | Supabase Auth | Supabase Auth |
 | RLS | 無効 | 有効 | 有効 |
 | CI/CD | - | GitHub Actions + Vercel | GitHub Actions + Vercel |
@@ -289,3 +302,8 @@ pnpm build
 - [`README.md`](README.md) - プロジェクト概要
 - [Vercel Documentation](https://vercel.com/docs)
 - [Supabase Documentation](https://supabase.com/docs)
+- [shadcn/ui Documentation](https://ui.shadcn.com/)
+
+---
+
+**最終更新**: 2025年12月

@@ -7,7 +7,7 @@ export class StaticSurveyGenerator {
   /**
    * SurveyConfigから静的HTMLを生成
    */
-  generateHTML(config: SurveyConfig): string {
+  generateHTML(config: SurveyConfig, surveyFormId?: string, storeId?: string): string {
     const safeConfig: SurveyConfig = JSON.parse(JSON.stringify(config));
     
     // CSS生成
@@ -53,15 +53,31 @@ export class StaticSurveyGenerator {
 
     <script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
     <script>
+        // LINEユーザーIDを保持する変数
+        let lineUserId = null;
+        
         // LIFF初期化
-        document.addEventListener('DOMContentLoaded', function () {
-            liff.init({
-                liffId: '${safeConfig.basic_info.liff_id}'
-            }).then(() => {
-                console.log('LIFF初期化成功');
-            }).catch((err) => {
+        document.addEventListener('DOMContentLoaded', async function () {
+            const liffId = '${safeConfig.basic_info.liff_id}';
+            if (!liffId || liffId.length < 10) return;
+            
+            try {
+                await liff.init({ liffId });
+                if (liff.isLoggedIn()) {
+                    // LINEユーザーIDを取得
+                    try {
+                        const idToken = await liff.getDecodedIDToken();
+                        if (idToken && idToken.sub) {
+                            lineUserId = idToken.sub;
+                        }
+                    } catch (idTokenError) {
+                        console.warn('LINE User ID取得に失敗しました:', idTokenError);
+                    }
+                    console.log('LIFF初期化成功');
+                }
+            } catch (err) {
                 console.error('LIFF初期化失敗', err);
-            });
+            }
         });
 
         // 選択ボタンの制御
@@ -124,6 +140,29 @@ export class StaticSurveyGenerator {
             let messageText = \`≪\${document.title}≫\\n\`;
             for (const [key, val] of Object.entries(formData)) {
                 messageText += \`【\${key}】\\n・\${val}\\n\\n\`;
+            }
+
+            // データベースに保存
+            const surveyFormId = '${surveyFormId || ''}';
+            const storeId = '${storeId || ''}';
+            
+            if (surveyFormId && storeId) {
+                // 現在のURLからベースパスを取得
+                const baseUrl = window.location.origin;
+                fetch(\`\${baseUrl}/api/surveys/submit\`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        survey_form_id: surveyFormId,
+                        store_id: storeId,
+                        responses: formData,
+                        line_user_id: lineUserId || null // LINEユーザーID
+                    })
+                }).catch((err) => {
+                    console.error('データベースへの保存に失敗しました', err);
+                });
             }
 
             // LINEトークにメッセージを送信

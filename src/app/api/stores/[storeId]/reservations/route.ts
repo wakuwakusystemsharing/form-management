@@ -105,7 +105,7 @@ export async function GET(
     }
 
     // クエリビルド
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let query = (adminClient as any)
       .from('reservations')
       .select('*')

@@ -16,8 +16,8 @@
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { isLocal } from './lib/env';
-import { createAuthenticatedClient, checkStoreAccess } from './lib/supabase';
+import { shouldSkipAuth, getAppEnvironment } from './lib/env';
+import { createAuthenticatedClient, checkStoreAccess, getSupabaseAdminClient } from './lib/supabase';
 
 const ADMIN_EMAILS = [
   'wakuwakusystemsharing@gmail.com',
@@ -25,11 +25,79 @@ const ADMIN_EMAILS = [
   'manager@wakuwakusystemsharing.com'
 ];
 
+/**
+ * サブドメインからstoreIdを取得（データベースルックアップ）
+ * staging/dev環境のプレビューデプロイメントURLにも対応
+ */
+async function getStoreIdFromSubdomain(hostname: string): Promise<string | null> {
+  // ローカル環境ではサブドメイン検出をスキップ
+  if (shouldSkipAuth()) {
+    return null;
+  }
+
+  // サブドメイン抽出
+  // 例: st0001.nas-rsv.com → st0001
+  // 例: st0001.form-management-staging.vercel.app → st0001
+  // 例: st0001.form-management-git-dev-wakuwakusystems-projects.vercel.app → st0001
+  const subdomainMatch = hostname.match(/^([a-z0-9]{6}|st\d{4})\./);
+  if (!subdomainMatch) {
+    // カスタムドメインの可能性もあるので、フルホスト名で検索
+    const adminClient = getSupabaseAdminClient();
+    if (!adminClient) return null;
+    
+    const { data } = await (adminClient as any)
+      .from('stores')
+      .select('id')
+      .eq('custom_domain', hostname)
+      .single();
+    
+    return data?.id || null;
+  }
+  
+  const subdomain = subdomainMatch[1];
+  
+  // データベースからサブドメインまたはカスタムドメインで店舗を検索
+  const adminClient = getSupabaseAdminClient();
+  if (!adminClient) return null;
+  
+  const { data } = await (adminClient as any)
+    .from('stores')
+    .select('id')
+    .or(`subdomain.eq.${subdomain},custom_domain.eq.${hostname}`)
+    .single();
+  
+  return data?.id || null;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const hostname = request.headers.get('host') || '';
+  
+  // サブドメインからstoreIdを取得
+  const storeIdFromSubdomain = await getStoreIdFromSubdomain(hostname);
+  
+  // サブドメインが検出された場合、パスをリライト
+  if (storeIdFromSubdomain) {
+    // /admin へのアクセスは拒否（サービス管理者ページはサブドメイン経由ではアクセス不可）
+    // 店舗管理者ページにリダイレクト
+    if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+      const url = request.nextUrl.clone();
+      url.pathname = `/${storeIdFromSubdomain}/admin`;
+      return NextResponse.redirect(url);
+    }
+    
+    // ルートパス（/）を店舗管理者ページにリライト
+    if (pathname === '/') {
+      const url = request.nextUrl.clone();
+      url.pathname = `/${storeIdFromSubdomain}/admin`;
+      return NextResponse.rewrite(url);
+    }
+    
+    // 既に店舗IDが含まれているパスはそのまま（リライト済み）
+  }
 
-  // ローカル開発環境では認証をスキップ
-  if (isLocal()) {
+  // ローカル環境のみ認証をスキップ
+  if (shouldSkipAuth()) {
     return NextResponse.next();
   }
 
@@ -64,11 +132,30 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // 店舗管理者ページ（/{storeId}/admin）へのアクセス時は、未認証でもページを表示
+  // ページ内でログイン画面を表示するため
+  const storeAdminPageMatch = pathname.match(/^\/([a-z0-9]{6}|st\d{4})\/admin$/);
+  if (storeAdminPageMatch) {
+    return NextResponse.next();
+  }
+
   // アクセストークン取得
   const accessToken = request.cookies.get('sb-access-token')?.value;
   
   if (!accessToken) {
-    // 未認証 → /admin にリダイレクト
+    // サービス管理者ルートの場合は /admin にリダイレクト
+    // 店舗管理者ルートの場合は既に上で許可されているので、ここには来ない
+    if (isServiceAdminRoute) {
+      return NextResponse.redirect(new URL('/admin', request.url));
+    }
+    // その他の保護されたルート（/{storeId}/forms, /{storeId}/reservations など）は認証必須
+    // 店舗管理者ページにリダイレクト（ログイン後、元のページに戻れるように）
+    const storeIdMatch = pathname.match(/\/([a-z0-9]{6}|st\d{4})\//);
+    if (storeIdMatch) {
+      const storeId = storeIdMatch[1];
+      return NextResponse.redirect(new URL(`/${storeId}/admin`, request.url));
+    }
+    // フォールバック: /admin にリダイレクト
     return NextResponse.redirect(new URL('/admin', request.url));
   }
 
@@ -89,14 +176,40 @@ export async function middleware(request: NextRequest) {
   }
 
   // サービス管理者ルートの場合は管理者アカウント確認
-  if (isServiceAdminRoute && !ADMIN_EMAILS.includes(user.email || '')) {
-    return NextResponse.redirect(new URL('/admin', request.url));
+  if (isServiceAdminRoute) {
+    // サービス管理者でない場合、店舗管理者ページにリダイレクト
+    if (!ADMIN_EMAILS.includes(user.email || '')) {
+      // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
+      // まず、ユーザーがアクセス権限を持つ店舗を取得
+      const { data: storeAdmins } = await (supabase as any)
+        .from('store_admins')
+        .select('store_id')
+        .limit(1);
+      
+      if (storeAdmins && storeAdmins.length > 0) {
+        const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
+        return NextResponse.redirect(new URL(`/${firstStoreId}/admin`, request.url));
+      }
+      
+      // 店舗管理者として登録されていない場合、403エラー
+      return new NextResponse(
+        JSON.stringify({ error: 'アクセス権限がありません' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
   }
 
-  // 店舗 ID 抽出
-  // 6文字のランダム文字列または旧形式（st0001）を抽出
-  const storeIdMatch = pathname.match(/\/([a-z0-9]{6}|st\d{4})\//);
-  const storeId = storeIdMatch ? storeIdMatch[1] : null;
+  // 店舗 ID 抽出（サブドメインまたはパスから）
+  let storeId: string | null = null;
+  
+  if (storeIdFromSubdomain) {
+    // サブドメインから取得（優先）
+    storeId = storeIdFromSubdomain;
+  } else {
+    // パスから抽出（既存ロジック、後方互換性）
+    const storeIdMatch = pathname.match(/\/([a-z0-9]{6}|st\d{4})\//);
+    storeId = storeIdMatch ? storeIdMatch[1] : null;
+  }
   
   // /{storeId}/reservations はサービス管理者のみアクセス可能
   const isReservationsRoute = pathname.match(/^\/([a-z0-9]{6}|st\d{4})\/reservations/);
@@ -109,14 +222,18 @@ export async function middleware(request: NextRequest) {
       }
     } else {
       // その他の店舗管理画面は店舗アクセス権限チェック
-      const hasAccess = await checkStoreAccess(user.id, storeId);
-      
-      if (!hasAccess) {
-        // アクセス権限なし → 403
-        return new NextResponse(
-          JSON.stringify({ error: 'この店舗へのアクセス権限がありません' }),
-          { status: 403, headers: { 'Content-Type': 'application/json' } }
-        );
+      // サービス管理者の場合は既にチェック済みなので、通常ユーザーのみチェック
+      if (!ADMIN_EMAILS.includes(user.email || '')) {
+        // 認証済みクライアントを渡してRLSをバイパス
+        const hasAccess = await checkStoreAccess(user.id, storeId, user.email, supabase);
+        
+        if (!hasAccess) {
+          // アクセス権限なし → 403
+          return new NextResponse(
+            JSON.stringify({ error: 'この店舗へのアクセス権限がありません' }),
+            { status: 403, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
       }
     }
   }
@@ -126,10 +243,8 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/admin/:path*', 
-    // 6文字のランダム文字列または旧形式（st0001）の店舗管理画面
-    '/:storeId([a-z0-9]{6}|st\\d{4})/(admin|forms|reservations)/:path*',
-    // public-form API は除外（一般公開）
-    '/((?!api/public-form)api)/(forms|stores|reservations)/:path*'
+    // すべてのパスをマッチ（サブドメイン検出のため）
+    // 静的ファイルとNext.js内部ファイルは除外
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ]
 };

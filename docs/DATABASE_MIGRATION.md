@@ -163,6 +163,28 @@
 
 **注意**: `20250125000000_add_survey_forms.sql` と重複する可能性がありますが、`IF NOT EXISTS` を使用しているため問題ありません
 
+### `20250202000000_add_subdomain_columns.sql` - サブドメイン・カスタムドメインカラム追加
+
+**実行状況**: ✅ 実行済み
+
+**目的**: 店舗ごとにサブドメインとカスタムドメインを設定可能にする
+
+#### 主な変更点
+
+**`stores` テーブル**:
+- `subdomain` (text, UNIQUE, nullable) - サブドメイン（例: st0001）
+- `custom_domain` (text, UNIQUE, nullable) - カスタムドメイン（例: example.com）
+- 既存レコードに対して `subdomain = id` を設定（既存データとの互換性）
+
+**インデックス**:
+- `idx_stores_subdomain` - subdomain用ユニークインデックス
+- `idx_stores_custom_domain` - custom_domain用ユニークインデックス
+
+**注意**: 
+- サブドメインは小文字英数字とハイフンのみ、3-63文字
+- 予約語（`www`, `api`, `admin`など）は使用不可
+- カスタムドメインは基本的なドメイン形式チェックを実施
+
 ## 🚀 新規環境へのマイグレーション手順
 
 ### 方法1: Supabase MCP経由（推奨）

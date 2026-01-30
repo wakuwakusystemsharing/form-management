@@ -60,17 +60,33 @@ LINE LIFFを活用した予約フォーム管理システムの全体設計、�
 **責務**: ユーザーインターフェース、ユーザー入力の処理、API との通信
 
 **主要ページ**:
-- `/admin` - サービス管理者ダッシュボード（店舗・フォーム・予約一覧）
-- `/[storeId]/admin` - 店舗管理者ダッシュボード
+- `/admin` - サービス管理者ダッシュボード（店舗・フォーム・予約一覧、shadcn/ui刷新）
+- `/admin/[storeId]` - サービス管理者向け店舗詳細管理（フォーム・アンケート・店舗管理者管理）
+- `/[storeId]/admin` - 店舗管理者ダッシュボード（予約一覧・分析・フォーム管理、shadcn/ui刷新）
+- `/[storeId]/reservations` - 予約一覧・分析ページ（shadcn/ui刷新）
 - `/[storeId]/forms/[formId]` - フォーム編集画面（複数タブ対応）
 - `/login` - ログイン画面（Supabase Auth連携）
 - `/form/[formId]` - 顧客向けプレビュー（静的HTML描画）
+
+**サブドメイン・カスタムドメイン対応**:
+- サブドメイン経由でのアクセス: `{subdomain}.{base-domain}` → `/{storeId}/admin` に自動リダイレクト
+- カスタムドメイン経由でのアクセス: `{custom-domain}` → `/{storeId}/admin` に自動リダイレクト
+- 例: `st0001.nas-rsv.com` → `/st0001/admin` にリダイレクト
+- サービス管理者ページ（`/admin`）はサブドメイン経由ではアクセス不可（セキュリティのため）
+
+**UIコンポーネント**:
+- **shadcn/ui**: Radix UIベースのモダンなUIコンポーネントライブラリ
+  - Avatar, Badge, Button, Card, Dialog, DropdownMenu, Input, Label, Select, Sheet, Table, Tabs, Toast, Toaster
+  - `lucide-react` アイコンライブラリ
+  - モバイルファーストデザイン
+  - アクセシビリティ対応
 
 **特徴**:
 - Server Components + Client Components を適切に分離
 - 状態管理は React hooks のみ（Zustand/Redux 不使用）
 - 深くコピーしてイミュータブルな更新
 - 認証は middleware + ログイン画面で制御
+- shadcn/uiによる統一されたUIデザインシステム
 
 ### 2. API 層（Next.js API Routes）
 
@@ -101,10 +117,18 @@ POST /api/surveys/[id]/deploy - アンケートフォーム静的HTML生成・�
 POST /api/reservations - 予約作成
 GET  /api/reservations - 全予約一覧（管理者用）
 GET  /api/stores/[storeId]/reservations - 店舗別予約一覧
+GET  /api/stores/[storeId]/reservations/analytics - 予約分析データ取得（日別・時間帯別・メニュー別統計）
+
+GET  /api/stores/[storeId]/admins - 店舗管理者一覧取得
+POST /api/stores/[storeId]/admins - 店舗管理者追加
+DELETE /api/stores/[storeId]/admins/[userId] - 店舗管理者削除
 
 POST /api/upload/menu-image - メニュー画像アップロード
 
 GET  /api/public-form/[...path] - 公開フォームプロキシ（Supabase Storageから配信）
+
+POST /api/auth/set-cookie - 認証トークンをクッキーに設定
+GET  /api/auth/verify - 認証トークン検証
 ```
 
 **認証方針**:
@@ -127,7 +151,7 @@ data/
 #### Staging / Production（Supabase）
 ```
 Database Tables:
-├── stores - 店舗マスタ（ID: 6文字ランダム文字列またはUUID）
+├── stores - 店舗マスタ（ID: 6文字ランダム文字列 `[a-z0-9]{6}` またはUUID（既存データ）、subdomain, custom_domainカラムあり）
 ├── forms - 予約フォーム定義（config は JSONB）
 ├── survey_forms - アンケートフォーム定義（config は JSONB）
 ├── reservations - 予約データ
@@ -146,8 +170,8 @@ RLS (Row Level Security):
 
 #### Supabase Storage（顧客向けフォーム HTML）
 ```
-Staging:  staging/forms/{storeId}/{formId}/config/current.html (Supabase Storage - Staging プロジェクト)
-Prod:     prod/forms/{storeId}/{formId}/config/current.html (Supabase Storage - Production プロジェクト)
+予約フォーム:  reservations/{storeId}/{formId}/index.html
+アンケートフォーム:  surveys/{storeId}/{formId}/index.html
 Local:    /public/static-forms/{formId}.html (mock)
 ```
 
@@ -162,6 +186,8 @@ Local:    /public/uploads/{storeId}/{menuId}.{ext} (mock)
 - Staging と Production は **別々の Supabase プロジェクト** を使用
 - 環境変数 (`NEXT_PUBLIC_SUPABASE_URL`) で自動的に適切なプロジェクトの Storage に接続
 - バケット名は両環境で `forms`（プロジェクトが別なので分離される）
+- 環境プレフィックス（`staging/`, `prod/`, `dev/`）は不要（プロジェクトレベルで分離されているため）
+- フォームタイプ別にディレクトリを分離（`reservations/`, `surveys/`）
 
 ### 5. 静的HTML生成・デプロイ
 
@@ -281,7 +307,9 @@ interface FormConfig {
 
 ```typescript
 interface Store {
-  id: string; // 6文字ランダム文字列 [a-z0-9]{6} または UUID（既存データ）
+  id: string; // 6文字ランダム文字列 `[a-z0-9]{6}` またはUUID（既存データ）
+  subdomain?: string; // サブドメイン（例: st0001）
+  custom_domain?: string; // カスタムドメイン（例: example.com）
   name: string;
   owner_name: string;
   owner_email: string;
@@ -359,17 +387,17 @@ StaticReservationGenerator (予約フォーム) / StaticSurveyGenerator (アン�
   └─ LIFF SDK + JavaScriptで予約/アンケート処理実装
   ↓
 SupabaseStorageDeployer:
-  ├─ 環境別 path に決定
-  │  ├─ staging: staging/forms/{storeId}/{formId}/config/current.html (Staging プロジェクト)
-  │  └─ prod: prod/forms/{storeId}/{formId}/config/current.html (Production プロジェクト)
-  ├─ 環境変数で適切な Supabase プロジェクトに接続
+  ├─ フォームタイプ別 path に決定
+  │  ├─ 予約フォーム: reservations/{storeId}/{formId}/index.html
+  │  └─ アンケートフォーム: surveys/{storeId}/{formId}/index.html
+  ├─ 環境変数で適切な Supabase プロジェクトに接続（プロジェクトレベルで環境分離）
   ├─ Supabase Storage API でアップロード
   └─ URL を返す（プロジェクトごとに異なる公開URL）
   ↓ DB 更新
   - static_deploy: { deploy_url, storage_url, deployed_at: now, status: 'deployed', environment }
   - last_published_at: now
   ↓ 顧客が LINE でフォーム URL アクセス
-  → `/api/public-form/{env}/forms/{storeId}/{formId}/config/current.html` 経由で静的 HTML が表示される（React なし）
+  → `/api/public-form/reservations/{storeId}/{formId}/index.html` または `/api/public-form/surveys/{storeId}/{formId}/index.html` 経由で静的 HTML が表示される（React なし）
 ```
 
 ## 🛡️ エラーハンドリング
@@ -400,9 +428,10 @@ SupabaseStorageDeployer:
 - **API_SPECIFICATION.md** - API 詳細仕様
 - **DATABASE_MIGRATION.md** - DB マイグレーション歴
 - **WORKFLOW.md** - 開発ワークフロー
+- **STORE_ADMIN_MANAGEMENT.md** - 店舗管理者管理ガイド
 - **SUPABASE_BEST_PRACTICES.md** - Supabase ベストプラクティス
 - **MCP_SETUP_GUIDE.md** - MCP サーバ設定
 
 ---
 
-**最終更新**: 2025年1月
+**最終更新**: 2025年12月

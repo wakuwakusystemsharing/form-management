@@ -292,7 +292,7 @@ pnpm build
 | 確認項目 | dev | staging | production |
 |---------|-----|---------|------------|
 | データ永続化 | JSON ファイル | Supabase (staging) | Supabase (prod) |
-| Blob URL | `/static-forms/` | `staging/forms/` | `prod/forms/` |
+| Storage パス | `/static-forms/` | `reservations/`, `surveys/` | `reservations/`, `surveys/` |
 | 環境変数 | `.env.local` | Vercel Preview 環境変数 | Vercel Production 環境変数 |
 | デプロイ | `pnpm dev` | `git push origin staging` | `git push origin main` |
 

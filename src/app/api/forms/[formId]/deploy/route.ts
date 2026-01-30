@@ -1,3 +1,4 @@
+ 
 import { NextRequest, NextResponse } from 'next/server';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -53,9 +54,8 @@ export async function POST(
           );
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (adminClient as any)
-          .from('forms')
+          .from('reservation_forms')
           .select('*')
           .eq('id', formId)
           .eq('store_id', storeId)
@@ -95,7 +95,7 @@ export async function POST(
     
     // Supabase Storageにデプロイ（環境に応じて自動判定）
     const deployer = new SupabaseStorageDeployer();
-    const deployResult = await deployer.deployForm(storeId, formId, staticHtml);
+    const deployResult = await deployer.deployForm(storeId, formId, staticHtml, 'reservation');
     
     console.log(`✅ フォーム再デプロイ完了: ${deployResult.storage_url || deployResult.url}`);
 
@@ -133,9 +133,8 @@ export async function POST(
       // staging/production: Supabase を更新
       const adminClient = createAdminClient();
       if (adminClient) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (adminClient as any)
-          .from('forms')
+          .from('reservation_forms')
           .update({
             static_deploy: deployInfo,
             updated_at: new Date().toISOString()

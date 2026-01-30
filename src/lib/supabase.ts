@@ -50,6 +50,7 @@ export type Database = {
           visit_count: string | null;
           coupon: string | null;
           message: string | null;
+          line_user_id: string | null; // LINEユーザーID
           status: 'pending' | 'confirmed' | 'cancelled';
           created_at: string;
           updated_at: string;
@@ -90,21 +91,60 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
 
   // 環境変数が設定されていない場合
   if (!supabaseUrl || !supabaseAnonKey) {
-    if (isLocal()) {
-      console.log('[Supabase] Local mode: using JSON file storage (Supabase env vars not set)');
-    } else {
-      console.error('[Supabase] Missing environment variables: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    if (!isLocal()) {
+      console.error('[Supabase] Missing environment variables:', {
+        hasUrl: !!supabaseUrl,
+        hasAnonKey: !!supabaseAnonKey,
+        urlPrefix: supabaseUrl ? supabaseUrl.substring(0, 20) + '...' : 'missing',
+      });
     }
     return null;
   }
 
-  // 環境変数が設定されている場合はSupabase接続を試みる（ローカル環境でも）
-  supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey);
-  if (isLocal()) {
-    console.log('[Supabase] Client initialized for local development (Supabase env vars set)');
-  } else {
-    console.log('[Supabase] Client initialized for staging/production');
+  // 開発環境でのみURLの形式をチェック
+  if (typeof window !== 'undefined' && !isLocal()) {
+    try {
+      new URL(supabaseUrl);
+    } catch (e) {
+      console.error('[Supabase] Invalid URL format:', supabaseUrl);
+      return null;
+    }
   }
+
+  // 環境変数が設定されている場合はSupabase接続を試みる（ローカル環境でも）
+  // ブラウザ環境では、クッキーからセッションを読み取るためにカスタムストレージを使用
+  const authOptions: any = {};
+  
+  // ブラウザ環境の場合、カスタムストレージを使用してクッキーからセッションを読み取る
+  if (typeof window !== 'undefined') {
+    authOptions.storage = {
+      getItem: (key: string) => {
+        // クッキーからアクセストークンを取得
+        if (key === 'sb-access-token') {
+          const cookies = document.cookie.split(';');
+          for (const cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'sb-access-token') {
+              return value;
+            }
+          }
+        }
+        // その他のキーはlocalStorageから取得
+        return localStorage.getItem(key);
+      },
+      setItem: (key: string, value: string) => {
+        // セッション情報はlocalStorageに保存
+        localStorage.setItem(key, value);
+      },
+      removeItem: (key: string) => {
+        localStorage.removeItem(key);
+      }
+    };
+  }
+  
+  supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: authOptions
+  });
   
   return supabaseClient;
 }
@@ -116,7 +156,6 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
  */
 export function getSupabaseAdminClient(): SupabaseClient<Database> | null {
   if (isLocal()) {
-    console.log('[Supabase Admin] Local mode: using JSON file storage');
     return null;
   }
 
@@ -166,31 +205,49 @@ export function createAuthenticatedClient(accessToken: string): SupabaseClient<D
 }
 
 /**
- * ユーザーの店舗アクセス権限を確認
- * @param userId Supabase Auth の user_id
+ * ユーザーの店舗アクセス権限を確認（RLSポリシーに従う）
+ * 
+ * RLSポリシー「store_admin_store_admins」により、認証済みユーザー（auth.uid()）が
+ * 指定されたstore_idの店舗管理者として登録されている場合のみアクセス可能。
+ * 
+ * @param userId Supabase Auth の user_id（ログ用、RLSでは使用しない）
  * @param storeId 店舗 ID
+ * @param userEmail ユーザーのメールアドレス（サービス管理者チェック用）
+ * @param authenticatedClient 認証済みSupabaseクライアント（必須、RLSが適用される）
  * @returns アクセス可能な場合 true
  */
-export async function checkStoreAccess(userId: string, storeId: string): Promise<boolean> {
-  const supabase = getSupabaseClient();
-  
-  if (!supabase) {
-    // ローカル環境では認証をスキップ
+export async function checkStoreAccess(
+  userId: string, 
+  storeId: string, 
+  userEmail: string | undefined,
+  authenticatedClient: SupabaseClient<Database>
+): Promise<boolean> {
+  // サービス管理者の場合は常にアクセス可能（RLSポリシー「admin_store_admins_all」により許可）
+  if (userEmail && isServiceAdmin(userEmail)) {
     return true;
   }
 
-  const { data, error } = await supabase
-    .from('store_admins')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('store_id', storeId)
-    .single();
-
-  if (error || !data) {
+  if (!authenticatedClient) {
+    console.error('[checkStoreAccess] Authenticated client is required');
     return false;
   }
 
-  return true;
+  // RLSポリシーに従って、認証済みユーザーのコンテキストでクエリを実行
+  // RLSポリシー「store_admin_store_admins」により、auth.uid()が自動的に適用される
+  // user_idでの明示的なフィルタリングは不要（RLSが自動的に適用）
+  const { data, error } = await authenticatedClient
+    .from('store_admins')
+    .select('id')
+    .eq('store_id', storeId)
+    .maybeSingle(); // single()ではなくmaybeSingle()を使用（レコードが見つからない場合もエラーにならない）
+
+  if (error) {
+    console.error('[checkStoreAccess] Query error:', { userId, storeId, error: error.message, code: error.code });
+    return false;
+  }
+
+  // データが存在する場合、RLSポリシーによりアクセス可能と判断
+  return !!data;
 }
 
 /**
@@ -213,3 +270,5 @@ export function isServiceAdmin(email: string): boolean {
   ]
   return adminEmails.includes(email)
 }
+
+

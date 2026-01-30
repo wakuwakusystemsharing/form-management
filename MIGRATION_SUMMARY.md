@@ -70,11 +70,18 @@
 
 ## 📦 パス構造
 
-### 環境別パス
+### フォームタイプ別パス（2025-01-31更新）
 ```
-staging:     staging/forms/{storeId}/{formId}/config/current.html
-production:  prod/forms/{storeId}/{formId}/config/current.html
+予約フォーム:  reservations/{storeId}/{formId}/index.html
+アンケートフォーム:  surveys/{storeId}/{formId}/index.html
 ```
+
+**変更点:**
+- 環境プレフィックス（`staging/`, `prod/`, `dev/`）を削除（プロジェクトレベルで分離されているため）
+- `forms/` ディレクトリを削除
+- `config/` ディレクトリを削除
+- `current.html` → `index.html` に変更
+- フォームタイプ別にディレクトリを分離
 
 ### 公開URL形式
 ```

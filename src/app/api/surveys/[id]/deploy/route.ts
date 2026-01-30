@@ -46,7 +46,7 @@ export async function POST(
 
     // HTML生成
     const generator = new StaticSurveyGenerator();
-    const html = generator.generateHTML(form.config);
+    const html = generator.generateHTML(form.config, form.id, form.store_id);
 
     // デプロイ処理
     let deployUrl = '';
@@ -64,7 +64,7 @@ export async function POST(
     } else {
       // Supabase Storageへアップロード
       const deployer = new SupabaseStorageDeployer();
-      const result = await deployer.deployForm(storeId, id, html);
+      const result = await deployer.deployForm(storeId, id, html, 'survey');
       deployUrl = result.url;
       storageUrl = result.storage_url || '';
     }

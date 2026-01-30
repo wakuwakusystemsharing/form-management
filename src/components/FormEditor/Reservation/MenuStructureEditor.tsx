@@ -4,6 +4,11 @@ import React, { useState } from 'react';
 import { Form, MenuCategory, MenuItem, MenuOption, SubMenuItem } from '@/types/form';
 import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 import ImageCropperModal from './ImageCropperModal';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
 
 interface MenuStructureEditorProps {
   form: Form;
@@ -104,194 +109,165 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
     onClose();
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className={`fixed inset-0 flex items-center justify-center z-50 ${themeClasses.modalOverlay}`}>
-      <div className={`rounded-lg shadow-xl max-w-md w-full mx-4 ${themeClasses.modal}`}>
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className={`text-lg font-semibold ${themeClasses.text.primary}`}>
-              {subMenuItem ? 'サブメニュー編集' : '新規サブメニュー追加'}
-            </h3>
-            <button
-              onClick={onClose}
-              className={`${themeClasses.text.secondary} ${theme === 'light' ? 'hover:text-gray-900' : 'hover:text-gray-300'} transition-colors`}
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            {subMenuItem ? 'サブメニュー編集' : '新規サブメニュー追加'}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="submenu-name">
+              サブメニュー名 <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="submenu-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="例: カット（ショート）"
+              required
+            />
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-1`}>
-                サブメニュー名 <span className="text-red-500">*</span>
-              </label>
-              <input
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="submenu-price">料金（円）</Label>
+              <Input
+                id="submenu-price"
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="例: カット（ショート）"
-                className={themeClasses.input}
-                required
+                value={price}
+                onChange={(e) => {
+                  const rawValue = parsePrice(e.target.value);
+                  if (rawValue === '' || /^\d+$/.test(rawValue)) {
+                    setPrice(rawValue === '' ? '' : formatPrice(rawValue));
+                  }
+                }}
+                onBlur={(e) => {
+                  if (e.target.value) {
+                    setPrice(formatPrice(e.target.value));
+                  }
+                }}
+                placeholder="例: 5,000"
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-1`}>
-                  料金（円）
-                </label>
-                <input
-                  type="text"
-                  value={price}
-                  onChange={(e) => {
-                    const rawValue = parsePrice(e.target.value);
-                    if (rawValue === '' || /^\d+$/.test(rawValue)) {
-                      setPrice(rawValue === '' ? '' : formatPrice(rawValue));
-                    }
-                  }}
-                  onBlur={(e) => {
-                    if (e.target.value) {
-                      setPrice(formatPrice(e.target.value));
-                    }
-                  }}
-                  placeholder="例: 5,000"
-                  className={themeClasses.input}
-                />
-                <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
-                  カンマは自動で追加されます
-                </p>
-              </div>
-              <div>
-                <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-1`}>
-                  所要時間（分）
-                </label>
-                <input
-                  type="number"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  min="0"
-                  className={themeClasses.input}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-1`}>
-                説明（オプション）
-              </label>
-              <textarea
-                rows={3}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="サブメニューの詳細説明を入力してください"
-                className={themeClasses.textarea}
-              />
-              <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
-                お客様に表示される説明文です
+              <p className="text-xs text-muted-foreground">
+                カンマは自動で追加されます
               </p>
             </div>
-
-            <div>
-              <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-1`}>
-                画像（オプション）
-              </label>
-              <div className="space-y-3">
-                {/* 画像URL入力 */}
-                <div className="flex space-x-2">
-                  <input
-                    type="url"
-                    value={image}
-                    onChange={(e) => setImage(e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                    className={`flex-1 ${themeClasses.input}`}
-                  />
-                  <div className="relative">
-                    <input
-                      type="file"
-                      ref={(el) => {
-                        if (el && !el.dataset.submenuInitialized) {
-                          el.dataset.submenuInitialized = 'true';
-                          el.accept = 'image/*';
-                          el.onchange = async (e) => {
-                            const file = (e.target as HTMLInputElement).files?.[0];
-                            if (file) {
-                              setSelectedFile(file);
-                              setCropperOpen(true);
-                            }
-                          };
-                        }
-                      }}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        const input = (e.currentTarget.parentNode as HTMLElement).querySelector('input[type="file"]') as HTMLInputElement;
-                        input?.click();
-                      }}
-                      disabled={uploading}
-                      className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                        uploading 
-                          ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
-                          : `${themeClasses.button.secondary} hover:opacity-90`
-                      }`}
-                    >
-                      {uploading ? 'アップロード中...' : 'ファイル選択'}
-                    </button>
-                  </div>
-                </div>
-                <p className={`text-xs ${themeClasses.text.tertiary}`}>
-                  画像URLを直接入力するか、ファイルをアップロードしてください（最大5MB、JPEG/PNG/GIF/WebP対応）
-                </p>
-              </div>
-              {image && (
-                <div className="mt-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className={`text-xs ${themeClasses.text.secondary}`}>プレビュー:</p>
-                    <button
-                      type="button"
-                      onClick={() => setImage('')}
-                      className={`text-xs ${themeClasses.button.delete} px-2 py-1 rounded`}
-                    >
-                      削除
-                    </button>
-                  </div>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img 
-                    src={image} 
-                    alt="プレビュー" 
-                    className={`w-40 h-40 object-cover rounded-md ${
-                      theme === 'light' ? 'border border-gray-300' : 'border border-gray-600'
-                    }`}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                </div>
-              )}
+            <div className="space-y-2">
+              <Label htmlFor="submenu-duration">所要時間（分）</Label>
+              <Input
+                id="submenu-duration"
+                type="number"
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                min="0"
+              />
             </div>
           </div>
 
-          <div className="flex justify-end space-x-3 mt-6">
-            <button
-              onClick={onClose}
-              className={`px-4 py-2 rounded-md ${themeClasses.button.secondary}`}
-            >
-              キャンセル
-            </button>
-            <button
-              onClick={handleSave}
-              className={`px-4 py-2 rounded-md ${themeClasses.button.primary}`}
-            >
-              保存
-            </button>
+          <div className="space-y-2">
+            <Label htmlFor="submenu-description">説明（オプション）</Label>
+            <Textarea
+              id="submenu-description"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="サブメニューの詳細説明を入力してください"
+            />
+            <p className="text-xs text-muted-foreground">
+              お客様に表示される説明文です
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="submenu-image">画像（オプション）</Label>
+            <div className="space-y-3">
+              {/* 画像URL入力 */}
+              <div className="flex space-x-2">
+                <Input
+                  id="submenu-image"
+                  type="url"
+                  value={image}
+                  onChange={(e) => setImage(e.target.value)}
+                  placeholder="https://example.com/image.jpg"
+                  className="flex-1"
+                />
+                <div className="relative">
+                  <input
+                    type="file"
+                    ref={(el) => {
+                      if (el && !el.dataset.submenuInitialized) {
+                        el.dataset.submenuInitialized = 'true';
+                        el.accept = 'image/*';
+                        el.onchange = async (e) => {
+                          const file = (e.target as HTMLInputElement).files?.[0];
+                          if (file) {
+                            setSelectedFile(file);
+                            setCropperOpen(true);
+                          }
+                        };
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={(e) => {
+                      const input = (e.currentTarget.parentNode as HTMLElement).querySelector('input[type="file"]') as HTMLInputElement;
+                      input?.click();
+                    }}
+                    disabled={uploading}
+                  >
+                    {uploading ? 'アップロード中...' : 'ファイル選択'}
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                画像URLを直接入力するか、ファイルをアップロードしてください（最大5MB、JPEG/PNG/GIF/WebP対応）
+              </p>
+            </div>
+            {image && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-muted-foreground">プレビュー:</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setImage('')}
+                  >
+                    削除
+                  </Button>
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img 
+                  src={image} 
+                  alt="プレビュー" 
+                  className="w-40 h-40 object-cover rounded-md border"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
-      </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            キャンセル
+          </Button>
+          <Button onClick={handleSave}>
+            保存
+          </Button>
+        </DialogFooter>
+
+      </DialogContent>
 
       <ImageCropperModal
         isOpen={cropperOpen}
@@ -330,7 +306,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
         imageFile={selectedFile!}
         theme={theme}
       />
-    </div>
+    </Dialog>
   );
 };
 
@@ -1120,14 +1096,14 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <svg className={`w-6 h-6 ${themeClasses.text.secondary}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className={`w-5 h-5 ${themeClasses.text.secondary}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
           </svg>
-          <h2 className={`text-xl font-semibold ${themeClasses.text.primary}`}>メニュー管理</h2>
+          <h2 className={`text-lg font-semibold ${themeClasses.text.primary}`}>メニュー管理</h2>
         </div>
         <button
           onClick={handleAddMenuItem}
-          className={`px-4 py-2 rounded-md flex items-center space-x-2 ${themeClasses.button.primary}`}
+          className={`px-3 py-1.5 text-sm rounded-md flex items-center space-x-2 ${themeClasses.button.primary}`}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
