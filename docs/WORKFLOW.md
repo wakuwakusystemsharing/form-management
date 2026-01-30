@@ -8,11 +8,11 @@
 main (Production - 本番)
   ↑ PR のみ（staging からのみ）
 staging (Staging - 検証環境)
-  ↑ PR のみ（dev または feature/* からのみ）
+  ↑ 直接プッシュ可能、または PR（dev または feature/* からのみ）
 dev (Development - 開発環境)
   ↑ 直接プッシュ可能
 feature/* (機能開発ブランチ)
-  ↑ dev にマージ、または staging にPR
+  ↑ dev にマージ、または staging にPR/直接push
 ```
 
 ### ブランチの役割
@@ -25,8 +25,8 @@ feature/* (機能開発ブランチ)
 
 - **`staging`**: ステージング環境 (Preview)
   - 本番デプロイ前の最終確認
-  - **直接プッシュ禁止**（ブランチ保護ルール）
-  - **dev または feature/* からのPRのみ許可**
+  - **直接プッシュ可能**（開発効率のため）
+  - **dev または feature/* からのPRも利用可能**
   - 本番と同じ構成でテスト
 
 - **`dev`**: 開発環境 (Development)
@@ -119,7 +119,7 @@ git push -u origin feature/your-feature-name
 # Base: staging ← Compare: dev または feature/your-feature-name
 ```
 
-> ⚠️ **重要**: staging への直接プッシュは**禁止**されています。必ずPR経由でマージしてください。
+> ✅ **注意**: staging への直接プッシュが可能です。必要に応じてPR経由でのマージも利用できます。
 
 #### 4-2. Staging 環境で動作確認
 

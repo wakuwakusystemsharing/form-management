@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     console.log('[API] POST /api/stores - Body:', { name, owner_name, owner_email })
 
     // バリデーション
-    if (!name || !owner_name || !owner_email) {
+    if (!name || !owner_name) {
       return NextResponse.json(
         { error: '必須項目が不足しています' },
         { status: 400 }

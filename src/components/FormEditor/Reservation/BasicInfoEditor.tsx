@@ -99,67 +99,130 @@ const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({
       </div>
 
       {/* システム管理者のみ表示 */}
-      {userRole === 'service_admin' && (
-        <>
-          <div>
-            <label className={`block text-sm ${themeClasses.label} mb-2`}>
-              LINE LIFF ID <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              value={(form as any).liff_id || form.config?.basic_info?.liff_id || ''}
-              onChange={(e) => {
-                if ((form as any).liff_id !== undefined) {
-                  // 新形式
-                  onUpdate({
-                    ...form,
-                    liff_id: e.target.value
-                  } as any);
-                } else {
-                  // 旧形式
+      {userRole === 'service_admin' && (() => {
+        // フォームタイプを判定（後方互換性のため）
+        const formType = form.config?.form_type || 
+          (form.config?.basic_info?.liff_id ? 'line' : 'web');
+        const isLineForm = formType === 'line';
+        
+        return (
+          <>
+            {isLineForm && (
+              <div>
+                <label className={`block text-sm ${themeClasses.label} mb-2`}>
+                  LINE LIFF ID <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={(form as any).liff_id || form.config?.basic_info?.liff_id || ''}
+                  onChange={(e) => {
+                    if ((form as any).liff_id !== undefined) {
+                      // 新形式
+                      onUpdate({
+                        ...form,
+                        liff_id: e.target.value
+                      } as any);
+                    } else {
+                      // 旧形式
+                      onUpdate({
+                        ...form,
+                        config: {
+                          ...form.config,
+                          basic_info: {
+                            ...form.config?.basic_info,
+                            liff_id: e.target.value
+                          }
+                        }
+                      });
+                    }
+                  }}
+                  className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
+                  placeholder="例：1234567890-abcdefgh"
+                  required
+                />
+                <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>LINE Developersで作成したLIFF ID</p>
+              </div>
+            )}
+
+            <div>
+              <label className={`block text-sm ${themeClasses.label} mb-2`}>
+                Google App Script エンドポイント（予約送信用） <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="url"
+                value={form.config?.gas_endpoint || ''}
+                onChange={(e) => {
                   onUpdate({
                     ...form,
                     config: {
                       ...form.config,
-                      basic_info: {
-                        ...form.config?.basic_info,
-                        liff_id: e.target.value
-                      }
+                      gas_endpoint: e.target.value
                     }
                   });
-                }
-              }}
-              className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
-              placeholder="例：1234567890-abcdefgh"
-              required
-            />
-            <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>LINE Developersで作成したLIFF ID</p>
-          </div>
+                }}
+                className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
+                placeholder="例：https://script.google.com/macros/s/xxx/exec"
+                required
+              />
+              <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                {isLineForm
+                  ? 'カレンダー空き状況取得用のGASエンドポイント'
+                  : '予約データをGoogle Calendarに登録するためのGASエンドポイント'}
+              </p>
+            </div>
 
-          <div>
-            <label className={`block text-sm ${themeClasses.label} mb-2`}>
-              Google App Script エンドポイント <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="url"
-              value={form.config?.gas_endpoint || ''}
-              onChange={(e) => {
-                onUpdate({
-                  ...form,
-                  config: {
-                    ...form.config,
-                    gas_endpoint: e.target.value
-                  }
-                });
-              }}
-              className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
-              placeholder="例：https://script.google.com/macros/s/xxx/exec"
-              required
-            />
-            <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>カレンダー空き取得用のGASエンドポイント</p>
-          </div>
-        </>
-      )}
+            {!isLineForm && (
+              <>
+                <div>
+                  <label className={`block text-sm ${themeClasses.label} mb-2`}>
+                    カレンダー取得URL <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={form.config?.calendar_url || ''}
+                    onChange={(e) => {
+                      onUpdate({
+                        ...form,
+                        config: {
+                          ...form.config,
+                          calendar_url: e.target.value
+                        }
+                      });
+                    }}
+                    className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
+                    placeholder="例：https://script.google.com/macros/s/xxx/exec"
+                    required
+                  />
+                  <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>Google Calendarの空き状況を取得するためのGASエンドポイント</p>
+                </div>
+
+                <div>
+                  <label className={`block text-sm ${themeClasses.label} mb-2`}>
+                    SECURITY_SECRET <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form.config?.security_secret || ''}
+                    onChange={(e) => {
+                      onUpdate({
+                        ...form,
+                        config: {
+                          ...form.config,
+                          security_secret: e.target.value
+                        }
+                      });
+                    }}
+                    className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
+                    placeholder="例：9f3a7c1e5b2d48a0c6e1f4d9b3a8c2e7d5f0a1b6c3d8e2f7a9b0c4e6d1f3a5b7"
+                    required
+                  />
+                  <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>フォーム送信時の簡易署名用の秘密鍵</p>
+                </div>
+              </>
+            )}
+          </>
+        );
+      })()}
 
       <div>
         <label className={`block text-sm ${themeClasses.label} mb-2`}>

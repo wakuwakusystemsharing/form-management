@@ -694,8 +694,11 @@ export default function StoreDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [newFormData, setNewFormData] = useState({
     form_name: '',
+    form_type: 'line' as 'line' | 'web',
     liff_id: '',
     gas_endpoint: '',
+    calendar_url: '',
+    security_secret: '',
     template: 'basic'
   });
   const [showCreateSurveyForm, setShowCreateSurveyForm] = useState(false);
@@ -778,81 +781,86 @@ export default function StoreDetailPage() {
       return;
     }
 
-    if (!newFormData.liff_id.trim()) {
-      alert('LIFF IDを入力してください');
-      return;
+    // フォームタイプに応じたバリデーション
+    // GASエンドポイント、LIFF ID、カレンダー取得URLは必須から除外（オプショナル）
+    // SECURITY_SECRETはWeb予約フォームの場合のみ必須
+    if (newFormData.form_type === 'web') {
+      if (!newFormData.security_secret.trim()) {
+        alert('SECURITY_SECRETを入力してください');
+        return;
+      }
     }
 
-    if (!newFormData.gas_endpoint.trim()) {
-      alert('Google App Script エンドポイントを入力してください');
-      return;
-    }
+    // GASエンドポイントが入力されている場合のみ、URL形式をチェック
+    if (newFormData.gas_endpoint.trim()) {
+      // GASエンドポイントのバリデーション（URL形式チェック）
+      try {
+        new URL(newFormData.gas_endpoint.trim());
+      } catch {
+        alert('有効なURL形式ではありません');
+        return;
+      }
 
-    // GASエンドポイントのバリデーション（URL形式チェック）
-    try {
-      new URL(newFormData.gas_endpoint.trim());
-    } catch {
-      alert('有効なURL形式ではありません');
-      return;
-    }
-
-    // Google Apps ScriptのURLパターンチェック
-    const gasUrlPattern = /^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec/;
-    if (!gasUrlPattern.test(newFormData.gas_endpoint.trim())) {
-      alert('Google Apps ScriptのURL形式が正しくありません（例: https://script.google.com/macros/s/xxx/exec）');
-      return;
+      // Google Apps ScriptのURLパターンチェック
+      const gasUrlPattern = /^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec/;
+      if (!gasUrlPattern.test(newFormData.gas_endpoint.trim())) {
+        alert('Google Apps ScriptのURL形式が正しくありません（例: https://script.google.com/macros/s/xxx/exec）');
+        return;
+      }
     }
 
     setSubmitting(true);
     
-    // GASエンドポイントが実際に動作するかテスト（サーバーサイドプロキシ経由）
+    // GASエンドポイントが入力されている場合のみ、実際に動作するかテスト（サーバーサイドプロキシ経由）
     let testPassed = false;
-    try {
-      const testStartTime = new Date();
-      testStartTime.setHours(0, 0, 0, 0);
-      const testEndTime = new Date(testStartTime);
-      testEndTime.setDate(testStartTime.getDate() + 7);
-      testEndTime.setHours(23, 59, 59, 999);
+    if (newFormData.gas_endpoint.trim()) {
+      try {
+        const testStartTime = new Date();
+        testStartTime.setHours(0, 0, 0, 0);
+        const testEndTime = new Date(testStartTime);
+        testEndTime.setDate(testStartTime.getDate() + 7);
+        testEndTime.setHours(23, 59, 59, 999);
 
-      // サーバーサイドプロキシAPIを使用してCORSエラーを回避
-      const testApiUrl = `/api/gas/test?url=${encodeURIComponent(newFormData.gas_endpoint.trim())}&startTime=${encodeURIComponent(testStartTime.toISOString())}&endTime=${encodeURIComponent(testEndTime.toISOString())}`;
+        // サーバーサイドプロキシAPIを使用してCORSエラーを回避
+        const testApiUrl = `/api/gas/test?url=${encodeURIComponent(newFormData.gas_endpoint.trim())}&startTime=${encodeURIComponent(testStartTime.toISOString())}&endTime=${encodeURIComponent(testEndTime.toISOString())}`;
 
-      const testResponse = await fetch(testApiUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+        const testResponse = await fetch(testApiUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
 
-      if (!testResponse.ok) {
-        const errorData = await testResponse.json().catch(() => ({ error: '不明なエラー' }));
-        throw new Error(errorData.error || `HTTPエラー: ${testResponse.status}`);
+        if (!testResponse.ok) {
+          const errorData = await testResponse.json().catch(() => ({ error: '不明なエラー' }));
+          throw new Error(errorData.error || `HTTPエラー: ${testResponse.status}`);
+        }
+
+        const result = await testResponse.json();
+        
+        if (!result.success) {
+          throw new Error(result.error || 'テストに失敗しました');
+        }
+
+        // テスト成功
+        testPassed = true;
+        console.log('GASエンドポイントのテスト成功:', result.data);
+      } catch (error) {
+        console.error('GASエンドポイントのテスト失敗:', error);
+        const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+        const shouldContinue = window.confirm(
+          `GASエンドポイントの接続テストに失敗しました。\n\n` +
+          `エラー: ${errorMessage}\n\n` +
+          `それでもフォームを作成しますか？\n\n` +
+          `（注意: カレンダー空き状況が取得できない可能性があります）`
+        );
+        
+        if (!shouldContinue) {
+          setSubmitting(false);
+          return;
+        }
+        // ユーザーが続行を選択した場合は、testPassed = falseのまま続行
       }
-
-      const result = await testResponse.json();
-      
-      if (!result.success) {
-        throw new Error(result.error || 'テストに失敗しました');
-      }
-
-      // テスト成功
-      testPassed = true;
-      console.log('GASエンドポイントのテスト成功:', result.data);
-    } catch (error) {
-      console.error('GASエンドポイントのテスト失敗:', error);
-      const errorMessage = error instanceof Error ? error.message : '不明なエラー';
-      const shouldContinue = window.confirm(
-        `GASエンドポイントの接続テストに失敗しました。\n\n` +
-        `エラー: ${errorMessage}\n\n` +
-        `それでもフォームを作成しますか？\n\n` +
-        `（注意: カレンダー空き状況が取得できない可能性があります）`
-      );
-      
-      if (!shouldContinue) {
-        setSubmitting(false);
-        return;
-      }
-      // ユーザーが続行を選択した場合は、testPassed = falseのまま続行
     }
 
     // フォーム作成処理
@@ -868,8 +876,11 @@ export default function StoreDetailPage() {
         credentials: 'include',
         body: JSON.stringify({
           form_name: newFormData.form_name.trim(),
-          liff_id: newFormData.liff_id.trim(),
+          form_type: newFormData.form_type,
+          liff_id: newFormData.form_type === 'line' ? newFormData.liff_id.trim() : '',
           gas_endpoint: newFormData.gas_endpoint.trim(),
+          calendar_url: newFormData.form_type === 'web' ? newFormData.calendar_url.trim() : '',
+          security_secret: newFormData.form_type === 'web' ? newFormData.security_secret.trim() : '',
           template: selectedTemplate
         }),
       });
@@ -877,7 +888,15 @@ export default function StoreDetailPage() {
       if (response.ok) {
         const newForm = await response.json();
         setForms([...forms, newForm]);
-        setNewFormData({ form_name: '', liff_id: '', gas_endpoint: '', template: 'basic' });
+        setNewFormData({ 
+          form_name: '', 
+          form_type: 'line',
+          liff_id: '', 
+          gas_endpoint: '', 
+          calendar_url: '',
+          security_secret: '',
+          template: 'basic' 
+        });
         setShowCreateForm(false);
         const formName = newForm.config?.basic_info?.form_name || newFormData.form_name.trim();
         alert(`フォーム「${formName}」を作成しました（ID: ${newForm.id}）\nテンプレート: ${selectedTemplate?.name || 'ベーシック'}`);
@@ -1166,7 +1185,7 @@ export default function StoreDetailPage() {
           <div className="flex items-center justify-between">
             <div>
               <button
-                onClick={() => router.back()}
+                onClick={() => router.push('/admin')}
                 className="text-blue-400 hover:text-blue-300 mb-2 transition-colors"
               >
                 ← 戻る
@@ -1410,6 +1429,95 @@ export default function StoreDetailPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
+                    フォームタイプ <span className="text-red-400">*</span>
+                  </label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="relative">
+                      <input
+                        type="radio"
+                        id="form-type-line"
+                        name="form_type"
+                        value="line"
+                        checked={newFormData.form_type === 'line'}
+                        onChange={(e) => setNewFormData({...newFormData, form_type: 'line'})}
+                        className="sr-only"
+                      />
+                      <label
+                        htmlFor="form-type-line"
+                        className={`block p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                          newFormData.form_type === 'line'
+                            ? 'border-emerald-500 bg-emerald-900/20 ring-2 ring-emerald-500/20'
+                            : 'border-gray-500 bg-gray-700 hover:border-emerald-400 hover:bg-gray-600'
+                        }`}
+                      >
+                        <div className="flex items-start space-x-3">
+                          <div className="flex-shrink-0">
+                            <div className={`w-5 h-5 rounded-full border-2 ${
+                              newFormData.form_type === 'line'
+                                ? 'border-emerald-500 bg-emerald-500'
+                                : 'border-gray-400'
+                            } flex items-center justify-center`}>
+                              {newFormData.form_type === 'line' && (
+                                <div className="w-2 h-2 bg-white rounded-full"></div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-medium text-gray-100">
+                              LINE予約フォーム
+                            </h4>
+                            <p className="text-xs text-gray-400 mt-1">
+                              LINE公式アカウント経由で予約（LIFF ID必須）
+                            </p>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="radio"
+                        id="form-type-web"
+                        name="form_type"
+                        value="web"
+                        checked={newFormData.form_type === 'web'}
+                        onChange={(e) => setNewFormData({...newFormData, form_type: 'web'})}
+                        className="sr-only"
+                      />
+                      <label
+                        htmlFor="form-type-web"
+                        className={`block p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                          newFormData.form_type === 'web'
+                            ? 'border-emerald-500 bg-emerald-900/20 ring-2 ring-emerald-500/20'
+                            : 'border-gray-500 bg-gray-700 hover:border-emerald-400 hover:bg-gray-600'
+                        }`}
+                      >
+                        <div className="flex items-start space-x-3">
+                          <div className="flex-shrink-0">
+                            <div className={`w-5 h-5 rounded-full border-2 ${
+                              newFormData.form_type === 'web'
+                                ? 'border-emerald-500 bg-emerald-500'
+                                : 'border-gray-400'
+                            } flex items-center justify-center`}>
+                              {newFormData.form_type === 'web' && (
+                                <div className="w-2 h-2 bg-white rounded-full"></div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-medium text-gray-100">
+                              Web予約フォーム
+                            </h4>
+                            <p className="text-xs text-gray-400 mt-1">
+                              URLだけで予約可能（LIFF ID不要）
+                            </p>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
                     テンプレート選択 <span className="text-red-400">*</span>
                   </label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1495,22 +1603,24 @@ export default function StoreDetailPage() {
                     </div>
                   </div>
                 </div>
+                {newFormData.form_type === 'line' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                      LIFF ID
+                    </label>
+                    <input
+                      type="text"
+                      value={newFormData.liff_id}
+                      onChange={(e) => setNewFormData({...newFormData, liff_id: e.target.value})}
+                      placeholder="例：1234567890-abcdefgh"
+                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">LINE Developersで作成したLIFF IDを入力</p>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">
-                    LIFF ID <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={newFormData.liff_id}
-                    onChange={(e) => setNewFormData({...newFormData, liff_id: e.target.value})}
-                    placeholder="例：1234567890-abcdefgh"
-                    className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">LINE Developersで作成したLIFF IDを入力</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Google App Script エンドポイント <span className="text-red-400">*</span>
+                    Google App Script エンドポイント（予約送信用）
                   </label>
                   <input
                     type="url"
@@ -1519,8 +1629,42 @@ export default function StoreDetailPage() {
                     placeholder="例：https://script.google.com/macros/s/xxx/exec"
                     className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
                   />
-                  <p className="text-xs text-gray-400 mt-1">カレンダー空き状況取得用のGASエンドポイント</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {newFormData.form_type === 'line'
+                      ? 'カレンダー空き状況取得用のGASエンドポイント'
+                      : '予約データをGoogle Calendarに登録するためのGASエンドポイント'}
+                  </p>
                 </div>
+                {newFormData.form_type === 'web' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        カレンダー取得URL
+                      </label>
+                      <input
+                        type="url"
+                        value={newFormData.calendar_url}
+                        onChange={(e) => setNewFormData({...newFormData, calendar_url: e.target.value})}
+                        placeholder="例：https://script.google.com/macros/s/xxx/exec"
+                        className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Google Calendarの空き状況を取得するためのGASエンドポイント</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        SECURITY_SECRET <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={newFormData.security_secret}
+                        onChange={(e) => setNewFormData({...newFormData, security_secret: e.target.value})}
+                        placeholder="例：9f3a7c1e5b2d48a0c6e1f4d9b3a8c2e7d5f0a1b6c3d8e2f7a9b0c4e6d1f3a5b7"
+                        className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">フォーム送信時の簡易署名用の秘密鍵</p>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="flex items-center space-x-3 mt-6">
                 <button
