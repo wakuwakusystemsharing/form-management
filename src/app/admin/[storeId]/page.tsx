@@ -730,6 +730,18 @@ export default function StoreDetailPage() {
                   <Calendar className="mr-2 h-4 w-4" />
                   予約一覧
                 </Button>
+                {store.google_calendar_id && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const calendarUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id)}`;
+                      window.open(calendarUrl, '_blank');
+                    }}
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    カレンダー
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   onClick={() => router.push(`/${storeId}/admin`)}

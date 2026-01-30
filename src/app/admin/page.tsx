@@ -981,6 +981,21 @@ export default function AdminPage() {
                             <Settings className="mr-2 h-4 w-4" />
                             管理
                           </Button>
+                          {store.google_calendar_id && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const calendarUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id)}`;
+                                window.open(calendarUrl, '_blank');
+                              }}
+                              className="flex-1"
+                            >
+                              <ExternalLink className="mr-2 h-4 w-4" />
+                              カレンダー
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
