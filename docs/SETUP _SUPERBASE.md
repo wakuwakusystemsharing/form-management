@@ -68,6 +68,8 @@
 - `name` (text) - 店舗名
 - `owner_name`, `owner_email` (text) - オーナー情報
 - `phone`, `address`, `description`, `website_url` (text) - 店舗詳細
+- `google_calendar_id` (text) - 店舗用GoogleカレンダーID
+- `line_channel_access_token` (text) - LINEチャネルアクセストークン
 - `created_at`, `updated_at` (timestamptz)
 
 #### `forms` テーブル（予約フォーム）
@@ -81,7 +83,6 @@
 - `static_deploy` (jsonb) - デプロイ情報
 - `last_published_at` (timestamptz)
 - `line_settings` (jsonb) - LINE設定
-- `gas_endpoint` (text) - Google Apps Script URL
 - `ui_settings` (jsonb) - UI設定
 - `created_at`, `updated_at` (timestamptz)
 
@@ -96,6 +97,11 @@
 - `storage_url` (text, nullable) - ストレージURL
 - `static_deploy` (jsonb, nullable) - デプロイ情報
 - `created_at`, `updated_at` (timestamptz)
+
+#### `admin_settings` テーブル（管理者設定）
+- `key` (text, PK) - 設定キー
+- `value` (text) - 設定値
+- `updated_at` (timestamptz)
 
 #### `reservations` テーブル（予約データ）
 - `id` (uuid) - 予約ID（自動生成）

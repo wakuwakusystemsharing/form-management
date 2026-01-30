@@ -161,7 +161,6 @@ const FORM_TEMPLATES = {
     name: '🐛 デバッグ用（全機能・画像付き）',
     description: '性別・来店回数・クーポン・カテゴリ横断・カスタム項目・画像付きメニューを全て含むテンプレート',
     liff_id: '2008098784-5ZQ1LRn3',
-    gas_endpoint: 'https://script.google.com/macros/s/AKfycby3QfS2E892nXbS-fnfBVrJX8KyJWTSsisKpe9zVz5QGWzvTH7Zc3PlOay9j60aSQLp/exec',
     config: {
       basic_info: { show_gender_selection: true },
       menu_structure: {
@@ -308,7 +307,6 @@ export default function StoreDetailPage() {
     form_name: '',
     form_type: 'line' as 'line' | 'web',
     liff_id: '',
-    gas_endpoint: '',
     security_secret: '',
     template: 'basic'
   });
@@ -402,70 +400,7 @@ export default function StoreDetailPage() {
       return;
     }
 
-    const gasEndpoint = newFormData.gas_endpoint.trim();
-    if (gasEndpoint) {
-      try {
-        new URL(gasEndpoint);
-      } catch {
-        toast({
-          title: 'エラー',
-          description: '有効なURL形式ではありません',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      const gasUrlPattern = /^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec/;
-      if (!gasUrlPattern.test(gasEndpoint)) {
-        toast({
-          title: 'エラー',
-          description: 'Google Apps ScriptのURL形式が正しくありません',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      setSubmitting(true);
-      try {
-        const testStartTime = new Date();
-        testStartTime.setHours(0, 0, 0, 0);
-        const testEndTime = new Date(testStartTime);
-        testEndTime.setDate(testStartTime.getDate() + 7);
-        testEndTime.setHours(23, 59, 59, 999);
-
-        const testApiUrl = `/api/gas/test?url=${encodeURIComponent(gasEndpoint)}&startTime=${encodeURIComponent(testStartTime.toISOString())}&endTime=${encodeURIComponent(testEndTime.toISOString())}`;
-
-        const testResponse = await fetch(testApiUrl, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
-
-        if (!testResponse.ok) {
-          const errorData = await testResponse.json().catch(() => ({ error: '不明なエラー' }));
-          throw new Error(errorData.error || `HTTPエラー: ${testResponse.status}`);
-        }
-
-        const result = await testResponse.json();
-        if (!result.success) {
-          throw new Error(result.error || 'テストに失敗しました');
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : '不明なエラー';
-        const shouldContinue = window.confirm(
-          `GASエンドポイントの接続テストに失敗しました。\n\n` +
-          `エラー: ${errorMessage}\n\n` +
-          `それでもフォームを作成しますか？\n\n` +
-          `（注意: カレンダー空き状況が取得できない可能性があります）`
-        );
-
-        if (!shouldContinue) {
-          setSubmitting(false);
-          return;
-        }
-      }
-    } else {
-      setSubmitting(true);
-    }
+    setSubmitting(true);
 
     try {
       const selectedTemplate = FORM_TEMPLATES[newFormData.template as keyof typeof FORM_TEMPLATES];
@@ -478,7 +413,6 @@ export default function StoreDetailPage() {
           form_name: newFormData.form_name.trim(),
           form_type: newFormData.form_type,
           liff_id: newFormData.form_type === 'line' ? (newFormData.liff_id.trim() || undefined) : undefined,
-          gas_endpoint: newFormData.gas_endpoint.trim() || undefined,
           security_secret: newFormData.form_type === 'web' ? newFormData.security_secret.trim() : undefined,
           template: selectedTemplate
         }),
@@ -487,7 +421,7 @@ export default function StoreDetailPage() {
       if (response.ok) {
         const newForm = await response.json();
         setForms([...forms, newForm]);
-        setNewFormData({ form_name: '', form_type: 'line', liff_id: '', gas_endpoint: '', security_secret: '', template: 'basic' });
+        setNewFormData({ form_name: '', form_type: 'line', liff_id: '', security_secret: '', template: 'basic' });
         setShowCreateForm(false);
         const formName = newForm.config?.basic_info?.form_name || newFormData.form_name.trim();
         toast({
@@ -1192,9 +1126,6 @@ export default function StoreDetailPage() {
                               if (debugTemplate.liff_id) {
                                 updatedData.liff_id = debugTemplate.liff_id;
                               }
-                              if (debugTemplate.gas_endpoint) {
-                                updatedData.gas_endpoint = debugTemplate.gas_endpoint;
-                              }
                             }
                             
                             setNewFormData(updatedData);
@@ -1257,17 +1188,6 @@ export default function StoreDetailPage() {
                           <p className="text-xs text-muted-foreground">Web予約フォームの認証用。任意の文字列を設定してください。</p>
                         </div>
                       )}
-                      <div className="space-y-2">
-                        <Label htmlFor="gas_endpoint">Google App Script エンドポイント</Label>
-                        <Input
-                          id="gas_endpoint"
-                    type="url"
-                    value={newFormData.gas_endpoint}
-                    onChange={(e) => setNewFormData({...newFormData, gas_endpoint: e.target.value})}
-                    placeholder="例：https://script.google.com/macros/s/xxx/exec"
-                  />
-                        <p className="text-xs text-muted-foreground">カレンダー空き状況取得用のGASエンドポイント</p>
-                </div>
                       <div className="flex gap-3">
                         <Button
                   onClick={handleCreateForm}

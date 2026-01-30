@@ -27,7 +27,7 @@
 | **見た目** | FormEditorTheme（`themeClasses`）、`ThemeType`。label/input に `themeClasses.input` 等。 | shadcn の `Label` / `Input` / `Select`。`text-destructive`、`text-muted-foreground`。 |
 | **フォーム種別** | `formType`（`form_type` または liff_id の有無で `'line'` / `'web'`）。`isLineForm` で出し分け。 | 種別による出し分けなし。 |
 | **LIFF ID** | **LINE のときのみ** LIFF ID 入力欄を表示。必須は LINE 時のみ。 | 常に LIFF ID 欄を表示し **必須**。 |
-| **GAS エンドポイント** | 常に 1 つ（予約送信用）。LINE 時は「カレンダー空き取得用」、Web 時は「予約データを Calendar に登録する用」の説明。 | 常に 1 つ。「カレンダー空き取得用」と説明。 |
+| **GAS エンドポイント** | 削除（Google Calendar API へ一本化）。 | 削除（Google Calendar API へ一本化）。 |
 | **Web 専用項目** | **`!isLineForm` のとき**「カレンダー取得URL」（`calendar_url`）と「SECURITY_SECRET」（`security_secret`）を別入力。いずれも必須。 | **なし**。calendar_url / security_secret の入力欄を削除。 |
 | **必須の緩和** | Web の場合は LIFF ID 不要。カレンダー URL と SECURITY_SECRET は Web 時のみ必須。 | LIFF ID を常に必須にしており、**LIFF/カレンダーを必須から外す**という要件と逆。 |
 
@@ -42,7 +42,7 @@
 | **型** | `rawForm as any`。 | `Record<string, unknown>` と `typedRawForm` で型を明示。 |
 | **custom_fields** | **`custom_fields: existingConfig?.custom_fields \|\| rawForm.config?.custom_fields \|\| []`** で正規化に含める。 | **`custom_fields` を削除**。config に custom_fields を出さない。→ カスタマイズ項目がフォームで使えなくなる。 |
 | **menu_structure** | `allow_cross_category_selection` を参照。 | `allow_cross_category_selection` の行を削除。 |
-| **その他** | 同じ defaultConfig の枠組み（visit_options, gender_selection, visit_count_selection, coupon_selection, calendar_settings, ui_settings, validation_rules, gas_endpoint）。 | 同上だが型アサーション多め。custom_fields のみ欠落。 |
+| **その他** | 同じ defaultConfig の枠組み（visit_options, gender_selection, visit_count_selection, coupon_selection, calendar_settings, ui_settings, validation_rules）。 | 同上だが型アサーション多め。custom_fields のみ欠落。 |
 
 **結論**: staging 版は **カスタマイズ項目（custom_fields）** を正規化に含めており、現在版ではこれが抜けている。メニュー複数選択まわりは `menu_structure` の `allow_cross_category_selection` が staging にはある。
 

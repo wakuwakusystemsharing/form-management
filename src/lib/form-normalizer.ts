@@ -40,7 +40,6 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
     menu_structure?: Record<string, unknown>;
     business_rules?: Record<string, unknown>;
     line_settings?: Record<string, unknown>;
-    gas_endpoint?: string;
   };
   
   // デフォルト config 構造
@@ -110,8 +109,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       required_fields: ['name', 'phone'],
       phone_format: 'japanese' as const,
       name_max_length: 50
-    },
-    gas_endpoint: ''
+    }
   };
 
   // 新しい簡易形式を従来のconfig形式に変換
@@ -199,8 +197,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         required_fields: (existingConfig?.validation_rules?.required_fields || (typedConfig?.validation_rules as Form['config']['validation_rules'])?.required_fields || ['name', 'phone']) as Form['config']['validation_rules']['required_fields'],
         phone_format: (existingConfig?.validation_rules?.phone_format || (typedConfig?.validation_rules as Form['config']['validation_rules'])?.phone_format || 'japanese') as 'japanese' | 'international',
         name_max_length: (existingConfig?.validation_rules?.name_max_length || (typedConfig?.validation_rules as Form['config']['validation_rules'])?.name_max_length || 50) as number
-      },
-      gas_endpoint: (existingConfig?.gas_endpoint || (typedConfig?.gas_endpoint as string) || typedRawForm.gas_endpoint || '') as string
+      }
     }
   };
   

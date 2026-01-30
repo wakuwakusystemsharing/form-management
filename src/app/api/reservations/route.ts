@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { createReservationEvent } from '@/lib/google-calendar';
 import {
   findCustomerByLineOrPhone,
   createCustomer,
@@ -442,6 +443,35 @@ export async function POST(request: Request) {
         console.error('[CRM] Customer visit creation error:', error);
         // エラーが発生しても予約のレスポンスは返す
       }
+    }
+
+    // 4. Googleカレンダーに予約イベントを作成
+    try {
+      const { data: storeData, error: storeError } = await (adminClient as any)
+        .from('stores')
+        .select('google_calendar_id')
+        .eq('id', body.store_id)
+        .single();
+
+      if (storeError) {
+        console.error('[API] Store calendar lookup error:', storeError);
+      } else if (storeData?.google_calendar_id) {
+        await createReservationEvent({
+          calendarId: storeData.google_calendar_id,
+          reservationDate: body.reservation_date,
+          reservationTime: body.reservation_time,
+          customerName: body.customer_name,
+          customerPhone: body.customer_phone,
+          lineUserId: body.line_user_id || null,
+          lineDisplayName: body.line_display_name || null,
+          message: body.message || null,
+          selectedMenus,
+          selectedOptions: body.selected_options || []
+        });
+      }
+    } catch (calendarError) {
+      console.error('[API] Calendar event creation error:', calendarError);
+      // 予約自体は成功しているため、ここではエラーにしない
     }
 
     return NextResponse.json(reservation, { status: 201 });

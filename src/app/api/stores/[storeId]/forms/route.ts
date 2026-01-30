@@ -25,7 +25,6 @@ type FormTemplate = {
     };
   };
   liff_id?: string;
-  gas_endpoint?: string;
 };
 
 // 一時的なJSONファイルでのデータ保存（開発用）
@@ -125,7 +124,7 @@ export async function POST(
   try {
     const { storeId } = await params;
     const body = await request.json();
-    const { form_name, form_type, liff_id, gas_endpoint, calendar_url, security_secret, template } = body;
+    const { form_name, form_type, liff_id, security_secret, template } = body;
     const env = getAppEnvironment();
     
     // 現在のユーザーIDを取得
@@ -140,7 +139,7 @@ export async function POST(
       );
     }
 
-    // GASエンドポイント、LIFF ID、カレンダー取得URLは必須から除外（オプショナル）
+    // LIFF ID はオプショナル
     // SECURITY_SECRETはWeb予約フォームの場合のみ必須
     if (form_type === 'web') {
       if (!security_secret || !security_secret.trim()) {
@@ -189,8 +188,6 @@ export async function POST(
         show_visit_count: template.config?.ui_settings?.show_visit_count || false,
         show_coupon_selection: template.config?.ui_settings?.show_coupon_selection || false
       },
-      gas_endpoint: (template as FormTemplate)?.gas_endpoint || gas_endpoint || '',
-      calendar_url: determinedFormType === 'web' ? (calendar_url || '') : undefined,
       security_secret: determinedFormType === 'web' ? (security_secret || '') : undefined,
       form_type: determinedFormType
     } : {
@@ -215,8 +212,6 @@ export async function POST(
         show_visit_count: false,
         show_coupon_selection: false
       },
-      gas_endpoint: gas_endpoint || '',
-      calendar_url: determinedFormType === 'web' ? (calendar_url || '') : undefined,
       security_secret: determinedFormType === 'web' ? (security_secret || '') : undefined,
       form_type: determinedFormType
     };
@@ -359,8 +354,7 @@ export async function POST(
           required_fields: ['name', 'phone'],
           phone_format: 'japanese' as const,
           name_max_length: 50
-        },
-        gas_endpoint: baseConfig.gas_endpoint
+        }
       };
       
       const html = generator.generateHTML(formConfig, newFormId, storeId);
@@ -401,7 +395,6 @@ export async function POST(
     const visitCountEnabled = baseTemplateConfig?.ui_settings?.show_visit_count || false;
     const couponEnabled = baseTemplateConfig?.ui_settings?.show_coupon_selection || false;
     const templateLiffId = (template as FormTemplate)?.liff_id;
-    const templateGasEndpoint = (template as FormTemplate)?.gas_endpoint;
     
     // フォームタイプを決定（後方互換性のため）
     const determinedFormType = form_type || (liff_id && liff_id.trim() ? 'line' : 'web');
@@ -480,8 +473,6 @@ export async function POST(
         phone_format: 'japanese' as const,
         name_max_length: 50
       },
-      gas_endpoint: templateGasEndpoint || gas_endpoint || '',
-      calendar_url: determinedFormType === 'web' ? (calendar_url || '') : undefined,
       security_secret: determinedFormType === 'web' ? (security_secret || '') : undefined,
       form_type: determinedFormType
     };

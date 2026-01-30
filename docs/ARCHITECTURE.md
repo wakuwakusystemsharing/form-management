@@ -53,6 +53,42 @@ LINE LIFFを活用した予約フォーム管理システムの全体設計、�
     └───────────┘    └───────────┘
 ```
 
+## 📅 Google Calendar 連携構成
+
+GAS は使用せず、店舗作成時に Google Calendar を自動作成し、空き状況取得・予約登録・LINE 通知を Next.js + Supabase で実行します。
+
+```mermaid
+flowchart TD
+  userLINE[LINEUser]
+  userWeb[WebUser]
+  adminUI[AdminUI]
+  apiServer[NextjsAPI]
+  supabaseDB[(SupabaseDB)]
+  googleCal[GoogleCalendarAPI]
+  lineAPI[LineMessagingAPI]
+  edgeFn[EdgeFunction_sendReminders]
+
+  adminUI -->|createStore| apiServer
+  apiServer -->|calendars.insert| googleCal
+  apiServer -->|storeCalendarId| supabaseDB
+
+  userWeb -->|GETAvailability| apiServer
+  apiServer -->|events.list| googleCal
+  apiServer -->|availabilityJson| userWeb
+
+  userWeb -->|POSTReservation| apiServer
+  apiServer -->|insertReservation| supabaseDB
+  apiServer -->|events.insert| googleCal
+
+  userLINE -->|webhook| apiServer
+  apiServer -->|reservations| supabaseDB
+  apiServer -->|events.list delete| googleCal
+  apiServer -->|reply push| lineAPI
+
+  edgeFn -->|queryTomorrow| supabaseDB
+  edgeFn -->|pushReminder| lineAPI
+```
+
 ## 🏗️ レイヤー構成
 
 ### 1. プレゼンテーション層（React/TypeScript）
@@ -151,19 +187,21 @@ data/
 #### Staging / Production（Supabase）
 ```
 Database Tables:
-├── stores - 店舗マスタ（ID: 6文字ランダム文字列 `[a-z0-9]{6}` またはUUID（既存データ）、subdomain, custom_domainカラムあり）
+├── stores - 店舗マスタ（ID: 6文字ランダム文字列 `[a-z0-9]{6}` またはUUID（既存データ）、subdomain, custom_domain, google_calendar_id, line_channel_access_token）
 ├── forms - 予約フォーム定義（config は JSONB）
 ├── survey_forms - アンケートフォーム定義（config は JSONB）
 ├── reservations - 予約データ
 ├── store_admins - 店舗管理者の権限管理
-└── profiles - ユーザープロファイル
+├── profiles - ユーザープロファイル
+└── admin_settings - システム管理者の設定（Google API等）
 
 RLS (Row Level Security):
 ├── stores: 全員読み取り可、管理者のみ更新/削除
 ├── forms: 店舗別RLS、管理者は全店舗アクセス可
 ├── survey_forms: 店舗別RLS、管理者は全店舗アクセス可
 ├── reservations: 店舗別RLS、管理者は全店舗アクセス可
-└── store_admins: 管理者のみアクセス可
+├── store_admins: 管理者のみアクセス可
+└── admin_settings: 管理者のみアクセス可
 ```
 
 ### 4. ストレージ層
@@ -262,7 +300,6 @@ interface Form {
   draft_status: 'none' | 'draft' | 'ready_to_publish';
   form_name: string; // フォーム名（タイトル）
   line_settings?: { liff_id: string }; // LIFF ID
-  gas_endpoint?: string; // Google Apps Script URL
   static_deploy?: StaticDeploy; // デプロイ情報
   created_at: string; // ISO 形式
   updated_at: string;
@@ -317,6 +354,8 @@ interface Store {
   address?: string;
   description?: string;
   website_url?: string;
+  google_calendar_id?: string; // 店舗用GoogleカレンダーID
+  line_channel_access_token?: string; // LINEチャネルアクセストークン
   status: 'active' | 'inactive';
   created_at: string;
   updated_at: string;

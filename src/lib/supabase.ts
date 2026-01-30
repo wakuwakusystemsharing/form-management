@@ -14,6 +14,8 @@ export type Database = {
         Row: {
           id: string;
           name: string;
+          google_calendar_id?: string | null;
+          line_channel_access_token?: string | null;
           created_at: string;
           updated_at: string;
         };

@@ -13,6 +13,8 @@ export interface Store {
   theme_color?: string;       // テーマカラー（HEX形式）
   subdomain?: string;         // サブドメイン（例: st0001）
   custom_domain?: string;     // カスタムドメイン（例: myshop.com）
+  google_calendar_id?: string; // 店舗用GoogleカレンダーID
+  line_channel_access_token?: string; // LINEチャネルアクセストークン
   created_at: string;
   updated_at: string;
   status: 'active' | 'inactive';

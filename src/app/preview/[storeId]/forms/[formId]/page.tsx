@@ -600,42 +600,97 @@ export default function PreviewFormPage() {
     setShowConfirmation(true);
   };
 
+  const buildSelectionPayload = useCallback(() => {
+    if (!form) {
+      return { selectedMenus: [], selectedOptions: [] };
+    }
+
+    const selectedMenus: Array<Record<string, unknown>> = [];
+    const selectedOptions: Array<Record<string, unknown>> = [];
+    const categories = form.config.menu_structure?.categories || [];
+
+    const processMenu = (category: any, menu: any, submenu: any, menuId: string) => {
+      const price = submenu ? (submenu.price || 0) : (menu.price || 0);
+      const duration = submenu ? (submenu.duration || 0) : (menu.duration || 0);
+
+      selectedMenus.push({
+        menu_id: menu.id,
+        menu_name: menu.name || '',
+        category_name: category?.name || '',
+        price,
+        duration,
+        ...(submenu ? { submenu_id: submenu.id, submenu_name: submenu.name || '' } : {})
+      });
+
+      const optionIds = formData.selectedMenuOptions?.[menuId] || [];
+      optionIds.forEach(optionId => {
+        const option = menu.options?.find((o: any) => o.id === optionId);
+        if (option) {
+          selectedOptions.push({
+            option_id: option.id,
+            option_name: option.name || '',
+            menu_id: menuId,
+            price: option.price || 0,
+            duration: option.duration || 0
+          });
+        }
+      });
+    };
+
+    categories.forEach(category => {
+      const menuIds = formData.selectedMenus[category.id] || [];
+      menuIds.forEach(menuId => {
+        const menu = category.menus?.find((m: any) => m.id === menuId);
+        if (!menu) return;
+        const subId = formData.selectedSubMenus?.[menuId];
+        const submenu = subId && menu.sub_menu_items ? menu.sub_menu_items.find((s: any) => s.id === subId) : null;
+        processMenu(category, menu, submenu, menuId);
+      });
+    });
+
+    return { selectedMenus, selectedOptions };
+  }, [form, formData]);
+
   const handleConfirmSubmit = async () => {
     if (!form) return;
 
     setSubmitting(true);
     
     try {
-      // GAS エンドポイントに送信
-      if (form.config.gas_endpoint) {
-        const payload = {
-          formId: form.id,
-          storeId: form.store_id,
-          customerData: formData,
-          submittedAt: new Date().toISOString()
-        };
-        
-        const response = await fetch(form.config.gas_endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-        
-        if (response.ok) {
-          await response.json().catch(() => null);
-          setSubmitted(true);
-          setShowConfirmation(false);
-        } else {
-          await response.text().catch(() => 'Unknown error');
-          throw new Error('送信に失敗しました');
+      const { selectedMenus, selectedOptions } = buildSelectionPayload();
+      const reservationData = {
+        form_id: form.id,
+        store_id: form.store_id,
+        customer_name: formData.name,
+        customer_phone: formData.phone,
+        reservation_date: formData.selectedDate,
+        reservation_time: formData.selectedTime,
+        message: formData.message || null,
+        selected_menus: selectedMenus,
+        selected_options: selectedOptions,
+        customer_info: {
+          gender: formData.gender || null,
+          visit_count: formData.visitCount || null,
+          coupon: formData.couponUsage || null,
+          custom_fields: formData.customFields || {}
         }
-      } else {
-        // GASエンドポイントが未設定の場合は成功として扱う（デモ用）
-        setSubmitted(true);
-        setShowConfirmation(false);
+      };
+
+      const response = await fetch('/api/reservations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(reservationData),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(errorText || '送信に失敗しました');
       }
+
+      setSubmitted(true);
+      setShowConfirmation(false);
     } catch (error) {
       alert('送信に失敗しました。しばらく経ってから再度お試しください。');
     } finally {
@@ -658,7 +713,7 @@ export default function PreviewFormPage() {
 
   // カレンダー空き状況を取得
   const fetchCalendarAvailability = useCallback(async (date: Date) => {
-    if (!form?.config?.gas_endpoint) {
+    if (!form?.store_id) {
       return;
     }
 
@@ -677,8 +732,8 @@ export default function PreviewFormPage() {
       return;
     }
 
-    const url = form.config.gas_endpoint + 
-      `?startTime=${startTime.toISOString()}&endTime=${endTime.toISOString()}`;
+    const url = `/api/stores/${form.store_id}/calendar/availability` +
+      `?start=${startTime.toISOString()}&end=${endTime.toISOString()}`;
 
     try {
       const response = await fetch(url);
@@ -714,7 +769,7 @@ export default function PreviewFormPage() {
       setAvailabilityData(null);
       setBusinessDays([]);
     }
-  }, [form?.config?.gas_endpoint, availabilityCache]);
+  }, [form?.store_id, availabilityCache]);
 
   // 営業時間に基づいて時間選択肢を生成
   const getAvailableTimeSlots = (date?: Date) => {
@@ -2194,7 +2249,7 @@ export default function PreviewFormPage() {
                                 if (isPast || isNextDay || endsAfter18 || !withinWindow || isClosed || !isWithinBusinessHours) {
                                   isAvailable = false;
                                 } else if (availabilityData && availabilityData.length > 0) {
-                                  // GASから取得したデータがある場合
+                                  // カレンダーAPIから取得したデータがある場合
                                   const day = new Date(date);
                                   day.setHours(0, 0, 0, 0);
                                   
@@ -2247,7 +2302,7 @@ export default function PreviewFormPage() {
                                     isAvailable = false;
                                   }
                                 } else {
-                                  // GASから取得したデータがない場合、営業時間のみで判定
+                                  // カレンダーAPIから取得したデータがない場合、営業時間のみで判定
                                   isAvailable = true;
                                 }
                                 

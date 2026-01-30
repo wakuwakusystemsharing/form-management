@@ -156,11 +156,7 @@ export interface FormConfig {
     name_max_length: number;
   };
 
-  // Google App Script エンドポイント
-  gas_endpoint?: string;
-  
   // Web予約フォーム用の設定
-  calendar_url?: string;      // カレンダー取得URL（空き状況取得用）
   security_secret?: string;   // SECURITY_SECRET（セキュリティ用の秘密鍵）
   form_type?: 'line' | 'web'; // フォームタイプ（LINE予約フォーム or Web予約フォーム）
 }

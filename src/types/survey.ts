@@ -30,7 +30,6 @@ export interface SurveyConfig {
     submit_button_text: string;
     theme_color: string;
   };
-  gas_endpoint?: string;
 }
 
 export interface SurveyForm {

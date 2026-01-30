@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAppEnvironment } from '../../../lib/env'
 import { getSupabaseClient, createAdminClient, isServiceAdmin } from '../../../lib/supabase'
 import { generateStoreId } from '../../../lib/store-id-generator'
+import { createStoreCalendar } from '../../../lib/google-calendar'
 import { Store } from '../../../types/store'
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -177,6 +178,8 @@ export async function POST(request: NextRequest) {
         description: description || '',
         website_url: website_url || '',
         subdomain: finalSubdomain || storeId, // 未指定の場合はstoreIdと同じ
+        google_calendar_id: '',
+        line_channel_access_token: '',
         status: 'active',
         created_at: now,
         updated_at: now
@@ -317,6 +320,17 @@ export async function POST(request: NextRequest) {
     
     // サブドメインが未指定の場合はstoreIdと同じ値を設定
     const subdomainToUse = finalSubdomain || storeId
+
+    let googleCalendarId: string | null = null
+    try {
+      googleCalendarId = await createStoreCalendar(name)
+    } catch (calendarError) {
+      console.error('[API] Calendar creation error:', calendarError)
+      return NextResponse.json(
+        { error: 'Googleカレンダーの作成に失敗しました。管理者設定を確認してください。' },
+        { status: 500 }
+      )
+    }
     
     // 店舗を挿入
      
@@ -332,6 +346,8 @@ export async function POST(request: NextRequest) {
         description: description || '',
         website_url: website_url || '',
         subdomain: subdomainToUse,
+        google_calendar_id: googleCalendarId || '',
+        line_channel_access_token: '',
         status: 'active',
         created_by: user.id,
         updated_by: user.id

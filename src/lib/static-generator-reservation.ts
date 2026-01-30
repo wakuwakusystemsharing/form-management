@@ -698,11 +698,6 @@ class BookingForm {
     
     // カレンダー空き状況を取得
     async fetchAvailability(date) {
-        // GASエンドポイントが未設定の場合はスキップ
-        if (!this.config.gas_endpoint) {
-            return;
-        }
-        
         const startTime = new Date(date);
         startTime.setHours(0, 0, 0, 0);
         const endTime = new Date(date);
@@ -719,8 +714,8 @@ class BookingForm {
             return;
         }
         
-        const url = this.config.gas_endpoint + 
-            \`?startTime=\${startTime.toISOString()}&endTime=\${endTime.toISOString()}\`;
+        const url = \`\${window.location.origin}/api/stores/\${STORE_ID}/calendar/availability\` + 
+            \`?start=\${startTime.toISOString()}&end=\${endTime.toISOString()}\`;
         
         try {
             const response = await fetch(url);
@@ -867,7 +862,7 @@ class BookingForm {
         if (isPast || isNextDay || endsAfter18 || !withinWindow || isClosed || !isWithinBusinessHours) {
             isAvailable = false;
         } else if (this.availabilityData && this.availabilityData.length > 0) {
-            // GASから取得したデータがある場合
+            // カレンダーAPIから取得したデータがある場合
             const day = new Date(date);
             day.setHours(0, 0, 0, 0);
             
@@ -926,7 +921,7 @@ class BookingForm {
                 isAvailable = false;
             }
         } else {
-            // GASから取得したデータがない場合、営業時間のみで判定
+            // カレンダーAPIから取得したデータがない場合、営業時間のみで判定
             isAvailable = true;
         }
         

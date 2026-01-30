@@ -147,7 +147,6 @@
     "line_settings": {
       "liff_id": "1234567890-abcdefgh"
     },
-    "gas_endpoint": "https://script.google.com/...",
     "ui_settings": {
       "theme_color": "#3B82F6"
     },
@@ -171,7 +170,6 @@
 {
   "form_name": "カット予約フォーム",
   "liff_id": "1234567890-abcdefgh",
-  "gas_endpoint": "https://script.google.com/...",
   "template": {
     "name": "スタンダード",
     "config": { ... }

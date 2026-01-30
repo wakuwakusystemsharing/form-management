@@ -27,7 +27,6 @@
 - `last_published_at` (timestamptz) - 最終公開日時
 - `form_name` (text) - フォーム名（新形式）
 - `line_settings` (jsonb) - LINE設定（LIFF ID等）
-- `gas_endpoint` (text) - Google Apps Script エンドポイント
 - `ui_settings` (jsonb) - UI設定（テーマカラー等）
 
 #### 変更されたカラム
@@ -81,7 +80,9 @@
 - `name` カラムを追加（NULL許可）
 - `form_name` カラムを追加
 - `line_settings` カラムを追加（JSONB）
-- `gas_endpoint` カラムを追加
+- Google Calendar 連携のため `stores.google_calendar_id` を追加
+- LINE 連携のため `stores.line_channel_access_token` を追加
+- 管理者設定 `admin_settings` テーブルを追加
 - `ui_settings` カラムを追加（JSONB）
 
 **`reservations` テーブル**:
@@ -286,7 +287,6 @@ draft_status        | text        | 'none'::text                 | NO
 static_deploy       | jsonb       |                              | YES
 last_published_at   | timestamptz |                              | YES
 line_settings       | jsonb       |                              | YES
-gas_endpoint        | text        |                              | YES
 ui_settings         | jsonb       |                              | YES
 created_at          | timestamptz | timezone('utc', now())       | NO
 updated_at          | timestamptz | timezone('utc', now())       | NO

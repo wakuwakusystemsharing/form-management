@@ -130,25 +130,6 @@ const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({
             <p className="text-xs text-muted-foreground">LINE Developersで作成したLIFF ID</p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="gas_endpoint">Google App Script エンドポイント</Label>
-            <Input
-              id="gas_endpoint"
-              type="url"
-              value={form.config?.gas_endpoint || ''}
-              onChange={(e) => {
-                onUpdate({
-                  ...form,
-                  config: {
-                    ...form.config,
-                    gas_endpoint: e.target.value
-                  }
-                });
-              }}
-              placeholder="例：https://script.google.com/macros/s/xxx/exec"
-            />
-            <p className="text-xs text-muted-foreground">カレンダー空き取得用のGASエンドポイント</p>
-          </div>
         </>
       )}
 
