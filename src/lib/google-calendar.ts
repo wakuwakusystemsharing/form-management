@@ -27,7 +27,7 @@ async function getServiceAccountJson(): Promise<string | null> {
   const adminClient = createAdminClient();
   if (!adminClient) return null;
 
-  const { data, error } = await adminClient
+  const { data, error } = await (adminClient as any)
     .from('admin_settings')
     .select('value')
     .eq('key', 'google_service_account_json')
@@ -51,12 +51,11 @@ async function getCalendarClient() {
     return null;
   }
 
-  const auth = new google.auth.JWT(
-    credentials.client_email,
-    undefined,
-    credentials.private_key,
-    GOOGLE_CALENDAR_SCOPES
-  );
+  const auth = new google.auth.JWT({
+    email: credentials.client_email,
+    key: credentials.private_key,
+    scopes: GOOGLE_CALENDAR_SCOPES
+  });
 
   return google.calendar({ version: 'v3', auth });
 }
