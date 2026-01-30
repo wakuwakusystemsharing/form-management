@@ -99,9 +99,7 @@ const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({
       {userRole === 'service_admin' && (
         <>
           <div className="space-y-2">
-            <Label htmlFor="liff_id">
-              LINE LIFF ID <span className="text-destructive">*</span>
-            </Label>
+            <Label htmlFor="liff_id">LINE LIFF ID</Label>
             <Input
               id="liff_id"
               type="text"
@@ -128,15 +126,12 @@ const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({
                 }
               }}
               placeholder="例：1234567890-abcdefgh"
-              required
             />
             <p className="text-xs text-muted-foreground">LINE Developersで作成したLIFF ID</p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="gas_endpoint">
-              Google App Script エンドポイント <span className="text-destructive">*</span>
-            </Label>
+            <Label htmlFor="gas_endpoint">Google App Script エンドポイント</Label>
             <Input
               id="gas_endpoint"
               type="url"
@@ -151,7 +146,6 @@ const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({
                 });
               }}
               placeholder="例：https://script.google.com/macros/s/xxx/exec"
-              required
             />
             <p className="text-xs text-muted-foreground">カレンダー空き取得用のGASエンドポイント</p>
           </div>

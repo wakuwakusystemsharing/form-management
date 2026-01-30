@@ -463,10 +463,10 @@ export default function AdminPage() {
   };
 
   const handleCreateStore = async () => {
-    if (!newStore.name || !newStore.owner_name || !newStore.owner_email) {
+    if (!newStore.name || !newStore.owner_name) {
       toast({
         title: 'エラー',
-        description: '必須項目を入力してください（店舗名、オーナー名、メールアドレス）',
+        description: '必須項目を入力してください（店舗名、オーナー名）',
         variant: 'destructive',
       });
       return;
@@ -792,16 +792,13 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="owner_email">
-                          メールアドレス <span className="text-destructive">*</span>
-                        </Label>
+                        <Label htmlFor="owner_email">メールアドレス</Label>
                         <Input
                           id="owner_email"
                           type="email"
                           value={newStore.owner_email}
                           onChange={(e) => setNewStore({...newStore, owner_email: e.target.value})}
                           placeholder="例：sato@example.com"
-                          required
                         />
                       </div>
                       <div className="space-y-2">

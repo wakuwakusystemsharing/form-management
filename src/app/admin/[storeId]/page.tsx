@@ -296,87 +296,69 @@ export default function StoreDetailPage() {
       return;
     }
 
-    if (!newFormData.liff_id.trim()) {
-      toast({
-        title: 'エラー',
-        description: 'LIFF IDを入力してください',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!newFormData.gas_endpoint.trim()) {
-      toast({
-        title: 'エラー',
-        description: 'Google App Script エンドポイントを入力してください',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    try {
-      new URL(newFormData.gas_endpoint.trim());
-    } catch {
-      toast({
-        title: 'エラー',
-        description: '有効なURL形式ではありません',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    const gasUrlPattern = /^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec/;
-    if (!gasUrlPattern.test(newFormData.gas_endpoint.trim())) {
-      toast({
-        title: 'エラー',
-        description: 'Google Apps ScriptのURL形式が正しくありません',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setSubmitting(true);
-    
-    let testPassed = false;
-    try {
-      const testStartTime = new Date();
-      testStartTime.setHours(0, 0, 0, 0);
-      const testEndTime = new Date(testStartTime);
-      testEndTime.setDate(testStartTime.getDate() + 7);
-      testEndTime.setHours(23, 59, 59, 999);
-
-      const testApiUrl = `/api/gas/test?url=${encodeURIComponent(newFormData.gas_endpoint.trim())}&startTime=${encodeURIComponent(testStartTime.toISOString())}&endTime=${encodeURIComponent(testEndTime.toISOString())}`;
-
-      const testResponse = await fetch(testApiUrl, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      if (!testResponse.ok) {
-        const errorData = await testResponse.json().catch(() => ({ error: '不明なエラー' }));
-        throw new Error(errorData.error || `HTTPエラー: ${testResponse.status}`);
-      }
-
-      const result = await testResponse.json();
-      
-      if (!result.success) {
-        throw new Error(result.error || 'テストに失敗しました');
-      }
-
-      testPassed = true;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '不明なエラー';
-      const shouldContinue = window.confirm(
-        `GASエンドポイントの接続テストに失敗しました。\n\n` +
-        `エラー: ${errorMessage}\n\n` +
-        `それでもフォームを作成しますか？\n\n` +
-        `（注意: カレンダー空き状況が取得できない可能性があります）`
-      );
-      
-      if (!shouldContinue) {
-        setSubmitting(false);
+    const gasEndpoint = newFormData.gas_endpoint.trim();
+    if (gasEndpoint) {
+      try {
+        new URL(gasEndpoint);
+      } catch {
+        toast({
+          title: 'エラー',
+          description: '有効なURL形式ではありません',
+          variant: 'destructive',
+        });
         return;
       }
+
+      const gasUrlPattern = /^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec/;
+      if (!gasUrlPattern.test(gasEndpoint)) {
+        toast({
+          title: 'エラー',
+          description: 'Google Apps ScriptのURL形式が正しくありません',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        const testStartTime = new Date();
+        testStartTime.setHours(0, 0, 0, 0);
+        const testEndTime = new Date(testStartTime);
+        testEndTime.setDate(testStartTime.getDate() + 7);
+        testEndTime.setHours(23, 59, 59, 999);
+
+        const testApiUrl = `/api/gas/test?url=${encodeURIComponent(gasEndpoint)}&startTime=${encodeURIComponent(testStartTime.toISOString())}&endTime=${encodeURIComponent(testEndTime.toISOString())}`;
+
+        const testResponse = await fetch(testApiUrl, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        if (!testResponse.ok) {
+          const errorData = await testResponse.json().catch(() => ({ error: '不明なエラー' }));
+          throw new Error(errorData.error || `HTTPエラー: ${testResponse.status}`);
+        }
+
+        const result = await testResponse.json();
+        if (!result.success) {
+          throw new Error(result.error || 'テストに失敗しました');
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+        const shouldContinue = window.confirm(
+          `GASエンドポイントの接続テストに失敗しました。\n\n` +
+          `エラー: ${errorMessage}\n\n` +
+          `それでもフォームを作成しますか？\n\n` +
+          `（注意: カレンダー空き状況が取得できない可能性があります）`
+        );
+
+        if (!shouldContinue) {
+          setSubmitting(false);
+          return;
+        }
+      }
+    } else {
+      setSubmitting(true);
     }
 
     try {
@@ -388,8 +370,8 @@ export default function StoreDetailPage() {
         credentials: 'include',
         body: JSON.stringify({
           form_name: newFormData.form_name.trim(),
-          liff_id: newFormData.liff_id.trim(),
-          gas_endpoint: newFormData.gas_endpoint.trim(),
+          liff_id: newFormData.liff_id.trim() || undefined,
+          gas_endpoint: newFormData.gas_endpoint.trim() || undefined,
           template: selectedTemplate
         }),
       });
@@ -1110,9 +1092,7 @@ export default function StoreDetailPage() {
                   </div>
                     </div>
                       <div className="space-y-2">
-                        <Label htmlFor="liff_id">
-                          LIFF ID <span className="text-destructive">*</span>
-                        </Label>
+                        <Label htmlFor="liff_id">LIFF ID</Label>
                         <Input
                           id="liff_id"
                     value={newFormData.liff_id}
@@ -1122,9 +1102,7 @@ export default function StoreDetailPage() {
                         <p className="text-xs text-muted-foreground">LINE Developersで作成したLIFF IDを入力</p>
                 </div>
                       <div className="space-y-2">
-                        <Label htmlFor="gas_endpoint">
-                          Google App Script エンドポイント <span className="text-destructive">*</span>
-                        </Label>
+                        <Label htmlFor="gas_endpoint">Google App Script エンドポイント</Label>
                         <Input
                           id="gas_endpoint"
                     type="url"
@@ -1418,9 +1396,7 @@ export default function StoreDetailPage() {
                     />
                   </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit_owner_email">
-                    メールアドレス <span className="text-destructive">*</span>
-                  </Label>
+                  <Label htmlFor="edit_owner_email">メールアドレス</Label>
                   <Input
                     id="edit_owner_email"
                       type="email"

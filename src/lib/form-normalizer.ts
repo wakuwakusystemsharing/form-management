@@ -80,6 +80,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
     menu_structure: {
       structure_type: 'category_based' as const,
       categories: [],
+      allow_cross_category_selection: false,
       display_options: {
         show_price: true,
         show_duration: true,
@@ -165,6 +166,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       menu_structure: {
         structure_type: (existingConfig?.menu_structure?.structure_type || (typedConfig?.menu_structure as Form['config']['menu_structure'])?.structure_type || 'category_based') as Form['config']['menu_structure']['structure_type'],
         categories: (existingConfig?.menu_structure?.categories || (typedConfig?.menu_structure as Form['config']['menu_structure'])?.categories || typedMenuStructure?.categories || []) as Form['config']['menu_structure']['categories'],
+        allow_cross_category_selection: existingConfig?.menu_structure?.allow_cross_category_selection ?? (typedConfig?.menu_structure as Form['config']['menu_structure'])?.allow_cross_category_selection ?? (typedMenuStructure?.allow_cross_category_selection as boolean) ?? false,
         display_options: {
           show_price: existingConfig?.menu_structure?.display_options?.show_price ?? true,
           show_duration: existingConfig?.menu_structure?.display_options?.show_duration ?? true,
@@ -172,6 +174,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           show_treatment_info: existingConfig?.menu_structure?.display_options?.show_treatment_info ?? false
         }
       },
+      custom_fields: (existingConfig?.custom_fields ?? (typedConfig as Form['config'])?.custom_fields ?? []) as Form['config']['custom_fields'],
       calendar_settings: {
         business_hours: (existingConfig?.calendar_settings?.business_hours || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.business_hours || typedBusinessRules?.business_hours || defaultConfig.calendar_settings.business_hours) as Form['config']['calendar_settings']['business_hours'],
         advance_booking_days: (existingConfig?.calendar_settings?.advance_booking_days || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.advance_booking_days || (typedBusinessRules?.advance_booking_days as number) || 30) as number,
