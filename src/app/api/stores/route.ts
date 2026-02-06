@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { name, owner_name, owner_email, phone, address, description, website_url, subdomain } = body
+    const { name, owner_name, owner_email, phone, address, description, website_url, subdomain, line_channel_access_token } = body
     console.log('[API] POST /api/stores - Body:', { name, owner_name, owner_email, subdomain })
 
     // バリデーション
@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
         website_url: website_url || '',
         subdomain: finalSubdomain || storeId, // 未指定の場合はstoreIdと同じ
         google_calendar_id: '',
-        line_channel_access_token: '',
+        line_channel_access_token: line_channel_access_token ?? '',
         status: 'active',
         created_at: now,
         updated_at: now
@@ -347,7 +347,7 @@ export async function POST(request: NextRequest) {
         website_url: website_url || '',
         subdomain: subdomainToUse,
         google_calendar_id: googleCalendarId || '',
-        line_channel_access_token: '',
+        line_channel_access_token: line_channel_access_token ?? '',
         status: 'active',
         created_by: user.id,
         updated_by: user.id

@@ -50,7 +50,8 @@ export default function AdminPage() {
     address: '',
     description: '',
     website_url: '',
-    subdomain: ''
+    subdomain: '',
+    line_channel_access_token: ''
   });
 
   const loadStores = useCallback(async () => {
@@ -460,7 +461,8 @@ export default function AdminPage() {
       address: '',
       description: '',
       website_url: '',
-      subdomain: ''
+      subdomain: '',
+      line_channel_access_token: ''
     });
   };
 
@@ -866,6 +868,20 @@ export default function AdminPage() {
                           onChange={(e) => setNewStore({...newStore, description: e.target.value})}
                           placeholder="店舗の特徴やサービス内容を入力してください"
                         />
+                      </div>
+                      <div className="md:col-span-2 space-y-2">
+                        <Label htmlFor="line_channel_access_token">LINE チャネルアクセストークン（任意）</Label>
+                        <Input
+                          id="line_channel_access_token"
+                          type="password"
+                          value={newStore.line_channel_access_token}
+                          onChange={(e) => setNewStore({...newStore, line_channel_access_token: e.target.value})}
+                          placeholder="LINE Developers で取得したチャネルアクセストークン"
+                          autoComplete="off"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Webhook・リマインドで使用します。未設定の場合は後から店舗編集で追加できます。
+                        </p>
                       </div>
                     </div>
                     <div className="flex gap-3">

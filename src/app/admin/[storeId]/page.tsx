@@ -324,6 +324,7 @@ export default function StoreDetailPage() {
   const [loadingReservations, setLoadingReservations] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState<any | null>(null);
   const [showReservationDetail, setShowReservationDetail] = useState(false);
+  const [creatingCalendar, setCreatingCalendar] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -586,6 +587,40 @@ export default function StoreDetailPage() {
     }
   };
 
+  const handleCreateCalendar = async () => {
+    if (!store) return;
+    setCreatingCalendar(true);
+    try {
+      const response = await fetch(`/api/stores/${storeId}/calendar`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.google_calendar_id) {
+        setStore({ ...store, google_calendar_id: data.google_calendar_id });
+        toast({
+          title: '成功',
+          description: 'Googleカレンダーを作成し、店舗に紐づけました',
+        });
+      } else {
+        toast({
+          title: 'エラー',
+          description: data.error || 'カレンダーの作成に失敗しました',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Create calendar error:', error);
+      toast({
+        title: 'エラー',
+        description: 'カレンダーの作成に失敗しました',
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingCalendar(false);
+    }
+  };
+
   const handleDeleteForm = (formId: string) => {
     setDeletingFormId(formId);
     setShowDeleteConfirm(true);
@@ -730,7 +765,7 @@ export default function StoreDetailPage() {
                   <Calendar className="mr-2 h-4 w-4" />
                   予約一覧
                 </Button>
-                {store.google_calendar_id && (
+                {store.google_calendar_id ? (
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -740,6 +775,15 @@ export default function StoreDetailPage() {
                   >
                     <ExternalLink className="mr-2 h-4 w-4" />
                     カレンダー
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    disabled={creatingCalendar}
+                    onClick={handleCreateCalendar}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {creatingCalendar ? '作成中...' : 'カレンダーを作成'}
                   </Button>
                 )}
                 <Button
@@ -1564,6 +1608,20 @@ export default function StoreDetailPage() {
                     onChange={(e) => setEditingStore({...editingStore, description: e.target.value})}
                     />
                   </div>
+                <div className="md:col-span-2 space-y-2">
+                  <Label htmlFor="edit_line_channel_access_token">LINE チャネルアクセストークン（任意）</Label>
+                  <Input
+                    id="edit_line_channel_access_token"
+                    type="password"
+                    placeholder="未設定の場合は空欄のまま"
+                    value={editingStore.line_channel_access_token || ''}
+                    onChange={(e) => setEditingStore({...editingStore, line_channel_access_token: e.target.value})}
+                    autoComplete="off"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Webhook・リマインドで使用します。
+                  </p>
+                </div>
                 </div>
               </div>
           )}
