@@ -481,9 +481,12 @@ class BookingForm {
         });
         
         // メッセージ
-        document.getElementById('customer-message').addEventListener('input', (e) => {
-            this.state.message = e.target.value;
-        });
+        const messageInput = document.getElementById('customer-message');
+        if (messageInput) {
+            messageInput.addEventListener('input', (e) => {
+                this.state.message = e.target.value;
+            });
+        }
         
         // 前回と同じメニューで予約するボタン
         const repeatButton = document.getElementById('repeat-booking-button');
@@ -1866,6 +1869,7 @@ if (document.readyState === 'loading') {
             <!-- メッセージ -->
             <div class="field" id="message-field">
                 <label class="field-label">メッセージ（任意）</label>
+                <textarea id="customer-message" class="input" rows="4" placeholder="ご要望などがあればご記入ください"></textarea>
             </div>`;
   }
 
