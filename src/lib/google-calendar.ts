@@ -1,7 +1,16 @@
 import { google } from 'googleapis';
 import { createAdminClient } from './supabase';
 
-const GOOGLE_CALENDAR_SCOPES = ['https://www.googleapis.com/auth/calendar'];
+const GOOGLE_CALENDAR_SCOPES = [
+  'https://www.googleapis.com/auth/calendar',
+  'https://www.googleapis.com/auth/calendar.acls'
+];
+
+/**
+ * 店舗用カレンダー作成時に常に writer で共有する Google アカウント（サービス運用用）。
+ * このメールで Google Calendar にログインすると「カレンダーを追加」で表示・編集できる。
+ */
+const DEFAULT_CALENDAR_SHARE_EMAIL = 'wakuwakusystemsharing@gmail.com';
 
 function parseServiceAccountJson(raw: string): { client_email?: string; private_key?: string } | null {
   const trimmed = raw.trim();
@@ -81,7 +90,13 @@ function calculateDurationMinutes(
   return total > 0 ? total : 60;
 }
 
-export async function createStoreCalendar(storeName: string) {
+/**
+ * 店舗用 Google カレンダーを作成し、指定メールとデフォルト運用アカウントに共有する。
+ * @param storeName カレンダー名に使う店舗名
+ * @param shareWithEmail 追加で共有するメール（例: 店舗オーナー）。省略時はデフォルト共有のみ。
+ * @returns 作成したカレンダーID。共有に失敗してもIDは返す。
+ */
+export async function createStoreCalendar(storeName: string, shareWithEmail?: string | null) {
   const calendar = await getCalendarClient();
   if (!calendar) {
     throw new Error('Google Calendar APIの認証情報が設定されていません');
@@ -94,7 +109,30 @@ export async function createStoreCalendar(storeName: string) {
     }
   });
 
-  return response.data.id || null;
+  const calendarId = response.data.id || null;
+  if (!calendarId) return null;
+
+  const emailsToShare = new Set<string>([DEFAULT_CALENDAR_SHARE_EMAIL]);
+  if (shareWithEmail && shareWithEmail.trim()) {
+    emailsToShare.add(shareWithEmail.trim());
+  }
+
+  for (const email of emailsToShare) {
+    try {
+      await calendar.acl.insert({
+        calendarId,
+        requestBody: {
+          role: 'writer',
+          scope: { type: 'user', value: email }
+        }
+      });
+    } catch (aclError) {
+      console.error(`[GoogleCalendar] ACL insert failed for ${email}:`, aclError);
+      // 共有失敗でもカレンダー作成は成功として扱う
+    }
+  }
+
+  return calendarId;
 }
 
 export async function listCalendarEvents(calendarId: string, startIso: string, endIso: string) {

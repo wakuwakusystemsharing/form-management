@@ -323,7 +323,7 @@ export async function POST(request: NextRequest) {
 
     let googleCalendarId: string | null = null
     try {
-      googleCalendarId = await createStoreCalendar(name)
+      googleCalendarId = await createStoreCalendar(name, body.owner_email ?? null)
     } catch (calendarError) {
       console.error('[API] Calendar creation error:', calendarError)
       return NextResponse.json(

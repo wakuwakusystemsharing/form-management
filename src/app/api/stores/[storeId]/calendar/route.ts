@@ -36,7 +36,7 @@ export async function POST(
 
     const { data: store, error: storeError } = await (adminClient as any)
       .from('stores')
-      .select('id, name, google_calendar_id')
+      .select('id, name, google_calendar_id, owner_email')
       .eq('id', storeId)
       .single();
 
@@ -54,7 +54,7 @@ export async function POST(
       );
     }
 
-    const googleCalendarId = await createStoreCalendar(store.name);
+    const googleCalendarId = await createStoreCalendar(store.name, store.owner_email ?? null);
     if (!googleCalendarId) {
       return NextResponse.json(
         { error: 'Googleカレンダーの作成に失敗しました' },
