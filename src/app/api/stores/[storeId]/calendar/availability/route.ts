@@ -44,7 +44,7 @@ export async function GET(
   }
 
   try {
-    const events = await listCalendarEvents(store.google_calendar_id, start, end);
+    const events = await listCalendarEvents(store.google_calendar_id, start, end, storeId);
     const availability = events.map(event => {
       const startTime = event.start?.dateTime || event.start?.date || '';
       const endTime = event.end?.dateTime || event.end?.date || '';

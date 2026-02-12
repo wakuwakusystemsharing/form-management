@@ -206,11 +206,11 @@ pnpm dev  # ローカルで開発
 
 ### 利用可能なコマンド
 
-- `npm run dev` - 開発サーバー起動
-- `npm run build` - プロダクションビルド
-- `npm run start` - プロダクションサーバー起動
-- `npm run lint` - ESLintによるコード検査
-- `npm run type-check` - TypeScriptの型チェック
+- `pnpm run dev` - 開発サーバー起動
+- `pnpm run build` - プロダクションビルド
+- `pnpm run start` - プロダクションサーバー起動
+- `pnpm run lint` - ESLintによるコード検査
+- `pnpm run type-check` - TypeScriptの型チェック
 
 ## 📖 使用方法
 
@@ -306,8 +306,8 @@ pnpm dev  # ローカルで開発
 
 ### プロダクションビルド
 ```bash
-npm run build
-npm run start
+pnpm run build
+pnpm run start
 ```
 
 ### 環境変数

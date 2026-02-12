@@ -210,10 +210,10 @@ export async function POST(req: NextRequest) {
       try {
         const start = new Date(`${target.reservation_date}T00:00:00+09:00`).toISOString();
         const end = new Date(`${target.reservation_date}T23:59:59+09:00`).toISOString();
-        const events = await listCalendarEvents(store.google_calendar_id, start, end);
+        const events = await listCalendarEvents(store.google_calendar_id, start, end, storeId);
         const event = events.find(e => e.location === userId && (e.summary || '').includes(target.customer_name));
         if (event?.id) {
-          await deleteCalendarEvent(store.google_calendar_id, event.id);
+          await deleteCalendarEvent(store.google_calendar_id, event.id, storeId);
         }
       } catch (calendarError) {
         console.error('[LINE] Calendar delete error:', calendarError);

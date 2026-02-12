@@ -2,7 +2,7 @@
 
  
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Store } from '@/types/store';
 import { Form } from '@/types/form';
 import { SurveyForm } from '@/types/survey';
@@ -325,6 +325,8 @@ export default function StoreDetailPage() {
   const [selectedReservation, setSelectedReservation] = useState<any | null>(null);
   const [showReservationDetail, setShowReservationDetail] = useState(false);
   const [creatingCalendar, setCreatingCalendar] = useState(false);
+  const [disconnectingCalendar, setDisconnectingCalendar] = useState(false);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -381,6 +383,35 @@ export default function StoreDetailPage() {
       fetchData();
     }
   }, [storeId]);
+
+  useEffect(() => {
+    const status = searchParams.get('google_calendar');
+    const message = searchParams.get('message');
+    if (!status || !storeId) return;
+    if (status === 'connected') {
+      toast({ title: '連携完了', description: '店舗のGoogleカレンダーと連携しました' });
+    } else if (status === 'error') {
+      const descriptions: Record<string, string> = {
+        config: 'Google OAuthの設定がありません。管理者設定を確認してください。',
+        unauthorized: 'ログインしてください。',
+        forbidden: 'この店舗へのアクセス権限がありません。',
+        no_code: '認証がキャンセルされました。',
+        no_refresh_token: 'リフレッシュトークンを取得できませんでした。再度お試しください。',
+        exchange: 'トークン取得に失敗しました。',
+        encryption: 'トークンの保存に失敗しました。',
+        save: '店舗の更新に失敗しました。',
+        invalid_state: '無効なリクエストです。',
+        local: 'ローカル環境では利用できません。',
+        server: 'サーバーエラーが発生しました。',
+      };
+      toast({
+        title: 'Googleカレンダー連携エラー',
+        description: (message && descriptions[message]) || '連携に失敗しました。',
+        variant: 'destructive',
+      });
+    }
+    router.replace(`/admin/${storeId}`, { scroll: false });
+  }, [searchParams, storeId, router]);
 
   const handleCreateForm = async () => {
     if (!newFormData.form_name.trim()) {
@@ -621,6 +652,41 @@ export default function StoreDetailPage() {
     }
   };
 
+  const handleDisconnectCalendar = async () => {
+    if (!storeId || !store) return;
+    setDisconnectingCalendar(true);
+    try {
+      const response = await fetch(`/api/stores/${storeId}/calendar/disconnect`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        setStore({
+          ...store,
+          google_calendar_id: '',
+          google_calendar_source: 'system',
+        });
+        toast({ title: '連携を解除しました' });
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast({
+          title: 'エラー',
+          description: data.error || '連携の解除に失敗しました',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Disconnect calendar error:', error);
+      toast({
+        title: 'エラー',
+        description: '連携の解除に失敗しました',
+        variant: 'destructive',
+      });
+    } finally {
+      setDisconnectingCalendar(false);
+    }
+  };
+
   const handleDeleteForm = (formId: string) => {
     setDeletingFormId(formId);
     setShowDeleteConfirm(true);
@@ -766,25 +832,60 @@ export default function StoreDetailPage() {
                   予約一覧
                 </Button>
                 {store.google_calendar_id ? (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const calendarUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id ?? '')}`;
-                      window.open(calendarUrl, '_blank');
-                    }}
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    カレンダー
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const calendarUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id ?? '')}`;
+                        window.open(calendarUrl, '_blank');
+                      }}
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      カレンダーを開く
+                    </Button>
+                    {store.google_calendar_source === 'store_oauth' ? (
+                      <>
+                        <Badge variant="secondary">店舗のGoogleカレンダーと連携中</Badge>
+                        <Button
+                          variant="outline"
+                          disabled={disconnectingCalendar}
+                          onClick={handleDisconnectCalendar}
+                        >
+                          {disconnectingCalendar ? '解除中...' : '連携を解除'}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          window.location.href = `/api/integrations/google-calendar/connect?store_id=${storeId}`;
+                        }}
+                      >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        店舗のGoogleカレンダーと連携
+                      </Button>
+                    )}
+                  </>
                 ) : (
-                  <Button
-                    variant="outline"
-                    disabled={creatingCalendar}
-                    onClick={handleCreateCalendar}
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    {creatingCalendar ? '作成中...' : 'カレンダーを作成'}
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      disabled={creatingCalendar}
+                      onClick={handleCreateCalendar}
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      {creatingCalendar ? '作成中...' : 'カレンダーを作成'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        window.location.href = `/api/integrations/google-calendar/connect?store_id=${storeId}`;
+                      }}
+                    >
+                      <Calendar className="mr-2 h-4 w-4" />
+                      店舗のGoogleカレンダーと連携
+                    </Button>
+                  </>
                 )}
                 <Button
                   variant="outline"

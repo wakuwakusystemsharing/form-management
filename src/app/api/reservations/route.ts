@@ -456,18 +456,21 @@ export async function POST(request: Request) {
       if (storeError) {
         console.error('[API] Store calendar lookup error:', storeError);
       } else if (storeData?.google_calendar_id) {
-        await createReservationEvent({
-          calendarId: storeData.google_calendar_id,
-          reservationDate: body.reservation_date,
-          reservationTime: body.reservation_time,
-          customerName: body.customer_name,
-          customerPhone: body.customer_phone,
-          lineUserId: body.line_user_id || null,
-          lineDisplayName: body.line_display_name || null,
-          message: body.message || null,
-          selectedMenus,
-          selectedOptions: body.selected_options || []
-        });
+        await createReservationEvent(
+          {
+            calendarId: storeData.google_calendar_id,
+            reservationDate: body.reservation_date,
+            reservationTime: body.reservation_time,
+            customerName: body.customer_name,
+            customerPhone: body.customer_phone,
+            lineUserId: body.line_user_id || null,
+            lineDisplayName: body.line_display_name || null,
+            message: body.message || null,
+            selectedMenus,
+            selectedOptions: body.selected_options || []
+          },
+          body.store_id
+        );
       }
     } catch (calendarError) {
       console.error('[API] Calendar event creation error:', calendarError);

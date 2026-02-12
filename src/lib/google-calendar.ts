@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { createAdminClient } from './supabase';
+import { decryptRefreshToken } from './google-calendar-token';
 
 const GOOGLE_CALENDAR_SCOPES = [
   'https://www.googleapis.com/auth/calendar',
@@ -50,7 +51,34 @@ async function getServiceAccountJson(): Promise<string | null> {
   return data?.value || null;
 }
 
-async function getCalendarClient() {
+async function getOAuthClientCredentials(): Promise<{ clientId: string; clientSecret: string } | null> {
+  if (process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET) {
+    return {
+      clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET
+    };
+  }
+  const adminClient = createAdminClient();
+  if (!adminClient) return null;
+  const { data: rows, error } = await (adminClient as any)
+    .from('admin_settings')
+    .select('key, value')
+    .in('key', ['google_oauth_client_id', 'google_oauth_client_secret']);
+  if (error || !rows?.length) return null;
+  const map = (rows as { key: string; value: string | null }[]).reduce(
+    (acc, r) => {
+      acc[r.key] = r.value || '';
+      return acc;
+    },
+    {} as Record<string, string>
+  );
+  const clientId = map.google_oauth_client_id?.trim();
+  const clientSecret = map.google_oauth_client_secret?.trim();
+  if (!clientId || !clientSecret) return null;
+  return { clientId, clientSecret };
+}
+
+async function getServiceAccountCalendarClient() {
   const rawJson = await getServiceAccountJson();
   if (!rawJson) return null;
 
@@ -67,6 +95,44 @@ async function getCalendarClient() {
   });
 
   return google.calendar({ version: 'v3', auth });
+}
+
+/**
+ * Returns Calendar API client for the store. Uses store OAuth when store has google_calendar_source = 'store_oauth',
+ * otherwise uses the service account client.
+ */
+async function getCalendarClientForStore(storeId: string): Promise<ReturnType<typeof google.calendar> | null> {
+  const adminClient = createAdminClient();
+  if (!adminClient) return null;
+
+  const { data: store, error } = await (adminClient as any)
+    .from('stores')
+    .select('google_calendar_source, google_calendar_refresh_token')
+    .eq('id', storeId)
+    .single();
+
+  if (error || !store) return null;
+  if (store.google_calendar_source === 'store_oauth' && store.google_calendar_refresh_token) {
+    const creds = await getOAuthClientCredentials();
+    if (!creds) return null;
+    const refreshToken = decryptRefreshToken(store.google_calendar_refresh_token);
+    if (!refreshToken) return null;
+    const oauth2 = new google.auth.OAuth2(creds.clientId, creds.clientSecret, 'https://localhost/callback');
+    oauth2.setCredentials({ refresh_token: refreshToken });
+    return google.calendar({ version: 'v3', auth: oauth2 });
+  }
+  return getServiceAccountCalendarClient();
+}
+
+/**
+ * Returns Calendar API client. When storeId is provided and the store uses store_oauth, uses that store's OAuth client; otherwise uses service account.
+ */
+async function getCalendarClient(storeId?: string) {
+  if (storeId) {
+    const client = await getCalendarClientForStore(storeId);
+    if (client) return client;
+  }
+  return getServiceAccountCalendarClient();
 }
 
 function buildMenuLines(selectedMenus: Array<Record<string, any>> | undefined) {
@@ -135,8 +201,13 @@ export async function createStoreCalendar(storeName: string, shareWithEmail?: st
   return calendarId;
 }
 
-export async function listCalendarEvents(calendarId: string, startIso: string, endIso: string) {
-  const calendar = await getCalendarClient();
+export async function listCalendarEvents(
+  calendarId: string,
+  startIso: string,
+  endIso: string,
+  storeId?: string
+) {
+  const calendar = await getCalendarClient(storeId);
   if (!calendar) {
     throw new Error('Google Calendar APIの認証情報が設定されていません');
   }
@@ -152,19 +223,22 @@ export async function listCalendarEvents(calendarId: string, startIso: string, e
   return response.data.items || [];
 }
 
-export async function createReservationEvent(params: {
-  calendarId: string;
-  reservationDate: string;
-  reservationTime: string;
-  customerName: string;
-  customerPhone: string;
-  lineUserId?: string | null;
-  lineDisplayName?: string | null;
-  message?: string | null;
-  selectedMenus?: Array<Record<string, any>>;
-  selectedOptions?: Array<Record<string, any>>;
-}) {
-  const calendar = await getCalendarClient();
+export async function createReservationEvent(
+  params: {
+    calendarId: string;
+    reservationDate: string;
+    reservationTime: string;
+    customerName: string;
+    customerPhone: string;
+    lineUserId?: string | null;
+    lineDisplayName?: string | null;
+    message?: string | null;
+    selectedMenus?: Array<Record<string, any>>;
+    selectedOptions?: Array<Record<string, any>>;
+  },
+  storeId?: string
+) {
+  const calendar = await getCalendarClient(storeId);
   if (!calendar) {
     throw new Error('Google Calendar APIの認証情報が設定されていません');
   }
@@ -207,8 +281,12 @@ export async function createReservationEvent(params: {
   return response.data.id || null;
 }
 
-export async function deleteCalendarEvent(calendarId: string, eventId: string) {
-  const calendar = await getCalendarClient();
+export async function deleteCalendarEvent(
+  calendarId: string,
+  eventId: string,
+  storeId?: string
+) {
+  const calendar = await getCalendarClient(storeId);
   if (!calendar) {
     throw new Error('Google Calendar APIの認証情報が設定されていません');
   }

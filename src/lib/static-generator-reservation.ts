@@ -383,9 +383,9 @@ class BookingForm {
                         } else {
                             const optionsContainer = document.getElementById('options-' + menuId);
                             if (optionsContainer) optionsContainer.style.display = 'block';
+                            this.hideSubmenu();
                         }
                     }
-                    this.hideSubmenu();
                     document.querySelectorAll('.menu-item').forEach(m => {
                         m.classList.remove('selected', 'has-submenu');
                         const cid = m.dataset.categoryId;

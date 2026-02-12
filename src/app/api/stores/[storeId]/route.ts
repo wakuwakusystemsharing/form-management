@@ -92,7 +92,8 @@ export async function GET(
         );
       }
 
-      return NextResponse.json(store);
+      const { google_calendar_refresh_token: _t, ...storeSafe } = store as Store & { google_calendar_refresh_token?: string };
+      return NextResponse.json(storeSafe);
     }
 
     // staging/production: Supabase から取得
@@ -119,7 +120,8 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(store);
+    const { google_calendar_refresh_token: _token, ...storeSafe } = store;
+    return NextResponse.json(storeSafe);
   } catch (error) {
     console.error('Store fetch error:', error);
     return NextResponse.json(

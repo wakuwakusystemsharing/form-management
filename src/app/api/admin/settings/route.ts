@@ -74,7 +74,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: '無効なリクエストです' }, { status: 400 });
   }
 
-  const allowedKeys = ['google_service_account_json', 'google_api_key'];
+  const allowedKeys = ['google_service_account_json', 'google_api_key', 'google_oauth_client_id', 'google_oauth_client_secret'];
   const incomingSettings = body.settings || {};
   const now = new Date().toISOString();
   const rows = Object.entries(incomingSettings)
