@@ -208,12 +208,32 @@ export async function POST(req: NextRequest) {
 
     if (store.google_calendar_id) {
       try {
-        const start = new Date(`${target.reservation_date}T00:00:00+09:00`).toISOString();
-        const end = new Date(`${target.reservation_date}T23:59:59+09:00`).toISOString();
-        const events = await listCalendarEvents(store.google_calendar_id, start, end, storeId);
-        const event = events.find(e => e.location === userId && (e.summary || '').includes(target.customer_name));
-        if (event?.id) {
-          await deleteCalendarEvent(store.google_calendar_id, event.id, storeId);
+        const eventIdToDelete = (target as { google_calendar_event_id?: string | null })
+          .google_calendar_event_id || null;
+        if (eventIdToDelete) {
+          await deleteCalendarEvent(store.google_calendar_id, eventIdToDelete, storeId);
+        } else {
+          // 旧予約: イベントID未保存の場合は日付範囲で検索して一致するイベントを削除
+          const start = new Date(`${target.reservation_date}T00:00:00+09:00`).toISOString();
+          const end = new Date(`${target.reservation_date}T23:59:59+09:00`).toISOString();
+          const events = await listCalendarEvents(store.google_calendar_id, start, end, storeId);
+          const timeStr =
+            typeof target.reservation_time === 'string'
+              ? target.reservation_time.slice(0, 5)
+              : '';
+          const expectedStart = new Date(
+            `${target.reservation_date}T${timeStr}:00+09:00`
+          ).toISOString();
+          const event = events.find((e) => {
+            const matchSummary = (e.summary || '').includes(target.customer_name);
+            const matchLocation = !userId || e.location === userId;
+            const startDt = e.start?.dateTime ?? '';
+            const matchTime = !startDt || startDt.startsWith(expectedStart.slice(0, 16));
+            return matchSummary && (matchLocation || matchTime);
+          });
+          if (event?.id) {
+            await deleteCalendarEvent(store.google_calendar_id, event.id, storeId);
+          }
         }
       } catch (calendarError) {
         console.error('[LINE] Calendar delete error:', calendarError);

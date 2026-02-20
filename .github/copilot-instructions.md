@@ -1,124 +1,80 @@
-## 🤖 Agent Quick Start (form-management)
+**詳細はルートの [CLAUDE.md](/CLAUDE.md) を参照。** 以下はクイックリファレンスです。
 
-目的: LINE LIFF 連携の予約フォームを Next.js (App Router) で編集・静的HTML化し Vercel Blob へデプロイする管理/生成システム。
+## Agent Quick Start (form-management)
+
+目的: LINE LIFF 連携の予約フォームを Next.js (App Router) で編集・静的HTML化し **Supabase Storage** へデプロイする管理/生成システム。
 
 ### 0. パッケージ管理・開発コマンド (pnpm 必須)
 - **インストール**: `pnpm install` (npm/yarn 使用禁止、lockfile 整合性維持)
-- **開発**: `pnpm dev` (ローカルサーバ起動、JSON ストレージ + Blob モック)
+- **開発**: `pnpm dev` (ローカルサーバ起動、JSON ストレージ + Storage モック)
 - **型チェック**: `pnpm type-check` (コミット前必須)
 - **Lint**: `pnpm lint` (ESLint 実行)
 - **ビルド**: `pnpm build` (Next.js プロダクションビルド、CI で実行)
-- **環境変数取得**: `pnpm vercel env pull .env.local` (Vercel 環境変数をローカルに同期)
+- **環境変数**: `.env.local.example` をコピーして `.env.local` を用意
 
-### 1. 環境モードと挙動 (dev / staging / prod)
+### 1. 環境モードと挙動 (local / staging / production)
 - **環境判定**: `getAppEnvironment()` → `NEXT_PUBLIC_APP_ENV` (local|staging|production)
-- **dev (ローカル開発)**:
+- **local (ローカル開発)**:
   - JSON ファイル (`data/*.json`) で永続化
-  - Blob モック: `BLOB_READ_WRITE_TOKEN` 未設定時 → `/public/static-forms/{formId}.html` に出力
-  - Supabase 未接続 (モック予定)
+  - 静的HTMLは `public/static-forms/` に出力（Supabase Storage はモック）
+  - 認証スキップ
 - **staging / production (本番系)**:
   - Supabase 接続 (RLS 適用、店舗別アクセス制御)
-    - **staging**: 既存の Supabase プロジェクト（staging 専用、既存データを継続使用）
-    - **production**: 新規の Supabase プロジェクト（production 専用、Pro プラン推奨）
-    - 環境変数 (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) で環境ごとに異なるプロジェクトを指定
-  - Supabase Storage 実デプロイ: `staging/forms/{storeId}/{formId}/config/current.html` or `prod/forms/{storeId}/{formId}/config/current.html`
-  - CI/CD: Vercel 自動デプロイ (staging は preview ブランチ、prod は main ブランチ)
-  - 環境変数は Vercel Dashboard で管理（環境ごとに異なる Supabase プロジェクトを指定）
+  - **staging**: 既存の Supabase プロジェクト（staging 専用）
+  - **production**: 新規の Supabase プロジェクト（Pro プラン推奨）
+  - 環境変数で環境ごとに異なるプロジェクトを指定
+  - フォームHTML: Supabase Storage にデプロイ。パスは環境別: `reservations/{storeId}/{formId}/index.html` / `surveys/{storeId}/{formId}/index.html`
+  - 公開は `/api/public-form/*` プロキシ経由
 
 ### 2. データレイヤ構成
-- **dev 環境**: JSON ファイル (`data/forms.json`, `data/forms_st{storeId}.json`, `data/stores.json`, `data/reservations.json`)
-- **staging / prod 環境**: Supabase PostgreSQL
-  - テーブル: `stores`, `forms`, `reservations`, `store_admins`
-  - RLS (Row Level Security) で店舗別アクセス制御
-  - `store_admins.store_id` で自店舗のみ CRUD 可能
-  - サービス管理者は全店舗アクセス可
-- **互換性**: 旧「フラット形式」(`form_name` 等) と新 `config.*` 形式共存 → `normalizeForm(form)` が常に全フィールド補完
-- 保存系 API は全体上書き + `updated_at` 更新 (差分マージなし)
-- **API 認証**: middleware では UI ページのアクセス制御のみ実施、API ルート内で独立認証処理
+- **local**: JSON ファイル (`data/forms_st{storeId}.json`, `data/stores.json`, `data/reservations.json` 等)
+- **staging / production**: Supabase PostgreSQL（`stores`, `forms`, `reservation_forms`, `reservations`, `store_admins` 等、RLS 適用）
+- **互換性**: 旧フラット形式と新 `config.*` 形式 → `normalizeForm(form)` で常に正規化
+- 保存系 API は全体上書き (差分マージなし)。API 認証はルート内で独立実施
 
 ### 3. 型とフォーム構造
-- 代表型: `types/form.ts` (`Form`, `FormConfig`) – 新機能追加時はここを最初に拡張
-- 互換ヘルパ: UI 側 `getFormConfig()` / API 側 `normalizeForm()` で欠損フィールドを安全補完 (Null 直接追加禁止、既存パターン踏襲)
+- 代表型: `src/types/form.ts` (`Form`, `FormConfig`) – 新機能追加時はここを最初に拡張
+- 正規化: API・画面とも `normalizeForm()` (`src/lib/form-normalizer.ts`) を使用。ページ内の重複 `normalizeFormData` は使わない
 
 ### 4. 主なフロー
-1. 管理 UI (`/[storeId]/forms/[formId]`) が `/api/forms/{formId}` を取得 → フォーム編集 (state 内で全体オブジェクト保持)
-2. 保存: PUT `/api/forms/{formId}` (丸ごと送信) → JSON 書き込み
-3. プレビュー: 直後 `/form/{formId}?preview=true` (まだ Blob 未反映)
-4. 本番反映: POST `/api/forms/{formId}/deploy` → 静的HTML生成 (`StaticFormGenerator.generateHTML`) → Blob / ローカル出力 → `static_deploy` 情報更新
+1. 管理 UI (`/[storeId]/forms/[formId]`) が `/api/forms/{formId}` を取得 → フォーム編集 (state で全体保持)
+2. 保存: PUT `/api/forms/{formId}` (丸ごと送信)
+3. 本番反映: POST `/api/forms/{formId}/deploy` → 静的HTML生成 → **Supabase Storage** にアップロード → `static_deploy` 更新
+4. 顧客: `/api/public-form/reservations/{storeId}/{formId}/index.html` 等でアクセス
 
-### 5. 静的HTML生成のポイント
-- 生成元: `src/lib/static-generator.ts` 内 `StaticFormGenerator`
-- 出力 HTML は LIFF SDK script 埋め込み + インライン CSS (テーマ色 `config.basic_info.theme_color` 適用)
-- メニュー/オプション有無は `config.*.enabled` フラグで条件レンダリング
+### 5. 静的HTML生成
+- 予約: `src/lib/static-generator-reservation.ts` の `StaticReservationGenerator.generateHTML()`
+- アンケート: `src/lib/static-generator-survey.ts` の `StaticSurveyGenerator.generateHTML()`
+- LIFF 互換のため vanilla JS のみ。テーマ色は `config.basic_info.theme_color`。設定は `FORM_CONFIG` として JSON 埋め込み
 
-### 6. Supabase Storage デプロイ仕様 (`SupabaseStorageDeployer`)
-- **環境別パス構造**: 
-  - staging → `staging/forms/{storeId}/{formId}/config/current.html`
-  - production → `prod/forms/{storeId}/{formId}/config/current.html`
-- **公開URL形式**: `{project-ref}.supabase.co/storage/v1/object/public/forms/{path}`
-- **Content-Type設定**: `text/html; charset=utf-8` で正しくブラウザ表示可能
-- **バケット設定**: 
-  - バケット名: `forms`
-  - パブリック読み取り: 有効（匿名ユーザーがアクセス可能）
-  - 書き込み権限: サービスロールのみ
-- **キャッシュ制御**: HTMLは1時間、画像は1年キャッシュ
-- エラーハンドリング: Storage 失敗時は throw → 呼び出し側でユーザ通知必須
-- 画像アップロード API で同クラス `uploadImage()` 利用 (パス命名一貫: `menu_images/{storeId}/{menuId}.{ext}`)
-- **旧Vercel Blob**: `vercel-blob-deployer.ts` は非推奨、1-2リリース後に削除予定
+### 6. Supabase Storage デプロイ (`SupabaseStorageDeployer`)
+- パス: 予約 `reservations/{storeId}/{formId}/index.html`、アンケート `surveys/{storeId}/{formId}/index.html`
+- Content-Type: `text/html; charset=utf-8`。画像は `menu_images/{storeId}/{menuId}.{ext}` 等
+- バケットは環境別プロジェクトで分離。Vercel Blob は使用しない（`vercel-blob-deployer.ts` は非推奨）
 
-### 7. API パターン (例: `api/forms/[formId]/route.ts`)
-- GET: 正規化して単一返却 (404 メッセージは日本語固定)
-- PUT: グローバル → 店舗順に探索し最初にヒットした領域で更新
-- DELETE: 同じ探索順で削除。レスポンスは `{ success, message, deletedForm { id, name } }`
-- 新規 API 追加時は: 1) ファイル先頭で data dir 初期化 2) 読み込み関数分離 3) 日本語エラーメッセージ整合 4) 時刻は ISO 文字列
+### 7. API パターン
+- GET: 取得後に `normalizeForm()` して返却。404 等は日本語メッセージ
+- PUT: フォーム全体で更新。環境は `getAppEnvironment()` で分岐
 
-### 8. UI 実装方針 (編集ページ)
-- 全フォームオブジェクトを `useState<Form>` で保持し、深い更新はイミュータブル spread (Immer 未使用)
-- 保存ステータス表示: `saveStatus` (idle|saving|saved|error) + 2 秒後 reset の一貫パターン
-- タブ切替: `activeTab` ローカル state、URL クエリ同期は未実装 (導入時は戻る遷移影響に注意)
+### 8. UI 実装方針
+- フォームは `useState<Form>` で全体保持。深い更新はイミュータブルに。認証済み fetch は `credentials: 'include'`
 
-### 9. 環境判定 / URL 生成
-- `getBaseUrl()` が SSR/CSR 両対応 (window 判定) – 新規サーバ util では直接 `process.env` よりも既存関数再利用
+### 9. 変更時の指針 (Agent 用)
+- 新フィールド追加: 1) `types/form.ts` 2) `form-normalizer.ts` の defaultConfig 3) FormEditor UI 4) static-generator-reservation.ts / static-generator-survey.ts の 4 箇所を更新
+- デプロイは `SupabaseStorageDeployer` を利用。日本語メッセージを英語に変更しない
 
-### 10. 変更時の指針 (Agent 用)
-- 新フィールド追加: `types/form.ts` → `normalizeForm()` で後方互換初期値 → UI 編集フォーム & Static HTML へのレンダリング追加
-- デプロイ動作変更: `VercelBlobDeployer.deployForm()` のみ集中修正 (ローカルモードとの差分壊さない)
-- 旧形式排除作業を行う場合は先に API レイヤで migration (normalize 結果を保存) を実装し UI を後追い
+### 10. 守るべき注意点
+- JSON ファイルを直接書き換えない (API 経由)
+- 日本語ユーザー向けメッセージを英語に置換しない
 
-### 11. 守るべき注意点
-- 直接 JSON ファイルを miscellaneous スクリプトで書き換えない (API 経由 or 既存 utility 関数流用)
-- `BLOB_READ_WRITE_TOKEN` 無しで本番/ステージング Deploy ロジックを誤実行しない (条件分岐維持)
-- 日本語メッセージ定型を英語に置換しない (ユーザ表示整合性)
+### 11. MCP 設定
+- `.mcp.json` または `.cursor/mcp.json` で Supabase MCP 等を設定。認証は環境変数で管理。本番接続は避ける
 
-### 12. MCP (Model Context Protocol) 設定
-- **mcp.json の役割**: `.cursor/mcp.json` に MCP サーバ設定を記載
-- **Supabase MCP の利用**: 開発時に AI アシスタント (Cursor など) から Supabase と連携
-  - 設定ファイル: `.cursor/mcp.json` で Supabase MCP サーバをセットアップ
-  - コマンド: `npx @supabase/mcp-server-supabase@latest --read-only --project-ref=<project-ref>`
-  - 認証: `SUPABASE_ACCESS_TOKEN` は個人アクセストークン (Supabase Dashboard で作成)
-- **セキュリティ考慮**:
-  - `--read-only` フラグで読み取り専用モードを強制 (本番データ保護)
-  - 個人アクセストークンは `.cursor/mcp.json` にハードコードしない、環境変数で管理
-  - 開発環境のみ接続、本番環境接続は厳禁
-- **その他 MCP サーバ**: Firecrawl MCP も同ファイルで設定可能 (`FIRECRAWL_API_KEY` 使用)
+### 12. Git ワークフロー（CLAUDE.md / docs/WORKFLOW.md に準拠）
+- **dev** – 直接プッシュ可。**staging** – dev / feature/* から PR。**main** – staging からのみ PR（保護）
+- コミット前: `pnpm type-check` 必須。PR で ESLint / type-check / build 実行
 
-### 13. Git ワークフロー＆ PR ベースマージ
-- **ブランチ保護**: `main` ブランチは PR なしマージ禁止（GitHub branch protection rules 設定済み）
-- **開発フロー**:
-  1. `staging` ブランチで開発・修正
-  2. `git add . && git commit && git push origin staging`
-  3. GitHub で PR を作成（staging → main）
-  4. 自動チェック実行: ESLint, TypeScript type-check, Build テスト
-  5. レビュー＆承認後にマージ可能
-  6. main への merge 自動で本番環境（form-management-seven）に Vercel デプロイ
-- **注意**: 直接 `git push origin main` や `git merge staging` は GitHub がブロック
+### 13. コード整理ポリシー
+- `deprecated` は 1-2 リリース後に削除。`*-old.ts`, `*-preview.ts` 等は即削除。`normalizeForm()` は互換性のため保持
 
-### 14. コード整理ポリシー
-- **古いコード削除**:
-  - `deprecated` メソッド: コメント付きで 1-2 リリース後に削除
-  - 古いルートファイル: `*-old.ts`, `new-route.ts`, `*-preview.ts` など命名されたファイルは直ちに削除
-  - レガシー実装: `TODO:` コメント確認して、実装完了後にコメント更新 or 削除
-- **バージョン追跡**: 削除前に関連ドキュメント更新して、削除理由を記載
-- **保守性**: `normalizeForm()` 等の互換性関数は保持（旧データとの互換性維持のため）
-
-不足/不明点があればこのファイルを更新する形で質問を追記してください。
+不足/不明点は CLAUDE.md および docs/ を参照。

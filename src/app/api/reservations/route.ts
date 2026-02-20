@@ -445,7 +445,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. Googleカレンダーに予約イベントを作成
+    // 4. Googleカレンダーに予約イベントを作成し、イベントIDを予約に保存（キャンセル時に削除するため）
     try {
       const { data: storeData, error: storeError } = await (adminClient as any)
         .from('stores')
@@ -456,7 +456,7 @@ export async function POST(request: Request) {
       if (storeError) {
         console.error('[API] Store calendar lookup error:', storeError);
       } else if (storeData?.google_calendar_id) {
-        await createReservationEvent(
+        const eventId = await createReservationEvent(
           {
             calendarId: storeData.google_calendar_id,
             reservationDate: body.reservation_date,
@@ -471,6 +471,12 @@ export async function POST(request: Request) {
           },
           body.store_id
         );
+        if (eventId) {
+          await (adminClient as any)
+            .from('reservations')
+            .update({ google_calendar_event_id: eventId })
+            .eq('id', reservation.id);
+        }
       }
     } catch (calendarError) {
       console.error('[API] Calendar event creation error:', calendarError);

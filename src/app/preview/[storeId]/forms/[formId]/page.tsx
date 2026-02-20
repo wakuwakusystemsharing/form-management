@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { Form } from '@/types/form';
+import { normalizeForm } from '@/lib/form-normalizer';
 
 export default function PreviewFormPage() {
   const params = useParams();
@@ -105,8 +106,8 @@ export default function PreviewFormPage() {
           return;
         }
         
-        // フォームデータの正規化
-        const normalizedForm = normalizeFormData(formData);
+        // フォームデータの正規化（共通 normalizer を使用）
+        const normalizedForm = normalizeForm(formData);
         
         // プレビューモードでは全てのステータスのフォームを表示
         setForm(normalizedForm);
@@ -122,131 +123,6 @@ export default function PreviewFormPage() {
       fetchForm();
     }
   }, [formId, storeId]);
-
-  // フォームデータ正規化関数
-  function normalizeFormData(form: Record<string, unknown>): Form {
-    const formWithConfig = form as unknown as { config?: Form['config']; [key: string]: unknown };
-    const uiSettings = form.ui_settings as Record<string, unknown> | undefined;
-    const lineSettings = form.line_settings as Record<string, unknown> | undefined;
-    const businessRules = form.business_rules as Record<string, unknown> | undefined;
-    
-    // configが存在しない場合は作成
-    if (!formWithConfig.config) {
-      formWithConfig.config = {} as Form['config'];
-    }
-    
-    // basic_infoの正規化
-    if (!formWithConfig.config.basic_info) {
-      formWithConfig.config.basic_info = {
-        form_name: (form.form_name as string) || 'フォーム',
-        store_name: (form.store_name as string) || '',
-        theme_color: (uiSettings?.theme_color as string) || '#3B82F6',
-        liff_id: (form.liff_id as string) || (lineSettings?.liff_id as string) || ''
-      };
-    }
-    
-    // ui_settingsの正規化
-    if (!formWithConfig.config.ui_settings) {
-      formWithConfig.config.ui_settings = (form.ui_settings as Form['config']['ui_settings']) || {};
-    }
-    
-    // menu_structureの正規化
-    if (!formWithConfig.config.menu_structure) {
-      formWithConfig.config.menu_structure = (form.menu_structure as Form['config']['menu_structure']) || { categories: [] };
-    }
-    
-    // menu_structure.display_optionsの正規化
-    if (!formWithConfig.config.menu_structure.display_options) {
-      formWithConfig.config.menu_structure.display_options = {
-        show_price: true,
-        show_duration: true,
-        show_description: true,
-        show_treatment_info: true
-      };
-    }
-    
-    // gender_selectionの正規化
-    if (!formWithConfig.config.gender_selection) {
-      formWithConfig.config.gender_selection = {
-        enabled: false,
-        required: false,
-        options: [
-          { value: 'male', label: '男性' },
-          { value: 'female', label: '女性' }
-        ]
-      };
-    }
-    
-    // calendar_settingsの正規化
-    if (!formWithConfig.config.calendar_settings) {
-      formWithConfig.config.calendar_settings = (businessRules as Form['config']['calendar_settings']) || {
-        advance_booking_days: 30
-      } as Form['config']['calendar_settings'];
-    }
-    
-    // business_hoursの構造を正規化（古い形式から新しい形式へ）
-    if (formWithConfig.config.calendar_settings.business_hours) {
-      const hours = formWithConfig.config.calendar_settings.business_hours as Record<string, unknown>;
-      
-      // 古い形式 {start: '09:00', end: '18:00'} を検出
-      if (hours.start && hours.end && !hours.monday) {
-        // 新しい形式に変換
-        const defaultHours = {
-          open: (hours.start as string) || '09:00',
-          close: (hours.end as string) || '18:00',
-          closed: false
-        };
-        
-        formWithConfig.config.calendar_settings.business_hours = {
-          monday: { ...defaultHours },
-          tuesday: { ...defaultHours },
-          wednesday: { ...defaultHours },
-          thursday: { ...defaultHours },
-          friday: { ...defaultHours },
-          saturday: { ...defaultHours },
-          sunday: { ...defaultHours, closed: true }
-        } as Form['config']['calendar_settings']['business_hours'];
-      }
-      
-      // business_hoursが存在しない場合はデフォルト値を設定
-      if (!hours.monday) {
-        const defaultHours = {
-          open: '09:00',
-          close: '18:00',
-          closed: false
-        };
-        
-        formWithConfig.config.calendar_settings.business_hours = {
-          monday: { ...defaultHours },
-          tuesday: { ...defaultHours },
-          wednesday: { ...defaultHours },
-          thursday: { ...defaultHours },
-          friday: { ...defaultHours },
-          saturday: { ...defaultHours },
-          sunday: { ...defaultHours, closed: true }
-        } as Form['config']['calendar_settings']['business_hours'];
-      }
-    } else {
-      // business_hoursが完全に存在しない場合
-      const defaultHours = {
-        open: '09:00',
-        close: '18:00',
-        closed: false
-      };
-      
-      formWithConfig.config.calendar_settings.business_hours = {
-        monday: { ...defaultHours },
-        tuesday: { ...defaultHours },
-        wednesday: { ...defaultHours },
-        thursday: { ...defaultHours },
-        friday: { ...defaultHours },
-        saturday: { ...defaultHours },
-        sunday: { ...defaultHours, closed: true }
-      } as Form['config']['calendar_settings']['business_hours'];
-    }
-    
-    return formWithConfig as unknown as Form;
-  }
 
   // ローカルストレージに選択内容を保存
   const saveSelectionToStorage = useCallback(() => {

@@ -1,0 +1,22 @@
+---
+description: Form config changes — 4-point update and normalizeForm usage
+globs: "**/form*.ts,**/form*.tsx,**/FormEditor/**/*,**/static-generator*.ts,**/form-normalizer.ts,**/types/form.ts,**/types/survey.ts"
+alwaysApply: false
+---
+
+# Form feature checklist
+
+When adding or changing **FormConfig** (reservation or survey):
+
+## 1. Update in order
+1. **Types** — `src/types/form.ts` (`FormConfig`) or `src/types/survey.ts`
+2. **Normalizer** — `src/lib/form-normalizer.ts`: add default in `defaultConfig` and in `normalizedForm.config` merge
+3. **FormEditor UI** — `src/components/FormEditor/Reservation/` or `FormEditor/Survey/`
+4. **Static HTML** — `src/lib/static-generator-reservation.ts` or `static-generator-survey.ts` (use optional chaining / defaults for new fields)
+
+## 2. Single source of truth
+- **Always** use `normalizeForm()` from `@/lib/form-normalizer` when reading form data (API, customer form page, preview page). Do **not** add or keep local `normalizeFormData()` in pages.
+
+## 3. API and save
+- GET form → return `normalizeForm(rawForm)`.
+- PUT form → accept full form object only (no PATCH/partial).
