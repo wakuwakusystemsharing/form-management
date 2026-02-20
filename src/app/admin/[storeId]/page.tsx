@@ -30,7 +30,8 @@ import {
   Copy,
   Store as StoreIcon,
   AlertTriangle,
-  Globe
+  Globe,
+  MessageCircle
 } from 'lucide-react';
 
 // アンケートテンプレート定義（既存のまま）
@@ -973,6 +974,36 @@ export default function StoreDetailPage() {
                     サブドメインが設定されていません。店舗情報編集から設定できます。
                   </p>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* LINE Messaging API Webhook URL */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MessageCircle className="h-5 w-5" />
+                  LINE Messaging API Webhook URL
+                </CardTitle>
+                <CardDescription>
+                  LINE Developers の Messaging API 設定で、このURLをWebhook URLとして登録してください。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <code className="px-2 py-1.5 bg-muted rounded text-sm break-all flex-1 min-w-0">
+                    {getBaseUrl()}/api/webhooks/line?storeId={storeId}
+                  </code>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const webhookUrl = `${getBaseUrl()}/api/webhooks/line?storeId=${storeId}`;
+                      copyToClipboard(webhookUrl);
+                    }}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 
