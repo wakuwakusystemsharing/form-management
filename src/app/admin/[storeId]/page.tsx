@@ -989,6 +989,12 @@ export default function StoreDetailPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {!store?.line_channel_access_token && (
+                  <div className="flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    LINEチャネルアクセストークンが未設定です。Webhookが動作しません。店舗編集から設定してください。
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center gap-2">
                   <code className="px-2 py-1.5 bg-muted rounded text-sm break-all flex-1 min-w-0">
                     {getBaseUrl()}/api/webhooks/line?storeId={storeId}
