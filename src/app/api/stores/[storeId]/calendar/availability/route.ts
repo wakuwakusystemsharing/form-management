@@ -60,8 +60,19 @@ export async function GET(
     });
 
     return NextResponse.json(availability);
-  } catch (error) {
-    console.error('[API] Calendar availability error:', error);
-    return NextResponse.json({ error: 'カレンダーの取得に失敗しました' }, { status: 500 });
+  } catch (error: any) {
+    const isAuthError = error?.code === 400 ||
+      error?.message?.includes('invalid_grant') ||
+      error?.message?.includes('Token has been expired') ||
+      error?.message?.includes('Token has been revoked');
+
+    if (isAuthError) {
+      console.error(`[API] Calendar auth error for store ${storeId} (token may be expired):`, error?.message || error);
+    } else {
+      console.error(`[API] Calendar availability error for store ${storeId}:`, error);
+    }
+
+    // カレンダーが壊れていてもフォーム自体は使えるように空配列を返す
+    return NextResponse.json([]);
   }
 }

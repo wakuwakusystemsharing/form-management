@@ -76,11 +76,13 @@ export async function POST(req: NextRequest) {
   const url = new URL(req.url);
   const storeId = url.searchParams.get('storeId');
   if (!storeId) {
+    console.warn('[LINE Webhook] storeId が未指定');
     return NextResponse.json({ error: 'storeId が必要です' }, { status: 400 });
   }
 
   const adminClient = createAdminClient();
   if (!adminClient) {
+    console.error('[LINE Webhook] Supabase 接続エラー');
     return NextResponse.json({ error: 'Supabase 接続エラー' }, { status: 500 });
   }
 
@@ -91,11 +93,13 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (storeError || !store) {
+    console.error(`[LINE Webhook] 店舗が見つかりません: storeId=${storeId}`, storeError);
     return NextResponse.json({ error: '店舗が見つかりません' }, { status: 404 });
   }
 
   const accessToken = store.line_channel_access_token;
   if (!accessToken) {
+    console.warn(`[LINE Webhook] LINEチャネルアクセストークン未設定: storeId=${storeId}`);
     return NextResponse.json({ error: 'LINEチャネルアクセストークンが未設定です' }, { status: 400 });
   }
 
@@ -104,6 +108,8 @@ export async function POST(req: NextRequest) {
   const replyToken = event.replyToken;
   const userId = event.source?.userId;
   const messageText = event.message?.text || '';
+
+  console.log(`[LINE Webhook] storeId=${storeId} type=${event.type || 'unknown'} userId=${userId ? 'yes' : 'no'} message=${messageText ? messageText.substring(0, 30) : '(empty)'}`);
 
   if (!replyToken || !userId) {
     return NextResponse.json({ success: true });
