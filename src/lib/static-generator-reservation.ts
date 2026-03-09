@@ -173,9 +173,14 @@ class BookingForm {
             selectedOptions: {}, // メニューIDをキーとしたオプションID配列
             selectedMenus: {}, // カテゴリーまたぎ時: categoryId -> [menuId]
             selectedSubMenus: {}, // カテゴリーまたぎ時: menuId -> submenuId
+            selectedCategoryOptions: {}, // カテゴリーレベルオプション: categoryId -> [optionId]
             customFields: {}, // カスタムフィールドの値
             selectedDate: '',
             selectedTime: '',
+            selectedDate2: '',
+            selectedTime2: '',
+            selectedDate3: '',
+            selectedTime3: '',
             message: '',
             lineUserId: null, // LINEユーザーID
             lineDisplayName: null, // LINE表示名
@@ -469,6 +474,29 @@ class BookingForm {
             });
         });
         
+        // カテゴリーレベルオプション選択
+        document.querySelectorAll('.category-option-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const categoryId = item.dataset.categoryId;
+                const optionId = item.dataset.optionId;
+                const current = this.state.selectedCategoryOptions[categoryId] || [];
+                const isSelected = current.includes(optionId);
+                if (isSelected) {
+                    this.state.selectedCategoryOptions[categoryId] = current.filter(id => id !== optionId);
+                    item.style.borderColor = '#d1d5db';
+                    item.style.backgroundColor = 'white';
+                    item.style.color = '#374151';
+                } else {
+                    this.state.selectedCategoryOptions[categoryId] = [...current, optionId];
+                    item.style.borderColor = '#3b82f6';
+                    item.style.backgroundColor = '#eff6ff';
+                    item.style.color = '#1e40af';
+                }
+                this.updateSummary();
+            });
+        });
+
         // 日付選択
         document.querySelectorAll('.calendar-day').forEach(day => {
             day.addEventListener('click', () => {
@@ -619,6 +647,22 @@ class BookingForm {
             const sub = this.state.selectedSubmenu || null;
             processMenu(category, this.state.selectedMenu, sub, this.state.selectedMenu.id);
         }
+        // カテゴリーレベルオプションを追加
+        if (this.state.selectedCategoryOptions && Object.keys(this.state.selectedCategoryOptions).length > 0) {
+            Object.entries(this.state.selectedCategoryOptions).forEach(([categoryId, optionIds]) => {
+                const category = this.config.menu_structure.categories.find(c => c.id === categoryId);
+                (optionIds || []).forEach(optId => {
+                    const opt = category?.options?.find(o => o.id === optId);
+                    if (!opt) return;
+                    const op = opt.price || 0;
+                    const od = opt.duration || 0;
+                    totalPrice += op;
+                    totalDuration += od;
+                    selectedOptions.push({ option_id: opt.id, option_name: opt.name || '', category_id: categoryId, price: op, duration: od });
+                    summaryLines.push('+ ' + opt.name + (op > 0 ? ' (+¥' + op.toLocaleString() + ')' : '') + (od > 0 ? ' (+' + od + '分)' : ''));
+                });
+            });
+        }
         const menuTextForMessage = messageParts.length > 0 ? messageParts.join(' / ') : '';
         const summaryHtml = summaryLines.map((line, i) => i === 0 ? \`<div style="margin-bottom:0.5rem;">\${line}</div>\` : \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">\${line}</div>\`).join('');
         return { selectedMenus, selectedOptions, totalPrice, totalDuration, summaryHtml, menuTextForMessage };
@@ -640,7 +684,7 @@ class BookingForm {
                 <button class="submenu-item" data-submenu-index="\${idx}">
                     \${sub.image ? \`
                         <div class="menu-item-image">
-                            <img src="\${sub.image}" alt="\${sub.name}" class="menu-image" loading="lazy" onerror="this.style.display='none'">
+                            <img src="\${sub.image}" alt="\${sub.name}" class="menu-image" loading="lazy" onerror="this.parentElement.style.display='none'">
                         </div>
                     \` : ''}
                     <div class="menu-item-content">
@@ -989,6 +1033,25 @@ class BookingForm {
         });
     }
     
+    // カテゴリータブ切り替え
+    showCategory(categoryId) {
+        document.querySelectorAll('.category-section').forEach(sec => {
+            sec.style.display = 'none';
+        });
+        const target = document.getElementById('category-section-' + categoryId);
+        if (target) target.style.display = 'block';
+        document.querySelectorAll('.category-tab-button').forEach(btn => {
+            const themeColor = this.config.basic_info?.theme_color || '#3B82F6';
+            if (btn.dataset.categorySection === categoryId) {
+                btn.style.background = themeColor;
+                btn.style.color = 'white';
+            } else {
+                btn.style.background = 'white';
+                btn.style.color = themeColor;
+            }
+        });
+    }
+
     // 月移動
     navigateMonth(direction) {
         const newDate = new Date(this.state.currentWeekStart);
@@ -1036,6 +1099,7 @@ class BookingForm {
             this.state.selectedOptions = {};
             this.state.selectedMenus = {};
             this.state.selectedSubMenus = {};
+            this.state.selectedCategoryOptions = {};
             
             // Previewページ形式（selectedMenus/selectedSubMenus）から復元
             if (selectionData.selectedMenus && Object.keys(selectionData.selectedMenus).length > 0) {
@@ -1231,7 +1295,17 @@ class BookingForm {
             }
         }
         if (this.state.selectedDate || this.state.selectedTime) {
-            items.push(\`<div class="summary-item"><span><strong>希望日時:</strong> \${this.state.selectedDate} \${this.state.selectedTime}</span><button class="summary-edit-button" data-field="datetime-field">修正</button></div>\`);
+            const bMode = this.config.calendar_settings?.booking_mode || 'calendar';
+            if (bMode === 'multiple_dates') {
+                let dateHtml = \`<strong>希望日時:</strong><div style="margin-top:0.25rem;font-size:0.875rem;">\`;
+                dateHtml += \`第一希望: \${this.state.selectedDate} \${this.state.selectedTime}\`;
+                if (this.state.selectedDate2 && this.state.selectedTime2) dateHtml += \`<br>第二希望: \${this.state.selectedDate2} \${this.state.selectedTime2}\`;
+                if (this.state.selectedDate3 && this.state.selectedTime3) dateHtml += \`<br>第三希望: \${this.state.selectedDate3} \${this.state.selectedTime3}\`;
+                dateHtml += \`</div>\`;
+                items.push(\`<div class="summary-item" style="align-items:flex-start;"><div>\${dateHtml}</div><button class="summary-edit-button" data-field="datetime-field-1">修正</button></div>\`);
+            } else {
+                items.push(\`<div class="summary-item"><span><strong>希望日時:</strong> \${this.state.selectedDate} \${this.state.selectedTime}</span><button class="summary-edit-button" data-field="datetime-field">修正</button></div>\`);
+            }
         }
         if (this.state.message) {
             items.push(\`<div class="summary-item" style="align-items:flex-start;"><div><strong>メッセージ:</strong><div style="margin-top:0.25rem;font-size:0.875rem;color:#6b7280;">\${this.state.message}</div></div><button class="summary-edit-button" data-field="message-field">修正</button></div>\`);
@@ -1303,6 +1377,11 @@ class BookingForm {
             }
             customerInfo.total_price = totalPrice;
             customerInfo.total_duration = totalDuration;
+            // 第二・第三希望日時（multiple_datesモードのみ）
+            if (this.state.selectedDate2) customerInfo.preferred_date2 = this.state.selectedDate2;
+            if (this.state.selectedTime2) customerInfo.preferred_time2 = this.state.selectedTime2;
+            if (this.state.selectedDate3) customerInfo.preferred_date3 = this.state.selectedDate3;
+            if (this.state.selectedTime3) customerInfo.preferred_time3 = this.state.selectedTime3;
             
             // 日付をYYYY-MM-DD形式に変換
             const dateObj = new Date(this.state.selectedDate);
@@ -1321,6 +1400,10 @@ class BookingForm {
                 total_duration: totalDuration,
                 reservation_date: reservationDate,
                 reservation_time: this.state.selectedTime,
+                reservation_date2: this.state.selectedDate2 || null,
+                reservation_time2: this.state.selectedTime2 || null,
+                reservation_date3: this.state.selectedDate3 || null,
+                reservation_time3: this.state.selectedTime3 || null,
                 customer_info: customerInfo,
                 line_user_id: this.state.lineUserId || null, // LINEユーザーID
                 line_display_name: this.state.lineDisplayName || null, // LINE表示名
@@ -1357,6 +1440,13 @@ class BookingForm {
             
             // 日時を日本語形式に変換（LINEメッセージ用）
             const formattedDate = \`\${dateObj.getFullYear()}年\${String(dateObj.getMonth() + 1).padStart(2, '0')}月\${String(dateObj.getDate()).padStart(2, '0')}日 \${this.state.selectedTime}\`;
+            const formatDateStr = (dateStr, timeStr) => {
+                if (!dateStr || !timeStr) return null;
+                const d = new Date(dateStr);
+                return \`\${d.getFullYear()}年\${String(d.getMonth() + 1).padStart(2, '0')}月\${String(d.getDate()).padStart(2, '0')}日 \${timeStr}\`;
+            };
+            const formattedDate2 = formatDateStr(this.state.selectedDate2, this.state.selectedTime2);
+            const formattedDate3 = formatDateStr(this.state.selectedDate3, this.state.selectedTime3);
             
             // メッセージ本文を構築（old_index.htmlとbooking.gsのparseReservationFormに合わせた形式）
             // booking.gsが期待する順序：お名前、電話番号、ご来店回数、コース、メニュー、希望日時、メッセージ
@@ -1381,8 +1471,15 @@ class BookingForm {
                 if (totalDuration > 0) messageText += \`合計時間：\${totalDuration}分\\n\`;
             }
             
-            // 希望日時（常に表示、booking.gsは「希望日時：」の次の行を日時として解析）
-            messageText += \`希望日時：\\n \${formattedDate}\\n\`;
+            // 希望日時（booking.gsは「希望日時：」の次の行を日時として解析）
+            const bookingModeForMsg = this.config.calendar_settings?.booking_mode || 'calendar';
+            if (bookingModeForMsg === 'multiple_dates') {
+                messageText += \`希望日時：\\n 第一希望：\${formattedDate}\\n\`;
+                if (formattedDate2) messageText += \` 第二希望：\${formattedDate2}\\n\`;
+                if (formattedDate3) messageText += \` 第三希望：\${formattedDate3}\\n\`;
+            } else {
+                messageText += \`希望日時：\\n \${formattedDate}\\n\`;
+            }
             
             // メッセージ（常に表示、空文字列でも）
             messageText += \`メッセージ：\${this.state.message || ''}\`;
@@ -1402,6 +1499,23 @@ class BookingForm {
                 }
             }
             
+            // 予約完了後に選択内容をlocalStorageへ保存（前回と同じメニューで予約する機能用）
+            try {
+                const bookingKey = \`booking_\${this.config.basic_info?.form_name || this.config.id || 'default'}\`;
+                localStorage.setItem(bookingKey, JSON.stringify({
+                    timestamp: Date.now(),
+                    selectedMenus: this.state.selectedMenus,
+                    selectedSubMenus: this.state.selectedSubMenus,
+                    selectedMenuOptions: this.state.selectedOptions,
+                    selectedCategoryOptions: this.state.selectedCategoryOptions,
+                    gender: this.state.gender,
+                    visitCount: this.state.visitCount,
+                    couponUsage: this.state.coupon
+                }));
+            } catch (e) {
+                // プライベートモードなどでlocalStorageが使えない場合も継続
+            }
+
             // 成功画面を表示
             document.querySelector('.form-content').innerHTML = \`
                 <div class="success">
@@ -1548,8 +1662,9 @@ class BookingForm {
             placeholder.style.fontWeight = 'bold';
             
             // 対応するstateを更新
-            if (index === 1) this.state.selectedDate = daySelect.value;
-            if (index === 1) this.state.selectedTime = timeSelect.value;
+            if (index === 1) { this.state.selectedDate = daySelect.value; this.state.selectedTime = timeSelect.value; }
+            if (index === 2) { this.state.selectedDate2 = daySelect.value; this.state.selectedTime2 = timeSelect.value; }
+            if (index === 3) { this.state.selectedDate3 = daySelect.value; this.state.selectedTime3 = timeSelect.value; }
         } else {
             placeholder.textContent = '⇩タップして日時を入力⇩';
             placeholder.style.color = '#6b7280';
@@ -1702,56 +1817,99 @@ if (document.readyState === 'loading') {
 
   private renderMenuField(config: FormConfig): string {
     if (!config.menu_structure.categories.length) return '';
-    
+    const themeColor = config.basic_info.theme_color || '#3B82F6';
+    const multiCat = config.menu_structure.categories.length > 1;
+    const firstCatId = config.menu_structure.categories[0]?.id || '';
+
+    const renderMenuButton = (menu: import('@/types/form').MenuItem, categoryId: string) => `
+                                <div>
+                                    <button type="button" class="menu-item" data-menu-id="${menu.id}" data-category-id="${categoryId}">
+                                        ${menu.image ? `
+                                            <div class="menu-item-image">
+                                                <img src="${menu.image}" alt="${this.escapeHtml(menu.name)}" class="menu-image" loading="lazy" onerror="this.parentElement.style.display='none'">
+                                            </div>
+                                        ` : ''}
+                                        <div class="menu-item-content">
+                                            <div class="menu-item-name">${this.escapeHtml(menu.name)}${menu.has_submenu ? ' ▶' : ''}</div>
+                                            ${menu.description ? `<div class="menu-item-desc">${this.escapeHtml(menu.description)}</div>` : ''}
+                                        </div>
+                                        ${!menu.has_submenu && (menu.price !== undefined || menu.duration) ? `
+                                            <div class="menu-item-info">
+                                                ${config.menu_structure.display_options.show_price && (menu.price || 0) > 0 ? `<div class="menu-item-price">¥${(menu.price || 0).toLocaleString()}</div>` : ''}
+                                                ${config.menu_structure.display_options.show_duration && menu.duration ? `<div class="menu-item-duration">${menu.duration}分</div>` : ''}
+                                            </div>
+                                        ` : `<div class="menu-item-info"><div class="menu-item-desc">サブメニューを選択</div></div>`}
+                                    </button>
+                                    ${!menu.has_submenu && menu.options && menu.options.length > 0 ? `
+                                        <div id="options-${menu.id}" class="menu-options-container" style="display:none;margin-left:1.5rem;padding-left:1rem;border-left:2px solid #bbf7d0;margin-top:0.75rem;margin-bottom:0.75rem;">
+                                            <div style="font-size:0.875rem;font-weight:500;color:#374151;margin-bottom:0.75rem;">オプション</div>
+                                            ${menu.options.map((option, optionIndex) => `
+                                                <button type="button" class="menu-option-item" data-menu-id="${menu.id}" data-option-id="${option.id || `option-${optionIndex}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
+                                                    <div style="display:flex;align-items:center;">
+                                                        <div>
+                                                            <div style="text-align:left;font-size:0.875rem;font-weight:500;">
+                                                                ${this.escapeHtml(option.name)}
+                                                                ${option.is_default ? '<span style="margin-left:0.5rem;padding:0.25rem 0.5rem;font-size:0.75rem;background:#fed7aa;color:#9a3412;border-radius:0.25rem;">おすすめ</span>' : ''}
+                                                            </div>
+                                                            ${option.description ? `<div style="font-size:0.75rem;opacity:0.7;text-align:left;margin-top:0.125rem;">${this.escapeHtml(option.description)}</div>` : ''}
+                                                        </div>
+                                                    </div>
+                                                    <div style="text-align:right;margin-left:0.5rem;">
+                                                        ${config.menu_structure.display_options.show_price ? `<div style="font-weight:500;font-size:0.875rem;">${option.price > 0 ? `+¥${option.price.toLocaleString()}` : '無料'}</div>` : ''}
+                                                        ${config.menu_structure.display_options.show_duration && option.duration > 0 ? `<div style="font-size:0.75rem;opacity:0.7;">+${option.duration}分</div>` : ''}
+                                                    </div>
+                                                </button>
+                                            `).join('')}
+                                        </div>
+                                    ` : ''}
+                                </div>`;
+
+    const renderCategoryOptions = (category: import('@/types/form').MenuCategory) => {
+      if (!category.options || category.options.length === 0) return '';
+      return `
+                            <div class="category-options-section" style="margin-top:1rem;padding-top:1rem;border-top:1px solid #e5e7eb;">
+                                <div style="font-size:0.875rem;font-weight:600;color:#374151;margin-bottom:0.75rem;">オプション</div>
+                                <div class="category-options-list">
+                                    ${category.options.map((opt, idx) => `
+                                        <button type="button" class="category-option-item" data-category-id="${category.id}" data-option-id="${opt.id || `catopt-${idx}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
+                                            <div>
+                                                <div style="font-size:0.875rem;font-weight:500;">${this.escapeHtml(opt.name)}</div>
+                                                ${opt.description ? `<div style="font-size:0.75rem;opacity:0.7;margin-top:0.125rem;">${this.escapeHtml(opt.description)}</div>` : ''}
+                                            </div>
+                                            <div style="text-align:right;margin-left:0.5rem;">
+                                                ${config.menu_structure.display_options.show_price && (opt.price || 0) > 0 ? `<div style="font-weight:500;font-size:0.875rem;">+¥${(opt.price || 0).toLocaleString()}</div>` : ''}
+                                                ${config.menu_structure.display_options.show_duration && (opt.duration || 0) > 0 ? `<div style="font-size:0.75rem;opacity:0.7;">+${opt.duration}分</div>` : ''}
+                                            </div>
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            </div>`;
+    };
+
     return `
             <!-- メニュー選択 -->
             <div class="field" id="menu-field">
                 <label class="field-label">メニューをお選びください</label>
-                ${config.menu_structure.categories.map(category => `
-                    <div class="menu-list">
-                        ${category.menus.map(menu => `
-                            <div>
-                                <button type="button" class="menu-item" data-menu-id="${menu.id}" data-category-id="${category.id}">
-                                    ${menu.image ? `
-                                        <div class="menu-item-image">
-                                            <img src="${menu.image}" alt="${menu.name}" class="menu-image" loading="lazy" onerror="this.style.display='none'">
-                                        </div>
-                                    ` : ''}
-                                    <div class="menu-item-content">
-                                        <div class="menu-item-name">${menu.name}${menu.has_submenu ? ' ▶' : ''}</div>
-                                        ${menu.description ? `<div class="menu-item-desc">${menu.description}</div>` : ''}
-                                    </div>
-                                    ${!menu.has_submenu && menu.price !== undefined ? `
-                                        <div class="menu-item-info">
-                                            ${config.menu_structure.display_options.show_price ? `<div class="menu-item-price">¥${menu.price.toLocaleString()}</div>` : ''}
-                                            ${config.menu_structure.display_options.show_duration && menu.duration ? `<div class="menu-item-duration">${menu.duration}分</div>` : ''}
-                                        </div>
-                                    ` : `<div class="menu-item-info"><div class="menu-item-desc">サブメニューを選択</div></div>`}
-                                </button>
-                                ${!menu.has_submenu && menu.options && menu.options.length > 0 ? `
-                                    <div id="options-${menu.id}" class="menu-options-container" style="display:none;margin-left:1.5rem;padding-left:1rem;border-left:2px solid #bbf7d0;margin-top:0.75rem;margin-bottom:0.75rem;">
-                                        <div style="font-size:0.875rem;font-weight:500;color:#374151;margin-bottom:0.75rem;">オプション</div>
-                                        ${menu.options.map((option, optionIndex) => `
-                                            <button type="button" class="menu-option-item" data-menu-id="${menu.id}" data-option-id="${option.id || `option-${optionIndex}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
-                                                <div style="display:flex;align-items:center;">
-                                                    <div>
-                                                        <div style="text-align:left;font-size:0.875rem;font-weight:500;">
-                                                            ${this.escapeHtml(option.name)}
-                                                            ${option.is_default ? '<span style="margin-left:0.5rem;padding:0.25rem 0.5rem;font-size:0.75rem;background:#fed7aa;color:#9a3412;border-radius:0.25rem;">おすすめ</span>' : ''}
-                                                        </div>
-                                                        ${option.description ? `<div style="font-size:0.75rem;opacity:0.7;text-align:left;margin-top:0.125rem;">${this.escapeHtml(option.description)}</div>` : ''}
-                                                    </div>
-                                                </div>
-                                                <div style="text-align:right;margin-left:0.5rem;">
-                                                    ${config.menu_structure.display_options.show_price ? `<div style="font-weight:500;font-size:0.875rem;">${option.price > 0 ? `+¥${option.price.toLocaleString()}` : '無料'}</div>` : ''}
-                                                    ${config.menu_structure.display_options.show_duration && option.duration > 0 ? `<div style="font-size:0.75rem;opacity:0.7;">+${option.duration}分</div>` : ''}
-                                                </div>
-                                            </button>
-                                        `).join('')}
-                                    </div>
-                                ` : ''}
-                            </div>
-                        `).join('')}
+                ${multiCat ? `
+                <div class="category-selector" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1rem;">
+                    ${config.menu_structure.categories.map((cat, idx) => `
+                        <button type="button" class="category-tab-button" data-category-section="${cat.id}" onclick="window.bookingForm.showCategory('${cat.id}')"
+                            style="padding:0.5rem 1rem;border:2px solid ${themeColor};border-radius:2rem;background:${idx === 0 ? themeColor : 'white'};color:${idx === 0 ? 'white' : themeColor};font-size:0.875rem;font-weight:500;cursor:pointer;transition:all 0.15s;">
+                            ${this.escapeHtml(cat.name)}
+                        </button>
+                    `).join('')}
+                </div>
+                ` : ''}
+                ${config.menu_structure.categories.map((category, idx) => `
+                    <div id="category-section-${category.id}" class="category-section" style="${multiCat && idx > 0 ? 'display:none;' : ''}">
+                        ${multiCat && (category.display_name || category.name) ? `
+                        <div style="text-align:center;font-weight:600;font-size:1rem;margin-bottom:0.75rem;color:#374151;">
+                            ${this.escapeHtml(category.display_name || category.name)}
+                        </div>` : ''}
+                        <div class="menu-list">
+                            ${category.menus.map(menu => renderMenuButton(menu, category.id)).join('')}
+                        </div>
+                        ${renderCategoryOptions(category)}
                     </div>
                 `).join('')}
             </div>`;
@@ -2068,21 +2226,25 @@ if (document.readyState === 'loading') {
         }
         
         .menu-item-image {
+            position: relative;
             width: 100%;
-            aspect-ratio: 16 / 9;
+            padding-top: 56.25%; /* 16:9 aspect ratio - cross-browser */
             margin: 0;
             border-radius: 0;
             overflow: hidden;
             flex-shrink: 0;
         }
-        
+
         .menu-image {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
             object-fit: cover;
             transition: transform 0.2s;
         }
-        
+
         .menu-item:hover .menu-image {
             transform: scale(1.05);
         }

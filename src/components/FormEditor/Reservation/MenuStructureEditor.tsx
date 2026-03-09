@@ -1019,97 +1019,213 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
 
 const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdate, theme = 'dark' }) => {
   const themeClasses = getThemeClasses(theme);
-  
-  // カテゴリーなしで直接メニューを管理
-  const [menus, setMenus] = useState<MenuItem[]>(() => {
-    const allMenus: MenuItem[] = [];
-    const menuStructure = form.config?.menu_structure;
-    
-    if (menuStructure?.categories && Array.isArray(menuStructure.categories)) {
-      menuStructure.categories.forEach((category: MenuCategory) => {
-        if (category.menus && Array.isArray(category.menus)) {
-          allMenus.push(...category.menus);
-        }
-      });
-    }
-    
-    return allMenus;
+
+  // カテゴリー管理
+  const [categories, setCategories] = useState<MenuCategory[]>(() => {
+    const cats = form.config?.menu_structure?.categories;
+    if (cats && Array.isArray(cats) && cats.length > 0) return cats;
+    return [{ id: 'default', name: 'メニュー', display_name: 'メニュー', menus: [], options: [], selection_mode: 'single', gender_condition: 'all' }];
   });
-  
+  const [openCategories, setOpenCategories] = useState<Set<string>>(
+    new Set([form.config?.menu_structure?.categories?.[0]?.id || 'default'])
+  );
+
+  // カテゴリーモーダル
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
+  const [catName, setCatName] = useState('');
+  const [catDisplayName, setCatDisplayName] = useState('');
+
+  // メニューモーダル
   const [menuModalOpen, setMenuModalOpen] = useState(false);
   const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | undefined>();
+  const [activeMenuCategoryId, setActiveMenuCategoryId] = useState<string>('');
 
-  const handleAddMenuItem = () => {
-    setSelectedMenuItem(undefined);
-    setMenuModalOpen(true);
-  };
+  // カテゴリーオプションモーダル（MenuItemModalを流用）
+  const [catOptModalOpen, setCatOptModalOpen] = useState(false);
+  const [editingCatOpt, setEditingCatOpt] = useState<MenuItem | undefined>();
+  const [activeCatOptCategoryId, setActiveCatOptCategoryId] = useState<string>('');
 
-  const handleEditMenuItem = (menuItem: MenuItem) => {
-    setSelectedMenuItem(menuItem);
-    setMenuModalOpen(true);
-  };
-
-  const handleSaveMenuItem = (menuItem: MenuItem) => {
-    const updatedMenus = selectedMenuItem?.id
-      ? menus.map(menu => menu.id === selectedMenuItem.id ? menuItem : menu)
-      : [...menus, menuItem];
-    
-    setMenus(updatedMenus);
-    updateForm(updatedMenus);
-  };
-
-  const handleDeleteMenuItem = (menuItemId: string) => {
-    if (window.confirm('このメニューを削除しますか？')) {
-      const updatedMenus = menus.filter(menu => menu.id !== menuItemId);
-      setMenus(updatedMenus);
-      updateForm(updatedMenus);
-    }
-  };
-
-  const updateForm = (updatedMenus: MenuItem[]) => {
-    const defaultCategory: MenuCategory = {
-      id: 'default',
-      name: 'メニュー',
-      display_name: 'メニュー',
-      menus: updatedMenus,
-      options: [],
-      selection_mode: 'single',
-      gender_condition: 'all'
-    };
-
-    const updatedForm: Form = {
+  const updateCategories = (updated: MenuCategory[]) => {
+    setCategories(updated);
+    onUpdate({
       ...form,
       config: {
         ...form.config,
         menu_structure: {
           ...form.config?.menu_structure,
-          categories: [defaultCategory],
+          categories: updated,
           structure_type: 'category_based'
         }
       }
-    };
-    
-    onUpdate(updatedForm);
+    });
   };
 
+  const toggleCategory = (id: string) => {
+    setOpenCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  // カテゴリーCRUD
+  const handleOpenAddCategory = () => {
+    setEditingCategory(null);
+    setCatName('');
+    setCatDisplayName('');
+    setCategoryModalOpen(true);
+  };
+  const handleOpenEditCategory = (cat: MenuCategory) => {
+    setEditingCategory(cat);
+    setCatName(cat.name);
+    setCatDisplayName(cat.display_name || cat.name);
+    setCategoryModalOpen(true);
+  };
+  const handleSaveCategory = () => {
+    const name = catName.trim() || 'カテゴリー';
+    const displayName = catDisplayName.trim() || name;
+    if (editingCategory) {
+      updateCategories(categories.map(c => c.id === editingCategory.id ? { ...c, name, display_name: displayName } : c));
+    } else {
+      const newCat: MenuCategory = { id: `cat_${Date.now()}`, name, display_name: displayName, menus: [], options: [], selection_mode: 'single', gender_condition: 'all' };
+      updateCategories([...categories, newCat]);
+      setOpenCategories(prev => new Set([...prev, newCat.id]));
+    }
+    setCategoryModalOpen(false);
+  };
+  const handleDeleteCategory = (id: string) => {
+    if (categories.length <= 1) { alert('カテゴリーは最低1つ必要です'); return; }
+    if (window.confirm('このカテゴリーとその中のメニュー・オプションをすべて削除しますか？')) {
+      updateCategories(categories.filter(c => c.id !== id));
+    }
+  };
+
+  // メニューCRUD
+  const handleAddMenuItem = (categoryId: string) => {
+    setActiveMenuCategoryId(categoryId);
+    setSelectedMenuItem(undefined);
+    setMenuModalOpen(true);
+  };
+  const handleEditMenuItem = (categoryId: string, menu: MenuItem) => {
+    setActiveMenuCategoryId(categoryId);
+    setSelectedMenuItem(menu);
+    setMenuModalOpen(true);
+  };
+  const handleSaveMenuItem = (menuItem: MenuItem) => {
+    updateCategories(categories.map(c => {
+      if (c.id !== activeMenuCategoryId) return c;
+      const menus = selectedMenuItem?.id
+        ? c.menus.map(m => m.id === selectedMenuItem.id ? menuItem : m)
+        : [...c.menus, menuItem];
+      return { ...c, menus };
+    }));
+  };
+  const handleDeleteMenuItem = (categoryId: string, menuId: string) => {
+    if (window.confirm('このメニューを削除しますか？')) {
+      updateCategories(categories.map(c => c.id === categoryId ? { ...c, menus: c.menus.filter(m => m.id !== menuId) } : c));
+    }
+  };
+
+  // カテゴリーオプションCRUD
+  const handleAddCatOpt = (categoryId: string) => {
+    setActiveCatOptCategoryId(categoryId);
+    setEditingCatOpt(undefined);
+    setCatOptModalOpen(true);
+  };
+  const handleEditCatOpt = (categoryId: string, opt: MenuItem) => {
+    setActiveCatOptCategoryId(categoryId);
+    setEditingCatOpt(opt);
+    setCatOptModalOpen(true);
+  };
+  const handleSaveCatOpt = (opt: MenuItem) => {
+    updateCategories(categories.map(c => {
+      if (c.id !== activeCatOptCategoryId) return c;
+      const options = editingCatOpt?.id
+        ? (c.options || []).map(o => o.id === editingCatOpt.id ? opt : o)
+        : [...(c.options || []), opt];
+      return { ...c, options };
+    }));
+  };
+  const handleDeleteCatOpt = (categoryId: string, optId: string) => {
+    if (window.confirm('このオプションを削除しますか？')) {
+      updateCategories(categories.map(c => c.id === categoryId ? { ...c, options: (c.options || []).filter(o => o.id !== optId) } : c));
+    }
+  };
+
+  // トグルUI共通ヘルパー
+  const renderToggle = (checked: boolean, onChange: (v: boolean) => void) => (
+    <label className="relative inline-flex items-center cursor-pointer">
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="sr-only" />
+      <div className={`w-11 h-6 rounded-full transition-colors ${checked ? 'bg-cyan-600' : 'bg-gray-600'}`}>
+        <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'} mt-0.5 ml-0.5`}></div>
+      </div>
+    </label>
+  );
+
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <svg className={`w-5 h-5 ${themeClasses.text.secondary}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-          </svg>
-          <h2 className={`text-lg font-semibold ${themeClasses.text.primary}`}>メニュー管理</h2>
-        </div>
+    <div className="space-y-4">
+      {/* ページヘッダー */}
+      <div className="flex items-center space-x-2">
+        <svg className={`w-5 h-5 ${themeClasses.text.secondary}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+        </svg>
+        <h2 className={`text-lg font-semibold ${themeClasses.text.primary}`}>メニュー管理</h2>
+      </div>
+
+      {/* 詳細設定（折りたたみ） */}
+      <div className={`${themeClasses.card} rounded-lg overflow-hidden`}>
         <button
-          onClick={handleAddMenuItem}
-          className={`px-3 py-1.5 text-sm rounded-md flex items-center space-x-2 ${themeClasses.button.primary}`}
+          type="button"
+          onClick={() => setSettingsOpen(v => !v)}
+          className={`w-full flex items-center justify-between p-4 cursor-pointer text-left ${theme === 'light' ? 'hover:bg-gray-50' : 'hover:bg-gray-700/50'} transition-colors`}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          <div className="flex items-center space-x-2">
+            <svg className={`w-4 h-4 ${themeClasses.text.secondary}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span className={`text-sm font-medium ${themeClasses.text.primary}`}>詳細設定</span>
+            <span className={`text-xs ${themeClasses.text.tertiary}`}>（表示オプション・性別・来店回数など）</span>
+          </div>
+          <svg
+            className={`w-4 h-4 ${themeClasses.text.secondary} transition-transform ${settingsOpen ? 'rotate-180' : ''}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
-          <span>メニュー追加</span>
         </button>
+
+        {settingsOpen && (
+          <div className={`px-4 pb-4 border-t ${themeClasses.divider} space-y-4 pt-4`}>
+
+      {/* 料金・時間の表示オプション */}
+      <div className={`p-4 ${themeClasses.card} rounded-lg`}>
+        <h3 className={`text-sm font-medium ${themeClasses.text.primary} mb-3`}>💴 料金・時間の表示設定</h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className={`text-sm ${themeClasses.text.primary}`}>料金を表示する</span>
+              <p className={`text-xs ${themeClasses.text.secondary}`}>メニューボタンに料金（¥）を表示します</p>
+            </div>
+            {renderToggle(
+              form.config?.menu_structure?.display_options?.show_price ?? true,
+              (v) => onUpdate({ ...form, config: { ...form.config, menu_structure: { ...form.config?.menu_structure, display_options: { ...form.config?.menu_structure?.display_options, show_price: v, show_duration: form.config?.menu_structure?.display_options?.show_duration ?? true, show_description: form.config?.menu_structure?.display_options?.show_description ?? true, show_treatment_info: form.config?.menu_structure?.display_options?.show_treatment_info ?? false } } } })
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <span className={`text-sm ${themeClasses.text.primary}`}>所要時間を表示する</span>
+              <p className={`text-xs ${themeClasses.text.secondary}`}>メニューボタンに所要時間（分）を表示します</p>
+            </div>
+            {renderToggle(
+              form.config?.menu_structure?.display_options?.show_duration ?? true,
+              (v) => onUpdate({ ...form, config: { ...form.config, menu_structure: { ...form.config?.menu_structure, display_options: { ...form.config?.menu_structure?.display_options, show_price: form.config?.menu_structure?.display_options?.show_price ?? true, show_duration: v, show_description: form.config?.menu_structure?.display_options?.show_description ?? true, show_treatment_info: form.config?.menu_structure?.display_options?.show_treatment_info ?? false } } } })
+            )}
+          </div>
+        </div>
       </div>
 
       {/* カテゴリーまたいでの複数選択設定 */}
@@ -1739,120 +1855,244 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
           )}
         </div>
       </div>
+          </div>
+        )}
+      </div>
 
-      {menus.length === 0 ? (
-        <div className={`text-center py-12 ${themeClasses.card} rounded-lg`}>
-          <svg className={`w-12 h-12 ${theme === 'light' ? 'text-gray-400' : 'text-gray-500'} mx-auto mb-4`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-          </svg>
-          <h3 className={`text-lg font-medium ${themeClasses.text.primary} mb-2`}>まだメニューがありません</h3>
-          <p className={`${themeClasses.text.secondary} mb-4`}>「メニュー追加」ボタンから最初のメニューを作成してください</p>
+      {/* カテゴリー・メニューセクション */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <svg className={`w-4 h-4 ${themeClasses.text.secondary}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+            <span className={`text-sm font-semibold ${themeClasses.text.primary}`}>カテゴリー・メニュー</span>
+            <span className={`text-xs ${themeClasses.text.tertiary}`}>{categories.length}カテゴリー</span>
+          </div>
+          <button
+            onClick={handleOpenAddCategory}
+            className={`px-3 py-1.5 text-sm rounded-md flex items-center space-x-1 ${themeClasses.button.primary}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>カテゴリー追加</span>
+          </button>
         </div>
-      ) : (
-        <div className="space-y-4">
-          {menus.map((menu) => (
-            <div key={menu.id} className={`flex items-center justify-between p-4 ${themeClasses.card} rounded-lg ${
-              theme === 'light' ? 'hover:border-gray-300' : 'hover:border-gray-600'
-            } transition-colors`}>
-              <div className="flex-1">
-                <div className="flex items-center space-x-2 mb-2">
-                  <h5 className={`text-lg font-medium ${themeClasses.text.primary}`}>{menu.name}</h5>
-                  {menu.gender_filter && menu.gender_filter !== 'both' && (
-                    <span className={`px-2 py-1 text-xs rounded border ${
-                      menu.gender_filter === 'male' 
-                        ? 'bg-blue-900/30 text-blue-300 border-blue-700' 
-                        : 'bg-pink-900/30 text-pink-300 border-pink-700'
-                    }`}>
-                      {menu.gender_filter === 'male' ? '男性専用' : '女性専用'}
-                    </span>
+      </div>
+
+      {/* カテゴリーアコーディオン */}
+      <div className="space-y-3">
+        {categories.map((category) => {
+          const isOpen = openCategories.has(category.id);
+          return (
+            <div key={category.id} className={`${themeClasses.card} rounded-lg overflow-hidden`}>
+              {/* カテゴリーヘッダー */}
+              <div
+                className={`flex items-center justify-between p-4 cursor-pointer ${theme === 'light' ? 'hover:bg-gray-50' : 'hover:bg-gray-700/50'}`}
+                onClick={() => toggleCategory(category.id)}
+              >
+                <div className="flex items-center space-x-2 flex-1 min-w-0">
+                  <span className={`text-xs ${themeClasses.text.secondary}`}>{isOpen ? '▼' : '▶'}</span>
+                  <h4 className={`font-medium ${themeClasses.text.primary} truncate`}>{category.name}</h4>
+                  {category.display_name && category.display_name !== category.name && (
+                    <span className={`text-xs ${themeClasses.text.secondary} truncate`}>（{category.display_name}）</span>
                   )}
-                  {menu.sub_menu_items && menu.sub_menu_items.length > 0 && (
-                    <span className={themeClasses.badge.cyan}>
-                      {menu.sub_menu_items.length}サブメニュー
-                    </span>
-                  )}
-                  {menu.options && menu.options.length > 0 && (
-                    <span className={themeClasses.badge.cyan}>
-                      {menu.options.length}オプション
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${themeClasses.badge.cyan} flex-shrink-0`}>
+                    {category.menus.length}メニュー
+                  </span>
+                  {(category.options || []).length > 0 && (
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${themeClasses.badge.cyan} flex-shrink-0`}>
+                      {category.options.length}オプション
                     </span>
                   )}
                 </div>
-                <p className={`text-sm ${themeClasses.text.secondary} mb-1`}>
-                  {menu.has_submenu && menu.sub_menu_items && menu.sub_menu_items.length > 0 ? (
-                    // サブメニューがある場合は価格範囲を表示
-                    (() => {
-                      const prices = menu.sub_menu_items.map(sub => sub.price).filter(p => p > 0);
-                      const durations = menu.sub_menu_items.map(sub => sub.duration).filter(d => d > 0);
-                      const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
-                      const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
-                      const minDuration = durations.length > 0 ? Math.min(...durations) : 0;
-                      const maxDuration = durations.length > 0 ? Math.max(...durations) : 0;
-                      
-                      let priceText = '';
-                      if (minPrice > 0 && maxPrice > 0) {
-                        priceText = minPrice === maxPrice ? `¥${minPrice.toLocaleString()}` : `¥${minPrice.toLocaleString()}～¥${maxPrice.toLocaleString()}`;
-                      }
-                      
-                      let durationText = '';
-                      if (minDuration > 0 && maxDuration > 0) {
-                        durationText = minDuration === maxDuration ? `${minDuration}分` : `${minDuration}～${maxDuration}分`;
-                      }
-                      
-                      return [priceText, durationText].filter(Boolean).join(' • ');
-                    })()
-                  ) : (
-                    `${menu.price ? `¥${menu.price.toLocaleString()}` : '価格未設定'} • ${menu.duration || 0}分`
+                <div className="flex space-x-1 ml-2" onClick={e => e.stopPropagation()}>
+                  <button
+                    onClick={() => handleOpenEditCategory(category)}
+                    className={`p-1.5 rounded text-cyan-400 hover:text-cyan-300 ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+                    title="カテゴリー編集"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                  {categories.length > 1 && (
+                    <button
+                      onClick={() => handleDeleteCategory(category.id)}
+                      className={`p-1.5 rounded text-red-400 hover:text-red-300 ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+                      title="カテゴリー削除"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   )}
-                </p>
-                {menu.description && (
-                  <p className={`text-sm ${theme === 'light' ? 'text-gray-600' : 'text-gray-500'} mb-2`}>{menu.description}</p>
-                )}
-                {menu.sub_menu_items && menu.sub_menu_items.length > 0 && (
-                  <div className={`text-xs ${theme === 'light' ? 'text-gray-600' : 'text-gray-500'} mb-1`}>
-                    サブメニュー: {menu.sub_menu_items.map(sub => sub.name).join(', ')}
-                  </div>
-                )}
-                {menu.options && menu.options.length > 0 && (
-                  <div className={`text-xs ${theme === 'light' ? 'text-gray-600' : 'text-gray-500'}`}>
-                    オプション: {menu.options.map(opt => opt.name).join(', ')}
-                  </div>
-                )}
+                </div>
               </div>
-              <div className="flex space-x-2 ml-4">
-                <button
-                  onClick={() => handleEditMenuItem(menu)}
-                  className={`p-2 text-cyan-400 hover:text-cyan-300 rounded-md transition-colors ${
-                    theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'
-                  }`}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => handleDeleteMenuItem(menu.id)}
-                  className={`p-2 text-red-400 hover:text-red-300 rounded-md transition-colors ${
-                    theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'
-                  }`}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
+
+              {/* カテゴリーボディ */}
+              {isOpen && (
+                <div className={`p-4 border-t ${themeClasses.divider} space-y-4`}>
+                  {/* メニュー一覧 */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h5 className={`text-sm font-medium ${themeClasses.text.primary}`}>メニュー</h5>
+                      <button
+                        onClick={() => handleAddMenuItem(category.id)}
+                        className={`px-2 py-1 text-xs rounded-md flex items-center space-x-1 ${themeClasses.button.primary}`}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span>メニュー追加</span>
+                      </button>
+                    </div>
+                    {category.menus.length === 0 ? (
+                      <p className={`text-xs text-center py-3 rounded ${themeClasses.emptyState}`}>まだメニューがありません</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {category.menus.map(menu => (
+                          <div key={menu.id} className={`flex items-center justify-between p-3 rounded-md ${themeClasses.highlight}`}>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center space-x-2 flex-wrap gap-1">
+                                <span className={`font-medium text-sm ${themeClasses.text.primary}`}>{menu.name}</span>
+                                {menu.has_submenu && <span className={`text-xs px-1 py-0.5 rounded ${themeClasses.badge.cyan}`}>サブメニュー</span>}
+                                {menu.options && menu.options.length > 0 && <span className={`text-xs px-1 py-0.5 rounded ${themeClasses.badge.cyan}`}>{menu.options.length}オプション</span>}
+                              </div>
+                              <p className={`text-xs ${themeClasses.text.secondary} mt-0.5`}>
+                                {menu.has_submenu && menu.sub_menu_items?.length
+                                  ? `${menu.sub_menu_items.length}サブメニュー`
+                                  : `${(menu.price || 0) > 0 ? `¥${(menu.price || 0).toLocaleString()}` : '価格未設定'} • ${menu.duration || 0}分`}
+                              </p>
+                            </div>
+                            <div className="flex space-x-1 ml-2">
+                              <button onClick={() => handleEditMenuItem(category.id, menu)} className={`p-1.5 rounded text-cyan-400 hover:text-cyan-300 ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                              </button>
+                              <button onClick={() => handleDeleteMenuItem(category.id, menu.id)} className={`p-1.5 rounded text-red-400 hover:text-red-300 ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* カテゴリー共通オプション */}
+                  <div className={`pt-3 border-t ${themeClasses.divider}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h5 className={`text-sm font-medium ${themeClasses.text.primary}`}>カテゴリー共通オプション</h5>
+                        <p className={`text-xs ${themeClasses.text.secondary}`}>このカテゴリー全体で選択できるオプション（眉カット、保湿パックなど）</p>
+                      </div>
+                      <button
+                        onClick={() => handleAddCatOpt(category.id)}
+                        className={`px-2 py-1 text-xs rounded-md flex items-center space-x-1 ${themeClasses.button.primary}`}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span>オプション追加</span>
+                      </button>
+                    </div>
+                    {(category.options || []).length === 0 ? (
+                      <p className={`text-xs text-center py-3 rounded ${themeClasses.emptyState}`}>カテゴリー共通オプションなし</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {(category.options || []).map(opt => (
+                          <div key={opt.id} className={`flex items-center justify-between p-2 rounded-md ${themeClasses.highlight}`}>
+                            <div>
+                              <span className={`text-sm ${themeClasses.text.primary}`}>{opt.name}</span>
+                              <p className={`text-xs ${themeClasses.text.secondary}`}>
+                                {(opt.price || 0) > 0 ? `¥${(opt.price || 0).toLocaleString()}` : '無料'} • {(opt.duration || 0) > 0 ? `${opt.duration}分` : '-'}
+                              </p>
+                            </div>
+                            <div className="flex space-x-1">
+                              <button onClick={() => handleEditCatOpt(category.id, opt)} className={`p-1.5 rounded text-cyan-400 hover:text-cyan-300 ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                              </button>
+                              <button onClick={() => handleDeleteCatOpt(category.id, opt.id)} className={`p-1.5 rounded text-red-400 hover:text-red-300 ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}>
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* カテゴリー名入力モーダル */}
+      {categoryModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className={`w-full max-w-md mx-4 p-6 rounded-lg shadow-xl ${theme === 'light' ? 'bg-white' : 'bg-gray-800'}`}>
+            <h3 className={`text-lg font-semibold mb-4 ${themeClasses.text.primary}`}>
+              {editingCategory ? 'カテゴリーを編集' : 'カテゴリーを追加'}
+            </h3>
+            <div className="space-y-3 mb-6">
+              <div>
+                <label className={`block text-sm ${themeClasses.label} mb-1`}>カテゴリー名 <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={catName}
+                  onChange={e => setCatName(e.target.value)}
+                  placeholder="例：ブライダルコース"
+                  className={themeClasses.input}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className={`block text-sm ${themeClasses.label} mb-1`}>表示名（省略時はカテゴリー名と同じ）</label>
+                <input
+                  type="text"
+                  value={catDisplayName}
+                  onChange={e => setCatDisplayName(e.target.value)}
+                  placeholder="例：◆ブライダルコース◆"
+                  className={themeClasses.input}
+                />
               </div>
             </div>
-          ))}
+            <div className="flex space-x-3 justify-end">
+              <button onClick={() => { setCategoryModalOpen(false); setEditingCategory(null); }} className={`px-4 py-2 rounded-md text-sm ${themeClasses.button.secondary}`}>
+                キャンセル
+              </button>
+              <button onClick={handleSaveCategory} disabled={!catName.trim()} className={`px-4 py-2 rounded-md text-sm ${themeClasses.button.primary} disabled:opacity-50`}>
+                {editingCategory ? '更新' : '追加'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
+      {/* メニューアイテムモーダル */}
       <MenuItemModal
-        key={selectedMenuItem?.id || 'new'}
+        key={`menu-${activeMenuCategoryId}-${selectedMenuItem?.id || 'new'}`}
         isOpen={menuModalOpen}
         onClose={() => setMenuModalOpen(false)}
         onSave={handleSaveMenuItem}
         menuItem={selectedMenuItem}
-        categoryId="default"
+        categoryId={activeMenuCategoryId}
         genderEnabled={form.config?.gender_selection?.enabled || false}
+        theme={theme}
+        form={form}
+      />
+
+      {/* カテゴリー共通オプションモーダル（MenuItemModalを流用） */}
+      <MenuItemModal
+        key={`catopt-${activeCatOptCategoryId}-${editingCatOpt?.id || 'new'}`}
+        isOpen={catOptModalOpen}
+        onClose={() => setCatOptModalOpen(false)}
+        onSave={handleSaveCatOpt}
+        menuItem={editingCatOpt}
+        categoryId={activeCatOptCategoryId}
+        genderEnabled={false}
         theme={theme}
         form={form}
       />

@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import { getSubdomainBaseDomain, getBaseUrl } from '@/lib/env';
+import { getBaseUrl } from '@/lib/env';
 import { 
   ArrowLeft, 
   Edit, 
@@ -30,7 +30,6 @@ import {
   Copy,
   Store as StoreIcon,
   AlertTriangle,
-  Globe,
   MessageCircle
 } from 'lucide-react';
 
@@ -103,26 +102,36 @@ const SURVEY_TEMPLATES = {
   }
 };
 
-// テンプレート定義（既存のまま - 簡略化）
+// テンプレート定義
 const FORM_TEMPLATES = {
   basic: {
-    name: '📝 ベーシック',
+    name: '📝 基本',
     description: 'シンプルなメニュー選択のみ',
     config: {
       basic_info: { show_gender_selection: false },
       menu_structure: {
-        structure_type: 'simple',
+        structure_type: 'category_based',
         categories: [{
-            id: 'cat1',
-            name: 'メニュー',
+          id: 'cat1',
+          name: 'メニュー',
+          display_name: 'メニュー',
+          selection_mode: 'single',
+          gender_condition: 'all',
           menus: [{
-                id: 'menu1',
-                name: 'カット',
-                price: 3000,
-                duration: 60,
-                description: 'スタンダードカット'
-          }]
-        }]
+            id: 'menu1',
+            name: 'カット',
+            price: 3000,
+            duration: 60,
+            description: 'スタンダードカット'
+          }],
+          options: []
+        }],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
       },
       ui_settings: {
         show_visit_count: false,
@@ -133,28 +142,281 @@ const FORM_TEMPLATES = {
   },
   standard: {
     name: '👫 スタンダード',
-    description: '性別選択 + 来店回数 + クーポン',
+    description: '基本 + 性別選択',
     config: {
       basic_info: { show_gender_selection: true },
       menu_structure: {
-        structure_type: 'simple',
-        categories: [{
-            id: 'cat1',
-            name: 'メニュー',
-          menus: [{
-                id: 'menu1',
+        structure_type: 'category_based',
+        categories: [
+          {
+            id: 'cat_male',
+            name: 'メンズメニュー',
+            display_name: 'メンズメニュー',
+            selection_mode: 'single',
+            gender_condition: 'male',
+            menus: [{
+              id: 'menu_m1',
+              name: 'メンズカット',
+              price: 3000,
+              duration: 60,
+              description: 'スタンダードカット',
+              target_gender: ['male']
+            }],
+            options: []
+          },
+          {
+            id: 'cat_female',
+            name: 'レディースメニュー',
+            display_name: 'レディースメニュー',
+            selection_mode: 'single',
+            gender_condition: 'female',
+            menus: [{
+              id: 'menu_f1',
+              name: 'レディースカット',
+              price: 3500,
+              duration: 60,
+              description: 'スタンダードカット',
+              target_gender: ['female']
+            }],
+            options: []
+          }
+        ],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
+      },
+      ui_settings: {
+        show_visit_count: false,
+        show_coupon_selection: false,
+        show_repeat_booking: false
+      }
+    }
+  },
+  premium: {
+    name: '⭐ プレミアム',
+    description: 'スタンダード + サブメニュー（長さ別など）',
+    config: {
+      basic_info: { show_gender_selection: true },
+      menu_structure: {
+        structure_type: 'category_based',
+        categories: [
+          {
+            id: 'cat_cut',
+            name: 'カット',
+            display_name: '◆カット◆',
+            selection_mode: 'single',
+            gender_condition: 'all',
+            menus: [
+              {
+                id: 'menu_cut1',
                 name: 'カット',
                 price: 3000,
                 duration: 60,
-                description: 'スタンダードカット',
-                target_gender: ['male', 'female']
-          }]
-        }]
+                description: '長さ別料金あり',
+                has_submenu: true,
+                sub_menu_items: [
+                  { id: 'sub_short', name: 'ショート', price: 3000, duration: 60 },
+                  { id: 'sub_mid', name: 'ミディアム', price: 3500, duration: 70 },
+                  { id: 'sub_long', name: 'ロング', price: 4000, duration: 80 }
+                ],
+                options: []
+              }
+            ],
+            options: []
+          },
+          {
+            id: 'cat_color',
+            name: 'カラー',
+            display_name: '◆カラー◆',
+            selection_mode: 'single',
+            gender_condition: 'all',
+            menus: [
+              {
+                id: 'menu_color1',
+                name: 'フルカラー',
+                price: 8000,
+                duration: 120,
+                description: '全体カラー',
+                has_submenu: false,
+                options: []
+              }
+            ],
+            options: []
+          }
+        ],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
+      },
+      ui_settings: {
+        show_visit_count: false,
+        show_coupon_selection: false,
+        show_repeat_booking: false
+      }
+    }
+  },
+  complete: {
+    name: '💎 コンプリート',
+    description: 'プレミアム + オプション + 来店回数',
+    config: {
+      basic_info: { show_gender_selection: true },
+      menu_structure: {
+        structure_type: 'category_based',
+        categories: [
+          {
+            id: 'cat_cut',
+            name: 'カット',
+            display_name: '◆カット◆',
+            selection_mode: 'single',
+            gender_condition: 'all',
+            menus: [
+              {
+                id: 'menu_cut1',
+                name: 'カット',
+                price: 3000,
+                duration: 60,
+                description: '長さ別料金あり',
+                has_submenu: true,
+                sub_menu_items: [
+                  { id: 'sub_short', name: 'ショート', price: 3000, duration: 60 },
+                  { id: 'sub_mid', name: 'ミディアム', price: 3500, duration: 70 },
+                  { id: 'sub_long', name: 'ロング', price: 4000, duration: 80 }
+                ],
+                options: [
+                  { id: 'opt_shampoo', name: 'シャンプー込み', price: 0, duration: 15, is_default: true },
+                  { id: 'opt_quick', name: 'クイック仕上げ', price: 500, duration: 10, is_default: false }
+                ]
+              }
+            ],
+            options: []
+          },
+          {
+            id: 'cat_color',
+            name: 'カラー',
+            display_name: '◆カラー◆',
+            selection_mode: 'single',
+            gender_condition: 'all',
+            menus: [
+              {
+                id: 'menu_color1',
+                name: 'フルカラー',
+                price: 8000,
+                duration: 120,
+                description: '全体カラー',
+                has_submenu: false,
+                options: [
+                  { id: 'opt_tone', name: 'トーンアップ', price: 500, duration: 0, is_default: false }
+                ]
+              }
+            ],
+            options: []
+          }
+        ],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
+      },
+      visit_count_selection: {
+        enabled: true,
+        required: false,
+        options: [
+          { value: 'first', label: '初回（+30分）', duration: 30 },
+          { value: 'repeat', label: '2回目以降', duration: 0 }
+        ]
+      },
+      ui_settings: {
+        show_visit_count: true,
+        show_coupon_selection: false,
+        show_repeat_booking: false
+      }
+    }
+  },
+  ultimate: {
+    name: '🚀 アルティメット',
+    description: 'コンプリート + クーポン + リピート予約',
+    config: {
+      basic_info: { show_gender_selection: true },
+      menu_structure: {
+        structure_type: 'category_based',
+        categories: [
+          {
+            id: 'cat_cut',
+            name: 'カット',
+            display_name: '◆カット◆',
+            selection_mode: 'single',
+            gender_condition: 'all',
+            menus: [
+              {
+                id: 'menu_cut1',
+                name: 'カット',
+                price: 3000,
+                duration: 60,
+                description: '長さ別料金あり',
+                has_submenu: true,
+                sub_menu_items: [
+                  { id: 'sub_short', name: 'ショート', price: 3000, duration: 60 },
+                  { id: 'sub_mid', name: 'ミディアム', price: 3500, duration: 70 },
+                  { id: 'sub_long', name: 'ロング', price: 4000, duration: 80 }
+                ],
+                options: [
+                  { id: 'opt_shampoo', name: 'シャンプー込み', price: 0, duration: 15, is_default: true },
+                  { id: 'opt_quick', name: 'クイック仕上げ', price: 500, duration: 10, is_default: false }
+                ]
+              }
+            ],
+            options: []
+          },
+          {
+            id: 'cat_color',
+            name: 'カラー',
+            display_name: '◆カラー◆',
+            selection_mode: 'single',
+            gender_condition: 'all',
+            menus: [
+              {
+                id: 'menu_color1',
+                name: 'フルカラー',
+                price: 8000,
+                duration: 120,
+                description: '全体カラー',
+                has_submenu: false,
+                options: [
+                  { id: 'opt_tone', name: 'トーンアップ', price: 500, duration: 0, is_default: false }
+                ]
+              }
+            ],
+            options: []
+          }
+        ],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
+      },
+      visit_count_selection: {
+        enabled: true,
+        required: false,
+        options: [
+          { value: 'first', label: '初回（+30分）', duration: 30 },
+          { value: 'repeat', label: '2回目以降', duration: 0 }
+        ]
       },
       ui_settings: {
         show_visit_count: true,
         show_coupon_selection: true,
-        show_repeat_booking: false
+        show_repeat_booking: true,
+        coupon_name: '初回限定クーポン'
       }
     }
   },
@@ -918,65 +1180,6 @@ export default function StoreDetailPage() {
 
           {/* 概要タブ */}
           <TabsContent value="overview" className="space-y-6">
-            {/* サブドメイン情報 */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Globe className="h-5 w-5" />
-                  サブドメイン設定
-                </CardTitle>
-                <CardDescription>店舗専用のサブドメインURL</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {store.subdomain ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Label className="font-medium">サブドメインURL:</Label>
-                      <code className="px-2 py-1 bg-muted rounded text-sm">
-                        https://{store.subdomain}.{getSubdomainBaseDomain()}
-                      </code>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          const url = `https://${store.subdomain}.${getSubdomainBaseDomain()}`;
-                          copyToClipboard(url);
-                          toast({
-                            title: 'コピーしました',
-                            description: 'サブドメインURLをクリップボードにコピーしました',
-                          });
-                        }}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          const url = `https://${store.subdomain}.${getSubdomainBaseDomain()}`;
-                          window.open(url, '_blank');
-                        }}
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {store.custom_domain && (
-                      <div className="flex items-center gap-2">
-                        <Label className="font-medium">カスタムドメイン:</Label>
-                        <code className="px-2 py-1 bg-muted rounded text-sm">
-                          {store.custom_domain}
-                        </code>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    サブドメインが設定されていません。店舗情報編集から設定できます。
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
             {/* LINE Messaging API Webhook URL */}
             <Card>
               <CardHeader>
@@ -1700,43 +1903,6 @@ export default function StoreDetailPage() {
                     onChange={(e) => setEditingStore({...editingStore, website_url: e.target.value})}
                     />
                   </div>
-                <div className="md:col-span-2 space-y-2">
-                  <Label htmlFor="edit_subdomain">
-                    サブドメイン
-                    <span className="text-xs text-muted-foreground ml-2">
-                      (例: {storeId} → {storeId}.{getSubdomainBaseDomain()})
-                    </span>
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="edit_subdomain"
-                      type="text"
-                      placeholder={storeId}
-                      value={editingStore.subdomain || ''}
-                      onChange={(e) => setEditingStore({...editingStore, subdomain: e.target.value})}
-                      className="flex-1"
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      .{getSubdomainBaseDomain()}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    小文字英数字とハイフンのみ、3-63文字。未指定の場合は店舗IDと同じ値が使用されます。
-                  </p>
-                </div>
-                <div className="md:col-span-2 space-y-2">
-                  <Label htmlFor="edit_custom_domain">カスタムドメイン（オプション）</Label>
-                  <Input
-                    id="edit_custom_domain"
-                    type="text"
-                    placeholder="例: myshop.com"
-                    value={editingStore.custom_domain || ''}
-                    onChange={(e) => setEditingStore({...editingStore, custom_domain: e.target.value})}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    独自のドメインを使用する場合に設定します。DNS設定が必要です。
-                  </p>
-                </div>
                 <div className="md:col-span-2 space-y-2">
                   <Label htmlFor="edit_description">店舗説明</Label>
                     <textarea

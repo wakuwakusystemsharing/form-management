@@ -12,6 +12,17 @@ type LineEvent = {
   source?: { userId?: string };
 };
 
+function formatDate(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-');
+  const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+  return `${year}年${parseInt(month)}月${parseInt(day)}日（${weekdays[d.getDay()]}）`;
+}
+
+function formatTime(timeStr: string): string {
+  return timeStr.slice(0, 5);
+}
+
 function parseReservationForm(text: string) {
   const lines = text.split('\n');
   const details: {
@@ -72,6 +83,48 @@ async function replyLineMessage(replyToken: string, accessToken: string, message
   });
 }
 
+async function replyFlexMessage(replyToken: string, accessToken: string, altText: string, bubbles: object[]) {
+  await fetch('https://api.line.me/v2/bot/message/reply', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json; charset=UTF-8',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      replyToken,
+      messages: [{
+        type: 'flex',
+        altText,
+        contents: { type: 'carousel', contents: bubbles }
+      }]
+    }),
+  });
+}
+
+function makeHeaderBox(title: string) {
+  return {
+    type: 'box',
+    layout: 'vertical',
+    contents: [{ type: 'text', text: title, color: '#ffffff', size: 'xl', weight: 'bold' }],
+    paddingAll: '20px',
+    backgroundColor: '#f7a3a3',
+    height: '70px',
+    paddingTop: '22px'
+  };
+}
+
+function makeSimpleBubble(title: string, body: string) {
+  return {
+    type: 'bubble',
+    header: makeHeaderBox(title),
+    body: {
+      type: 'box',
+      layout: 'vertical',
+      contents: [{ type: 'text', text: body, margin: 'md', wrap: true }]
+    }
+  };
+}
+
 export async function POST(req: NextRequest) {
   const url = new URL(req.url);
   const storeId = url.searchParams.get('storeId');
@@ -128,21 +181,31 @@ export async function POST(req: NextRequest) {
       .order('reservation_time', { ascending: true });
 
     if (!reservations || reservations.length === 0) {
-      await replyLineMessage(replyToken, accessToken, [{
-        type: 'text',
-        text: '現在LINEでされた予約が見つかりませんでした。'
-      }]);
+      await replyFlexMessage(replyToken, accessToken, '予約確認', [
+        makeSimpleBubble('予約確認', '現在ご予約はありません。')
+      ]);
       return NextResponse.json({ success: true });
     }
 
-    const lines = reservations.map((r: any, index: number) => {
+    const bubbles = reservations.map((r: any, index: number) => {
       const menu = r.submenu_name ? `${r.menu_name} > ${r.submenu_name}` : r.menu_name;
-      return `${index + 1}. ${r.reservation_date} ${r.reservation_time} ${menu}`;
+      return {
+        type: 'bubble',
+        size: 'mega',
+        header: makeHeaderBox('予約内容'),
+        body: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [
+            { type: 'text', text: `【${index + 1}件目】`, weight: 'bold', margin: 'md' },
+            { type: 'text', text: `📅 ${formatDate(r.reservation_date)}`, margin: 'md', wrap: true },
+            { type: 'text', text: `🕐 ${formatTime(r.reservation_time)}`, margin: 'sm' },
+            { type: 'text', text: `📌 ${menu}`, margin: 'sm', wrap: true }
+          ]
+        }
+      };
     });
-    await replyLineMessage(replyToken, accessToken, [{
-      type: 'text',
-      text: `予約一覧:\n${lines.join('\n')}`
-    }]);
+    await replyFlexMessage(replyToken, accessToken, 'ご予約一覧', bubbles);
     return NextResponse.json({ success: true });
   }
 
@@ -159,20 +222,36 @@ export async function POST(req: NextRequest) {
       .order('reservation_time', { ascending: true });
 
     if (!reservations || reservations.length === 0) {
-      await replyLineMessage(replyToken, accessToken, [{
-        type: 'text',
-        text: '現在LINEでされた予約がありません。'
-      }]);
+      await replyFlexMessage(replyToken, accessToken, '予約キャンセル', [
+        makeSimpleBubble('予約をキャンセル', '現在キャンセルできるご予約はありません。')
+      ]);
       return NextResponse.json({ success: true });
     }
 
-    const lines = reservations.map((r: any, index: number) => {
+    const cancelContents: object[] = [];
+    reservations.forEach((r: any, index: number) => {
       const menu = r.submenu_name ? `${r.menu_name} > ${r.submenu_name}` : r.menu_name;
-      return `${index}. ${r.reservation_date} ${r.reservation_time} ${menu}`;
+      if (index > 0) cancelContents.push({ type: 'separator', margin: 'lg' });
+      cancelContents.push(
+        { type: 'text', text: `📅 ${formatDate(r.reservation_date)}`, margin: 'lg', wrap: true },
+        { type: 'text', text: `🕐 ${formatTime(r.reservation_time)}`, margin: 'sm' },
+        { type: 'text', text: `📌 ${menu}`, margin: 'sm', wrap: true },
+        {
+          type: 'button',
+          action: { type: 'message', label: `予約${index + 1}をキャンセルする`, text: `キャンセル: ${index}` },
+          color: '#f7a3a3',
+          style: 'primary',
+          margin: 'md'
+        }
+      );
     });
-    await replyLineMessage(replyToken, accessToken, [{
-      type: 'text',
-      text: `キャンセルしたい予約番号を送信してください。\n\n例: キャンセル: 0\n\n${lines.join('\n')}`
+    cancelContents.push({ type: 'text', text: '↑ タップしてキャンセル', size: 'sm', color: '#888888', align: 'center', margin: 'lg' });
+
+    await replyFlexMessage(replyToken, accessToken, '予約をキャンセル', [{
+      type: 'bubble',
+      size: 'mega',
+      header: makeHeaderBox('予約をキャンセル'),
+      body: { type: 'box', layout: 'vertical', contents: cancelContents }
     }]);
     return NextResponse.json({ success: true });
   }
@@ -180,10 +259,9 @@ export async function POST(req: NextRequest) {
   if (messageText.startsWith('キャンセル:')) {
     const index = parseInt(messageText.replace('キャンセル:', '').trim(), 10);
     if (Number.isNaN(index)) {
-      await replyLineMessage(replyToken, accessToken, [{
-        type: 'text',
-        text: 'キャンセル番号が正しくありません。'
-      }]);
+      await replyFlexMessage(replyToken, accessToken, 'エラー', [
+        makeSimpleBubble('エラー', 'キャンセル番号が正しくありません。\n\n「予約をキャンセル」と送ると予約一覧を確認できます。')
+      ]);
       return NextResponse.json({ success: true });
     }
 
@@ -200,10 +278,9 @@ export async function POST(req: NextRequest) {
 
     const target = reservations?.[index];
     if (!target) {
-      await replyLineMessage(replyToken, accessToken, [{
-        type: 'text',
-        text: '指定された予約が見つかりません。'
-      }]);
+      await replyFlexMessage(replyToken, accessToken, 'エラー', [
+        makeSimpleBubble('エラー', '指定された番号の予約が見つかりません。\n\n「予約をキャンセル」と送ると予約一覧を確認できます。')
+      ]);
       return NextResponse.json({ success: true });
     }
 
@@ -246,9 +323,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await replyLineMessage(replyToken, accessToken, [{
-      type: 'text',
-      text: `${target.reservation_date} ${target.reservation_time} の予約をキャンセルしました。`
+    const menu = target.submenu_name
+      ? `${target.menu_name} > ${target.submenu_name}`
+      : target.menu_name;
+    await replyFlexMessage(replyToken, accessToken, 'キャンセル完了', [{
+      type: 'bubble',
+      size: 'mega',
+      header: makeHeaderBox('キャンセル完了'),
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          { type: 'text', text: '以下の予約をキャンセルしました。', margin: 'md', wrap: true },
+          { type: 'separator', margin: 'lg' },
+          { type: 'text', text: `📅 ${formatDate(target.reservation_date)}`, margin: 'lg', wrap: true },
+          { type: 'text', text: `🕐 ${formatTime(target.reservation_time)}`, margin: 'sm' },
+          { type: 'text', text: `📌 ${menu || ''}`, margin: 'sm', wrap: true },
+          { type: 'separator', margin: 'lg' },
+          { type: 'text', text: 'またのご利用をお待ちしております。', margin: 'lg', wrap: true, color: '#888888', size: 'sm' }
+        ]
+      }
     }]);
     return NextResponse.json({ success: true });
   }

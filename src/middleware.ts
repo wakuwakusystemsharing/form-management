@@ -1,12 +1,12 @@
 /**
  * 認証ミドルウェア
- * 
+ *
  * 保護対象ルート:
  * - /{storeId}/admin - 店舗管理者ダッシュボード
  * - /{storeId}/forms/* - フォーム編集画面
  * - /{storeId}/reservations - 予約一覧
  * - /api/* - API ルート (一部除外あり)
- * 
+ *
  * 認証フロー:
  * 1. 未認証ユーザーが保護されたルートにアクセス
  * 2. /login?redirect={元のURL} にリダイレクト
@@ -16,8 +16,8 @@
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { shouldSkipAuth, getAppEnvironment } from './lib/env';
-import { createAuthenticatedClient, checkStoreAccess, getSupabaseAdminClient } from './lib/supabase';
+import { shouldSkipAuth } from './lib/env';
+import { createAuthenticatedClient, checkStoreAccess } from './lib/supabase';
 
 const ADMIN_EMAILS = [
   'wakuwakusystemsharing@gmail.com',
@@ -25,76 +25,8 @@ const ADMIN_EMAILS = [
   'manager@wakuwakusystemsharing.com'
 ];
 
-/**
- * サブドメインからstoreIdを取得（データベースルックアップ）
- * staging/dev環境のプレビューデプロイメントURLにも対応
- */
-async function getStoreIdFromSubdomain(hostname: string): Promise<string | null> {
-  // ローカル環境ではサブドメイン検出をスキップ
-  if (shouldSkipAuth()) {
-    return null;
-  }
-
-  // サブドメイン抽出
-  // 例: st0001.nas-rsv.com → st0001
-  // 例: st0001.form-management-staging.vercel.app → st0001
-  // 例: st0001.form-management-git-dev-wakuwakusystems-projects.vercel.app → st0001
-  const subdomainMatch = hostname.match(/^([a-z0-9]{6}|st\d{4})\./);
-  if (!subdomainMatch) {
-    // カスタムドメインの可能性もあるので、フルホスト名で検索
-    const adminClient = getSupabaseAdminClient();
-    if (!adminClient) return null;
-    
-    const { data } = await (adminClient as any)
-      .from('stores')
-      .select('id')
-      .eq('custom_domain', hostname)
-      .single();
-    
-    return data?.id || null;
-  }
-  
-  const subdomain = subdomainMatch[1];
-  
-  // データベースからサブドメインまたはカスタムドメインで店舗を検索
-  const adminClient = getSupabaseAdminClient();
-  if (!adminClient) return null;
-  
-  const { data } = await (adminClient as any)
-    .from('stores')
-    .select('id')
-    .or(`subdomain.eq.${subdomain},custom_domain.eq.${hostname}`)
-    .single();
-  
-  return data?.id || null;
-}
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hostname = request.headers.get('host') || '';
-  
-  // サブドメインからstoreIdを取得
-  const storeIdFromSubdomain = await getStoreIdFromSubdomain(hostname);
-  
-  // サブドメインが検出された場合、パスをリライト
-  if (storeIdFromSubdomain) {
-    // /admin へのアクセスは拒否（サービス管理者ページはサブドメイン経由ではアクセス不可）
-    // 店舗管理者ページにリダイレクト
-    if (pathname === '/admin' || pathname.startsWith('/admin/')) {
-      const url = request.nextUrl.clone();
-      url.pathname = `/${storeIdFromSubdomain}/admin`;
-      return NextResponse.redirect(url);
-    }
-    
-    // ルートパス（/）を店舗管理者ページにリライト
-    if (pathname === '/') {
-      const url = request.nextUrl.clone();
-      url.pathname = `/${storeIdFromSubdomain}/admin`;
-      return NextResponse.rewrite(url);
-    }
-    
-    // 既に店舗IDが含まれているパスはそのまま（リライト済み）
-  }
 
   // ローカル環境のみ認証をスキップ
   if (shouldSkipAuth()) {
@@ -199,17 +131,9 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 店舗 ID 抽出（サブドメインまたはパスから）
-  let storeId: string | null = null;
-  
-  if (storeIdFromSubdomain) {
-    // サブドメインから取得（優先）
-    storeId = storeIdFromSubdomain;
-  } else {
-    // パスから抽出（既存ロジック、後方互換性）
-    const storeIdMatch = pathname.match(/\/([a-z0-9]{6}|st\d{4})\//);
-    storeId = storeIdMatch ? storeIdMatch[1] : null;
-  }
+  // 店舗 ID 抽出（パスから）
+  const storeIdMatch = pathname.match(/\/([a-z0-9]{6}|st\d{4})\//);
+  const storeId: string | null = storeIdMatch ? storeIdMatch[1] : null;
   
   // /{storeId}/reservations はサービス管理者のみアクセス可能
   const isReservationsRoute = pathname.match(/^\/([a-z0-9]{6}|st\d{4})\/reservations/);
@@ -243,7 +167,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // すべてのパスをマッチ（サブドメイン検出のため）
     // 静的ファイルとNext.js内部ファイルは除外
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ]

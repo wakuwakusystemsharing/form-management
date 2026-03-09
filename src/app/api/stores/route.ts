@@ -13,33 +13,6 @@ export const dynamic = 'force-dynamic'
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 
-// 予約語リスト（サブドメインとして使用不可）
-const RESERVED_SUBDOMAINS = ['www', 'api', 'admin', 'app', 'mail', 'ftp', 'localhost', 'staging', 'dev', 'development', 'production', 'prod', 'test']
-
-/**
- * サブドメインのバリデーション
- * @param subdomain 検証するサブドメイン
- * @returns 有効な形式かどうか
- */
-function validateSubdomain(subdomain: string): boolean {
-  // 小文字英数字とハイフンのみ、3-63文字
-  if (!/^[a-z0-9-]{3,63}$/.test(subdomain)) {
-    return false
-  }
-  
-  // 先頭・末尾はハイフン不可
-  if (subdomain.startsWith('-') || subdomain.endsWith('-')) {
-    return false
-  }
-  
-  // 予約語チェック
-  if (RESERVED_SUBDOMAINS.includes(subdomain.toLowerCase())) {
-    return false
-  }
-  
-  return true
-}
-
 // data ディレクトリ初期化
 async function ensureDataDir() {
   try {
@@ -122,8 +95,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { name, owner_name, owner_email, phone, address, description, website_url, subdomain, line_channel_access_token } = body
-    console.log('[API] POST /api/stores - Body:', { name, owner_name, owner_email, subdomain })
+    const { name, owner_name, owner_email, phone, address, description, website_url, line_channel_access_token } = body
+    console.log('[API] POST /api/stores - Body:', { name, owner_name, owner_email })
 
     // バリデーション
     if (!name || !owner_name) {
@@ -131,18 +104,6 @@ export async function POST(request: NextRequest) {
         { error: '必須項目が不足しています' },
         { status: 400 }
       )
-    }
-
-    // サブドメインのバリデーション
-    let finalSubdomain: string | undefined = undefined
-    if (subdomain) {
-      if (!validateSubdomain(subdomain)) {
-        return NextResponse.json(
-          { error: 'サブドメインの形式が正しくありません。小文字英数字とハイフンのみ、3-63文字で、先頭・末尾はハイフン不可です。' },
-          { status: 400 }
-        )
-      }
-      finalSubdomain = subdomain.toLowerCase()
     }
 
     const now = new Date().toISOString()
@@ -177,7 +138,6 @@ export async function POST(request: NextRequest) {
         address: address || '',
         description: description || '',
         website_url: website_url || '',
-        subdomain: finalSubdomain || storeId, // 未指定の場合はstoreIdと同じ
         google_calendar_id: '',
         line_channel_access_token: line_channel_access_token ?? '',
         status: 'active',
@@ -268,34 +228,6 @@ export async function POST(request: NextRequest) {
       return !!data
     }
     
-    // サブドメインの重複チェック関数
-    const checkSubdomainExists = async (subdomain: string): Promise<boolean> => {
-       
-      const { data, error } = await (adminClient as any)
-        .from('stores')
-        .select('id')
-        .eq('subdomain', subdomain)
-        .single()
-      
-      if (error && error.code !== 'PGRST116') { // PGRST116 = not found (正常)
-        console.error('[API] Subdomain existence check error:', error)
-        throw error
-      }
-      
-      return !!data
-    }
-    
-    // サブドメインの重複チェック
-    if (finalSubdomain) {
-      const subdomainExists = await checkSubdomainExists(finalSubdomain)
-      if (subdomainExists) {
-        return NextResponse.json(
-          { error: 'このサブドメインは既に使用されています。別のサブドメインを指定してください。' },
-          { status: 409 }
-        )
-      }
-    }
-    
     // 重複しないIDを生成
     do {
       storeId = generateStoreId()
@@ -317,9 +249,6 @@ export async function POST(request: NextRequest) {
     } while (true)
     
     console.log('[API] Generated unique store ID:', storeId, `(attempts: ${attempts})`)
-    
-    // サブドメインが未指定の場合はstoreIdと同じ値を設定
-    const subdomainToUse = finalSubdomain || storeId
 
     let googleCalendarId: string | null = null
     try {
@@ -345,7 +274,6 @@ export async function POST(request: NextRequest) {
         address: address || '',
         description: description || '',
         website_url: website_url || '',
-        subdomain: subdomainToUse,
         google_calendar_id: googleCalendarId || '',
         line_channel_access_token: line_channel_access_token ?? '',
         status: 'active',
