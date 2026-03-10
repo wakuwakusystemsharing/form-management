@@ -17,21 +17,33 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { getBaseUrl } from '@/lib/env';
-import { 
-  ArrowLeft, 
-  Edit, 
-  Trash2, 
-  Plus, 
-  FileText, 
-  ClipboardList, 
-  Calendar, 
-  Settings, 
-  ExternalLink, 
+import {
+  ArrowLeft,
+  Edit,
+  Trash2,
+  Plus,
+  FileText,
+  ClipboardList,
+  Calendar,
+  Settings,
+  ExternalLink,
   Copy,
   Store as StoreIcon,
   AlertTriangle,
-  MessageCircle
+  MessageCircle,
+  Info
 } from 'lucide-react';
+
+function InfoTooltip({ text }: { text: string }) {
+  return (
+    <span className="relative group inline-flex items-center">
+      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 w-64 -translate-x-1/2 rounded-md border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md opacity-0 transition-opacity group-hover:opacity-100">
+        {text}
+      </span>
+    </span>
+  );
+}
 
 // アンケートテンプレート定義（既存のまま）
 const SURVEY_TEMPLATES = {
@@ -1048,11 +1060,11 @@ export default function StoreDetailPage() {
   if (error || !store) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md border-border">
           <CardContent className="pt-6">
             <div className="text-center text-destructive">
-                {error || '店舗が見つかりません'}
-              </div>
+              {error || '店舗が見つかりません'}
+            </div>
             <div className="mt-4 text-center">
               <Button onClick={() => router.back()} variant="outline">
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -1066,116 +1078,157 @@ export default function StoreDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 lg:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* ヘッダー */}
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                onClick={() => router.back()}
-                  >
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    戻る
-                  </Button>
-            </div>
-                <CardTitle className="text-3xl">{store.name}</CardTitle>
-                <CardDescription className="mt-1">店舗ID: {store.id}</CardDescription>
+    <div className="min-h-screen bg-background">
+      {/* ── ナビゲーションバー ── */}
+      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 lg:px-8 h-14 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/admin')}
+              className="text-muted-foreground hover:text-foreground h-8 px-2 shrink-0"
+            >
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline text-xs">店舗一覧</span>
+            </Button>
+            <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                <StoreIcon className="w-3.5 h-3.5 text-primary" />
               </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  variant="outline"
-                onClick={() => router.push(`/admin/${storeId}/reservations`)}
-                >
-                  <Calendar className="mr-2 h-4 w-4" />
-                  予約一覧
-                </Button>
+              <span className="font-semibold text-foreground text-sm truncate">{store.name}</span>
+              <Badge className="bg-violet-600 hover:bg-violet-600 text-white border-0 text-xs px-1.5 py-0 shrink-0 cursor-default">
+                サービス管理者
+              </Badge>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/admin/${storeId}/reservations`)}
+              className="text-muted-foreground hover:text-foreground text-xs h-8"
+            >
+              <Calendar className="h-3.5 w-3.5 mr-1" />
+              <span className="hidden sm:inline">予約一覧</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/${storeId}/admin`)}
+              className="text-muted-foreground hover:text-green-600 text-xs h-8"
+            >
+              <StoreIcon className="h-3.5 w-3.5 mr-1" />
+              <span className="hidden sm:inline">店舗管理者</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleEditStore}
+              className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
+              aria-label="店舗情報編集"
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6 space-y-6">
+        {/* ── 店舗ヘッダーカード ── */}
+        <Card className="border-border bg-card">
+          <CardContent className="p-5">
+            <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-xl font-bold text-foreground">{store.name}</h1>
+                  {store.google_calendar_id && (
+                    <Badge className="bg-green-500/20 text-green-700 border border-green-500/30 text-xs">
+                      カレンダー連携中
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground font-mono mt-1">ID: {store.id}</p>
+              </div>
+              <div className="flex flex-wrap gap-2 items-center">
                 {store.google_calendar_id ? (
                   <>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        const calendarUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id ?? '')}`;
-                        window.open(calendarUrl, '_blank');
-                      }}
+                    <Button variant="outline" size="sm"
+                      onClick={() => window.open(`https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id ?? '')}`, '_blank')}
+                      className="border-border h-8 text-xs"
                     >
-                      <ExternalLink className="mr-2 h-4 w-4" />
+                      <ExternalLink className="mr-1 h-3.5 w-3.5" />
                       カレンダーを開く
                     </Button>
                     {store.google_calendar_source === 'store_oauth' ? (
-                      <>
-                        <Badge variant="secondary">店舗のGoogleカレンダーと連携中</Badge>
-                        <Button
-                          variant="outline"
-                          disabled={disconnectingCalendar}
-                          onClick={handleDisconnectCalendar}
-                        >
-                          {disconnectingCalendar ? '解除中...' : '連携を解除'}
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          window.location.href = `/api/integrations/google-calendar/connect?store_id=${storeId}`;
-                        }}
+                      <Button variant="outline" size="sm" disabled={disconnectingCalendar}
+                        onClick={handleDisconnectCalendar}
+                        className="border-border h-8 text-xs"
                       >
-                        <Calendar className="mr-2 h-4 w-4" />
-                        店舗のGoogleカレンダーと連携
+                        {disconnectingCalendar ? '解除中...' : '連携を解除'}
                       </Button>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <Button variant="outline" size="sm"
+                          onClick={() => { window.location.href = `/api/integrations/google-calendar/connect?store_id=${storeId}`; }}
+                          className="border-border h-8 text-xs"
+                        >
+                          <Calendar className="mr-1 h-3.5 w-3.5" />
+                          Googleカレンダー連携
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
+                          onClick={() => copyToClipboard(`${getBaseUrl()}/api/integrations/google-calendar/connect?store_id=${storeId}`)}
+                          title="連携用URLをコピー"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                        <InfoTooltip text="店舗オーナーのGoogleアカウントでOAuth認証を行い、そのカレンダーに予約を自動登録します。コピーボタンで連携URLを取得し、店舗オーナーに共有してください。" />
+                      </div>
                     )}
                   </>
                 ) : (
                   <>
-                    <Button
-                      variant="outline"
-                      disabled={creatingCalendar}
-                      onClick={handleCreateCalendar}
-                    >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      {creatingCalendar ? '作成中...' : 'カレンダーを作成'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        window.location.href = `/api/integrations/google-calendar/connect?store_id=${storeId}`;
-                      }}
-                    >
-                      <Calendar className="mr-2 h-4 w-4" />
-                      店舗のGoogleカレンダーと連携
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm" disabled={creatingCalendar}
+                        onClick={handleCreateCalendar}
+                        className="border-border h-8 text-xs"
+                      >
+                        <Calendar className="mr-1 h-3.5 w-3.5" />
+                        {creatingCalendar ? '作成中...' : 'カレンダーを作成'}
+                      </Button>
+                      <InfoTooltip text="サービスアカウント経由でGoogleカレンダーを新規作成します。作成したカレンダーに予約が自動登録されます。店舗オーナーのGoogleアカウントとは連携しません。" />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm"
+                        onClick={() => { window.location.href = `/api/integrations/google-calendar/connect?store_id=${storeId}`; }}
+                        className="border-border h-8 text-xs"
+                      >
+                        <Calendar className="mr-1 h-3.5 w-3.5" />
+                        Googleカレンダーと連携
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
+                        onClick={() => copyToClipboard(`${getBaseUrl()}/api/integrations/google-calendar/connect?store_id=${storeId}`)}
+                        title="連携用URLをコピー"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                      <InfoTooltip text="店舗オーナーのGoogleアカウントでOAuth認証を行い、そのカレンダーに予約を自動登録します。コピーボタンで連携URLを取得し、店舗オーナーに共有してください。" />
+                    </div>
                   </>
                 )}
-                <Button
-                  variant="outline"
-                  onClick={() => router.push(`/${storeId}/admin`)}
-                >
-                  <StoreIcon className="mr-2 h-4 w-4" />
-                  店舗管理者
-                </Button>
-                <Button
-                  variant="outline"
-                onClick={handleEditStore}
-              >
-                  <Edit className="mr-2 h-4 w-4" />
-                店舗情報編集
-                </Button>
+              </div>
             </div>
-          </div>
-          </CardHeader>
+          </CardContent>
         </Card>
 
-        {/* タブナビゲーション */}
+        {/* ── タブナビゲーション ── */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">概要</TabsTrigger>
-            <TabsTrigger value="forms">予約フォーム</TabsTrigger>
-            <TabsTrigger value="surveys">アンケート</TabsTrigger>
-            <TabsTrigger value="settings">設定</TabsTrigger>
+          <TabsList className="h-10 bg-card border border-border p-1 w-full sm:w-auto grid grid-cols-4 sm:inline-grid">
+            <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">概要</TabsTrigger>
+            <TabsTrigger value="forms" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">予約フォーム</TabsTrigger>
+            <TabsTrigger value="surveys" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">アンケート</TabsTrigger>
+            <TabsTrigger value="settings" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">設定</TabsTrigger>
           </TabsList>
 
           {/* 概要タブ */}
@@ -1216,158 +1269,124 @@ export default function StoreDetailPage() {
               </CardContent>
             </Card>
 
-            {/* フォームURL一覧 */}
-            <Card>
-              <CardHeader>
-                <CardTitle>フォームURL一覧</CardTitle>
-                <CardDescription>顧客向けの公開URL</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {forms.length === 0 && surveyForms.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    まだフォームが作成されていません
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {forms.length > 0 && (
-                      <div>
-                        <h3 className="text-sm font-medium mb-2">予約フォーム</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* フォームURL一覧 + 基本情報 横並び */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="flex flex-col">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">フォームURL一覧</CardTitle>
+                  <CardDescription>顧客向けの公開URL</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1">
+                  {forms.length === 0 && surveyForms.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-6 text-sm">
+                      まだフォームが作成されていません
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {forms.length > 0 && (
+                        <>
+                          <p className="text-xs font-medium text-muted-foreground px-1 pb-0.5">予約フォーム</p>
                           {forms.map((form) => {
                             const deployInfo = (form as any).static_deploy;
-                            // deploy_urlが相対パスの場合は、環境に応じたベースURLを付与
                             let formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/forms/${form.id}`;
                             if (formUrl.startsWith('/') && !formUrl.startsWith('//')) {
                               formUrl = `${getBaseUrl()}${formUrl}`;
                             }
-                            
                             return (
-                              <Card key={form.id}>
-                                <CardHeader className="pb-3">
-                                  <div className="flex items-center justify-between">
-                                    <CardTitle className="text-base">
-                                      {(form as any).form_name || form.config?.basic_info?.form_name}
-                                    </CardTitle>
-                                    <Badge variant={form.status === 'active' ? 'default' : 'secondary'}>
-                        {form.status === 'active' ? '公開中' : '非公開'}
-                                    </Badge>
-                    </div>
-                                </CardHeader>
-                                <CardContent className="space-y-2">
-                                  <div className="flex gap-2">
-                                    <Button
-                                      size="sm"
-                                      className="flex-1"
-                                      onClick={() => window.open(formUrl, '_blank')}
-                                    >
-                                      <ExternalLink className="mr-2 h-4 w-4" />
-                                      開く
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => copyToClipboard(formUrl)}
-                                    >
-                                      <Copy className="h-4 w-4" />
-                                    </Button>
-                      </div>
-                                </CardContent>
-                              </Card>
+                              <div key={form.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 group">
+                                <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                <span className="text-sm font-medium truncate flex-1 min-w-0">
+                                  {(form as any).form_name || form.config?.basic_info?.form_name}
+                                </span>
+                                <Badge variant={form.status === 'active' ? 'default' : 'secondary'} className="text-xs shrink-0">
+                                  {form.status === 'active' ? '公開中' : '非公開'}
+                                </Badge>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0 opacity-50 group-hover:opacity-100" onClick={() => window.open(formUrl, '_blank')}>
+                                  <ExternalLink className="h-3 w-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0 opacity-50 group-hover:opacity-100" onClick={() => copyToClipboard(formUrl)}>
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </div>
                             );
                           })}
-                    </div>
-                      </div>
-                    )}
-                    {surveyForms.length > 0 && (
-            <div>
-                        <h3 className="text-sm font-medium mb-2">アンケートフォーム</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        </>
+                      )}
+                      {surveyForms.length > 0 && (
+                        <>
+                          <p className="text-xs font-medium text-muted-foreground px-1 pt-2 pb-0.5">アンケートフォーム</p>
                           {surveyForms.map((form) => {
                             const deployInfo = form.static_deploy;
-                            // deploy_urlが相対パスの場合は、環境に応じたベースURLを付与
                             let formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/surveys/${form.id}`;
                             if (formUrl.startsWith('/') && !formUrl.startsWith('//')) {
                               formUrl = `${getBaseUrl()}${formUrl}`;
                             }
-                            
                             return (
-                              <Card key={form.id}>
-                                <CardHeader className="pb-3">
-                                  <div className="flex items-center justify-between">
-                                    <CardTitle className="text-base">{form.config.basic_info.title}</CardTitle>
-                                    <Badge variant={form.status === 'active' ? 'default' : 'secondary'}>
-                        {form.status === 'active' ? '公開中' : '非公開'}
-                                    </Badge>
-                    </div>
-                                </CardHeader>
-                                <CardContent className="space-y-2">
-                                  <div className="flex gap-2">
-                                    <Button
-                                      size="sm"
-                                      className="flex-1"
-                                      onClick={() => window.open(formUrl, '_blank')}
-                                    >
-                                      <ExternalLink className="mr-2 h-4 w-4" />
-                                      開く
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => copyToClipboard(formUrl)}
-                                    >
-                                      <Copy className="h-4 w-4" />
-                                    </Button>
-                      </div>
-                                </CardContent>
-                              </Card>
+                              <div key={form.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 group">
+                                <ClipboardList className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                <span className="text-sm font-medium truncate flex-1 min-w-0">
+                                  {form.config.basic_info.title}
+                                </span>
+                                <Badge variant={form.status === 'active' ? 'default' : 'secondary'} className="text-xs shrink-0">
+                                  {form.status === 'active' ? '公開中' : '非公開'}
+                                </Badge>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0 opacity-50 group-hover:opacity-100" onClick={() => window.open(formUrl, '_blank')}>
+                                  <ExternalLink className="h-3 w-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0 opacity-50 group-hover:opacity-100" onClick={() => copyToClipboard(formUrl)}>
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </div>
                             );
                           })}
+                        </>
+                      )}
                     </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* 店舗基本情報 */}
+              <Card className="flex flex-col">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">基本情報</CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">店舗名</Label>
+                      <p className="text-sm font-medium mt-0.5">{store.name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">オーナー名</Label>
+                      <p className="text-sm font-medium mt-0.5">{store.owner_name}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs text-muted-foreground">メールアドレス</Label>
+                      <p className="text-sm font-medium mt-0.5 break-all">{store.owner_email}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">電話番号</Label>
+                      <p className="text-sm font-medium mt-0.5">{store.phone || '未設定'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">ウェブサイト</Label>
+                      <p className="text-sm font-medium mt-0.5 truncate">{store.website_url || '未設定'}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs text-muted-foreground">住所</Label>
+                      <p className="text-sm font-medium mt-0.5">{store.address || '未設定'}</p>
+                    </div>
+                    {store.description && (
+                      <div className="col-span-2">
+                        <Label className="text-xs text-muted-foreground">説明</Label>
+                        <p className="text-sm font-medium mt-0.5">{store.description}</p>
                       </div>
                     )}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          )}
-              </CardContent>
-            </Card>
-
-        {/* 店舗基本情報 */}
-            <Card>
-              <CardHeader>
-                <CardTitle>基本情報</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                    <Label className="text-muted-foreground">店舗名</Label>
-                    <p className="font-medium">{store.name}</p>
-            </div>
-            <div>
-                    <Label className="text-muted-foreground">オーナー名</Label>
-                    <p className="font-medium">{store.owner_name}</p>
-            </div>
-            <div>
-                    <Label className="text-muted-foreground">メールアドレス</Label>
-                    <p className="font-medium">{store.owner_email}</p>
-            </div>
-            <div>
-                    <Label className="text-muted-foreground">電話番号</Label>
-                    <p className="font-medium">{store.phone || '未設定'}</p>
-            </div>
-            <div className="md:col-span-2">
-                    <Label className="text-muted-foreground">住所</Label>
-                    <p className="font-medium">{store.address || '未設定'}</p>
-            </div>
-            <div className="md:col-span-2">
-                    <Label className="text-muted-foreground">ウェブサイト</Label>
-                    <p className="font-medium">{store.website_url || '未設定'}</p>
-            </div>
-            <div className="md:col-span-2">
-                    <Label className="text-muted-foreground">説明</Label>
-                    <p className="font-medium">{store.description || '未設定'}</p>
-            </div>
-          </div>
-              </CardContent>
-            </Card>
 
             {/* 最近の予約 */}
             <Card>
@@ -1385,47 +1404,51 @@ export default function StoreDetailPage() {
               </CardHeader>
               <CardContent>
                 {loadingReservations ? (
-                  <p className="text-center text-muted-foreground py-8">読み込み中...</p>
+                  <p className="text-center text-muted-foreground py-8 text-sm">読み込み中...</p>
                 ) : recentReservations.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">まだ予約がありません</p>
+                  <p className="text-center text-muted-foreground py-8 text-sm">まだ予約がありません</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="divide-y divide-border -mx-6">
                     {recentReservations.map((reservation) => {
                       const selectedMenus = reservation.selected_menus || [];
                       const menuInfo = selectedMenus.length > 0 ? selectedMenus[0] : null;
                       const menuName = menuInfo?.menu_name || reservation.menu_name || '未選択';
                       const submenuName = menuInfo?.submenu_name || reservation.submenu_name;
                       const fullMenuName = submenuName ? `${menuName} > ${submenuName}` : menuName;
-                      
+                      const statusMap: Record<string, { label: string; className: string }> = {
+                        confirmed: { label: '確認済み', className: 'bg-green-100 text-green-700 border-green-200' },
+                        pending:   { label: '保留中',   className: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+                        cancelled: { label: 'キャンセル', className: 'bg-red-100 text-red-600 border-red-200' },
+                      };
+                      const status = statusMap[reservation.status] ?? statusMap.pending;
+
                       return (
-                        <div 
-                          key={reservation.id} 
-                          className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-accent transition-colors"
+                        <div
+                          key={reservation.id}
+                          className="flex items-center gap-3 px-6 py-3 cursor-pointer hover:bg-muted/40 transition-colors"
                           onClick={() => {
                             setSelectedReservation(reservation);
                             setShowReservationDetail(true);
                           }}
                         >
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-medium">{reservation.customer_name}</span>
-                              <Badge
-                                variant={
-                                  reservation.status === 'confirmed' ? 'default' :
-                                  reservation.status === 'pending' ? 'secondary' :
-                                  'destructive'
-                                }
-                              >
-                                {reservation.status === 'pending' ? '保留中' : 
-                                 reservation.status === 'confirmed' ? '確認済み' : 'キャンセル'}
-                              </Badge>
-                            </div>
-                            <div className="text-sm text-muted-foreground space-y-1">
-                              <div>📅 {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}</div>
-                              <div>📋 {fullMenuName}</div>
-                              <div>📞 {reservation.customer_phone}</div>
-                            </div>
+                          {/* 日時ブロック */}
+                          <div className="shrink-0 w-16 text-center">
+                            <p className="text-xs font-semibold text-foreground leading-tight">
+                              {new Date(reservation.reservation_date).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{reservation.reservation_time}</p>
                           </div>
+                          {/* 縦線 */}
+                          <div className="w-px h-8 bg-border shrink-0" />
+                          {/* 顧客・メニュー */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{reservation.customer_name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{fullMenuName}</p>
+                          </div>
+                          {/* ステータスバッジ */}
+                          <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full border font-medium ${status.className}`}>
+                            {status.label}
+                          </span>
                         </div>
                       );
                     })}
@@ -1612,29 +1635,35 @@ export default function StoreDetailPage() {
                 まだ予約フォームが作成されていません
                     </p>
             ) : (
-              forms.map((form) => (
+              forms.map((form) => {
+                const deployInfo = (form as any).static_deploy;
+                let formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/forms/${form.id}`;
+                if (formUrl.startsWith('/') && !formUrl.startsWith('//')) {
+                  formUrl = `${getBaseUrl()}${formUrl}`;
+                }
+                return (
                       <Card key={form.id}>
-                        <CardContent className="p-4">
+                        <CardContent className="p-4 space-y-2">
                   <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-medium">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <h3 className="font-medium truncate">
 {(form as any).form_name || form.config?.basic_info?.form_name}
                                 </h3>
                         {form.draft_status === 'draft' && (
-                                  <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                  <Badge variant="outline" className="text-orange-600 border-orange-600 shrink-0">
                                     下書き
                                   </Badge>
                                 )}
-                                <Badge variant={form.status === 'active' ? 'default' : 'secondary'}>
+                                <Badge variant={form.status === 'active' ? 'default' : 'secondary'} className="shrink-0">
                                   {form.status === 'active' ? '公開中' : '非公開'}
                                 </Badge>
                               </div>
-                              <p className="text-sm text-muted-foreground">
+                              <p className="text-xs text-muted-foreground font-mono truncate">
                                 ID: {form.id}
                       </p>
                     </div>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 shrink-0">
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -1653,9 +1682,19 @@ export default function StoreDetailPage() {
                               </Button>
                     </div>
                   </div>
+                          <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1">
+                            <code className="text-xs text-muted-foreground truncate flex-1 min-w-0">{formUrl}</code>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => window.open(formUrl, '_blank')} title="開く">
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => copyToClipboard(formUrl)} title="コピー">
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </CardContent>
                       </Card>
-              ))
+                );
+              })
             )}
           </div>
               </CardContent>
@@ -1757,27 +1796,33 @@ export default function StoreDetailPage() {
                 まだアンケートが作成されていません
                     </p>
             ) : (
-              surveyForms.map((form) => (
+              surveyForms.map((form) => {
+                const deployInfo = form.static_deploy;
+                let formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/surveys/${form.id}`;
+                if (formUrl.startsWith('/') && !formUrl.startsWith('//')) {
+                  formUrl = `${getBaseUrl()}${formUrl}`;
+                }
+                return (
                       <Card key={form.id}>
-                        <CardContent className="p-4">
+                        <CardContent className="p-4 space-y-2">
                   <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-medium">{form.config.basic_info.title}</h3>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <h3 className="font-medium truncate">{form.config.basic_info.title}</h3>
                         {form.draft_status === 'draft' && (
-                                  <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                  <Badge variant="outline" className="text-orange-600 border-orange-600 shrink-0">
                                     下書き
                                   </Badge>
                                 )}
-                                <Badge variant={form.status === 'active' ? 'default' : 'secondary'}>
+                                <Badge variant={form.status === 'active' ? 'default' : 'secondary'} className="shrink-0">
                                   {form.status === 'active' ? '公開中' : '非公開'}
                                 </Badge>
                               </div>
-                              <p className="text-sm text-muted-foreground">
+                              <p className="text-xs text-muted-foreground font-mono truncate">
                                 ID: {form.id}
                       </p>
                     </div>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 shrink-0">
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -1796,9 +1841,19 @@ export default function StoreDetailPage() {
                               </Button>
                     </div>
                   </div>
+                          <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1">
+                            <code className="text-xs text-muted-foreground truncate flex-1 min-w-0">{formUrl}</code>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => window.open(formUrl, '_blank')} title="開く">
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => copyToClipboard(formUrl)} title="コピー">
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </CardContent>
                       </Card>
-              ))
+                );
+              })
             )}
           </div>
               </CardContent>

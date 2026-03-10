@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock, Settings } from 'lucide-react';
+import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock, Settings, Calendar } from 'lucide-react';
 
 const ADMIN_EMAILS = [
   'wakuwakusystemsharing@gmail.com',
@@ -553,11 +553,11 @@ export default function AdminPage() {
   // パスワードリセット画面
   if (showPasswordReset) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md border-border">
           <CardHeader className="text-center">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Lock className="w-8 h-8 text-blue-600" />
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-primary/20">
+              <Lock className="w-8 h-8 text-primary" />
             </div>
             <CardTitle className="text-2xl">パスワードリセット</CardTitle>
             <CardDescription>新しいパスワードを設定してください</CardDescription>
@@ -621,14 +621,20 @@ export default function AdminPage() {
   // 未認証時のログイン画面
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Settings className="w-8 h-8 text-blue-600" />
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-6">
+          {/* ブランドヘッダー */}
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 mb-2">
+              <Settings className="w-7 h-7 text-primary" />
             </div>
-            <CardTitle className="text-2xl">サービス管理者ログイン</CardTitle>
-            <CardDescription>「店舗運営にとって「Need（必要不可欠）」な予約システム」</CardDescription>
+            <h1 className="text-2xl font-bold text-foreground">サービス管理者</h1>
+            <p className="text-sm text-muted-foreground">NeedsRSV 管理コンソール</p>
+          </div>
+        <Card className="border-border">
+          <CardHeader className="text-center">
+            <CardTitle className="text-lg">ログイン</CardTitle>
+            <CardDescription>許可されたアカウントのみアクセス可能</CardDescription>
           </CardHeader>
           <CardContent>
             {passwordResetError && (
@@ -669,344 +675,277 @@ export default function AdminPage() {
               </Button>
             </form>
 
-            <div className="mt-6 text-xs text-muted-foreground text-center">
-              <p>許可されたアカウントのみアクセス可能</p>
-            </div>
           </CardContent>
         </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 lg:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* ヘッダー */}
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <CardTitle className="text-2xl">サービス管理者ページ</CardTitle>
-                <CardDescription className="mt-2">
-                  店舗の管理を行います。店舗をクリックして詳細管理ページに移動できます。
-                </CardDescription>
-                <p className="text-sm text-muted-foreground mt-2">
-                  ログイン中: {user?.email}
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => router.push('/admin/reservations')}
-                >
-                  全予約一覧
-                </Button>
-                <Button variant="outline" onClick={handleSignOut}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  ログアウト
-                </Button>
-              </div>
+    <div className="min-h-screen bg-background">
+      {/* ── ナビゲーションバー ── */}
+      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 lg:px-8 h-14 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Settings className="w-4 h-4 text-primary" />
             </div>
-          </CardHeader>
-        </Card>
+            <span className="font-semibold text-foreground text-sm">NeedsRSV</span>
+            <Badge className="bg-violet-600 hover:bg-violet-600 text-white border-0 text-xs px-2 py-0.5 cursor-default">
+              サービス管理者
+            </Badge>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="hidden sm:block text-xs text-muted-foreground mr-2">{user?.email}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/admin/reservations')}
+              className="text-muted-foreground hover:text-foreground text-xs h-8"
+            >
+              全予約一覧
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSignOut}
+              className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
+              aria-label="ログアウト"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </header>
 
-        {/* 店舗管理セクション */}
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <CardTitle>店舗管理</CardTitle>
-              <Button 
-                onClick={() => setShowAddStore(!showAddStore)}
-                className="w-full sm:w-auto"
+      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-8 space-y-6">
+        {/* ── ページヘッダー ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">店舗一覧</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {stores.length > 0 ? `${stores.length} 店舗が登録されています` : '店舗を追加してください'}
+            </p>
+          </div>
+          <Button
+            onClick={() => setShowAddStore(!showAddStore)}
+            className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground shadow-md"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {showAddStore ? 'キャンセル' : '新しい店舗を追加'}
+          </Button>
+        </div>
+
+        {/* ── 店舗追加フォーム ── */}
+        {showAddStore && (
+          <Card className="border-primary/30 bg-card">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold">新しい店舗を追加</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form
+                onSubmit={(e) => { e.preventDefault(); handleCreateStore(); }}
+                className="space-y-4"
               >
-                <Plus className="mr-2 h-4 w-4" />
-                {showAddStore ? 'キャンセル' : '新しい店舗を追加'}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* 検索バー */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="店舗名、オーナー名、メールアドレスで検索..."
-                className="pl-10"
-              />
-              {searchQuery && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2"
-                  onClick={() => setSearchQuery('')}
-                >
-                  ✕
-                </Button>
-              )}
-            </div>
-            {searchQuery && (
-              <p className="text-sm text-muted-foreground">
-                {filteredStores.length}件の店舗が見つかりました
-              </p>
-            )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">店舗名 <span className="text-destructive">*</span></Label>
+                    <Input id="name" type="text" value={newStore.name}
+                      onChange={(e) => setNewStore({...newStore, name: e.target.value})}
+                      placeholder="例：美容室B（大阪店）" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="owner_name">オーナー名 <span className="text-destructive">*</span></Label>
+                    <Input id="owner_name" type="text" value={newStore.owner_name}
+                      onChange={(e) => setNewStore({...newStore, owner_name: e.target.value})}
+                      placeholder="例：佐藤花子" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="owner_email">メールアドレス</Label>
+                    <Input id="owner_email" type="email" value={newStore.owner_email}
+                      onChange={(e) => setNewStore({...newStore, owner_email: e.target.value})}
+                      placeholder="例：sato@example.com" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">電話番号</Label>
+                    <Input id="phone" type="tel" value={newStore.phone}
+                      onChange={(e) => setNewStore({...newStore, phone: e.target.value})}
+                      placeholder="例：06-1234-5678" />
+                  </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <Label htmlFor="address">住所</Label>
+                    <Input id="address" type="text" value={newStore.address}
+                      onChange={(e) => setNewStore({...newStore, address: e.target.value})}
+                      placeholder="例：大阪府大阪市中央区1-2-3" />
+                  </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <Label htmlFor="website_url">ウェブサイトURL</Label>
+                    <Input id="website_url" type="url" value={newStore.website_url}
+                      onChange={(e) => setNewStore({...newStore, website_url: e.target.value})}
+                      placeholder="例：https://beauty-b.example.com" />
+                  </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <Label htmlFor="description">店舗説明</Label>
+                    <textarea
+                      id="description"
+                      className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      value={newStore.description}
+                      onChange={(e) => setNewStore({...newStore, description: e.target.value})}
+                      placeholder="店舗の特徴やサービス内容を入力してください" />
+                  </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <Label htmlFor="line_channel_access_token">LINE チャネルアクセストークン（任意）</Label>
+                    <Input id="line_channel_access_token" type="password"
+                      value={newStore.line_channel_access_token}
+                      onChange={(e) => setNewStore({...newStore, line_channel_access_token: e.target.value})}
+                      placeholder="LINE Developers で取得したチャネルアクセストークン"
+                      autoComplete="off" />
+                    <p className="text-xs text-muted-foreground">Webhook・リマインドで使用します。後から追加可能です。</p>
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <Button type="submit" disabled={submitting} className="bg-primary hover:bg-primary/90">
+                    {submitting ? '作成中...' : '店舗を作成'}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setShowAddStore(false)}>
+                    キャンセル
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        )}
 
-            {/* 店舗追加フォーム */}
-            {showAddStore && (
-              <Card className="border-primary/50">
-                <CardHeader>
-                  <CardTitle className="text-lg">新しい店舗を追加</CardTitle>
+        {/* ── 検索バー ── */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="店舗名、オーナー名、メールアドレスで検索..."
+            className="pl-10 bg-card border-border"
+          />
+          {searchQuery && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+              onClick={() => setSearchQuery('')}
+              aria-label="検索クリア"
+            >
+              ✕
+            </Button>
+          )}
+        </div>
+        {searchQuery && (
+          <p className="text-sm text-muted-foreground -mt-2">
+            {filteredStores.length} 件ヒット
+          </p>
+        )}
+
+        {/* ── 店舗カードグリッド ── */}
+        {filteredStores.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            {searchQuery ? (
+              <div className="space-y-2">
+                <p>「{searchQuery}」に一致する店舗が見つかりませんでした</p>
+                <Button variant="link" onClick={() => setSearchQuery('')} className="text-primary">
+                  検索をクリア
+                </Button>
+              </div>
+            ) : (
+              <p>まだ店舗が登録されていません。上のボタンから追加してください。</p>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredStores.map(store => (
+              <Card
+                key={store.id}
+                className="cursor-pointer border-border bg-card hover:border-primary/40 hover:bg-accent transition-all duration-200 group"
+                onClick={() => handleStoreClick(store.id)}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                        <StoreIcon className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="min-w-0">
+                        <CardTitle className="text-sm font-semibold truncate group-hover:text-primary transition-colors">
+                          {store.name}
+                        </CardTitle>
+                        <CardDescription className="text-xs font-mono mt-0.5">ID: {store.id}</CardDescription>
+                      </div>
+                    </div>
+                    {store.google_calendar_id && (
+                      <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center shrink-0" title="カレンダー連携済み">
+                        <Calendar className="h-3 w-3 text-green-500" />
+                      </div>
+                    )}
+                  </div>
                 </CardHeader>
-                <CardContent>
-                  <form 
-                    onSubmit={(e) => { 
-                      e.preventDefault(); 
-                      handleCreateStore(); 
-                    }}
-                    className="space-y-4"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="name">
-                          店舗名 <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          id="name"
-                          type="text"
-                          value={newStore.name}
-                          onChange={(e) => setNewStore({...newStore, name: e.target.value})}
-                          placeholder="例：美容室B（大阪店）"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="owner_name">
-                          オーナー名 <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          id="owner_name"
-                          type="text"
-                          value={newStore.owner_name}
-                          onChange={(e) => setNewStore({...newStore, owner_name: e.target.value})}
-                          placeholder="例：佐藤花子"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="owner_email">メールアドレス</Label>
-                        <Input
-                          id="owner_email"
-                          type="email"
-                          value={newStore.owner_email}
-                          onChange={(e) => setNewStore({...newStore, owner_email: e.target.value})}
-                          placeholder="例：sato@example.com"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">電話番号</Label>
-                        <Input
-                          id="phone"
-                          type="tel"
-                          value={newStore.phone}
-                          onChange={(e) => setNewStore({...newStore, phone: e.target.value})}
-                          placeholder="例：06-1234-5678"
-                        />
-                      </div>
-                      <div className="md:col-span-2 space-y-2">
-                        <Label htmlFor="address">住所</Label>
-                        <Input
-                          id="address"
-                          type="text"
-                          value={newStore.address}
-                          onChange={(e) => setNewStore({...newStore, address: e.target.value})}
-                          placeholder="例：大阪府大阪市中央区1-2-3"
-                        />
-                      </div>
-                      <div className="md:col-span-2 space-y-2">
-                        <Label htmlFor="website_url">ウェブサイトURL</Label>
-                        <Input
-                          id="website_url"
-                          type="url"
-                          value={newStore.website_url}
-                          onChange={(e) => setNewStore({...newStore, website_url: e.target.value})}
-                          placeholder="例：https://beauty-b.example.com"
-                        />
-                      </div>
-                      <div className="md:col-span-2 space-y-2">
-                        <Label htmlFor="description">店舗説明</Label>
-                        <textarea
-                          id="description"
-                          className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                          value={newStore.description}
-                          onChange={(e) => setNewStore({...newStore, description: e.target.value})}
-                          placeholder="店舗の特徴やサービス内容を入力してください"
-                        />
-                      </div>
-                      <div className="md:col-span-2 space-y-2">
-                        <Label htmlFor="line_channel_access_token">LINE チャネルアクセストークン（任意）</Label>
-                        <Input
-                          id="line_channel_access_token"
-                          type="password"
-                          value={newStore.line_channel_access_token}
-                          onChange={(e) => setNewStore({...newStore, line_channel_access_token: e.target.value})}
-                          placeholder="LINE Developers で取得したチャネルアクセストークン"
-                          autoComplete="off"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Webhook・リマインドで使用します。未設定の場合は後から店舗編集で追加できます。
-                        </p>
-                      </div>
+                <CardContent className="pt-0 space-y-3">
+                  <div className="space-y-1 text-sm">
+                    <div className="flex gap-2">
+                      <span className="text-muted-foreground text-xs w-14 shrink-0">オーナー</span>
+                      <span className="text-foreground text-xs truncate">{store.owner_name}</span>
                     </div>
-                    <div className="flex gap-3">
-                      <Button 
-                        type="submit"
-                        disabled={submitting}
-                        className="flex-1 sm:flex-none"
-                      >
-                        {submitting ? '作成中...' : '店舗を作成'}
-                      </Button>
-                      <Button 
-                        type="button"
+                    <div className="flex gap-2">
+                      <span className="text-muted-foreground text-xs w-14 shrink-0">メール</span>
+                      <span className="text-foreground text-xs truncate">{store.owner_email}</span>
+                    </div>
+                    {store.phone && (
+                      <div className="flex gap-2">
+                        <span className="text-muted-foreground text-xs w-14 shrink-0">電話</span>
+                        <span className="text-foreground text-xs">{store.phone}</span>
+                      </div>
+                    )}
+                    {store.address && (
+                      <div className="flex gap-2">
+                        <span className="text-muted-foreground text-xs w-14 shrink-0">住所</span>
+                        <span className="text-foreground text-xs truncate">{store.address}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2 pt-1 border-t border-border">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); router.push(`/admin/${store.id}`); }}
+                      className="flex-1 h-7 text-xs border-border hover:border-primary/50 hover:text-primary"
+                    >
+                      <Settings className="mr-1 h-3 w-3" />
+                      管理
+                    </Button>
+                    {store.google_calendar_id && (
+                      <Button
                         variant="outline"
-                        onClick={() => setShowAddStore(false)}
-                        className="flex-1 sm:flex-none"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); window.open(`https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id ?? '')}`, '_blank'); }}
+                        className="flex-1 h-7 text-xs border-border hover:border-primary/50 hover:text-primary"
                       >
-                        キャンセル
+                        <ExternalLink className="mr-1 h-3 w-3" />
+                        カレンダー
                       </Button>
-                    </div>
-                  </form>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); router.push(`/${store.id}/admin`); }}
+                      className="flex-1 h-7 text-xs border-border hover:border-green-500/50 hover:text-green-500"
+                    >
+                      <StoreIcon className="mr-1 h-3 w-3" />
+                      店舗管理者
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
-            )}
-
-
-            {/* 店舗一覧 */}
-            <div className="space-y-4">
-              {filteredStores.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  {searchQuery ? (
-                    <>
-                      「{searchQuery}」に一致する店舗が見つかりませんでした。
-                      <Button
-                        variant="link"
-                        onClick={() => setSearchQuery('')}
-                        className="ml-2"
-                      >
-                        検索をクリア
-                      </Button>
-                    </>
-                  ) : (
-                    'まだ店舗が登録されていません。上のボタンから新しい店舗を追加してください。'
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredStores.map(store => (
-                    <Card 
-                      key={store.id} 
-                      className="cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => handleStoreClick(store.id)}
-                    >
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <CardTitle className="text-lg flex items-center gap-2">
-                              <StoreIcon className="h-5 w-5" />
-                              {store.name}
-                            </CardTitle>
-                            <CardDescription className="mt-1">ID: {store.id}</CardDescription>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2 text-sm">
-                          <div>
-                            <span className="font-medium">オーナー:</span> {store.owner_name}
-                          </div>
-                          <div>
-                            <span className="font-medium">メール:</span> {store.owner_email}
-                          </div>
-                          {store.phone && (
-                            <div>
-                              <span className="font-medium">電話:</span> {store.phone}
-                            </div>
-                          )}
-                          {store.address && (
-                            <div>
-                              <span className="font-medium">住所:</span> {store.address}
-                            </div>
-                          )}
-                          {store.website_url && (
-                            <div>
-                              <span className="font-medium">サイト:</span>{' '}
-                              <a 
-                                href={store.website_url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-primary hover:underline inline-flex items-center gap-1"
-                              >
-                                {store.website_url}
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            </div>
-                          )}
-                          {store.description && (
-                            <div className="pt-2 border-t">
-                              <span className="font-medium">説明:</span> {store.description}
-                            </div>
-                          )}
-                        </div>
-                        <div className="mt-4 flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(`/admin/${store.id}`);
-                            }}
-                            className="flex-1"
-                          >
-                            <Settings className="mr-2 h-4 w-4" />
-                            管理
-                          </Button>
-                          {store.google_calendar_id && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const calendarUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id ?? '')}`;
-                                window.open(calendarUrl, '_blank');
-                              }}
-                              className="flex-1"
-                            >
-                              <ExternalLink className="mr-2 h-4 w-4" />
-                              カレンダー
-                            </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(`/${store.id}/admin`);
-                            }}
-                            className="flex-1"
-                          >
-                            <StoreIcon className="mr-2 h-4 w-4" />
-                            店舗管理者
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
