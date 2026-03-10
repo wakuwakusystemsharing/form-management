@@ -1078,7 +1078,7 @@ export default function StoreDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="admin-page min-h-screen bg-background">
       {/* ── ナビゲーションバー ── */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 h-14 flex items-center justify-between gap-4">

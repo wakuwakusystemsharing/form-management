@@ -108,7 +108,7 @@ export default function AdminStoreReservationsPage() {
     : reservations.filter(r => r.status === filterStatus);
 
   return (
-    <div className="min-h-screen bg-background p-4 lg:p-8">
+    <div className="admin-page min-h-screen bg-background p-4 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* ヘッダー */}
         <Card>

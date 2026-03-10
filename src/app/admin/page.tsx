@@ -553,7 +553,7 @@ export default function AdminPage() {
   // パスワードリセット画面
   if (showPasswordReset) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="admin-page min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md border-border">
           <CardHeader className="text-center">
             <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-primary/20">
@@ -621,7 +621,7 @@ export default function AdminPage() {
   // 未認証時のログイン画面
   if (!user) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="admin-page min-h-screen bg-background flex items-center justify-center p-4">
         <div className="w-full max-w-md space-y-6">
           {/* ブランドヘッダー */}
           <div className="text-center space-y-2">
@@ -629,7 +629,7 @@ export default function AdminPage() {
               <Settings className="w-7 h-7 text-primary" />
             </div>
             <h1 className="text-2xl font-bold text-foreground">サービス管理者</h1>
-            <p className="text-sm text-muted-foreground">NeedsRSV 管理コンソール</p>
+            <p className="text-sm text-muted-foreground">NAS 管理コンソール</p>
           </div>
         <Card className="border-border">
           <CardHeader className="text-center">
@@ -683,7 +683,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="admin-page min-h-screen bg-background">
       {/* ── ナビゲーションバー ── */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 h-14 flex items-center justify-between gap-4">
@@ -691,7 +691,7 @@ export default function AdminPage() {
             <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
               <Settings className="w-4 h-4 text-primary" />
             </div>
-            <span className="font-semibold text-foreground text-sm">NeedsRSV</span>
+            <span className="font-semibold text-foreground text-sm">NAS</span>
             <Badge className="bg-violet-600 hover:bg-violet-600 text-white border-0 text-xs px-2 py-0.5 cursor-default">
               サービス管理者
             </Badge>
