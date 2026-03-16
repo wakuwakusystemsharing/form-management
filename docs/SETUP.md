@@ -338,8 +338,8 @@ pnpm build
 ## 📚 関連ドキュメント
 
 - [`WORKFLOW.md`](WORKFLOW.md) - 開発・運用フローガイド ⭐ **日常的な開発はこちら**
-- [`.github/copilot-instructions.md`](.github/copilot-instructions.md) - AI エージェント向けガイド
-- [`README.md`](README.md) - プロジェクト概要
+- [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) - AI エージェント向けガイド
+- [`README.md`](../README.md) - プロジェクト概要
 - [Vercel Documentation](https://vercel.com/docs)
 - [Supabase Documentation](https://supabase.com/docs)
 - [shadcn/ui Documentation](https://ui.shadcn.com/)
