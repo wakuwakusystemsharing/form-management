@@ -12,12 +12,15 @@
 - **ビルド**: `pnpm build` (Next.js プロダクションビルド、CI で実行)
 - **環境変数**: `.env.local.example` をコピーして `.env.local` を用意
 
-### 1. 環境モードと挙動 (local / staging / production)
-- **環境判定**: `getAppEnvironment()` → `NEXT_PUBLIC_APP_ENV` (local|staging|production)
+### 1. 環境モードと挙動 (local / staging / development / production)
+- **環境判定**: `getAppEnvironment()` → `NEXT_PUBLIC_APP_ENV` (local|staging|development|production)
 - **local (ローカル開発)**:
   - JSON ファイル (`data/*.json`) で永続化
   - 静的HTMLは `public/static-forms/` に出力（Supabase Storage はモック）
   - 認証スキップ
+- **development (dev ブランチ Vercel プレビュー)**:
+  - Supabase staging プロジェクトの dev ブランチを使用
+  - Vercel プレビューデプロイメント用（`NEXT_PUBLIC_APP_ENV=development`）
 - **staging / production (本番系)**:
   - Supabase 接続 (RLS 適用、店舗別アクセス制御)
   - **staging**: 既存の Supabase プロジェクト（staging 専用）
