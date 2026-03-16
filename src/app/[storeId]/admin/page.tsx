@@ -475,21 +475,16 @@ export default function StoreAdminPage() {
                             {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
                           </p>
       </div>
-                        <Badge
-                          variant={
-                            reservation.status === 'confirmed' ? 'default' :
-                            reservation.status === 'pending' ? 'secondary' :
-                            reservation.status === 'completed' ? 'default' :
-                            'destructive'
-                          }
-                          className={
-                            reservation.status === 'completed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''
-                          }
-                        >
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                          reservation.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          reservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
+                          'bg-green-50 text-green-700 border-green-200'
+                        }`}>
                           {reservation.status === 'pending' ? '保留中' :
                            reservation.status === 'confirmed' ? '確認済み' :
                            reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
-                        </Badge>
+                        </span>
                       </div>
                     ))}
           </div>
@@ -836,21 +831,16 @@ export default function StoreAdminPage() {
                                     {(reservation as any).submenu_name && ` - ${(reservation as any).submenu_name}`}
                                   </TableCell>
                                   <TableCell>
-                                    <Badge
-                                      variant={
-                                        reservation.status === 'confirmed' ? 'default' :
-                                        reservation.status === 'pending' ? 'secondary' :
-                                        reservation.status === 'completed' ? 'default' :
-                                        'destructive'
-                                      }
-                                      className={
-                                        reservation.status === 'completed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''
-                                      }
-                                    >
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                                      reservation.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                      reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                      reservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
+                                      'bg-green-50 text-green-700 border-green-200'
+                                    }`}>
                                       {reservation.status === 'pending' ? '保留中' :
                                        reservation.status === 'confirmed' ? '確認済み' :
                                        reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
-                                    </Badge>
+                                    </span>
                                   </TableCell>
                                 </TableRow>
                               ))
@@ -1521,21 +1511,16 @@ export default function StoreAdminPage() {
                     <div>
                       <Label className="text-sm text-muted-foreground">ステータス</Label>
                       <div className="mt-1">
-                        <Badge
-                          variant={
-                            selectedReservation.status === 'confirmed' ? 'default' :
-                            selectedReservation.status === 'pending' ? 'secondary' :
-                            selectedReservation.status === 'completed' ? 'default' :
-                            'destructive'
-                          }
-                          className={
-                            selectedReservation.status === 'completed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''
-                          }
-                        >
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                          selectedReservation.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          selectedReservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          selectedReservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
+                          'bg-green-50 text-green-700 border-green-200'
+                        }`}>
                           {selectedReservation.status === 'pending' ? '保留中' :
                            selectedReservation.status === 'confirmed' ? '確認済み' :
                            selectedReservation.status === 'cancelled' ? 'キャンセル' : '完了'}
-                        </Badge>
+                        </span>
                       </div>
                     </div>
                     <div>

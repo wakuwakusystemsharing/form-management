@@ -76,24 +76,17 @@ export default function AdminStoreReservationsPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants = {
-      pending: 'secondary' as const,
-      confirmed: 'default' as const,
-      cancelled: 'destructive' as const,
-      completed: 'default' as const,
+    const map: Record<string, { label: string; className: string }> = {
+      confirmed: { label: '確認済み', className: 'bg-blue-50 text-blue-700 border border-blue-200' },
+      pending:   { label: '保留中',   className: 'bg-amber-50 text-amber-700 border border-amber-200' },
+      cancelled: { label: 'キャンセル', className: 'bg-red-50 text-red-600 border border-red-200' },
+      completed: { label: '完了',     className: 'bg-green-50 text-green-700 border border-green-200' },
     };
-
-    const labels = {
-      pending: '保留中',
-      confirmed: '確認済み',
-      cancelled: 'キャンセル',
-      completed: '完了',
-    };
-
+    const s = map[status] ?? map.pending;
     return (
-      <Badge variant={variants[status as keyof typeof variants] || 'secondary'}>
-        {labels[status as keyof typeof labels] || status}
-      </Badge>
+      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.className}`}>
+        {s.label}
+      </span>
     );
   };
 

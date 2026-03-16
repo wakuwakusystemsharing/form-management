@@ -134,7 +134,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         store_name: (existingConfig?.basic_info?.store_name as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.store_name || (typedBasicInfo?.store_name as string) || '',
         liff_id: (existingConfig?.basic_info?.liff_id as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.liff_id || (typedBasicInfo?.liff_id as string) || (typedLineSettings?.liff_id as string) || '',
         theme_color: (existingConfig?.basic_info?.theme_color as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.theme_color || (typedBasicInfo?.theme_color as string) || '#3B82F6',
-        logo_url: (existingConfig?.basic_info?.logo_url as string | undefined) || (typedConfig?.basic_info as Form['config']['basic_info'])?.logo_url || (typedBasicInfo?.logo_url as string | undefined)
+        logo_url: (existingConfig?.basic_info?.logo_url as string | undefined) || (typedConfig?.basic_info as Form['config']['basic_info'])?.logo_url || (typedBasicInfo?.logo_url as string | undefined),
+        notice: (existingConfig?.basic_info?.notice as string | undefined) || (typedConfig?.basic_info as Form['config']['basic_info'])?.notice || (typedBasicInfo?.notice as string | undefined)
       },
       visit_options: (existingConfig?.visit_options || typedConfig?.visit_options || []) as Form['config']['visit_options'],
       gender_selection: {

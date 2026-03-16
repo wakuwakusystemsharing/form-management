@@ -6,6 +6,7 @@ export interface MenuOption {
   duration: number;          // 分単位
   description?: string;
   is_default?: boolean;      // デフォルトで選択されるか
+  hide_price?: boolean;      // 料金を非表示にするか
 }
 
 // サブメニューの型定義
@@ -16,6 +17,7 @@ export interface SubMenuItem {
   duration: number;          // 分単位
   description?: string;
   image?: string;            // 画像URL
+  hide_price?: boolean;      // 料金を非表示にするか
 }
 
 // 予約フォームの型定義
@@ -34,6 +36,7 @@ export interface MenuItem {
   options?: MenuOption[];    // メニューオプション
   has_submenu?: boolean;     // サブメニューを使用するかどうか
   sub_menu_items?: SubMenuItem[];  // サブメニュー項目
+  hide_price?: boolean;      // 料金を非表示にするか
 }
 
 export interface MenuCategory {
@@ -69,6 +72,7 @@ export interface FormConfig {
     liff_id?: string;  // オプショナル：Web予約フォームの場合は不要
     theme_color: string;
     logo_url?: string;
+    notice?: string;   // フォーム上部に表示する注意書き（任意）
   };
   
   visit_options: VisitOption[];

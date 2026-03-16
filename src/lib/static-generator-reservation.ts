@@ -126,7 +126,9 @@ export class StaticReservationGenerator {
         
         <div class="form-content">
             <h2 class="section-title">ご予約内容</h2>
-            
+
+            ${safeConfig.basic_info?.notice ? `<div class="notice-banner">${this.escapeHtml(safeConfig.basic_info.notice)}</div>` : ''}
+
             ${safeConfig.ui_settings?.show_repeat_booking ? this.renderRepeatBookingButton(safeConfig) : ''}
             
             <!-- お客様名 -->
@@ -1819,6 +1821,7 @@ if (document.readyState === 'loading') {
     if (!config.menu_structure.categories.length) return '';
     const themeColor = config.basic_info.theme_color || '#3B82F6';
     const multiCat = config.menu_structure.categories.length > 1;
+    const showTabs = multiCat && !config.menu_structure.allow_cross_category_selection;
     const firstCatId = config.menu_structure.categories[0]?.id || '';
 
     const renderMenuButton = (menu: import('@/types/form').MenuItem, categoryId: string) => `
@@ -1835,8 +1838,8 @@ if (document.readyState === 'loading') {
                                         </div>
                                         ${!menu.has_submenu && (menu.price !== undefined || menu.duration) ? `
                                             <div class="menu-item-info">
-                                                ${config.menu_structure.display_options.show_price && (menu.price || 0) > 0 ? `<div class="menu-item-price">¥${(menu.price || 0).toLocaleString()}</div>` : ''}
-                                                ${config.menu_structure.display_options.show_duration && menu.duration ? `<div class="menu-item-duration">${menu.duration}分</div>` : ''}
+                                                ${(menu.price || 0) > 0 && !menu.hide_price ? `<div class="menu-item-price">¥${(menu.price || 0).toLocaleString()}</div>` : ''}
+                                                ${menu.duration ? `<div class="menu-item-duration">${menu.duration}分</div>` : ''}
                                             </div>
                                         ` : `<div class="menu-item-info"><div class="menu-item-desc">サブメニューを選択</div></div>`}
                                     </button>
@@ -1855,8 +1858,8 @@ if (document.readyState === 'loading') {
                                                         </div>
                                                     </div>
                                                     <div style="text-align:right;margin-left:0.5rem;">
-                                                        ${config.menu_structure.display_options.show_price ? `<div style="font-weight:500;font-size:0.875rem;">${option.price > 0 ? `+¥${option.price.toLocaleString()}` : '無料'}</div>` : ''}
-                                                        ${config.menu_structure.display_options.show_duration && option.duration > 0 ? `<div style="font-size:0.75rem;opacity:0.7;">+${option.duration}分</div>` : ''}
+                                                        ${!option.hide_price ? `<div style="font-weight:500;font-size:0.875rem;">${option.price > 0 ? `+¥${option.price.toLocaleString()}` : '無料'}</div>` : ''}
+                                                        ${option.duration > 0 ? `<div style="font-size:0.75rem;opacity:0.7;">+${option.duration}分</div>` : ''}
                                                     </div>
                                                 </button>
                                             `).join('')}
@@ -1877,8 +1880,8 @@ if (document.readyState === 'loading') {
                                                 ${opt.description ? `<div style="font-size:0.75rem;opacity:0.7;margin-top:0.125rem;">${this.escapeHtml(opt.description)}</div>` : ''}
                                             </div>
                                             <div style="text-align:right;margin-left:0.5rem;">
-                                                ${config.menu_structure.display_options.show_price && (opt.price || 0) > 0 ? `<div style="font-weight:500;font-size:0.875rem;">+¥${(opt.price || 0).toLocaleString()}</div>` : ''}
-                                                ${config.menu_structure.display_options.show_duration && (opt.duration || 0) > 0 ? `<div style="font-size:0.75rem;opacity:0.7;">+${opt.duration}分</div>` : ''}
+                                                ${(opt.price || 0) > 0 && !opt.hide_price ? `<div style="font-weight:500;font-size:0.875rem;">+¥${(opt.price || 0).toLocaleString()}</div>` : ''}
+                                                ${(opt.duration || 0) > 0 ? `<div style="font-size:0.75rem;opacity:0.7;">+${opt.duration}分</div>` : ''}
                                             </div>
                                         </button>
                                     `).join('')}
@@ -1890,7 +1893,7 @@ if (document.readyState === 'loading') {
             <!-- メニュー選択 -->
             <div class="field" id="menu-field">
                 <label class="field-label">メニューをお選びください</label>
-                ${multiCat ? `
+                ${showTabs ? `
                 <div class="category-selector" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1rem;">
                     ${config.menu_structure.categories.map((cat, idx) => `
                         <button type="button" class="category-tab-button" data-category-section="${cat.id}" onclick="window.bookingForm.showCategory('${cat.id}')"
@@ -1901,7 +1904,7 @@ if (document.readyState === 'loading') {
                 </div>
                 ` : ''}
                 ${config.menu_structure.categories.map((category, idx) => `
-                    <div id="category-section-${category.id}" class="category-section" style="${multiCat && idx > 0 ? 'display:none;' : ''}">
+                    <div id="category-section-${category.id}" class="category-section" style="${showTabs && idx > 0 ? 'display:none;' : ''}">
                         ${multiCat && (category.display_name || category.name) ? `
                         <div style="text-align:center;font-weight:600;font-size:1rem;margin-bottom:0.75rem;color:#374151;">
                             ${this.escapeHtml(category.display_name || category.name)}
@@ -2125,6 +2128,18 @@ if (document.readyState === 'loading') {
             font-weight: 600;
             color: #111827;
             margin-bottom: 1.5rem;
+        }
+
+        .notice-banner {
+            background-color: #fff0f0;
+            border: 1px solid #fecaca;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            color: #991b1b;
+            line-height: 1.5;
+            margin-bottom: 1.25rem;
+            white-space: pre-wrap;
         }
         
         .field {

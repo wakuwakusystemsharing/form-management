@@ -1122,15 +1122,6 @@ export default function StoreDetailPage() {
               <StoreIcon className="h-3.5 w-3.5 mr-1" />
               <span className="hidden sm:inline">店舗管理者</span>
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleEditStore}
-              className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
-              aria-label="店舗情報編集"
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
           </div>
         </div>
       </header>
@@ -1234,40 +1225,34 @@ export default function StoreDetailPage() {
           {/* 概要タブ */}
           <TabsContent value="overview" className="space-y-6">
             {/* LINE Messaging API Webhook URL */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageCircle className="h-5 w-5" />
-                  LINE Messaging API Webhook URL
-                </CardTitle>
-                <CardDescription>
-                  LINE Developers の Messaging API 設定で、このURLをWebhook URLとして登録してください。
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <div className="rounded-lg border bg-card p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-sm font-medium">LINE Webhook URL</span>
                 {!store?.line_channel_access_token && (
-                  <div className="flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                    LINEチャネルアクセストークンが未設定です。Webhookが動作しません。店舗編集から設定してください。
-                  </div>
+                  <span className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-2 py-0.5 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> トークン未設定
+                  </span>
                 )}
-                <div className="flex flex-wrap items-center gap-2">
-                  <code className="px-2 py-1.5 bg-muted rounded text-sm break-all flex-1 min-w-0">
-                    {getBaseUrl()}/api/webhooks/line?storeId={storeId}
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      const webhookUrl = `${getBaseUrl()}/api/webhooks/line?storeId=${storeId}`;
-                      copyToClipboard(webhookUrl);
-                    }}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-muted px-2 py-1 rounded flex-1 min-w-0 truncate">
+                  {getBaseUrl()}/api/webhooks/line?storeId={storeId}
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 w-7 p-0 shrink-0"
+                  onClick={() => {
+                    const webhookUrl = `${getBaseUrl()}/api/webhooks/line?storeId=${storeId}`;
+                    copyToClipboard(webhookUrl);
+                  }}
+                  aria-label="Webhook URLをコピー"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
 
             {/* フォームURL一覧 + 基本情報 横並び */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1349,7 +1334,18 @@ export default function StoreDetailPage() {
               {/* 店舗基本情報 */}
               <Card className="flex flex-col">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-base">基本情報</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">基本情報</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleEditStore}
+                      className="text-muted-foreground hover:text-foreground h-7 w-7 p-0"
+                      aria-label="店舗情報編集"
+                    >
+                      <Edit className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="flex-1">
                   <div className="grid grid-cols-2 gap-x-4 gap-y-3">
@@ -1416,9 +1412,10 @@ export default function StoreDetailPage() {
                       const submenuName = menuInfo?.submenu_name || reservation.submenu_name;
                       const fullMenuName = submenuName ? `${menuName} > ${submenuName}` : menuName;
                       const statusMap: Record<string, { label: string; className: string }> = {
-                        confirmed: { label: '確認済み', className: 'bg-green-100 text-green-700 border-green-200' },
-                        pending:   { label: '保留中',   className: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-                        cancelled: { label: 'キャンセル', className: 'bg-red-100 text-red-600 border-red-200' },
+                        confirmed: { label: '確認済み', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+                        pending:   { label: '保留中',   className: 'bg-amber-50 text-amber-700 border-amber-200' },
+                        cancelled: { label: 'キャンセル', className: 'bg-red-50 text-red-600 border-red-200' },
+                        completed: { label: '完了',     className: 'bg-green-50 text-green-700 border-green-200' },
                       };
                       const status = statusMap[reservation.status] ?? statusMap.pending;
 
@@ -2109,21 +2106,16 @@ Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === de
                     <div>
                       <Label className="text-sm text-muted-foreground">ステータス</Label>
                       <div className="mt-1">
-                        <Badge
-                          variant={
-                            selectedReservation.status === 'confirmed' ? 'default' :
-                            selectedReservation.status === 'pending' ? 'secondary' :
-                            selectedReservation.status === 'completed' ? 'default' :
-                            'destructive'
-                          }
-                          className={
-                            selectedReservation.status === 'completed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''
-                          }
-                        >
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                          selectedReservation.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          selectedReservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          selectedReservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
+                          'bg-green-50 text-green-700 border-green-200'
+                        }`}>
                           {selectedReservation.status === 'pending' ? '保留中' :
                            selectedReservation.status === 'confirmed' ? '確認済み' :
                            selectedReservation.status === 'cancelled' ? 'キャンセル' : '完了'}
-                        </Badge>
+                        </span>
                       </div>
                     </div>
                     <div>
@@ -2196,26 +2188,74 @@ Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === de
                 ) : null;
               })()}
 
-              {/* 顧客情報 */}
+              {/* その他情報 */}
               {(() => {
-                const info = selectedReservation.customer_info;
-                return info && typeof info === 'object' && info !== null && Object.keys(info).length > 0 ? (
+                const info = selectedReservation.customer_info as Record<string, any> | null;
+                if (!info || typeof info !== 'object') return null;
+
+                const formConfig = forms.find(f => f.id === selectedReservation.form_id)?.config;
+
+                // gender の値 → ラベル
+                const genderLabel = (v: string) => {
+                  const opt = formConfig?.gender_selection?.options?.find(o => o.value === v);
+                  if (opt) return opt.label;
+                  return v === 'male' ? '男性' : v === 'female' ? '女性' : v;
+                };
+
+                // visit_count の値 → ラベル
+                const visitCountLabel = (v: string) => {
+                  const opt = formConfig?.visit_count_selection?.options?.find(o => o.value === v);
+                  if (opt) return opt.label;
+                  return v === 'first' ? '初回' : v === 'repeat' ? '2回目以降' : v;
+                };
+
+                // coupon の値 → ラベル
+                const couponLabel = (v: string) => {
+                  const opt = formConfig?.coupon_selection?.options?.find(o => o.value === v);
+                  if (opt) return opt.label;
+                  return v === 'use' ? '利用する' : v === 'not_use' ? '利用しない' : v;
+                };
+
+                const rows: { label: string; value: string }[] = [];
+
+                if (info.gender) rows.push({ label: '性別', value: genderLabel(String(info.gender)) });
+                if (info.visit_count) rows.push({ label: '来店回数', value: visitCountLabel(String(info.visit_count)) });
+                if (info.coupon) rows.push({ label: 'クーポン', value: couponLabel(String(info.coupon)) });
+                if (info.notes && String(info.notes).trim()) rows.push({ label: 'メモ', value: String(info.notes) });
+                if (info.total_price != null) rows.push({ label: '合計料金', value: `¥${Number(info.total_price).toLocaleString()}` });
+                if (info.total_duration != null) rows.push({ label: '合計所要時間', value: `${info.total_duration}分` });
+                if (info.preferred_date2) rows.push({ label: '第2希望日時', value: `${info.preferred_date2}${info.preferred_time2 ? ' ' + info.preferred_time2 : ''}` });
+                if (info.preferred_date3) rows.push({ label: '第3希望日時', value: `${info.preferred_date3}${info.preferred_time3 ? ' ' + info.preferred_time3 : ''}` });
+
+                // カスタムフィールド
+                if (info.custom_fields && typeof info.custom_fields === 'object') {
+                  Object.entries(info.custom_fields as Record<string, any>).forEach(([fieldId, fieldValue]) => {
+                    const fieldDef = formConfig?.custom_fields?.find(f => f.id === fieldId);
+                    const label = fieldDef?.title || fieldId;
+                    const val = Array.isArray(fieldValue) ? fieldValue.join(', ') : String(fieldValue ?? '');
+                    if (val) rows.push({ label, value: val });
+                  });
+                }
+
+                if (rows.length === 0) return null;
+
+                return (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">その他情報</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        {Object.entries(info as Record<string, any>).map(([key, value]) => (
-                          <div key={key} className="flex justify-between">
-                            <span className="text-sm text-muted-foreground">{key}:</span>
-                            <span className="text-sm font-medium">{value != null ? String(value) : ''}</span>
+                        {rows.map(({ label, value }) => (
+                          <div key={label} className="flex justify-between items-start gap-4">
+                            <span className="text-sm text-muted-foreground shrink-0">{label}</span>
+                            <span className="text-sm font-medium text-right">{value}</span>
                           </div>
                         ))}
                       </div>
                     </CardContent>
                   </Card>
-                ) : null;
+                );
               })()}
 
               {/* 作成日時 */}

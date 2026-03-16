@@ -31,6 +31,7 @@ export default function PreviewFormPage() {
     selectedMenus: {} as Record<string, string[]>,
     selectedSubMenus: {} as Record<string, string>, // メニューIDに対する選択されたサブメニューID
     selectedMenuOptions: {} as Record<string, string[]>, // メニューIDに対するオプションID配列
+    selectedCategoryOptions: {} as Record<string, string[]>, // カテゴリーIDに対する共通オプションID配列
     customFields: {} as Record<string, string | string[]>, // カスタムフィールドの値
     selectedDate: '',
     selectedTime: '',
@@ -133,6 +134,7 @@ export default function PreviewFormPage() {
       selectedMenus: formData.selectedMenus,
       selectedSubMenus: formData.selectedSubMenus,
       selectedMenuOptions: formData.selectedMenuOptions,
+      selectedCategoryOptions: formData.selectedCategoryOptions,
       gender: formData.gender,
       visitCount: formData.visitCount,
       couponUsage: formData.couponUsage,
@@ -168,6 +170,7 @@ export default function PreviewFormPage() {
         selectedMenus: selectionData.selectedMenus || {},
         selectedSubMenus: selectionData.selectedSubMenus || {},
         selectedMenuOptions: selectionData.selectedMenuOptions || {},
+        selectedCategoryOptions: selectionData.selectedCategoryOptions || {},
         gender: selectionData.gender || '',
         visitCount: selectionData.visitCount || '',
         couponUsage: selectionData.couponUsage || ''
@@ -394,7 +397,7 @@ export default function PreviewFormPage() {
     const newOptions = isChecked
       ? [...currentOptions, optionId]
       : currentOptions.filter(id => id !== optionId);
-    
+
     setFormData(prev => {
       const newFormData = {
         ...prev,
@@ -407,6 +410,20 @@ export default function PreviewFormPage() {
       setTimeout(() => saveSelectionToStorage(), 100);
       return newFormData;
     });
+  };
+
+  const handleCategoryOptionSelection = (categoryId: string, optionId: string) => {
+    const current = formData.selectedCategoryOptions[categoryId] || [];
+    const isSelected = current.includes(optionId);
+    setFormData(prev => ({
+      ...prev,
+      selectedCategoryOptions: {
+        ...prev.selectedCategoryOptions,
+        [categoryId]: isSelected
+          ? current.filter(id => id !== optionId)
+          : [...current, optionId],
+      },
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -978,6 +995,7 @@ export default function PreviewFormPage() {
                   selectedMenus: {},
                   selectedSubMenus: {},
                   selectedMenuOptions: {},
+                  selectedCategoryOptions: {},
                   customFields: {},
                   selectedDate: '',
                   selectedTime: '',
@@ -1383,7 +1401,14 @@ export default function PreviewFormPage() {
         {/* 予約フォーム */}
         <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-6">ご予約内容</h2>
-          
+
+          {/* 注意書きバナー */}
+          {form.config.basic_info?.notice && (
+            <div className="mb-5 px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-800 leading-relaxed whitespace-pre-wrap">
+              {form.config.basic_info.notice}
+            </div>
+          )}
+
           {/* お客様名 */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1610,8 +1635,11 @@ export default function PreviewFormPage() {
               <div className="space-y-4">
                 {form.config.menu_structure.categories.map((category, categoryIndex) => (
                   <div key={category.id || categoryIndex} className="border border-gray-200 rounded-lg p-4">
+                    {category.name && (
+                      <h3 className="text-sm font-semibold text-gray-800 mb-3">{category.name}</h3>
+                    )}
                     <div className="space-y-2">
-                      {category.menus
+                      {(category.menus || [])
                         .filter((menu) => {
                           // 性別選択が無効の場合は、全てのメニューを表示
                           if (!form.config?.gender_selection?.enabled) {
@@ -1718,10 +1746,10 @@ export default function PreviewFormPage() {
                                               <div className="text-xs text-gray-600 mb-2">{subMenu.description}</div>
                                             )}
                                             <div className="flex justify-between items-center gap-2 text-sm">
-                                              {form.config?.menu_structure?.display_options?.show_price && (
+                                              {subMenu.price > 0 && !subMenu.hide_price && (
                                                 <div className="font-semibold">¥{subMenu.price.toLocaleString()}</div>
                                               )}
-                                              {form.config?.menu_structure?.display_options?.show_duration && (
+                                              {true && (
                                                 <div className="text-gray-600">{subMenu.duration}分</div>
                                               )}
                                             </div>
@@ -1739,10 +1767,10 @@ export default function PreviewFormPage() {
                                             </div>
                                           </div>
                                           <div className="text-right ml-4">
-                                            {form.config?.menu_structure?.display_options?.show_price && (
+                                            {subMenu.price > 0 && !subMenu.hide_price && (
                                               <div className="font-semibold">¥{subMenu.price.toLocaleString()}</div>
                                             )}
-                                            {form.config?.menu_structure?.display_options?.show_duration && (
+                                            {true && (
                                               <div className="text-sm opacity-70">{subMenu.duration}分</div>
                                             )}
                                           </div>
@@ -1808,10 +1836,10 @@ export default function PreviewFormPage() {
                                       <div className="text-xs text-gray-600 mb-2">{menu.description}</div>
                                     )}
                                     <div className="flex justify-between items-center gap-2 text-sm">
-                                      {form.config?.menu_structure?.display_options?.show_price && menu.price !== undefined && (
+                                      {menu.price !== undefined && menu.price > 0 && !menu.hide_price && (
                                         <div className="font-semibold">¥{menu.price.toLocaleString()}</div>
                                       )}
-                                      {form.config?.menu_structure?.display_options?.show_duration && menu.duration !== undefined && (
+                                      {true && menu.duration !== undefined && (
                                         <div className="text-gray-600">{menu.duration}分</div>
                                       )}
                                     </div>
@@ -1835,13 +1863,10 @@ export default function PreviewFormPage() {
                                     )}
                                   </div>
                                   <div className="text-right ml-4">
-                                    {form.config?.menu_structure?.display_options?.show_price && menu.price !== undefined && (
+                                    {menu.price !== undefined && menu.price > 0 && !menu.hide_price && (
                                       <div className="font-semibold">¥{menu.price.toLocaleString()}</div>
                                     )}
-                                    {form.config?.menu_structure?.display_options?.show_price && menu.price !== undefined && (
-                                      <div className="font-semibold">¥{menu.price.toLocaleString()}</div>
-                                    )}
-                                    {form.config?.menu_structure?.display_options?.show_duration && menu.duration !== undefined && (
+                                    {true && menu.duration !== undefined && (
                                       <div className="text-sm opacity-70">{menu.duration}分</div>
                                     )}
                                   </div>
@@ -1890,12 +1915,12 @@ export default function PreviewFormPage() {
                                     </div>
                                   </div>
                                   <div className="text-right ml-2">
-                                    {form.config.menu_structure.display_options.show_price && (
+                                    {!option.hide_price && (
                                       <div className="font-medium">
                                         {option.price > 0 ? `+¥${option.price.toLocaleString()}` : '無料'}
                                       </div>
                                     )}
-                                    {form.config.menu_structure.display_options.show_duration && option.duration > 0 && (
+                                    {option.duration > 0 && (
                                       <div className="text-xs opacity-70">+{option.duration}分</div>
                                     )}
                                   </div>
@@ -1906,6 +1931,39 @@ export default function PreviewFormPage() {
                         </div>
                       ))}
                     </div>
+                    {/* カテゴリー共通オプション */}
+                    {category.options && category.options.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                        <div className="text-sm font-medium text-gray-700">オプション</div>
+                        {category.options.map((opt: { id?: string; name: string; description?: string; price?: number; hide_price?: boolean; duration?: number }, optIdx: number) => {
+                          const optId = opt.id || `catopt-${optIdx}`;
+                          const isSelected = (formData.selectedCategoryOptions[category.id] || []).includes(optId);
+                          return (
+                            <button
+                              key={optId}
+                              type="button"
+                              onClick={() => handleCategoryOptionSelection(category.id, optId)}
+                              className={`w-full flex items-center justify-between p-2.5 border-2 rounded-md text-left transition-all duration-150 ${
+                                isSelected ? 'border-green-500 bg-green-50' : 'border-gray-300 bg-white hover:border-gray-400'
+                              }`}
+                            >
+                              <div>
+                                <div className={`text-sm font-medium ${isSelected ? 'text-green-700' : 'text-gray-800'}`}>{opt.name}</div>
+                                {opt.description && <div className="text-xs text-gray-500 mt-0.5">{opt.description}</div>}
+                              </div>
+                              <div className="text-right ml-3 shrink-0">
+                                {(opt.price || 0) > 0 && !opt.hide_price && (
+                                  <div className="text-sm font-semibold">+¥{(opt.price || 0).toLocaleString()}</div>
+                                )}
+                                {(opt.duration || 0) > 0 && (
+                                  <div className="text-xs text-gray-500">+{opt.duration}分</div>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

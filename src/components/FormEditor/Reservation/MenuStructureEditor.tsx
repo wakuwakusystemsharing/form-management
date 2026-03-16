@@ -79,6 +79,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [cropperOpen, setCropperOpen] = useState(false);
+  const [hidePrice, setHidePrice] = useState(false);
 
   React.useEffect(() => {
     if (subMenuItem) {
@@ -87,12 +88,14 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
       setDuration(subMenuItem.duration.toString());
       setDescription(subMenuItem.description || '');
       setImage(subMenuItem.image || '');
+      setHidePrice(subMenuItem.hide_price || false);
     } else {
       setName('');
       setPrice('');
       setDuration('');
       setDescription('');
       setImage('');
+      setHidePrice(false);
     }
   }, [subMenuItem]);
 
@@ -103,7 +106,8 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
       price: parseInt(parsePrice(price)) || 0,
       duration: parseInt(duration) || 0,
       description: description || undefined,
-      image: image || undefined
+      image: image || undefined,
+      hide_price: hidePrice || undefined
     };
     onSave(newSubMenuItem);
     onClose();
@@ -156,6 +160,16 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
               <p className="text-xs text-muted-foreground">
                 カンマは自動で追加されます
               </p>
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  type="checkbox"
+                  id="submenu-hide-price"
+                  checked={!!hidePrice}
+                  onChange={(e) => setHidePrice(e.target.checked)}
+                  className="h-4 w-4 rounded"
+                />
+                <label htmlFor="submenu-hide-price" className="text-xs text-muted-foreground">料金を非表示</label>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="submenu-duration">所要時間（分）</Label>
@@ -323,6 +337,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
   const [duration, setDuration] = useState('');
   const [description, setDescription] = useState('');
   const [isDefault, setIsDefault] = useState(false);
+  const [hidePrice, setHidePrice] = useState(false);
 
   React.useEffect(() => {
     if (option) {
@@ -331,12 +346,14 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       setDuration(option.duration.toString());
       setDescription(option.description || '');
       setIsDefault(option.is_default || false);
+      setHidePrice(option.hide_price || false);
     } else {
       setName('');
       setPrice('');
       setDuration('');
       setDescription('');
       setIsDefault(false);
+      setHidePrice(false);
     }
   }, [option]);
 
@@ -347,7 +364,8 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       price: parseInt(parsePrice(price)) || 0,
       duration: parseInt(duration) || 0,
       description: description || undefined,
-      is_default: isDefault
+      is_default: isDefault,
+      hide_price: hidePrice || undefined
     };
     onSave(newOption);
     onClose();
@@ -411,6 +429,16 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
                 <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
                   カンマは自動で追加されます
                 </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="checkbox"
+                    id="option-hide-price"
+                    checked={!!hidePrice}
+                    onChange={(e) => setHidePrice(e.target.checked)}
+                    className="h-4 w-4 rounded"
+                  />
+                  <label htmlFor="option-hide-price" className={`text-xs ${themeClasses.text.tertiary}`}>料金を非表示</label>
+                </div>
               </div>
               <div>
                 <label className={`block text-sm ${themeClasses.label} mb-1`}>
@@ -498,6 +526,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [cropperOpen, setCropperOpen] = useState(false);
+  const [hidePrice, setHidePrice] = useState(false);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -511,6 +540,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setOptions(menuItem.options || []);
         setHasSubmenu(menuItem.has_submenu || false);
         setSubMenuItems(menuItem.sub_menu_items || []);
+        setHidePrice(menuItem.hide_price || false);
       } else {
         setName('');
         setPrice('');
@@ -521,6 +551,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setOptions([]);
         setHasSubmenu(false);
         setSubMenuItems([]);
+        setHidePrice(false);
       }
     }
   }, [menuItem, isOpen]);
@@ -537,7 +568,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       gender_filter: genderEnabled ? genderFilter : undefined,
       options: hasSubmenu ? undefined : (options.length > 0 ? options : undefined),
       has_submenu: hasSubmenu,
-      sub_menu_items: hasSubmenu ? subMenuItems : undefined
+      sub_menu_items: hasSubmenu ? subMenuItems : undefined,
+      hide_price: hidePrice || undefined
     };
     onSave(newMenuItem);
     onClose();
@@ -690,6 +722,16 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                         <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
                           カンマは自動で追加されます
                         </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <input
+                            type="checkbox"
+                            id="hide-price"
+                            checked={!!hidePrice}
+                            onChange={(e) => setHidePrice(e.target.checked)}
+                            className="h-4 w-4 rounded"
+                          />
+                          <label htmlFor="hide-price" className={`text-xs ${themeClasses.text.tertiary}`}>料金を非表示</label>
+                        </div>
                       </div>
                       <div>
                         <label className={`block text-sm ${themeClasses.label} mb-1`}>
@@ -1201,33 +1243,6 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
         {settingsOpen && (
           <div className={`px-4 pb-4 border-t ${themeClasses.divider} space-y-4 pt-4`}>
 
-      {/* 料金・時間の表示オプション */}
-      <div className={`p-4 ${themeClasses.card} rounded-lg`}>
-        <h3 className={`text-sm font-medium ${themeClasses.text.primary} mb-3`}>💴 料金・時間の表示設定</h3>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className={`text-sm ${themeClasses.text.primary}`}>料金を表示する</span>
-              <p className={`text-xs ${themeClasses.text.secondary}`}>メニューボタンに料金（¥）を表示します</p>
-            </div>
-            {renderToggle(
-              form.config?.menu_structure?.display_options?.show_price ?? true,
-              (v) => onUpdate({ ...form, config: { ...form.config, menu_structure: { ...form.config?.menu_structure, display_options: { ...form.config?.menu_structure?.display_options, show_price: v, show_duration: form.config?.menu_structure?.display_options?.show_duration ?? true, show_description: form.config?.menu_structure?.display_options?.show_description ?? true, show_treatment_info: form.config?.menu_structure?.display_options?.show_treatment_info ?? false } } } })
-            )}
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <span className={`text-sm ${themeClasses.text.primary}`}>所要時間を表示する</span>
-              <p className={`text-xs ${themeClasses.text.secondary}`}>メニューボタンに所要時間（分）を表示します</p>
-            </div>
-            {renderToggle(
-              form.config?.menu_structure?.display_options?.show_duration ?? true,
-              (v) => onUpdate({ ...form, config: { ...form.config, menu_structure: { ...form.config?.menu_structure, display_options: { ...form.config?.menu_structure?.display_options, show_price: form.config?.menu_structure?.display_options?.show_price ?? true, show_duration: v, show_description: form.config?.menu_structure?.display_options?.show_description ?? true, show_treatment_info: form.config?.menu_structure?.display_options?.show_treatment_info ?? false } } } })
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* カテゴリーまたいでの複数選択設定 */}
       <div className={`mb-6 p-4 ${themeClasses.card} rounded-lg`}>
         <div className="flex items-center justify-between">
@@ -1271,6 +1286,41 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             </div>
           </label>
         </div>
+      </div>
+
+      {/* 注意書き */}
+      <div className={`p-4 ${themeClasses.card} rounded-lg`}>
+        <div className="mb-2">
+          <h3 className={`text-sm font-medium ${themeClasses.text.primary}`}>
+            📢 注意書き
+          </h3>
+          <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
+            フォーム上部にピンク背景で表示されます（任意）
+          </p>
+        </div>
+        <textarea
+          value={form.config?.basic_info?.notice || ''}
+          onChange={(e) => {
+            const updatedForm = {
+              ...form,
+              config: {
+                ...form.config,
+                basic_info: {
+                  ...form.config?.basic_info,
+                  notice: e.target.value
+                }
+              }
+            };
+            onUpdate(updatedForm);
+          }}
+          placeholder="例：〇〇のご予約はお電話にてお問い合わせください。"
+          rows={3}
+          className={`w-full text-sm rounded-md border px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
+            theme === 'light'
+              ? 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+              : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
+          }`}
+        />
       </div>
 
       {/* 性別選択機能設定 */}
