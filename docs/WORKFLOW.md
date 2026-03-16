@@ -424,8 +424,8 @@ vercel inspect
 
 - [SETUP.md](SETUP.md) - 環境構築ガイド
 - [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md) - ブランチ保護ルール詳細
-- [.github/copilot-instructions.md](.github/copilot-instructions.md) - AI エージェント向けガイド
-- [README.md](README.md) - プロジェクト概要
+- [.github/copilot-instructions.md](../.github/copilot-instructions.md) - AI エージェント向けガイド
+- [README.md](../README.md) - プロジェクト概要
 
 ---
 
