@@ -164,27 +164,200 @@
 
 **注意**: `20250125000000_add_survey_forms.sql` と重複する可能性がありますが、`IF NOT EXISTS` を使用しているため問題ありません
 
-### `20250202000000_add_subdomain_columns.sql` - サブドメイン・カスタムドメインカラム追加
+### `20250131000000_remove_store_id_default.sql` - stores.id デフォルト値削除
 
 **実行状況**: ✅ 実行済み
 
-**目的**: 店舗ごとにサブドメインとカスタムドメインを設定可能にする
+**目的**: `stores.id` のデフォルト値（UUID 自動生成）を削除。アプリケーション側で 6 文字のランダム ID を必ず指定するため。
 
 #### 主な変更点
 
 **`stores` テーブル**:
-- `subdomain` (text, UNIQUE, nullable) - サブドメイン（例: st0001）
-- `custom_domain` (text, UNIQUE, nullable) - カスタムドメイン（例: example.com）
-- 既存レコードに対して `subdomain = id` を設定（既存データとの互換性）
+- `id` カラムのデフォルト値を削除（`gen_random_uuid()` を除去）
+
+---
+
+### `20250131000001_rename_rls_policies_to_english.sql` - RLS ポリシー名を英語に統一
+
+**実行状況**: ✅ 実行済み
+
+**目的**: 日本語名の RLS ポリシーを英語名に変更し、国際化対応と可読性を向上。
+
+#### 主な変更点
+- `stores`、`forms`、`reservations`、`store_admins`、`survey_forms`、`surveys` テーブルの RLS ポリシーを全て英語名に再作成（例: `"store_admin_stores_select"`）
+
+---
+
+### `20250201000000_add_reservation_analysis_columns.sql` - 予約分析用カラム追加
+
+**実行状況**: ✅ 実行済み
+
+**目的**: 予約データの分析・集計に対応するため、構造化データを JSONB で保存。
+
+#### 追加されたカラム
+
+**`reservations` テーブル**:
+- `selected_menus` (JSONB, default `[]`) - 選択メニュー情報（ID・名前・価格・サブメニュー等）
+- `selected_options` (JSONB, default `[]`) - 選択オプション情報
+- `customer_info` (JSONB, default `{}`) - 顧客属性（性別・来店回数・クーポン使用等）
 
 **インデックス**:
-- `idx_stores_subdomain` - subdomain用ユニークインデックス
-- `idx_stores_custom_domain` - custom_domain用ユニークインデックス
+- `idx_reservations_selected_menus_gin` - GIN インデックス（JSONB 検索高速化）
+- `idx_reservations_selected_options_gin` - GIN インデックス
+- `idx_reservations_customer_info_gin` - GIN インデックス
 
-**注意**: 
-- サブドメインは小文字英数字とハイフンのみ、3-63文字
-- 予約語（`www`, `api`, `admin`など）は使用不可
-- カスタムドメインは基本的なドメイン形式チェックを実施
+---
+
+### `20250202000000_safe_add_forms_status.sql` - forms.status カラム安全追加
+
+**実行状況**: ✅ 実行済み
+
+**目的**: `forms` テーブルに `status` カラムが存在しない環境への安全な追加（既に存在する場合はスキップ）。
+
+#### 追加されたカラム
+
+**`forms` テーブル**:
+- `status` (text, NOT NULL, default `'inactive'`) - チェック制約: `'active' | 'inactive'`
+
+---
+
+### `20250202000000_add_subdomain_columns.sql` - サブドメイン・カスタムドメインカラム追加
+
+**実行状況**: ✅ 実行済み（⚠️ `20260308000000_remove_subdomain_columns.sql` で削除済み）
+
+**目的**: 店舗ごとにサブドメインとカスタムドメインを設定可能にする（後に機能削除）
+
+#### 追加されたカラム（現在は削除済み）
+
+**`stores` テーブル**:
+- `subdomain` (text, UNIQUE, nullable) - サブドメイン（例: st0001）※削除済み
+- `custom_domain` (text, UNIQUE, nullable) - カスタムドメイン（例: example.com）※削除済み
+
+**注意**: これらのカラムは `20260308000000_remove_subdomain_columns.sql`（2026-03-08 実行）で完全に削除されました。`src/types/store.ts` にも該当フィールドは存在しません。
+
+### `20250203000000_add_line_user_id_to_reservations_surveys.sql` - LINE ユーザー ID カラム追加
+
+**実行状況**: ✅ 実行済み
+
+**目的**: LIFF から取得した LINE ユーザー ID を予約・アンケート回答に紐付けて保存。
+
+#### 追加されたカラム
+
+**`reservations` テーブル**:
+- `line_user_id` (text, nullable) - LINE ユーザー ID（LIFF から取得）
+
+**`surveys` テーブル**:
+- `line_user_id` (text, nullable) - LINE ユーザー ID（LIFF から取得）
+
+**インデックス**:
+- `idx_reservations_line_user_id` (WHERE line_user_id IS NOT NULL)
+- `idx_surveys_line_user_id` (WHERE line_user_id IS NOT NULL)
+
+---
+
+### `20250204000000_add_crm_tables.sql` - CRM テーブル追加
+
+**実行状況**: ✅ 実行済み
+
+**目的**: 顧客管理（CRM）機能のためのテーブルを追加。
+
+#### 追加されたテーブル
+
+**`customers` テーブル**（顧客マスタ）:
+- `id` (text, PK) - 顧客 ID
+- `store_id` (text, NOT NULL, FK → stores) - 店舗 ID
+- `line_user_id` (text, nullable) - LINE ユーザー ID（同一店舗内でユニーク）
+- `name` (text, NOT NULL) - 顧客名
+- `name_kana` / `phone` / `email` / `birthday` / `gender` - 基本情報
+- `customer_type` (text, default `'regular'`) - `'new' | 'regular' | 'vip' | 'inactive'`
+- `total_visits` / `total_spent` / `first_visit_date` / `last_visit_date` - 統計情報
+- LINE 連携情報（`line_display_name`, `line_picture_url` 等）
+
+**`customer_visits` テーブル**（来店履歴）:
+- 予約と顧客の紐付け、来店日・金額・メモ等を記録
+
+**`customer_interactions` テーブル**（インタラクション履歴）:
+- メモ・LINE 通知・スタッフコメント等を記録
+
+RLS ポリシーを有効化（店舗管理者は自店舗の顧客データのみアクセス可）。
+
+---
+
+### `20250205000000_optimize_crm_rls_policies.sql` - CRM RLS ポリシー最適化
+
+**実行状況**: ✅ 実行済み
+
+**目的**: `auth.uid()` を各行で評価するパフォーマンス問題を修正。`(select auth.uid())` を使用してクエリあたり 1 回の評価に変更。
+
+対象テーブル: `customers`、`customer_visits`、`customer_interactions`
+
+---
+
+### `20250206000000_staging_sync_with_dev_schema.sql` - Staging と Dev スキーマの同期
+
+**実行状況**: ✅ 実行済み
+
+**目的**: Staging DB を Dev スキーマに合わせて同期（`forms` テーブルの `reservation_forms` へのリネーム、CRM テーブル追加、LINE・subdomain カラム追加等）。
+
+#### 主な変更点
+- `forms` テーブルを `reservation_forms` にリネーム（一部環境）
+- `stores` テーブルに `subdomain`、`custom_domain`、`created_by`、`updated_by` カラムを追加
+- CRM テーブル（`customers`、`customer_visits` 等）の作成
+
+**注意**: `subdomain`、`custom_domain` は後に `20260308000000_remove_subdomain_columns.sql` で削除済み。
+
+---
+
+### `20250211000000_add_google_calendar_oauth_columns.sql` - Google Calendar OAuth カラム追加
+
+**実行状況**: ✅ 実行済み
+
+**目的**: 店舗が自分の Google アカウントでカレンダーを連携できるよう、OAuth 関連カラムを追加。
+
+#### 追加されたカラム
+
+**`stores` テーブル**:
+- `google_calendar_source` (text, NOT NULL, default `'system'`) - `'system' | 'store_oauth'`
+- `google_calendar_refresh_token` (text, nullable) - 暗号化済み OAuth リフレッシュトークン（`google_calendar_source = 'store_oauth'` の場合）
+
+---
+
+### `20250212000000_add_reservations_google_calendar_event_id.sql` - 予約への Google Calendar イベント ID 追加
+
+**実行状況**: ✅ 実行済み
+
+**目的**: 予約キャンセル時に Google Calendar イベントを確実に削除できるよう、予約レコードにイベント ID を保存。
+
+#### 追加されたカラム
+
+**`reservations` テーブル**:
+- `google_calendar_event_id` (text, nullable) - Google Calendar イベント ID
+
+---
+
+### `20260308000000_remove_subdomain_columns.sql` - サブドメイン・カスタムドメインカラム削除
+
+**実行状況**: ✅ 実行済み（2026-03-08）
+
+**目的**: サブドメイン・カスタムドメイン機能を廃止。関連する制約・インデックス・カラムを全て除去。
+
+#### 削除された内容
+
+**`stores` テーブル**:
+- `subdomain` カラムを削除
+- `custom_domain` カラムを削除
+
+**制約・インデックス**:
+- `stores_subdomain_unique` 制約を削除
+- `stores_custom_domain_unique` 制約を削除
+- `idx_stores_subdomain` インデックスを削除
+- `idx_stores_custom_domain` インデックスを削除
+
+**影響**:
+- `src/types/store.ts` の `Store` 型からも `subdomain`・`custom_domain` フィールドが除去済み
+- Middleware はサブドメイン検出を行わない（UI アクセス制御のみ）
+
+---
 
 ## 🚀 新規環境へのマイグレーション手順
 

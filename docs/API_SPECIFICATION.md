@@ -46,8 +46,6 @@
       "address": "東京都...",
       "website_url": "https://...",
       "description": "店舗説明",
-      "subdomain": "st0001",
-      "custom_domain": null,
       "status": "active",
       "created_at": "2025-01-15T00:00:00Z",
       "updated_at": "2025-01-15T00:00:00Z"
@@ -106,16 +104,8 @@
   "phone": "03-9876-5432",
   "address": "更新された住所",
   "website_url": "https://updated.com",
-  "description": "更新された説明",
-  "subdomain": "st0001",
-  "custom_domain": "example.com"
+  "description": "更新された説明"
 }
-```
-
-**注意**: 
-- `subdomain`: 小文字英数字とハイフンのみ、3-63文字、予約語不可（`www`, `api`, `admin`など）
-- `custom_domain`: 基本的なドメイン形式チェックを実施
-- 両方ともユニーク制約あり（重複不可）
 
 ### `DELETE /api/stores/{storeId}`
 店舗を削除（関連フォーム・予約も削除）
@@ -599,12 +589,173 @@ Supabase StorageからフォームHTMLをプロキシ配信
 |------|-------|-------------------|
 | データストア | JSON ファイル | Supabase |
 | 店舗ID形式 | `st{timestamp}` | 6文字ランダム文字列 `[a-z0-9]{6}` または UUID（既存データ） |
-| サブドメイン | 未対応 | 対応（例: `st0001.nas-rsv.com`） |
-| カスタムドメイン | 未対応 | 対応（例: `example.com`） |
 | フォームID形式 | 12文字ランダム | 12文字ランダム |
 | 認証 | スキップ | 必須 |
 | RLS | 無効 | 有効（一部） |
 | ストレージ | ローカルファイル | Supabase Storage |
+
+---
+
+## 📡 Webhook API
+
+### `POST /api/webhooks/line`
+LINE Messaging API からの Webhook イベントを受信
+
+**認証**: 不要（署名検証を実施）
+
+**リクエストヘッダー**:
+- `x-line-signature`: LINE が付与する HMAC-SHA256 署名
+
+**署名検証**: `LINE_CHANNEL_SECRET` で HMAC-SHA256 署名を検証（不正リクエストを拒否）
+
+**処理内容**:
+- 予約確認・キャンセルメッセージの受信と処理
+- LINE ユーザーへの返信・プッシュ通知
+
+**レスポンス**:
+```json
+{ "success": true }
+```
+
+---
+
+## 📅 Google Calendar 連携 API
+
+### `GET /api/integrations/google-calendar/connect`
+Google OAuth 認証フローを開始（Google へリダイレクト）
+
+**クエリパラメータ**:
+- `store_id` (string, 必須): 店舗 ID
+
+**レスポンス**: Google OAuth 認証ページへのリダイレクト
+
+---
+
+### `GET /api/integrations/google-calendar/callback`
+Google OAuth コールバック処理。リフレッシュトークンを暗号化して stores テーブルに保存。
+
+**クエリパラメータ**: Google から付与される `code`、`state`
+
+**レスポンス**: 店舗管理画面へリダイレクト
+
+---
+
+### `GET /api/stores/{storeId}/calendar`
+カレンダー連携状態を取得
+
+**レスポンス**:
+```json
+{
+  "google_calendar_id": "calendar-id@group.calendar.google.com",
+  "google_calendar_source": "store_oauth"
+}
+```
+
+---
+
+### `PUT /api/stores/{storeId}/calendar`
+カレンダー ID を手動設定
+
+**リクエストボディ**:
+```json
+{
+  "google_calendar_id": "calendar-id@group.calendar.google.com"
+}
+```
+
+---
+
+### `POST /api/stores/{storeId}/calendar/disconnect`
+Google Calendar 連携を解除（OAuth トークンを削除）
+
+**レスポンス**:
+```json
+{ "success": true }
+```
+
+---
+
+### `GET /api/stores/{storeId}/calendar/availability`
+カレンダーの空き状況を取得
+
+**クエリパラメータ**:
+- `date` (YYYY-MM-DD): 対象日付
+- `duration` (number): 予約時間（分）
+
+**レスポンス**: 空き時間スロットの配列
+
+---
+
+## 👤 CRM API（顧客管理）
+
+### `GET /api/stores/{storeId}/customers`
+顧客一覧を取得（ページネーション・検索対応）
+
+**クエリパラメータ**:
+- `page` (number, default 1): ページ番号
+- `limit` (number, default 20): 1ページあたりの件数
+- `search` (string): 名前・電話番号・メールでの検索
+
+**レスポンス**:
+```json
+{
+  "customers": [
+    {
+      "id": "uuid-here",
+      "store_id": "abc123",
+      "name": "山田太郎",
+      "phone": "090-1234-5678",
+      "email": "customer@example.com",
+      "customer_type": "regular",
+      "total_visits": 5,
+      "last_visit_date": "2026-02-01",
+      "created_at": "2025-06-01T00:00:00Z"
+    }
+  ],
+  "total": 100,
+  "page": 1,
+  "limit": 20
+}
+```
+
+### `POST /api/stores/{storeId}/customers`
+顧客を作成
+
+**リクエストボディ**:
+```json
+{
+  "name": "山田太郎",
+  "phone": "090-1234-5678",
+  "email": "customer@example.com",
+  "line_user_id": "Uxxxxxxx"
+}
+```
+
+### `GET /api/stores/{storeId}/customers/{customerId}`
+顧客詳細を取得（来店履歴含む）
+
+**レスポンス**: 顧客オブジェクト + `visits` 配列
+
+### `PUT /api/stores/{storeId}/customers/{customerId}`
+顧客情報を更新
+
+### `DELETE /api/stores/{storeId}/customers/{customerId}`
+顧客を削除
+
+### `GET /api/stores/{storeId}/customers/analytics`
+顧客分析データを取得（セグメント別件数・来店推移等）
+
+---
+
+## ⚙️ 管理者設定 API
+
+### `GET /api/admin/settings`
+サービス全体設定を取得（Google API 認証情報等）
+
+**認証**: サービス管理者のみ
+
+### `PUT /api/admin/settings`
+サービス全体設定を更新
 
 ---
 
@@ -616,5 +767,5 @@ Supabase StorageからフォームHTMLをプロキシ配信
 
 ---
 
-**最終更新**: 2025年12月
+**最終更新**: 2026年3月
 
