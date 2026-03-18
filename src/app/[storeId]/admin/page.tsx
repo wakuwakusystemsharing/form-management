@@ -436,13 +436,11 @@ export default function StoreAdminPage() {
               <CardHeader>
           <div className="flex items-center justify-between">
                   <CardTitle className="text-base">最近の予約</CardTitle>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.location.href = `/${storeId}/admin?tab=reservations`}
-                  >
-                    すべて見る
-                  </Button>
+                  <a href={`/${storeId}/admin?tab=reservations`}>
+                    <Button variant="outline" size="sm">
+                      すべて見る
+                    </Button>
+                  </a>
         </div>
               </CardHeader>
               <CardContent>
@@ -453,18 +451,19 @@ export default function StoreAdminPage() {
                 ) : (
                   <div className="space-y-2">
                     {stats.recentReservations.map((reservation) => (
-                      <div
+                      <button
                         key={reservation.id}
-                        className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-accent transition-colors"
+                        type="button"
+                        className="w-full flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-accent transition-[background-color] duration-150 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
                         onClick={() => {
                           setSelectedReservation(reservation);
                           setShowReservationDetail(true);
                         }}
                       >
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <p className="font-medium">{reservation.customer_name}</p>
                           <p className="text-sm text-muted-foreground">
-                            {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
+                            {new Intl.DateTimeFormat('ja-JP').format(new Date(reservation.reservation_date))} {reservation.reservation_time}
                           </p>
       </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
@@ -477,7 +476,7 @@ export default function StoreAdminPage() {
                            reservation.status === 'confirmed' ? '確認済み' :
                            reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
                         </span>
-                      </div>
+                      </button>
                     ))}
           </div>
                 )}
@@ -499,7 +498,7 @@ export default function StoreAdminPage() {
                   <div className="relative w-full sm:w-auto">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="フォームを検索..."
+                      placeholder="フォームを検索…"
                       value={formSearchQuery}
                       onChange={(e) => setFormSearchQuery(e.target.value)}
                       className="pl-10"
@@ -1160,7 +1159,7 @@ export default function StoreAdminPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">読み込み中...</p>
+          <p className="mt-4 text-muted-foreground">読み込み中…</p>
       </div>
       </div>
     );
@@ -1233,7 +1232,7 @@ export default function StoreAdminPage() {
               )}
 
               <Button type="submit" className="w-full" disabled={isLoggingIn}>
-                {isLoggingIn ? 'ログイン中...' : 'ログイン'}
+                {isLoggingIn ? 'ログイン中…' : 'ログイン'}
               </Button>
             </form>
 
@@ -1258,7 +1257,7 @@ export default function StoreAdminPage() {
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">読み込み中...</p>
+            <p className="mt-4 text-muted-foreground">読み込み中…</p>
           </div>
         </div>
       </StoreAdminLayout>
@@ -1498,6 +1497,9 @@ export default function StoreAdminPage() {
         onClose={() => {
           setShowCustomerDetail(false);
           setSelectedCustomerId(null);
+        }}
+        onUpdated={() => {
+          // 顧客一覧を再取得するためにタブを維持したまま再描画
         }}
       />
     </StoreAdminLayout>

@@ -6,16 +6,19 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Separator } from '@/components/ui/separator';
-import { Calendar, Phone, Mail, User, MapPin, Star } from 'lucide-react';
+import { useToast } from '@/components/ui/use-toast';
+import { Phone, Mail, Pencil, X } from 'lucide-react';
+import CustomerForm, { CustomerFormData, customerToFormData } from '@/components/CustomerForm';
 
 interface CustomerDetailProps {
   storeId: string;
   customerId: string | null;
   open: boolean;
   onClose: () => void;
+  onUpdated?: () => void;
 }
 
 interface CustomerDetailData {
@@ -24,13 +27,17 @@ interface CustomerDetailData {
   visits: CustomerVisit[];
 }
 
-export default function CustomerDetail({ storeId, customerId, open, onClose }: CustomerDetailProps) {
+export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated }: CustomerDetailProps) {
   const [data, setData] = useState<CustomerDetailData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (customerId && open) {
       fetchCustomerDetail();
+      setIsEditing(false);
     }
   }, [customerId, open]);
 
@@ -51,45 +58,63 @@ export default function CustomerDetail({ storeId, customerId, open, onClose }: C
     }
   };
 
+  const handleUpdate = async (formData: CustomerFormData) => {
+    if (!customerId) return;
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/stores/${storeId}/customers/${customerId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || '更新に失敗しました');
+      }
+
+      toast({ title: '顧客情報を更新しました' });
+      setIsEditing(false);
+      fetchCustomerDetail();
+      onUpdated?.();
+    } catch (error) {
+      throw error;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const dateFormatter = new Intl.DateTimeFormat('ja-JP');
+  const currencyFormatter = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' });
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('ja-JP');
+    return dateFormatter.format(new Date(dateString));
   };
 
   const formatDateTime = (dateString: string, timeString: string | null) => {
-    const date = new Date(dateString);
-    const dateStr = date.toLocaleDateString('ja-JP');
+    const dateStr = dateFormatter.format(new Date(dateString));
     return timeString ? `${dateStr} ${timeString}` : dateStr;
   };
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
-      case 'confirmed':
-        return 'default';
-      case 'pending':
-        return 'secondary';
-      case 'cancelled':
-        return 'destructive';
-      case 'completed':
-        return 'outline';
-      default:
-        return 'default';
+      case 'confirmed': return 'default';
+      case 'pending': return 'secondary';
+      case 'cancelled': return 'destructive';
+      case 'completed': return 'outline';
+      default: return 'default';
     }
   };
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'confirmed':
-        return '確認済み';
-      case 'pending':
-        return '保留中';
-      case 'cancelled':
-        return 'キャンセル';
-      case 'completed':
-        return '完了';
-      default:
-        return status;
+      case 'confirmed': return '確認済み';
+      case 'pending': return '保留中';
+      case 'cancelled': return 'キャンセル';
+      case 'completed': return '完了';
+      default: return status;
     }
   };
 
@@ -101,18 +126,54 @@ export default function CustomerDetail({ storeId, customerId, open, onClose }: C
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto overscroll-contain">
         <DialogHeader>
-          <DialogTitle>顧客詳細</DialogTitle>
-          <DialogDescription>顧客情報、予約履歴、来店履歴を確認できます</DialogDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <DialogTitle>顧客詳細</DialogTitle>
+              <DialogDescription>
+                {isEditing ? '顧客情報を編集しています' : '顧客情報、予約履歴、来店履歴を確認できます'}
+              </DialogDescription>
+            </div>
+            {!isEditing && !loading && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditing(true)}
+              >
+                <Pencil className="mr-2 h-4 w-4" aria-hidden="true" />
+                編集
+              </Button>
+            )}
+            {isEditing && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsEditing(false)}
+              >
+                <X className="mr-2 h-4 w-4" aria-hidden="true" />
+                編集を閉じる
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         {loading ? (
           <div className="text-center py-8">
             <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
-            <p className="mt-2 text-sm text-muted-foreground">読み込み中...</p>
+            <p className="mt-2 text-sm text-muted-foreground">読み込み中…</p>
           </div>
+        ) : isEditing ? (
+          /* 編集モード */
+          <CustomerForm
+            initialData={customerToFormData(customer)}
+            onSubmit={handleUpdate}
+            onCancel={() => setIsEditing(false)}
+            submitLabel="更新"
+            isSubmitting={isSaving}
+          />
         ) : (
+          /* 表示モード */
           <div className="space-y-6">
             {/* 基本情報セクション */}
             <Card>
@@ -145,13 +206,13 @@ export default function CustomerDetail({ storeId, customerId, open, onClose }: C
                     <div className="grid grid-cols-2 gap-4">
                       {customer.phone && (
                         <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          <Phone className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                           <span>{customer.phone}</span>
                         </div>
                       )}
                       {customer.email && (
                         <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          <Mail className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                           <span>{customer.email}</span>
                         </div>
                       )}
@@ -171,6 +232,22 @@ export default function CustomerDetail({ storeId, customerId, open, onClose }: C
                         </div>
                       )}
                     </div>
+
+                    {/* アレルギー・既往歴 */}
+                    <div className="grid grid-cols-2 gap-4">
+                      {customer.allergies && (
+                        <div>
+                          <p className="text-sm text-muted-foreground">アレルギー</p>
+                          <p>{customer.allergies}</p>
+                        </div>
+                      )}
+                      {customer.medical_history && (
+                        <div>
+                          <p className="text-sm text-muted-foreground">既往歴</p>
+                          <p>{customer.medical_history}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -184,11 +261,11 @@ export default function CustomerDetail({ storeId, customerId, open, onClose }: C
               <CardContent>
                 <div className="grid grid-cols-4 gap-4">
                   <div className="text-center">
-                    <p className="text-2xl font-bold">{customer.total_visits}回</p>
+                    <p className="text-2xl font-bold tabular-nums">{customer.total_visits}回</p>
                     <p className="text-sm text-muted-foreground">来店回数</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-2xl font-bold">¥{customer.total_spent.toLocaleString()}</p>
+                    <p className="text-2xl font-bold tabular-nums">{currencyFormatter.format(customer.total_spent)}</p>
                     <p className="text-sm text-muted-foreground">総利用金額</p>
                   </div>
                   <div className="text-center">
@@ -270,11 +347,14 @@ export default function CustomerDetail({ storeId, customerId, open, onClose }: C
                             <TableRow key={visit.id}>
                               <TableCell>{formatDateTime(visit.visit_date, visit.visit_time)}</TableCell>
                               <TableCell>
-                                {visit.treatment_menus ?
-                                  JSON.stringify(visit.treatment_menus) : '-'}
+                                {visit.treatment_menus
+                                  ? (Array.isArray(visit.treatment_menus)
+                                    ? (visit.treatment_menus as Array<{ name?: string; menu_name?: string }>).map((m) => m.menu_name || m.name || '').filter(Boolean).join(', ') || '-'
+                                    : '-')
+                                  : '-'}
                               </TableCell>
-                              <TableCell className="text-right">
-                                {visit.amount ? `¥${visit.amount.toLocaleString()}` : '-'}
+                              <TableCell className="text-right tabular-nums">
+                                {visit.amount ? currencyFormatter.format(Number(visit.amount)) : '-'}
                               </TableCell>
                             </TableRow>
                           ))}
