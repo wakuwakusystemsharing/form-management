@@ -39,9 +39,14 @@ export async function POST(request: NextRequest) {
     // クッキーにアクセストークンを設定
     const response = NextResponse.json({ success: true });
     
+    // VercelではHTTPSが使用されるため、secureフラグを有効にする
+    // ローカル環境ではhttpOnlyのみ設定（secureはfalse）
+    const isLocal = process.env.NEXT_PUBLIC_APP_ENV === 'local';
+    const isSecure = !isLocal; // ローカル以外はsecureを有効化
+    
     response.cookies.set('sb-access-token', accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecure,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7日間
       path: '/',

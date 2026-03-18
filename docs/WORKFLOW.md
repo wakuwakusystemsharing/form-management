@@ -2,7 +2,7 @@
 
 このドキュメントでは、日常的な開発からデプロイまでの運用フローを説明します。
 
-## 🌳 ブランチ戦略
+## ブランチ戦略
 
 ```
 main (Production - 本番)
@@ -12,7 +12,7 @@ staging (Staging - 検証環境)
 dev (Development - 開発環境)
   ↑ 直接プッシュ可能
 feature/* (機能開発ブランチ)
-  ↑ dev にマージ、または staging にPR/直接push
+  ↑ dev にマージ、または staging に PR/直接 push
 ```
 
 ### ブランチの役割
@@ -20,47 +20,49 @@ feature/* (機能開発ブランチ)
 - **`main`**: 本番環境 (Production)
   - 常に安定した状態を保つ
   - **直接プッシュ禁止**（ブランチ保護ルール）
-  - **staging からのPRのみ許可**
+  - **staging からの PR のみ許可**
   - レビュー必須（1名以上、推奨: 2名）
 
 - **`staging`**: ステージング環境 (Preview)
   - 本番デプロイ前の最終確認
   - **直接プッシュ可能**（開発効率のため）
-  - **dev または feature/* からのPRも利用可能**
+  - **dev または feature/* からの PR も利用可能**
   - 本番と同じ構成でテスト
+  - Supabase staging プロジェクトを使用
 
 - **`dev`**: 開発環境 (Development)
   - 日常的な開発・実験的機能のテスト
   - **直接プッシュ可能**（開発用のため）
-  - Supabase Stagingプロジェクトのdevブランチを使用
+  - Supabase staging プロジェクトの dev ブランチを使用
+  - Vercel の Preview URL で確認可能
 
 - **`feature/*`**: 機能開発ブランチ
   - 各機能ごとに作成
   - 例: `feature/add-menu-editor`, `feature/fix-auth`
-  - dev にマージ、または staging にPR
+  - dev にマージ、または staging に PR
 
-### 🔒 階層的な制限
+### 階層的な制限
 
 **Production < Staging < Development** の順序で制限がかかります：
 
-- ✅ `dev` → `staging` へのPR: **許可**
-- ✅ `staging` → `main` へのPR: **許可**
-- ❌ `dev` → `main` への直接PR: **禁止**
-- ❌ `feature/*` → `main` への直接PR: **禁止**
-- ❌ `main` → `staging` への逆方向マージ: **禁止**
+- `dev` → `staging` への PR: **許可**
+- `staging` → `main` への PR: **許可**
+- `dev` → `main` への直接 PR: **禁止**
+- `feature/*` → `main` への直接 PR: **禁止**
+- `main` → `staging` への逆方向マージ: **禁止**
 
 詳細は [`BRANCH_PROTECTION.md`](./BRANCH_PROTECTION.md) を参照してください。
 
 ---
 
-## 📋 日常的な開発フロー
+## 日常的な開発フロー
 
 ### 1. 新機能の開発開始
 
-#### オプションA: devブランチで直接開発（推奨）
+#### オプション A: dev ブランチで直接開発（推奨）
 
 ```bash
-# devブランチで開発
+# dev ブランチで開発
 git checkout dev
 git pull origin dev
 # 直接コミット・プッシュ可能
@@ -69,7 +71,7 @@ git commit -m "feat: 新機能を追加"
 git push origin dev
 ```
 
-#### オプションB: featureブランチで開発
+#### オプション B: feature ブランチで開発
 
 ```bash
 # 最新の dev をベースに feature ブランチを作成
@@ -92,12 +94,14 @@ cp .env.local.example .env.local
 pnpm dev
 # → http://localhost:3000
 
-# 型チェック
+# 型チェック（コミット前必須）
 pnpm type-check
 
 # Lint
 pnpm lint
 ```
+
+ローカル環境では `NEXT_PUBLIC_APP_ENV=local` を設定すると JSON ファイルでデータを管理し、Supabase 不要で動作します。
 
 ### 3. コミット & Push
 
@@ -119,7 +123,7 @@ git push -u origin feature/your-feature-name
 # Base: staging ← Compare: dev または feature/your-feature-name
 ```
 
-> ✅ **注意**: staging への直接プッシュが可能です。必要に応じてPR経由でのマージも利用できます。
+> staging への直接プッシュも可能です。必要に応じて PR 経由でのマージも利用できます。
 
 #### 4-2. Staging 環境で動作確認
 
@@ -128,7 +132,7 @@ https://your-app-git-staging-yourteam.vercel.app
 ```
 
 - Supabase (staging) のデータで確認
-- Vercel Blob (staging) にデプロイされた静的HTML確認
+- Supabase Storage にデプロイされた静的 HTML 確認（`reservations/`, `surveys/` パス）
 - RLS の動作確認
 - 予約フローの E2E テスト
 
@@ -142,7 +146,7 @@ https://your-app-git-staging-yourteam.vercel.app
 # タイトル: "Release: v1.2.0" など
 ```
 
-> ⚠️ **重要**: main への直接プッシュは**禁止**されています。必ず staging からのPR経由でマージしてください。
+> **重要**: main への直接プッシュは**禁止**されています。必ず staging からの PR 経由でマージしてください。
 
 #### 5-2. レビュー & マージ
 
@@ -171,13 +175,13 @@ https://your-app.vercel.app
 
 ---
 
-## 🔄 定型作業フロー
+## 定型作業フロー
 
 ### 緊急バグ修正 (Hotfix)
 
-> ⚠️ **注意**: 緊急時でも基本的なフロー（dev → staging → main）を守ることを推奨します。
+> **注意**: 緊急時でも基本的なフロー（dev → staging → main）を守ることを推奨します。
 
-#### 方法1: 通常フロー（推奨）
+#### 方法 1: 通常フロー（推奨）
 
 ```bash
 # dev ブランチで修正
@@ -195,14 +199,14 @@ git checkout dev
 git merge hotfix/fix-critical-bug
 git push origin dev
 
-# staging へのPRを作成・マージ
+# staging への PR を作成・マージ
 # GitHub: Base: staging ← Compare: hotfix/fix-critical-bug
 
-# Staging で確認後、main へのPRを作成・マージ
+# Staging で確認後、main への PR を作成・マージ
 # GitHub: Base: main ← Compare: staging
 ```
 
-#### 方法2: 緊急時のみ（管理者権限必要）
+#### 方法 2: 緊急時のみ（管理者権限必要）
 
 ```bash
 # 1. GitHub Settings → Branches で一時的に保護ルールを無効化（管理者のみ）
@@ -251,7 +255,7 @@ git push origin v1.2.0
 
 ---
 
-## 🧪 テスト方針
+## テスト方針
 
 ### ローカル (dev)
 
@@ -276,7 +280,7 @@ pnpm build
 
 - **データ確認**
   - Supabase Dashboard でデータ確認
-  - Vercel Blob で静的HTML確認
+  - Supabase Storage で静的 HTML 確認（`reservations/{storeId}/{formId}/index.html`）
 
 ### Production
 
@@ -287,18 +291,45 @@ pnpm build
 
 ---
 
-## 📊 環境ごとの確認ポイント
+## 環境ごとの確認ポイント
 
-| 確認項目 | dev | staging | production |
-|---------|-----|---------|------------|
-| データ永続化 | JSON ファイル | Supabase (staging) | Supabase (prod) |
-| Blob URL | `/static-forms/` | `staging/forms/` | `prod/forms/` |
-| 環境変数 | `.env.local` | Vercel Preview 環境変数 | Vercel Production 環境変数 |
-| デプロイ | `pnpm dev` | `git push origin staging` | `git push origin main` |
+| 確認項目 | local | dev (Vercel Preview) | staging | production |
+|---------|-------|----------------------|---------|------------|
+| データ永続化 | JSON ファイル (`data/`) | Supabase (staging の dev ブランチ) | Supabase (staging) | Supabase (prod) |
+| Storage パス | `/static-forms/`（ローカルモック） | `reservations/`, `surveys/` | `reservations/`, `surveys/` | `reservations/`, `surveys/` |
+| 環境変数 | `.env.local` (`APP_ENV=local`) | Vercel Preview 環境変数 | Vercel Preview 環境変数 | Vercel Production 環境変数 |
+| 認証 | スキップ | Supabase Auth | Supabase Auth | Supabase Auth |
+| デプロイ | `pnpm dev` | `git push origin dev` | `git push origin staging` | `git push origin main`（PR 必須） |
 
 ---
 
-## 🚨 トラブルシューティング
+## dev ブランチの Supabase ブランチ連携
+
+dev ブランチは Supabase staging プロジェクトの `dev` ブランチを使用します。
+
+### Supabase Dev ブランチの管理
+
+Supabase Dashboard → **Branches** から以下の操作が可能：
+
+- **Merge**: dev ブランチの変更を staging（メイン）にマージ
+- **Reset**: dev ブランチを staging（メイン）の状態にリセット
+- **Rebase**: staging（メイン）の最新変更を dev ブランチに取り込む
+- **Delete**: dev ブランチを削除
+
+### マイグレーションの適用
+
+dev ブランチにマイグレーションを適用する場合：
+
+```bash
+supabase link --project-ref <dev-branch-ref>
+supabase db push
+```
+
+> Supabase ブランチ機能は追加コストがかかる場合があります。料金プランを確認してください。
+
+---
+
+## トラブルシューティング
 
 ### Staging デプロイが失敗する
 
@@ -331,7 +362,7 @@ pnpm vercel env pull .env.local
 
 ---
 
-## 📚 関連コマンド
+## 関連コマンド
 
 ### ブランチ管理
 
@@ -362,32 +393,40 @@ vercel inspect
 
 ---
 
-## 🎯 ベストプラクティス
+## ベストプラクティス
 
 1. **小さく頻繁にコミット**
    - 1つの機能 = 1つのコミット
-   - コミットメッセージは明確に
+   - コミットメッセージは明確に（Conventional Commits 推奨）
 
-2. **Staging で必ず確認**
+2. **コミット前に型チェックを実行**
+   - `pnpm type-check` を必ず実行
+
+3. **Staging で必ず確認**
    - 本番デプロイ前に必ず Staging で動作確認
    - 予約データの保存確認は必須
 
-3. **環境変数の管理**
+4. **環境変数の管理**
    - `.env.local` は Git にコミットしない
    - 環境変数変更時は Vercel Dashboard で設定
 
-4. **定期的なリリース**
+5. **定期的なリリース**
    - 毎週金曜日に定期リリース
    - 緊急バグは即座に Hotfix
 
-5. **ドキュメント更新**
+6. **ドキュメント更新**
    - 新機能追加時は README / SETUP.md を更新
-   - API 変更時は `.github/copilot-instructions.md` を更新
+   - API 変更時は `docs/API_SPECIFICATION.md` を更新
 
 ---
 
-## 📖 参考ドキュメント
+## 参考ドキュメント
 
 - [SETUP.md](SETUP.md) - 環境構築ガイド
-- [.github/copilot-instructions.md](.github/copilot-instructions.md) - AI エージェント向けガイド
-- [README.md](README.md) - プロジェクト概要
+- [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md) - ブランチ保護ルール詳細
+- [.github/copilot-instructions.md](../.github/copilot-instructions.md) - AI エージェント向けガイド
+- [README.md](../README.md) - プロジェクト概要
+
+---
+
+**最終更新**: 2026年3月

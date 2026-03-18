@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { SurveyForm } from '@/types/survey';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { getCurrentUserId } from '@/lib/auth-helper';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -27,6 +29,13 @@ export async function GET(
         const form = forms.find((f: SurveyForm) => f.id === id);
         
         if (form) {
+          // ui_settingsが存在しない場合はデフォルト値を設定
+          if (form.config && !form.config.ui_settings) {
+            form.config.ui_settings = {
+              submit_button_text: '送信',
+              theme_color: form.config.basic_info?.theme_color || '#13ca5e'
+            };
+          }
           return NextResponse.json(form);
         }
       }
@@ -50,7 +59,20 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(form);
+    if (!form) {
+      return NextResponse.json({ error: 'Form not found' }, { status: 404 });
+    }
+
+    // ui_settingsが存在しない場合はデフォルト値を設定
+    const formData = form as any;
+    if (formData.config && !formData.config.ui_settings) {
+      formData.config.ui_settings = {
+        submit_button_text: '送信',
+        theme_color: formData.config.basic_info?.theme_color || '#13ca5e'
+      };
+    }
+
+    return NextResponse.json(formData);
 
   } catch (error) {
     console.error('Survey fetch error:', error);
@@ -60,13 +82,16 @@ export async function GET(
 
 // PUT /api/surveys/[id] - アンケートフォーム更新
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
     const body = await request.json();
     const env = getAppEnvironment();
+    
+    // 現在のユーザーIDを取得
+    const currentUserId = await getCurrentUserId(request);
 
     // ローカル環境
     if (env === 'local') {
@@ -101,7 +126,8 @@ export async function PUT(
       .update({
         config: body.config,
         status: body.status,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        updated_by: currentUserId
       })
       .eq('id', id)
       .select()

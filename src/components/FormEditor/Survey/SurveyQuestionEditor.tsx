@@ -1,5 +1,26 @@
+'use client';
+
 import React from 'react';
 import { SurveyQuestion, SurveyQuestionType } from '@/types/survey';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ArrowUp, ArrowDown, X, Plus } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface SurveyQuestionEditorProps {
   questions: SurveyQuestion[];
@@ -7,6 +28,8 @@ interface SurveyQuestionEditorProps {
 }
 
 export default function SurveyQuestionEditor({ questions, onChange }: SurveyQuestionEditorProps) {
+  const [deleteIndex, setDeleteIndex] = React.useState<number | null>(null);
+
   const addQuestion = () => {
     const newQuestion: SurveyQuestion = {
       id: Math.random().toString(36).substr(2, 9),
@@ -25,11 +48,10 @@ export default function SurveyQuestionEditor({ questions, onChange }: SurveyQues
   };
 
   const removeQuestion = (index: number) => {
-    if (confirm('この質問を削除してもよろしいですか？')) {
-      const newQuestions = [...questions];
-      newQuestions.splice(index, 1);
-      onChange(newQuestions);
-    }
+    const newQuestions = [...questions];
+    newQuestions.splice(index, 1);
+    onChange(newQuestions);
+    setDeleteIndex(null);
   };
 
   const moveQuestion = (index: number, direction: 'up' | 'down') => {
@@ -48,141 +70,176 @@ export default function SurveyQuestionEditor({ questions, onChange }: SurveyQues
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-medium text-gray-200">質問項目設定</h3>
-        <button
-          onClick={addQuestion}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 text-sm"
-        >
-          + 質問を追加
-        </button>
+        <h3 className="text-lg font-semibold">質問項目設定</h3>
+        <Button onClick={addQuestion} size="sm">
+          <Plus className="mr-2 h-4 w-4" />
+          質問を追加
+        </Button>
       </div>
 
       <div className="space-y-4">
-        {questions.map((q, index) => (
-          <div key={q.id} className="bg-gray-800 border border-gray-700 rounded-lg p-4">
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex items-center space-x-2">
-                <span className="bg-gray-700 text-gray-300 px-2 py-1 rounded text-xs">
-                  Q{index + 1}
-                </span>
-                <input
-                  type="text"
-                  value={q.title}
-                  onChange={(e) => updateQuestion(index, { title: e.target.value })}
-                  className="bg-gray-700 border border-gray-600 text-white px-2 py-1 rounded focus:outline-none focus:border-blue-500"
-                  placeholder="質問タイトル"
-                />
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => moveQuestion(index, 'up')}
-                  disabled={index === 0}
-                  className="text-gray-400 hover:text-white disabled:opacity-30"
-                >
-                  ↑
-                </button>
-                <button
-                  onClick={() => moveQuestion(index, 'down')}
-                  disabled={index === questions.length - 1}
-                  className="text-gray-400 hover:text-white disabled:opacity-30"
-                >
-                  ↓
-                </button>
-                <button
-                  onClick={() => removeQuestion(index)}
-                  className="text-red-400 hover:text-red-300 ml-2"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
+        {questions.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            質問がありません。上記の「質問を追加」ボタンから追加してください。
+          </div>
+        ) : (
+          questions.map((q, index) => (
+            <Card key={q.id}>
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">Q{index + 1}</Badge>
+                    <Input
+                      type="text"
+                      value={q.title}
+                      onChange={(e) => updateQuestion(index, { title: e.target.value })}
+                      placeholder="質問タイトル"
+                      className="flex-1"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => moveQuestion(index, 'up')}
+                      disabled={index === 0}
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => moveQuestion(index, 'down')}
+                      disabled={index === questions.length - 1}
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setDeleteIndex(index)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>回答タイプ</Label>
+                    <Select
+                      value={q.type}
+                      onValueChange={(value) => updateQuestion(index, { type: value as SurveyQuestionType })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="text">テキスト入力 (1行)</SelectItem>
+                        <SelectItem value="textarea">テキスト入力 (複数行)</SelectItem>
+                        <SelectItem value="date">日付選択</SelectItem>
+                        <SelectItem value="radio">単一選択 (ボタン)</SelectItem>
+                        <SelectItem value="checkbox">複数選択 (ボタン)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center space-x-2 pt-8">
+                    <Checkbox
+                      id={`required-${index}`}
+                      checked={q.required}
+                      onCheckedChange={(checked) => updateQuestion(index, { required: checked as boolean })}
+                    />
+                    <Label htmlFor={`required-${index}`} className="cursor-pointer">
+                      必須項目にする
+                    </Label>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">回答タイプ</label>
-                <select
-                  value={q.type}
-                  onChange={(e) => updateQuestion(index, { type: e.target.value as SurveyQuestionType })}
-                  className="w-full bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded focus:outline-none focus:border-blue-500"
-                >
-                  <option value="text">テキスト入力 (1行)</option>
-                  <option value="textarea">テキスト入力 (複数行)</option>
-                  <option value="date">日付選択</option>
-                  <option value="radio">単一選択 (ボタン)</option>
-                  <option value="checkbox">複数選択 (ボタン)</option>
-                </select>
-              </div>
-              <div className="flex items-center mt-6">
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={q.required}
-                    onChange={(e) => updateQuestion(index, { required: e.target.checked })}
-                    className="form-checkbox h-4 w-4 text-blue-600 bg-gray-700 border-gray-600 rounded"
-                  />
-                  <span className="text-sm text-gray-300">必須項目にする</span>
-                </label>
-              </div>
-            </div>
-
-            {/* 説明文（同意項目などで使用） */}
-            <div className="mb-4">
-              <label className="block text-xs text-gray-400 mb-1">説明文・補足（任意）</label>
-              <textarea
-                value={q.description || ''}
-                onChange={(e) => updateQuestion(index, { description: e.target.value })}
-                className="w-full bg-gray-700 border border-gray-600 text-white px-3 py-2 rounded focus:outline-none focus:border-blue-500 text-sm"
-                rows={2}
-                placeholder="質問の下に表示される説明文を入力（同意事項など）"
-              />
-            </div>
-
-            {/* 選択肢設定 (radio/checkboxのみ) */}
-            {(q.type === 'radio' || q.type === 'checkbox') && (
-              <div className="bg-gray-900/50 p-3 rounded border border-gray-700">
-                <label className="block text-xs text-gray-400 mb-2">選択肢</label>
+                {/* 説明文（同意項目などで使用） */}
                 <div className="space-y-2">
-                  {q.options?.map((opt, optIndex) => (
-                    <div key={optIndex} className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        value={opt.label}
-                        onChange={(e) => {
-                          const newOptions = [...(q.options || [])];
-                          newOptions[optIndex] = { ...newOptions[optIndex], label: e.target.value, value: e.target.value };
-                          updateQuestion(index, { options: newOptions });
-                        }}
-                        className="flex-1 bg-gray-700 border border-gray-600 text-white px-2 py-1 rounded text-sm"
-                        placeholder={`選択肢 ${optIndex + 1}`}
-                      />
-                      <button
+                  <Label>説明文・補足（任意）</Label>
+                  <Textarea
+                    value={q.description || ''}
+                    onChange={(e) => updateQuestion(index, { description: e.target.value })}
+                    rows={2}
+                    placeholder="質問の下に表示される説明文を入力（同意事項など）"
+                  />
+                </div>
+
+                {/* 選択肢設定 (radio/checkboxのみ) */}
+                {(q.type === 'radio' || q.type === 'checkbox') && (
+                  <Card className="bg-muted">
+                    <CardHeader>
+                      <CardTitle className="text-sm">選択肢</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {q.options?.map((opt, optIndex) => (
+                        <div key={optIndex} className="flex items-center gap-2">
+                          <Input
+                            type="text"
+                            value={opt.label}
+                            onChange={(e) => {
+                              const newOptions = [...(q.options || [])];
+                              newOptions[optIndex] = { ...newOptions[optIndex], label: e.target.value, value: e.target.value };
+                              updateQuestion(index, { options: newOptions });
+                            }}
+                            placeholder={`選択肢 ${optIndex + 1}`}
+                            className="flex-1"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              const newOptions = [...(q.options || [])];
+                              newOptions.splice(optIndex, 1);
+                              updateQuestion(index, { options: newOptions });
+                            }}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => {
                           const newOptions = [...(q.options || [])];
-                          newOptions.splice(optIndex, 1);
+                          newOptions.push({ label: '', value: '' });
                           updateQuestion(index, { options: newOptions });
                         }}
-                        className="text-red-400 hover:text-red-300"
+                        className="w-full"
                       >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => {
-                      const newOptions = [...(q.options || [])];
-                      newOptions.push({ label: '', value: '' });
-                      updateQuestion(index, { options: newOptions });
-                    }}
-                    className="text-sm text-blue-400 hover:text-blue-300"
-                  >
-                    + 選択肢を追加
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
+                        <Plus className="mr-2 h-4 w-4" />
+                        選択肢を追加
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
+
+      <AlertDialog open={deleteIndex !== null} onOpenChange={(open) => !open && setDeleteIndex(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>質問を削除</AlertDialogTitle>
+            <AlertDialogDescription>
+              この質問を削除してもよろしいですか？この操作は元に戻せません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteIndex !== null && removeQuestion(deleteIndex)}>
+              削除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

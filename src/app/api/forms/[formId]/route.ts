@@ -1,11 +1,13 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { Form } from '@/types/form';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { getCurrentUserId } from '@/lib/auth-helper';
 
 // 一時的なJSONファイルでのデータ保存（開発用）
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -108,7 +110,7 @@ export async function GET(
     }
 
     const { data: form, error } = await (adminClient as any)
-      .from('forms')
+      .from('reservation_forms')
       .select('*')
       .eq('id', formId)
       .single();
@@ -135,7 +137,7 @@ export async function GET(
 
 // PUT /api/forms/[formId] - フォーム更新
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ formId: string }> }
 ) {
   try {
@@ -222,9 +224,13 @@ export async function PUT(
       );
     }
 
+    // 現在のユーザーIDを取得
+    const currentUserId = await getCurrentUserId(request);
+    
     const updateData = {
       ...updatedFormData,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      updated_by: currentUserId
     };
 
     // id, created_atは変更不可なので削除
@@ -232,7 +238,7 @@ export async function PUT(
     delete updateData.created_at;
 
     const { data: updatedForm, error } = await (adminClient as any)
-      .from('forms')
+      .from('reservation_forms')
       .update(updateData)
       .eq('id', formId)
       .select()
@@ -337,7 +343,7 @@ export async function DELETE(
 
     // まずフォーム情報を取得（削除前に名前を保存）
     const { data: form, error: fetchError } = await (adminClient as any)
-      .from('forms')
+      .from('reservation_forms')
       .select('*')
       .eq('id', formId)
       .single();
@@ -352,7 +358,7 @@ export async function DELETE(
 
     // フォームを削除（関連予約データは CASCADE で自動削除）
     const { error: deleteError } = await (adminClient as any)
-      .from('forms')
+      .from('reservation_forms')
       .delete()
       .eq('id', formId);
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { Form } from '@/types/form';
+import { normalizeForm } from '@/lib/form-normalizer';
 
 export default function PreviewFormPage() {
   const params = useParams();
@@ -30,6 +31,7 @@ export default function PreviewFormPage() {
     selectedMenus: {} as Record<string, string[]>,
     selectedSubMenus: {} as Record<string, string>, // メニューIDに対する選択されたサブメニューID
     selectedMenuOptions: {} as Record<string, string[]>, // メニューIDに対するオプションID配列
+    selectedCategoryOptions: {} as Record<string, string[]>, // カテゴリーIDに対する共通オプションID配列
     customFields: {} as Record<string, string | string[]>, // カスタムフィールドの値
     selectedDate: '',
     selectedTime: '',
@@ -105,8 +107,8 @@ export default function PreviewFormPage() {
           return;
         }
         
-        // フォームデータの正規化
-        const normalizedForm = normalizeFormData(formData);
+        // フォームデータの正規化（共通 normalizer を使用）
+        const normalizedForm = normalizeForm(formData);
         
         // プレビューモードでは全てのステータスのフォームを表示
         setForm(normalizedForm);
@@ -123,127 +125,6 @@ export default function PreviewFormPage() {
     }
   }, [formId, storeId]);
 
-  // フォームデータ正規化関数
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function normalizeFormData(form: any): Form {
-    // configが存在しない場合は作成
-    if (!form.config) {
-      form.config = {} as Form['config'];
-    }
-    
-    // basic_infoの正規化
-    if (!form.config.basic_info) {
-      form.config.basic_info = {
-        form_name: form.form_name || 'フォーム',
-        store_name: form.store_name || '',
-        theme_color: form.ui_settings?.theme_color || '#3B82F6',
-        liff_id: form.liff_id || form.line_settings?.liff_id || ''
-      };
-    }
-    
-    // ui_settingsの正規化
-    if (!form.config.ui_settings) {
-      form.config.ui_settings = form.ui_settings || {};
-    }
-    
-    // menu_structureの正規化
-    if (!form.config.menu_structure) {
-      form.config.menu_structure = form.menu_structure || { categories: [] };
-    }
-    
-    // menu_structure.display_optionsの正規化
-    if (!form.config.menu_structure.display_options) {
-      form.config.menu_structure.display_options = {
-        show_price: true,
-        show_duration: true,
-        show_description: true
-      };
-    }
-    
-    // gender_selectionの正規化
-    if (!form.config.gender_selection) {
-      form.config.gender_selection = {
-        enabled: false,
-        required: false,
-        options: [
-          { value: 'male', label: '男性' },
-          { value: 'female', label: '女性' }
-        ]
-      };
-    }
-    
-    // calendar_settingsの正規化
-    if (!form.config.calendar_settings) {
-      form.config.calendar_settings = form.business_rules || {
-        advance_booking_days: 30
-      };
-    }
-    
-    // business_hoursの構造を正規化（古い形式から新しい形式へ）
-    if (form.config.calendar_settings.business_hours) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const hours = form.config.calendar_settings.business_hours as any;
-      
-      // 古い形式 {start: '09:00', end: '18:00'} を検出
-      if (hours.start && hours.end && !hours.monday) {
-        // 新しい形式に変換
-        const defaultHours = {
-          open: hours.start || '09:00',
-          close: hours.end || '18:00',
-          closed: false
-        };
-        
-        form.config.calendar_settings.business_hours = {
-          monday: { ...defaultHours },
-          tuesday: { ...defaultHours },
-          wednesday: { ...defaultHours },
-          thursday: { ...defaultHours },
-          friday: { ...defaultHours },
-          saturday: { ...defaultHours },
-          sunday: { ...defaultHours, closed: true }
-        } as Form['config']['calendar_settings']['business_hours'];
-      }
-      
-      // business_hoursが存在しない場合はデフォルト値を設定
-      if (!hours.monday) {
-        const defaultHours = {
-          open: '09:00',
-          close: '18:00',
-          closed: false
-        };
-        
-        form.config.calendar_settings.business_hours = {
-          monday: { ...defaultHours },
-          tuesday: { ...defaultHours },
-          wednesday: { ...defaultHours },
-          thursday: { ...defaultHours },
-          friday: { ...defaultHours },
-          saturday: { ...defaultHours },
-          sunday: { ...defaultHours, closed: true }
-        } as Form['config']['calendar_settings']['business_hours'];
-      }
-    } else {
-      // business_hoursが完全に存在しない場合
-      const defaultHours = {
-        open: '09:00',
-        close: '18:00',
-        closed: false
-      };
-      
-      form.config.calendar_settings.business_hours = {
-        monday: { ...defaultHours },
-        tuesday: { ...defaultHours },
-        wednesday: { ...defaultHours },
-        thursday: { ...defaultHours },
-        friday: { ...defaultHours },
-        saturday: { ...defaultHours },
-        sunday: { ...defaultHours, closed: true }
-      } as Form['config']['calendar_settings']['business_hours'];
-    }
-    
-    return form as Form;
-  }
-
   // ローカルストレージに選択内容を保存
   const saveSelectionToStorage = useCallback(() => {
     if (!form) return;
@@ -253,6 +134,7 @@ export default function PreviewFormPage() {
       selectedMenus: formData.selectedMenus,
       selectedSubMenus: formData.selectedSubMenus,
       selectedMenuOptions: formData.selectedMenuOptions,
+      selectedCategoryOptions: formData.selectedCategoryOptions,
       gender: formData.gender,
       visitCount: formData.visitCount,
       couponUsage: formData.couponUsage,
@@ -288,6 +170,7 @@ export default function PreviewFormPage() {
         selectedMenus: selectionData.selectedMenus || {},
         selectedSubMenus: selectionData.selectedSubMenus || {},
         selectedMenuOptions: selectionData.selectedMenuOptions || {},
+        selectedCategoryOptions: selectionData.selectedCategoryOptions || {},
         gender: selectionData.gender || '',
         visitCount: selectionData.visitCount || '',
         couponUsage: selectionData.couponUsage || ''
@@ -514,7 +397,7 @@ export default function PreviewFormPage() {
     const newOptions = isChecked
       ? [...currentOptions, optionId]
       : currentOptions.filter(id => id !== optionId);
-    
+
     setFormData(prev => {
       const newFormData = {
         ...prev,
@@ -527,6 +410,20 @@ export default function PreviewFormPage() {
       setTimeout(() => saveSelectionToStorage(), 100);
       return newFormData;
     });
+  };
+
+  const handleCategoryOptionSelection = (categoryId: string, optionId: string) => {
+    const current = formData.selectedCategoryOptions[categoryId] || [];
+    const isSelected = current.includes(optionId);
+    setFormData(prev => ({
+      ...prev,
+      selectedCategoryOptions: {
+        ...prev.selectedCategoryOptions,
+        [categoryId]: isSelected
+          ? current.filter(id => id !== optionId)
+          : [...current, optionId],
+      },
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -596,72 +493,98 @@ export default function PreviewFormPage() {
     setShowConfirmation(true);
   };
 
+  const buildSelectionPayload = useCallback(() => {
+    if (!form) {
+      return { selectedMenus: [], selectedOptions: [] };
+    }
+
+    const selectedMenus: Array<Record<string, unknown>> = [];
+    const selectedOptions: Array<Record<string, unknown>> = [];
+    const categories = form.config.menu_structure?.categories || [];
+
+    const processMenu = (category: any, menu: any, submenu: any, menuId: string) => {
+      const price = submenu ? (submenu.price || 0) : (menu.price || 0);
+      const duration = submenu ? (submenu.duration || 0) : (menu.duration || 0);
+
+      selectedMenus.push({
+        menu_id: menu.id,
+        menu_name: menu.name || '',
+        category_name: category?.name || '',
+        price,
+        duration,
+        ...(submenu ? { submenu_id: submenu.id, submenu_name: submenu.name || '' } : {})
+      });
+
+      const optionIds = formData.selectedMenuOptions?.[menuId] || [];
+      optionIds.forEach(optionId => {
+        const option = menu.options?.find((o: any) => o.id === optionId);
+        if (option) {
+          selectedOptions.push({
+            option_id: option.id,
+            option_name: option.name || '',
+            menu_id: menuId,
+            price: option.price || 0,
+            duration: option.duration || 0
+          });
+        }
+      });
+    };
+
+    categories.forEach(category => {
+      const menuIds = formData.selectedMenus[category.id] || [];
+      menuIds.forEach(menuId => {
+        const menu = category.menus?.find((m: any) => m.id === menuId);
+        if (!menu) return;
+        const subId = formData.selectedSubMenus?.[menuId];
+        const submenu = subId && menu.sub_menu_items ? menu.sub_menu_items.find((s: any) => s.id === subId) : null;
+        processMenu(category, menu, submenu, menuId);
+      });
+    });
+
+    return { selectedMenus, selectedOptions };
+  }, [form, formData]);
+
   const handleConfirmSubmit = async () => {
     if (!form) return;
-
-    console.log('[Calendar] handleConfirmSubmit called');
-    console.log('[Calendar] Form submission data:', {
-      formId: form.id,
-      storeId: form.store_id,
-      selectedDate: formData.selectedDate,
-      selectedTime: formData.selectedTime,
-      selectedDate2: formData.selectedDate2,
-      selectedTime2: formData.selectedTime2,
-      selectedDate3: formData.selectedDate3,
-      selectedTime3: formData.selectedTime3,
-      selectedDateTime: selectedDateTime ? selectedDateTime.toISOString() : null,
-      selectedDateTimeLocal: selectedDateTime ? selectedDateTime.toLocaleString('ja-JP') : null,
-      fullFormData: formData
-    });
 
     setSubmitting(true);
     
     try {
-      // GAS エンドポイントに送信
-      if (form.config.gas_endpoint) {
-        const payload = {
-          formId: form.id,
-          storeId: form.store_id,
-          customerData: formData,
-          submittedAt: new Date().toISOString()
-        };
-        console.log('[Calendar] Sending to GAS endpoint:', {
-          url: form.config.gas_endpoint,
-          payload: payload
-        });
-        
-        const response = await fetch(form.config.gas_endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-        
-        console.log('[Calendar] GAS response:', {
-          ok: response.ok,
-          status: response.status,
-          statusText: response.statusText
-        });
-        
-        if (response.ok) {
-          const responseData = await response.json().catch(() => null);
-          console.log('[Calendar] GAS response data:', responseData);
-          setSubmitted(true);
-          setShowConfirmation(false);
-        } else {
-          const errorText = await response.text().catch(() => 'Unknown error');
-          console.error('[Calendar] GAS error response:', errorText);
-          throw new Error('送信に失敗しました');
+      const { selectedMenus, selectedOptions } = buildSelectionPayload();
+      const reservationData = {
+        form_id: form.id,
+        store_id: form.store_id,
+        customer_name: formData.name,
+        customer_phone: formData.phone,
+        reservation_date: formData.selectedDate,
+        reservation_time: formData.selectedTime,
+        message: formData.message || null,
+        selected_menus: selectedMenus,
+        selected_options: selectedOptions,
+        customer_info: {
+          gender: formData.gender || null,
+          visit_count: formData.visitCount || null,
+          coupon: formData.couponUsage || null,
+          custom_fields: formData.customFields || {}
         }
-      } else {
-        // GASエンドポイントが未設定の場合は成功として扱う（デモ用）
-        console.log('[Calendar] No GAS endpoint, treating as success (demo mode)');
-        setSubmitted(true);
-        setShowConfirmation(false);
+      };
+
+      const response = await fetch('/api/reservations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(reservationData),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(errorText || '送信に失敗しました');
       }
+
+      setSubmitted(true);
+      setShowConfirmation(false);
     } catch (error) {
-      console.error('[Calendar] Submit error:', error);
       alert('送信に失敗しました。しばらく経ってから再度お試しください。');
     } finally {
       setSubmitting(false);
@@ -683,15 +606,7 @@ export default function PreviewFormPage() {
 
   // カレンダー空き状況を取得
   const fetchCalendarAvailability = useCallback(async (date: Date) => {
-    console.log('[Calendar] fetchCalendarAvailability called:', { 
-      date: date.toISOString(),
-      dateLocal: date.toLocaleString('ja-JP'),
-      hasGasEndpoint: !!form?.config?.gas_endpoint,
-      gasEndpoint: form?.config?.gas_endpoint
-    });
-    
-    if (!form?.config?.gas_endpoint) {
-      console.log('[Calendar] No GAS endpoint, skipping availability fetch');
+    if (!form?.store_id) {
       return;
     }
 
@@ -702,29 +617,16 @@ export default function PreviewFormPage() {
     endTime.setHours(23, 59, 59, 999);
 
     const cacheKey = startTime.toISOString() + endTime.toISOString();
-    console.log('[Calendar] Cache key:', cacheKey);
-    console.log('[Calendar] Time range:', {
-      startTime: startTime.toISOString(),
-      endTime: endTime.toISOString(),
-      startTimeLocal: startTime.toLocaleString('ja-JP'),
-      endTimeLocal: endTime.toLocaleString('ja-JP')
-    });
 
     // キャッシュを確認
     if (availabilityCache[cacheKey]) {
-      console.log('[Calendar] Using cached availability data:', {
-        cacheKey,
-        availabilityCount: availabilityCache[cacheKey].availability?.length || 0,
-        businessDaysCount: availabilityCache[cacheKey].businessDays?.length || 0
-      });
       setAvailabilityData(availabilityCache[cacheKey].availability);
       setBusinessDays(availabilityCache[cacheKey].businessDays);
       return;
     }
 
-    const url = form.config.gas_endpoint + 
-      `?startTime=${startTime.toISOString()}&endTime=${endTime.toISOString()}`;
-    console.log('[Calendar] Fetching from URL:', url);
+    const url = `/api/stores/${form.store_id}/calendar/availability` +
+      `?start=${startTime.toISOString()}&end=${endTime.toISOString()}`;
 
     try {
       const response = await fetch(url);
@@ -732,11 +634,6 @@ export default function PreviewFormPage() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      console.log('[Calendar] Availability data received:', {
-        dataCount: data?.length || 0,
-        data: data,
-        sampleEvent: data?.[0]
-      });
 
       // 営業日の情報を抽出
       const businessDaysData = data.filter((event: any) => event.summary === "営業日").map((event: any) => {
@@ -744,15 +641,6 @@ export default function PreviewFormPage() {
           start: new Date(event.startTime),
           end: new Date(event.endTime)
         };
-      });
-      console.log('[Calendar] Business days extracted:', {
-        businessDaysCount: businessDaysData.length,
-        businessDays: businessDaysData.map((bd: { start: Date; end: Date }) => ({
-          start: bd.start.toISOString(),
-          end: bd.end.toISOString(),
-          startLocal: bd.start.toLocaleString('ja-JP'),
-          endLocal: bd.end.toLocaleString('ja-JP')
-        }))
       });
 
       // データをキャッシュに保存
@@ -763,18 +651,8 @@ export default function PreviewFormPage() {
       setAvailabilityCache(newCache);
       setAvailabilityData(data);
       setBusinessDays(businessDaysData);
-      console.log('[Calendar] Availability data set to state:', {
-        availabilityDataCount: data?.length || 0,
-        businessDaysCount: businessDaysData.length
-      });
     } catch (error) {
-      console.error('[Calendar] Error fetching calendar availability:', error);
-      
       // エラーメッセージを設定
-      const errorMsg = error instanceof Error 
-        ? error.message 
-        : '空き状況の取得に失敗しました';
-      
       setErrorMessage('カレンダーの空き状況を取得できませんでした。営業時間のみで判定します。');
       
       // 5秒後に自動で非表示
@@ -784,7 +662,7 @@ export default function PreviewFormPage() {
       setAvailabilityData(null);
       setBusinessDays([]);
     }
-  }, [form?.config?.gas_endpoint, availabilityCache]);
+  }, [form?.store_id, availabilityCache]);
 
   // 営業時間に基づいて時間選択肢を生成
   const getAvailableTimeSlots = (date?: Date) => {
@@ -816,71 +694,25 @@ export default function PreviewFormPage() {
 
   // カレンダーのセル選択
   const handleDateTimeSelect = (date: Date, time: string) => {
-    console.log('[Calendar] handleDateTimeSelect called:', { date, time });
-    
     const dateTime = new Date(date);
     const [hours, minutes] = time.split(':').map(Number);
     dateTime.setHours(hours, minutes, 0, 0);
     
     const dateString = date.toISOString().split('T')[0];
-    console.log('[Calendar] Setting date/time:', { 
-      dateString, 
-      time, 
-      dateTime: dateTime.toISOString(),
-      dateTimeLocal: dateTime.toLocaleString('ja-JP')
-    });
     
     setSelectedDateTime(dateTime);
-    setFormData(prev => {
-      const newData = {
-        ...prev,
-        selectedDate: dateString,
-        selectedTime: time
-      };
-      console.log('[Calendar] formData updated:', {
-        selectedDate: newData.selectedDate,
-        selectedTime: newData.selectedTime,
-        previousDate: prev.selectedDate,
-        previousTime: prev.selectedTime
-      });
-      return newData;
-    });
+    setFormData(prev => ({
+      ...prev,
+      selectedDate: dateString,
+      selectedTime: time
+    }));
   };
 
-  // formDataとselectedDateTimeの変更を監視
-  useEffect(() => {
-    console.log('[Calendar] formData changed:', {
-      selectedDate: formData.selectedDate,
-      selectedTime: formData.selectedTime,
-      selectedDate2: formData.selectedDate2,
-      selectedTime2: formData.selectedTime2,
-      selectedDate3: formData.selectedDate3,
-      selectedTime3: formData.selectedTime3
-    });
-  }, [formData.selectedDate, formData.selectedTime, formData.selectedDate2, formData.selectedTime2, formData.selectedDate3, formData.selectedTime3]);
-
-  useEffect(() => {
-    console.log('[Calendar] selectedDateTime changed:', {
-      selectedDateTime: selectedDateTime ? selectedDateTime.toISOString() : null,
-      selectedDateTimeLocal: selectedDateTime ? selectedDateTime.toLocaleString('ja-JP') : null,
-      dateString: selectedDateTime ? selectedDateTime.toISOString().split('T')[0] : null,
-      timeString: selectedDateTime ? selectedDateTime.toTimeString().slice(0, 5) : null
-    });
-  }, [selectedDateTime]);
 
   // 週の移動
   const navigateWeek = (direction: 'prev' | 'next') => {
-    console.log('[Calendar] navigateWeek called:', { 
-      direction, 
-      currentWeekStart: currentWeekStart.toISOString(),
-      currentWeekStartLocal: currentWeekStart.toLocaleString('ja-JP')
-    });
     const newWeekStart = new Date(currentWeekStart);
     newWeekStart.setDate(currentWeekStart.getDate() + (direction === 'next' ? 7 : -7));
-    console.log('[Calendar] navigateWeek result:', {
-      newWeekStart: newWeekStart.toISOString(),
-      newWeekStartLocal: newWeekStart.toLocaleString('ja-JP')
-    });
     // 上限週を越えないようにクランプ
     const maxWeekStart = getWeekStart(getMaxBookingDate());
     if (direction === 'next' && newWeekStart > maxWeekStart) {
@@ -894,11 +726,6 @@ export default function PreviewFormPage() {
 
   // 月の移動
   const navigateMonth = (direction: 'prev' | 'next') => {
-    console.log('[Calendar] navigateMonth called:', { 
-      direction, 
-      currentWeekStart: currentWeekStart.toISOString(),
-      currentWeekStartLocal: currentWeekStart.toLocaleString('ja-JP')
-    });
     const newDate = new Date(currentWeekStart);
     newDate.setMonth(currentWeekStart.getMonth() + (direction === 'next' ? 1 : -1));
     let nextWeekStart = getWeekStart(newDate);
@@ -906,18 +733,12 @@ export default function PreviewFormPage() {
     if (direction === 'next' && nextWeekStart > maxWeekStart) {
       nextWeekStart = maxWeekStart;
     }
-    console.log('[Calendar] navigateMonth result:', {
-      nextWeekStart: nextWeekStart.toISOString(),
-      nextWeekStartLocal: nextWeekStart.toLocaleString('ja-JP'),
-      maxWeekStart: maxWeekStart.toISOString(),
-      maxWeekStartLocal: maxWeekStart.toLocaleString('ja-JP')
-    });
     setCurrentWeekStart(nextWeekStart);
     fetchCalendarAvailability(nextWeekStart);
   };
 
   // メニューが選択されているかチェック
-  const isMenuSelected = () => {
+  const isMenuSelected = useCallback(() => {
     // 通常のメニューが選択されているかチェック
     const hasSelectedMenus = Object.values(formData.selectedMenus).some(menuIds => menuIds.length > 0);
     
@@ -925,14 +746,14 @@ export default function PreviewFormPage() {
     const hasSelectedSubMenus = Object.values(formData.selectedSubMenus).some(subMenuId => subMenuId !== '');
     
     return hasSelectedMenus || hasSelectedSubMenus;
-  };
+  }, [formData.selectedMenus, formData.selectedSubMenus]);
 
   // カレンダー表示時に空き状況を取得
   useEffect(() => {
     if (form && isMenuSelected() && form.config?.calendar_settings?.booking_mode !== 'multiple_dates') {
       fetchCalendarAvailability(currentWeekStart);
     }
-  }, [form, formData.selectedMenus, formData.selectedSubMenus, currentWeekStart, fetchCalendarAvailability]);
+  }, [form, isMenuSelected, currentWeekStart, fetchCalendarAvailability]);
 
   if (loading) {
     return (
@@ -1174,6 +995,7 @@ export default function PreviewFormPage() {
                   selectedMenus: {},
                   selectedSubMenus: {},
                   selectedMenuOptions: {},
+                  selectedCategoryOptions: {},
                   customFields: {},
                   selectedDate: '',
                   selectedTime: '',
@@ -1579,7 +1401,14 @@ export default function PreviewFormPage() {
         {/* 予約フォーム */}
         <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-6">ご予約内容</h2>
-          
+
+          {/* 注意書きバナー */}
+          {form.config.basic_info?.notice && (
+            <div className="mb-5 px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-sm text-red-800 leading-relaxed whitespace-pre-wrap">
+              {form.config.basic_info.notice}
+            </div>
+          )}
+
           {/* お客様名 */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1806,8 +1635,11 @@ export default function PreviewFormPage() {
               <div className="space-y-4">
                 {form.config.menu_structure.categories.map((category, categoryIndex) => (
                   <div key={category.id || categoryIndex} className="border border-gray-200 rounded-lg p-4">
+                    {category.name && (
+                      <h3 className="text-sm font-semibold text-gray-800 mb-3">{category.name}</h3>
+                    )}
                     <div className="space-y-2">
-                      {category.menus
+                      {(category.menus || [])
                         .filter((menu) => {
                           // 性別選択が無効の場合は、全てのメニューを表示
                           if (!form.config?.gender_selection?.enabled) {
@@ -1914,10 +1746,10 @@ export default function PreviewFormPage() {
                                               <div className="text-xs text-gray-600 mb-2">{subMenu.description}</div>
                                             )}
                                             <div className="flex justify-between items-center gap-2 text-sm">
-                                              {form.config?.menu_structure?.display_options?.show_price && (
+                                              {subMenu.price > 0 && !subMenu.hide_price && (
                                                 <div className="font-semibold">¥{subMenu.price.toLocaleString()}</div>
                                               )}
-                                              {form.config?.menu_structure?.display_options?.show_duration && (
+                                              {true && (
                                                 <div className="text-gray-600">{subMenu.duration}分</div>
                                               )}
                                             </div>
@@ -1935,10 +1767,10 @@ export default function PreviewFormPage() {
                                             </div>
                                           </div>
                                           <div className="text-right ml-4">
-                                            {form.config?.menu_structure?.display_options?.show_price && (
+                                            {subMenu.price > 0 && !subMenu.hide_price && (
                                               <div className="font-semibold">¥{subMenu.price.toLocaleString()}</div>
                                             )}
-                                            {form.config?.menu_structure?.display_options?.show_duration && (
+                                            {true && (
                                               <div className="text-sm opacity-70">{subMenu.duration}分</div>
                                             )}
                                           </div>
@@ -2004,10 +1836,10 @@ export default function PreviewFormPage() {
                                       <div className="text-xs text-gray-600 mb-2">{menu.description}</div>
                                     )}
                                     <div className="flex justify-between items-center gap-2 text-sm">
-                                      {form.config?.menu_structure?.display_options?.show_price && menu.price !== undefined && (
+                                      {menu.price !== undefined && menu.price > 0 && !menu.hide_price && (
                                         <div className="font-semibold">¥{menu.price.toLocaleString()}</div>
                                       )}
-                                      {form.config?.menu_structure?.display_options?.show_duration && menu.duration !== undefined && (
+                                      {true && menu.duration !== undefined && (
                                         <div className="text-gray-600">{menu.duration}分</div>
                                       )}
                                     </div>
@@ -2031,13 +1863,10 @@ export default function PreviewFormPage() {
                                     )}
                                   </div>
                                   <div className="text-right ml-4">
-                                    {form.config?.menu_structure?.display_options?.show_price && menu.price !== undefined && (
+                                    {menu.price !== undefined && menu.price > 0 && !menu.hide_price && (
                                       <div className="font-semibold">¥{menu.price.toLocaleString()}</div>
                                     )}
-                                    {form.config?.menu_structure?.display_options?.show_price && menu.price !== undefined && (
-                                      <div className="font-semibold">¥{menu.price.toLocaleString()}</div>
-                                    )}
-                                    {form.config?.menu_structure?.display_options?.show_duration && menu.duration !== undefined && (
+                                    {true && menu.duration !== undefined && (
                                       <div className="text-sm opacity-70">{menu.duration}分</div>
                                     )}
                                   </div>
@@ -2086,12 +1915,12 @@ export default function PreviewFormPage() {
                                     </div>
                                   </div>
                                   <div className="text-right ml-2">
-                                    {form.config.menu_structure.display_options.show_price && (
+                                    {!option.hide_price && (
                                       <div className="font-medium">
                                         {option.price > 0 ? `+¥${option.price.toLocaleString()}` : '無料'}
                                       </div>
                                     )}
-                                    {form.config.menu_structure.display_options.show_duration && option.duration > 0 && (
+                                    {option.duration > 0 && (
                                       <div className="text-xs opacity-70">+{option.duration}分</div>
                                     )}
                                   </div>
@@ -2102,6 +1931,39 @@ export default function PreviewFormPage() {
                         </div>
                       ))}
                     </div>
+                    {/* カテゴリー共通オプション */}
+                    {category.options && category.options.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                        <div className="text-sm font-medium text-gray-700">オプション</div>
+                        {category.options.map((opt: { id?: string; name: string; description?: string; price?: number; hide_price?: boolean; duration?: number }, optIdx: number) => {
+                          const optId = opt.id || `catopt-${optIdx}`;
+                          const isSelected = (formData.selectedCategoryOptions[category.id] || []).includes(optId);
+                          return (
+                            <button
+                              key={optId}
+                              type="button"
+                              onClick={() => handleCategoryOptionSelection(category.id, optId)}
+                              className={`w-full flex items-center justify-between p-2.5 border-2 rounded-md text-left transition-all duration-150 ${
+                                isSelected ? 'border-green-500 bg-green-50' : 'border-gray-300 bg-white hover:border-gray-400'
+                              }`}
+                            >
+                              <div>
+                                <div className={`text-sm font-medium ${isSelected ? 'text-green-700' : 'text-gray-800'}`}>{opt.name}</div>
+                                {opt.description && <div className="text-xs text-gray-500 mt-0.5">{opt.description}</div>}
+                              </div>
+                              <div className="text-right ml-3 shrink-0">
+                                {(opt.price || 0) > 0 && !opt.hide_price && (
+                                  <div className="text-sm font-semibold">+¥{(opt.price || 0).toLocaleString()}</div>
+                                )}
+                                {(opt.duration || 0) > 0 && (
+                                  <div className="text-xs text-gray-500">+{opt.duration}分</div>
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2321,7 +2183,7 @@ export default function PreviewFormPage() {
                                 if (isPast || isNextDay || endsAfter18 || !withinWindow || isClosed || !isWithinBusinessHours) {
                                   isAvailable = false;
                                 } else if (availabilityData && availabilityData.length > 0) {
-                                  // GASから取得したデータがある場合
+                                  // カレンダーAPIから取得したデータがある場合
                                   const day = new Date(date);
                                   day.setHours(0, 0, 0, 0);
                                   
@@ -2374,7 +2236,7 @@ export default function PreviewFormPage() {
                                     isAvailable = false;
                                   }
                                 } else {
-                                  // GASから取得したデータがない場合、営業時間のみで判定
+                                  // カレンダーAPIから取得したデータがない場合、営業時間のみで判定
                                   isAvailable = true;
                                 }
                                 
@@ -2382,53 +2244,12 @@ export default function PreviewFormPage() {
                                   selectedDateTime.toDateString() === date.toDateString() &&
                                   selectedDateTime.toTimeString().slice(0, 5) === time;
                                 
-                                // デバッグログ（最初の数回のみ）
-                                if (dateIndex === 0 && timeIndex === 0) {
-                                  console.log('[Calendar] Cell availability check:', {
-                                    date: date.toISOString(),
-                                    dateLocal: date.toLocaleString('ja-JP'),
-                                    time,
-                                    slotStartUTC: slotStart.toISOString(),
-                                    slotStartLocal: slotStart.toLocaleString('ja-JP'),
-                                    nowUTC: now.toISOString(),
-                                    nowLocal: now.toLocaleString('ja-JP'),
-                                    slotStartTime: slotStart.getTime(),
-                                    nowTime: now.getTime(),
-                                    timeDiff: slotStart.getTime() - now.getTime(),
-                                    isPast,
-                                    isNextDay,
-                                    endsAfter18,
-                                    withinWindow,
-                                    isClosed,
-                                    isWithinBusinessHours,
-                                    isAvailable,
-                                    isSelected,
-                                    availabilityDataCount: availabilityData?.length || 0,
-                                    businessDaysCount: businessDays.length
-                                  });
-                                }
-                                
                                 return (
                                   <td 
                                     key={dateIndex}
                                     onClick={() => {
                                       if (isAvailable && !isPast) {
-                                        console.log('[Calendar] Cell clicked:', {
-                                          date: date.toISOString(),
-                                          dateLocal: date.toLocaleString('ja-JP'),
-                                          time,
-                                          isAvailable,
-                                          isPast
-                                        });
                                         handleDateTimeSelect(date, time);
-                                      } else {
-                                        console.log('[Calendar] Cell click ignored (not available or past):', {
-                                          date: date.toISOString(),
-                                          dateLocal: date.toLocaleString('ja-JP'),
-                                          time,
-                                          isAvailable,
-                                          isPast
-                                        });
                                       }
                                     }}
                                     className={`text-center p-1 border border-gray-400 text-xs ${

@@ -4,7 +4,7 @@
  */
 
 import { createAdminClient } from './supabase';
-import { shouldUseMockBlob, isProduction, getAppEnvironment, getBaseUrl } from './env';
+import { shouldUseMockBlob, isProduction, isStaging, isDevelopment, getAppEnvironment, getBaseUrl } from './env';
 import fs from 'fs';
 import path from 'path';
 
@@ -20,12 +20,14 @@ export class SupabaseStorageDeployer {
    * @param storeId 店舗ID
    * @param formId フォームID
    * @param html 生成されたHTML
+   * @param formType フォームタイプ（'reservation' | 'survey'）
    * @returns デプロイ結果（URL、Storage URL、環境情報）
    */
   async deployForm(
     storeId: string,
     formId: string,
-    html: string
+    html: string,
+    formType: 'reservation' | 'survey' = 'reservation'
   ): Promise<DeployResult> {
     const env = getAppEnvironment();
     
@@ -64,9 +66,9 @@ export class SupabaseStorageDeployer {
         throw new Error('Supabase クライアントの初期化に失敗しました');
       }
       
-      // 環境ごとに異なるパスプレフィックスを使用
-      const envPrefix = isProduction() ? 'prod' : 'staging';
-      const storagePath = `${envPrefix}/forms/${storeId}/${formId}/config/current.html`;
+      // 新しいパス構成: {formType}/{storeId}/{formId}/index.html
+      // 環境プレフィックスは不要（プロジェクトレベルで分離されているため）
+      const storagePath = `${formType}s/${storeId}/${formId}/index.html`;
       
       // HTMLをBufferに変換
       const htmlBuffer = Buffer.from(html, 'utf-8');
@@ -123,8 +125,9 @@ export class SupabaseStorageDeployer {
    * フォームをSupabase Storageから削除
    * @param storeId 店舗ID
    * @param formId フォームID
+   * @param formType フォームタイプ（'reservation' | 'survey'）
    */
-  async deleteForm(storeId: string, formId: string): Promise<void> {
+  async deleteForm(storeId: string, formId: string, formType: 'reservation' | 'survey' = 'reservation'): Promise<void> {
     if (shouldUseMockBlob()) {
       // ローカル環境: ファイルシステムから削除
       const staticDir = path.join(process.cwd(), 'public', 'static-forms');
@@ -144,8 +147,8 @@ export class SupabaseStorageDeployer {
         throw new Error('Supabase クライアントの初期化に失敗しました');
       }
 
-      const envPrefix = isProduction() ? 'prod' : 'staging';
-      const storagePath = `${envPrefix}/forms/${storeId}/${formId}/config/current.html`;
+      // 新しいパス構成: {formType}/{storeId}/{formId}/index.html
+      const storagePath = `${formType}s/${storeId}/${formId}/index.html`;
       
       const { error } = await supabase.storage
         .from('forms')
@@ -166,8 +169,9 @@ export class SupabaseStorageDeployer {
   /**
    * 店舗の全フォームをSupabase Storageから削除
    * @param storeId 店舗ID
+   * @param formType フォームタイプ（'reservation' | 'survey' | 'all'）
    */
-  async deleteStoreAllForms(storeId: string): Promise<void> {
+  async deleteStoreAllForms(storeId: string, formType: 'reservation' | 'survey' | 'all' = 'all'): Promise<void> {
     if (shouldUseMockBlob()) {
       console.log('[LOCAL MODE] Skipping bulk deletion in local mode');
       return;
@@ -180,38 +184,78 @@ export class SupabaseStorageDeployer {
         throw new Error('Supabase クライアントの初期化に失敗しました');
       }
 
-      const envPrefix = isProduction() ? 'prod' : 'staging';
-      const prefix = `${envPrefix}/forms/${storeId}/`;
-      
-      // 指定プレフィックスのファイル一覧を取得
-      const { data: files, error: listError } = await supabase.storage
-        .from('forms')
-        .list(prefix, {
-          limit: 1000,
-        });
-
-      if (listError) {
-        throw new Error(`Failed to list files: ${listError.message}`);
+      // 新しいパス構成に基づいて削除
+      const prefixes: string[] = [];
+      if (formType === 'all') {
+        prefixes.push(`reservations/${storeId}/`);
+        prefixes.push(`surveys/${storeId}/`);
+      } else {
+        prefixes.push(`${formType}s/${storeId}/`);
       }
 
-      if (!files || files.length === 0) {
+      let totalDeleted = 0;
+      for (const prefix of prefixes) {
+        // 指定プレフィックスのディレクトリ一覧を取得（例: reservations/{storeId}/）
+        const { data: dirs, error: listError } = await supabase.storage
+          .from('forms')
+          .list(prefix, {
+            limit: 1000,
+          });
+
+        if (listError) {
+          console.warn(`Failed to list directories for ${prefix}: ${listError.message}`);
+          continue;
+        }
+
+        if (!dirs || dirs.length === 0) {
+          continue;
+        }
+
+        // 各フォームIDディレクトリ内のindex.htmlを削除
+        const filePaths: string[] = [];
+        
+        for (const dir of dirs) {
+          if (!dir.id) {
+            // ディレクトリの場合、その中身を確認
+            const formDir = `${prefix}${dir.name}/`;
+            const { data: files } = await supabase.storage
+              .from('forms')
+              .list(formDir, {
+                limit: 100,
+              });
+            
+            if (files) {
+              for (const file of files) {
+                if (file.name === 'index.html' && file.id) {
+                  filePaths.push(file.id);
+                }
+              }
+            }
+          }
+        }
+
+        if (filePaths.length === 0) {
+          continue;
+        }
+
+        // 一括削除
+        const { error: deleteError } = await supabase.storage
+          .from('forms')
+          .remove(filePaths);
+
+        if (deleteError) {
+          console.warn(`Failed to delete files for ${prefix}: ${deleteError.message}`);
+          continue;
+        }
+
+        totalDeleted += filePaths.length;
+      }
+
+      if (totalDeleted > 0) {
+        console.log(`✅ All forms deleted for store: ${storeId} (${totalDeleted} files)`);
+      } else {
         console.log(`No forms found for store: ${storeId}`);
-        return;
       }
-
-      // ファイルパスの配列を作成
-      const filePaths = files.map(file => `${prefix}${file.name}`);
-
-      // 一括削除
-      const { error: deleteError } = await supabase.storage
-        .from('forms')
-        .remove(filePaths);
-
-      if (deleteError) {
-        throw new Error(`Failed to delete files: ${deleteError.message}`);
-      }
-
-      console.log(`✅ All forms deleted for store: ${storeId} (${files.length} files)`);
     } catch (error) {
       console.error('❌ Bulk deletion failed:', error);
       throw new Error(`Failed to delete store forms from Supabase Storage: ${error}`);

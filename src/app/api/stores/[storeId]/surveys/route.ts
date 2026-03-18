@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { SurveyForm, SurveyConfig, SurveyQuestion } from '@/types/survey';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { getCurrentUserId } from '@/lib/auth-helper';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -27,7 +29,24 @@ export async function GET(
       const data = fs.readFileSync(formsPath, 'utf-8');
       const storeForms = JSON.parse(data);
       
-      return NextResponse.json(storeForms);
+      // ui_settingsが存在しない場合はデフォルト値を設定
+      const normalizedForms = storeForms.map((form: SurveyForm) => {
+        if (form.config && !form.config.ui_settings) {
+          return {
+            ...form,
+            config: {
+              ...form.config,
+              ui_settings: {
+                submit_button_text: '送信',
+                theme_color: form.config.basic_info?.theme_color || '#13ca5e'
+              }
+            }
+          };
+        }
+        return form;
+      });
+      
+      return NextResponse.json(normalizedForms);
     }
 
     // staging/production: Supabase から取得
@@ -53,7 +72,24 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(forms || []);
+    // ui_settingsが存在しない場合はデフォルト値を設定
+    const normalizedForms = (forms || []).map((form: any) => {
+      if (form.config && !form.config.ui_settings) {
+        return {
+          ...form,
+          config: {
+            ...form.config,
+            ui_settings: {
+              submit_button_text: '送信',
+              theme_color: form.config.basic_info?.theme_color || '#13ca5e'
+            }
+          }
+        };
+      }
+      return form;
+    });
+
+    return NextResponse.json(normalizedForms);
   } catch (error) {
     console.error('Survey Forms fetch error:', error);
     return NextResponse.json(
@@ -75,7 +111,7 @@ function generateRandomFormId(): string {
 
 // POST /api/stores/[storeId]/surveys - 新しいアンケートフォーム作成
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ storeId: string }> }
 ) {
   try {
@@ -83,6 +119,9 @@ export async function POST(
     const body = await request.json();
     const { form_name, liff_id, template_config } = body;
     const env = getAppEnvironment();
+    
+    // 現在のユーザーIDを取得
+    const currentUserId = await getCurrentUserId(request);
 
     // デフォルトの質問テンプレート（要件に基づく）
     const defaultQuestions = [
@@ -196,7 +235,9 @@ export async function POST(
         name: form_name || 'アンケートフォーム',
         config: newConfig,
         status: 'active',
-        draft_status: 'none'
+        draft_status: 'none',
+        created_by: currentUserId,
+        updated_by: currentUserId
       })
       .select()
       .single();

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { Form, FormConfig } from '@/types/form';
@@ -6,6 +7,7 @@ import { StaticReservationGenerator } from '@/lib/static-generator-reservation';
 import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { getCurrentUserId } from '@/lib/auth-helper';
 
 // テンプレート型定義
 type FormTemplate = {
@@ -23,7 +25,6 @@ type FormTemplate = {
     };
   };
   liff_id?: string;
-  gas_endpoint?: string;
 };
 
 // 一時的なJSONファイルでのデータ保存（開発用）
@@ -82,7 +83,7 @@ export async function GET(
     }
 
     const { data: forms, error } = await adminClient
-      .from('forms')
+      .from('reservation_forms')
       .select('*')
       .eq('store_id', storeId)
       .order('created_at', { ascending: false });
@@ -117,14 +118,17 @@ function generateRandomFormId(): string {
 
 // POST /api/stores/[storeId]/forms - 新しいフォーム作成
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ storeId: string }> }
 ) {
   try {
     const { storeId } = await params;
     const body = await request.json();
-    const { form_name, form_type, liff_id, gas_endpoint, calendar_url, security_secret, template } = body;
+    const { form_name, form_type, liff_id, security_secret, template } = body;
     const env = getAppEnvironment();
+    
+    // 現在のユーザーIDを取得
+    const currentUserId = await getCurrentUserId(request);
 
     // バリデーション
     // フォーム名のみ必須
@@ -135,7 +139,7 @@ export async function POST(
       );
     }
 
-    // GASエンドポイント、LIFF ID、カレンダー取得URLは必須から除外（オプショナル）
+    // LIFF ID はオプショナル
     // SECURITY_SECRETはWeb予約フォームの場合のみ必須
     if (form_type === 'web') {
       if (!security_secret || !security_secret.trim()) {
@@ -184,8 +188,6 @@ export async function POST(
         show_visit_count: template.config?.ui_settings?.show_visit_count || false,
         show_coupon_selection: template.config?.ui_settings?.show_coupon_selection || false
       },
-      gas_endpoint: (template as FormTemplate)?.gas_endpoint || gas_endpoint || '',
-      calendar_url: determinedFormType === 'web' ? (calendar_url || '') : undefined,
       security_secret: determinedFormType === 'web' ? (security_secret || '') : undefined,
       form_type: determinedFormType
     } : {
@@ -210,8 +212,6 @@ export async function POST(
         show_visit_count: false,
         show_coupon_selection: false
       },
-      gas_endpoint: gas_endpoint || '',
-      calendar_url: determinedFormType === 'web' ? (calendar_url || '') : undefined,
       security_secret: determinedFormType === 'web' ? (security_secret || '') : undefined,
       form_type: determinedFormType
     };
@@ -242,28 +242,32 @@ export async function POST(
             { value: 'female' as const, label: '女性' }
           ]
         },
-        visit_count_selection: { 
-          enabled: baseConfig.ui_settings?.show_visit_count || false, 
-          required: false, 
-          options: [
-            { value: 'first', label: '初回' },
-            { value: 'repeat', label: '2回目以降' }
-          ]
+        visit_count_selection: {
+          enabled: baseConfig.ui_settings?.show_visit_count || false,
+          required: false,
+          options: (template?.config as FormConfig)?.visit_count_selection?.options?.length
+            ? (template.config as FormConfig).visit_count_selection!.options
+            : [
+                { value: 'first', label: '初回' },
+                { value: 'repeat', label: '2回目以降' }
+              ]
         },
-        coupon_selection: { 
-          enabled: baseConfig.ui_settings?.show_coupon_selection || false, 
+        coupon_selection: {
+          enabled: baseConfig.ui_settings?.show_coupon_selection || false,
+          coupon_name: (template?.config as FormConfig)?.coupon_selection?.coupon_name ?? '',
           options: [
             { value: 'use' as const, label: '利用する' },
             { value: 'not_use' as const, label: '利用しない' }
           ]
         },
+        custom_fields: (template?.config as FormConfig)?.custom_fields ?? [],
         menu_structure: {
           ...baseConfig.menu_structure,
           display_options: {
             show_price: true,
             show_duration: true,
             show_description: true,
-            show_treatment_info: false
+            show_treatment_info: (baseConfig.menu_structure as FormConfig['menu_structure'])?.display_options?.show_treatment_info ?? false
           }
         },
         ui_settings: {
@@ -350,12 +354,11 @@ export async function POST(
           required_fields: ['name', 'phone'],
           phone_format: 'japanese' as const,
           name_max_length: 50
-        },
-        gas_endpoint: baseConfig.gas_endpoint
+        }
       };
       
       const html = generator.generateHTML(formConfig, newFormId, storeId);
-      const deployResult = await deployer.deployForm(storeId, newFormId, html);
+      const deployResult = await deployer.deployForm(storeId, newFormId, html, 'reservation');
       
       console.log(`✅ フォーム作成と同時にStorageにデプロイ: ${deployResult.storage_url || deployResult.url}`);
       
@@ -392,7 +395,6 @@ export async function POST(
     const visitCountEnabled = baseTemplateConfig?.ui_settings?.show_visit_count || false;
     const couponEnabled = baseTemplateConfig?.ui_settings?.show_coupon_selection || false;
     const templateLiffId = (template as FormTemplate)?.liff_id;
-    const templateGasEndpoint = (template as FormTemplate)?.gas_endpoint;
     
     // フォームタイプを決定（後方互換性のため）
     const determinedFormType = form_type || (liff_id && liff_id.trim() ? 'line' : 'web');
@@ -419,18 +421,22 @@ export async function POST(
       visit_count_selection: {
         enabled: visitCountEnabled,
         required: false,
-        options: [
-          { value: 'first', label: '初回' },
-          { value: 'repeat', label: '2回目以降' }
-        ]
+        options: (baseTemplateConfig as FormConfig)?.visit_count_selection?.options?.length
+          ? (baseTemplateConfig as FormConfig).visit_count_selection!.options
+          : [
+              { value: 'first', label: '初回' },
+              { value: 'repeat', label: '2回目以降' }
+            ]
       },
       coupon_selection: {
         enabled: couponEnabled,
+        coupon_name: (baseTemplateConfig as FormConfig)?.coupon_selection?.coupon_name ?? '',
         options: [
           { value: 'use' as const, label: '利用する' },
           { value: 'not_use' as const, label: '利用しない' }
         ]
       },
+      custom_fields: (baseTemplateConfig as FormConfig)?.custom_fields ?? [],
       menu_structure: {
         ...(baseTemplateConfig?.menu_structure || {
           structure_type: 'simple' as const,
@@ -467,8 +473,6 @@ export async function POST(
         phone_format: 'japanese' as const,
         name_max_length: 50
       },
-      gas_endpoint: templateGasEndpoint || gas_endpoint || '',
-      calendar_url: determinedFormType === 'web' ? (calendar_url || '') : undefined,
       security_secret: determinedFormType === 'web' ? (security_secret || '') : undefined,
       form_type: determinedFormType
     };
@@ -480,11 +484,13 @@ export async function POST(
       status: 'active' as const,
       draft_status: 'none' as const,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      created_by: currentUserId,
+      updated_by: currentUserId
     };
 
     const { data: newForm, error } = await adminClient
-      .from('forms')
+      .from('reservation_forms')
       // @ts-expect-error Supabase型の制限をバイパス
       .insert([newFormData as Record<string, unknown>])
       .select()
@@ -507,7 +513,7 @@ export async function POST(
       // supabaseConfig は FormConfig 型で構築済み
       const createdFormId = (newForm as Form).id;
       const html = generator.generateHTML(supabaseConfig, createdFormId, storeId);
-      const deployResult = await deployer.deployForm(storeId, createdFormId, html);
+      const deployResult = await deployer.deployForm(storeId, createdFormId, html, 'reservation');
 
       console.log(`✅ [${env}] フォーム作成と同時にStorageにデプロイ: ${deployResult.storage_url || deployResult.url}`);
 
@@ -519,9 +525,9 @@ export async function POST(
         status: 'deployed' as const
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { error: updateError } = await (adminClient as any)
-        .from('forms')
+        .from('reservation_forms')
         .update({ static_deploy: staticDeploy })
         .eq('id', createdFormId);
 

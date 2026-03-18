@@ -1,0 +1,31 @@
+---
+description: Core project rules — commands, don'ts, must-dos. Details in CLAUDE.md.
+alwaysApply: true
+---
+
+# Project global rules
+
+**Full reference:** See [CLAUDE.md](/CLAUDE.md) for architecture, API, and docs.
+
+## Commands (pnpm only)
+- `pnpm install` / `pnpm dev` / `pnpm build` / `pnpm lint` / `pnpm type-check`
+- **Never** use npm or yarn.
+
+## Before commit
+- Run `pnpm type-check` (required).
+- Run `pnpm lint` when touching TS/TSX.
+
+## Do not
+- Edit JSON in `data/` directly — use API routes.
+- Change user-facing Japanese error messages to English.
+- Add environment prefixes to Supabase Storage paths.
+- Use Vercel Blob — use Supabase Storage only.
+
+## Always
+- Use `normalizeForm()` when reading form data from any source.
+- Send full form object on PUT (no partial updates).
+- Use `credentials: 'include'` on authenticated fetch.
+- Use `getAppEnvironment()` for env branching in API.
+
+## Environment
+- `NEXT_PUBLIC_APP_ENV=local` → JSON + mocks; staging/production → Supabase. See `.env.local.example`.

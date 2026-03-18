@@ -28,8 +28,8 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 -- ==========================================
 ALTER TABLE survey_forms ENABLE ROW LEVEL SECURITY;
 
--- 店舗管理者は自店舗のフォームのみ CRUD 可能
-CREATE POLICY "店舗管理者は自店舗のアンケートフォームを閲覧可能" ON survey_forms
+-- Store admins can CRUD survey forms for their own stores only
+CREATE POLICY "store_admin_survey_forms_select" ON survey_forms
   FOR SELECT
   USING (
     store_id IN (
@@ -37,7 +37,7 @@ CREATE POLICY "店舗管理者は自店舗のアンケートフォームを閲�
     )
   );
 
-CREATE POLICY "店舗管理者は自店舗のアンケートフォームを作成可能" ON survey_forms
+CREATE POLICY "store_admin_survey_forms_insert" ON survey_forms
   FOR INSERT
   WITH CHECK (
     store_id IN (
@@ -45,7 +45,7 @@ CREATE POLICY "店舗管理者は自店舗のアンケートフォームを作�
     )
   );
 
-CREATE POLICY "店舗管理者は自店舗のアンケートフォームを更新可能" ON survey_forms
+CREATE POLICY "store_admin_survey_forms_update" ON survey_forms
   FOR UPDATE
   USING (
     store_id IN (
@@ -53,7 +53,7 @@ CREATE POLICY "店舗管理者は自店舗のアンケートフォームを更�
     )
   );
 
-CREATE POLICY "店舗管理者は自店舗のアンケートフォームを削除可能" ON survey_forms
+CREATE POLICY "store_admin_survey_forms_delete" ON survey_forms
   FOR DELETE
   USING (
     store_id IN (

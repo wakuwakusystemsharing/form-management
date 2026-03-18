@@ -3,6 +3,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { ArrowLeft, Calendar, BarChart3 } from 'lucide-react';
 
 interface Reservation {
   id: string;
@@ -54,11 +62,11 @@ export default function StoreReservationsPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    const styles = {
-      pending: 'bg-yellow-900/50 text-yellow-200 border-yellow-700',
-      confirmed: 'bg-green-900/50 text-green-200 border-green-700',
-      cancelled: 'bg-red-900/50 text-red-200 border-red-700',
-      completed: 'bg-blue-900/50 text-blue-200 border-blue-700',
+    const variants = {
+      pending: 'secondary' as const,
+      confirmed: 'default' as const,
+      cancelled: 'destructive' as const,
+      completed: 'default' as const,
     };
 
     const labels = {
@@ -69,9 +77,9 @@ export default function StoreReservationsPage() {
     };
 
     return (
-      <span className={`px-3 py-1 rounded-full text-xs font-medium border ${styles[status as keyof typeof styles]}`}>
-        {labels[status as keyof typeof labels]}
-      </span>
+      <Badge variant={variants[status as keyof typeof variants] || 'secondary'}>
+        {labels[status as keyof typeof labels] || status}
+      </Badge>
     );
   };
 
@@ -81,155 +89,141 @@ export default function StoreReservationsPage() {
     return `${dateStr} ${time}`;
   };
 
+  const filteredReservations = filterStatus === 'all' 
+    ? reservations 
+    : reservations.filter(r => r.status === filterStatus);
+
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <button
-                onClick={() => router.push(`/admin/${storeId}`)}
-                className="text-blue-400 hover:text-blue-300 mb-2 transition-colors"
-              >
-                ← 店舗管理画面に戻る
-              </button>
-              <h1 className="text-3xl font-bold text-gray-100">予約一覧</h1>
-              <p className="text-gray-400 mt-1">店舗ID: {storeId}</p>
+    <div className="min-h-screen bg-background p-4 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* ヘッダー */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => router.push(`/${storeId}/admin`)}
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    店舗管理画面に戻る
+                  </Button>
+                </div>
+                <CardTitle className="text-2xl">予約一覧</CardTitle>
+                <CardDescription className="mt-1">店舗ID: {storeId}</CardDescription>
+              </div>
             </div>
-          </div>
-        </div>
+          </CardHeader>
+        </Card>
 
-        {/* Tabs */}
-        <div className="border-b border-gray-700 mb-6">
-          <nav className="flex space-x-8">
-            <button
-              onClick={() => setActiveTab('list')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'list'
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
-              }`}
-            >
+        {/* タブナビゲーション */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'list' | 'analytics')} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="list">
+              <Calendar className="mr-2 h-4 w-4" />
               予約一覧
-            </button>
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === 'analytics'
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600'
-              }`}
-            >
+            </TabsTrigger>
+            <TabsTrigger value="analytics">
+              <BarChart3 className="mr-2 h-4 w-4" />
               分析
-            </button>
-          </nav>
-        </div>
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Analytics Tab */}
-        {activeTab === 'analytics' && (
-          <ReservationAnalytics storeId={storeId} />
-        )}
+          {/* 分析タブ */}
+          <TabsContent value="analytics" className="space-y-6">
+            <ReservationAnalytics storeId={storeId} />
+          </TabsContent>
 
-        {/* List Tab */}
-        {activeTab === 'list' && (
-          <>
-        {/* Filters */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700">
-          <div className="flex flex-wrap gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                ステータス
-              </label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">全て</option>
-                <option value="pending">保留中</option>
-                <option value="confirmed">確認済み</option>
-                <option value="cancelled">キャンセル</option>
-                <option value="completed">完了</option>
-              </select>
-            </div>
-          </div>
-        </div>
+          {/* 予約一覧タブ */}
+          <TabsContent value="list" className="space-y-6">
+            {/* フィルター */}
+            <Card>
+              <CardHeader>
+                <CardTitle>フィルター</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="space-y-2 flex-1">
+                    <Label htmlFor="status-filter">ステータス</Label>
+                    <Select value={filterStatus} onValueChange={setFilterStatus}>
+                      <SelectTrigger id="status-filter" className="w-full sm:w-[200px]">
+                        <SelectValue placeholder="ステータスでフィルター" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">全て</SelectItem>
+                        <SelectItem value="pending">保留中</SelectItem>
+                        <SelectItem value="confirmed">確認済み</SelectItem>
+                        <SelectItem value="cancelled">キャンセル</SelectItem>
+                        <SelectItem value="completed">完了</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* Reservations Table */}
-        <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-          {loading ? (
-            <div className="text-center py-12 text-gray-400">
-              読み込み中...
-            </div>
-          ) : reservations.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              予約データがありません
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-900">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      予約日時
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      顧客名
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      電話番号
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      メールアドレス
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      ステータス
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      作成日時
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700">
-                  {reservations.map((reservation) => (
-                    <tr key={reservation.id} className="hover:bg-gray-700/50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-100">
-                        {formatDate(reservation.reservation_date, reservation.reservation_time)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-100">
-                        {reservation.customer_name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {reservation.customer_phone}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {reservation.customer_email || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(reservation.status)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                        {new Date(reservation.created_at).toLocaleString('ja-JP')}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Summary */}
-        {!loading && reservations.length > 0 && (
-          <div className="mt-6 bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <p className="text-gray-300 text-sm">
-              合計 <span className="font-bold text-cyan-400">{reservations.length}</span> 件の予約
-            </p>
-          </div>
-        )}
-          </>
-        )}
+            {/* 予約テーブル */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>予約一覧</CardTitle>
+                  {!loading && filteredReservations.length > 0 && (
+                    <Badge variant="outline">
+                      合計 {filteredReservations.length} 件
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                    <p className="mt-4 text-muted-foreground">読み込み中...</p>
+                  </div>
+                ) : filteredReservations.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    予約データがありません
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>予約日時</TableHead>
+                          <TableHead>顧客名</TableHead>
+                          <TableHead>電話番号</TableHead>
+                          <TableHead>メールアドレス</TableHead>
+                          <TableHead>ステータス</TableHead>
+                          <TableHead>作成日時</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredReservations.map((reservation) => (
+                          <TableRow key={reservation.id}>
+                            <TableCell className="font-medium">
+                              {formatDate(reservation.reservation_date, reservation.reservation_time)}
+                            </TableCell>
+                            <TableCell>{reservation.customer_name}</TableCell>
+                            <TableCell>{reservation.customer_phone}</TableCell>
+                            <TableCell>{reservation.customer_email || '-'}</TableCell>
+                            <TableCell>
+                              {getStatusBadge(reservation.status)}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {new Date(reservation.created_at).toLocaleString('ja-JP')}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

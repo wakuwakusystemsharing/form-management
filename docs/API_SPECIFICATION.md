@@ -38,7 +38,7 @@
 {
   "stores": [
     {
-      "id": "uuid-here",
+      "id": "abc123",
       "name": "店舗名",
       "owner_name": "オーナー名",
       "owner_email": "owner@example.com",
@@ -46,6 +46,7 @@
       "address": "東京都...",
       "website_url": "https://...",
       "description": "店舗説明",
+      "status": "active",
       "created_at": "2025-01-15T00:00:00Z",
       "updated_at": "2025-01-15T00:00:00Z"
     }
@@ -92,7 +93,19 @@
 ### `PUT /api/stores/{storeId}`
 店舗情報を更新
 
+**認証**: サービス管理者
+
 **リクエストボディ**: 更新したいフィールドのみ
+```json
+{
+  "name": "更新された店舗名",
+  "owner_name": "更新されたオーナー名",
+  "owner_email": "updated@example.com",
+  "phone": "03-9876-5432",
+  "address": "更新された住所",
+  "website_url": "https://updated.com",
+  "description": "更新された説明"
+}
 
 ### `DELETE /api/stores/{storeId}`
 店舗を削除（関連フォーム・予約も削除）
@@ -124,12 +137,11 @@
     "line_settings": {
       "liff_id": "1234567890-abcdefgh"
     },
-    "gas_endpoint": "https://script.google.com/...",
     "ui_settings": {
       "theme_color": "#3B82F6"
     },
     "static_deploy": {
-      "deploy_url": "https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{formId}/config/current.html",
+      "deploy_url": "https://nas-rsv.com/api/public-form/reservations/{storeId}/{formId}/index.html",
       "storage_url": "https://[project-ref].supabase.co/storage/v1/object/public/forms/...",
       "deployed_at": "2025-01-15T00:00:00Z",
       "status": "deployed"
@@ -148,7 +160,6 @@
 {
   "form_name": "カット予約フォーム",
   "liff_id": "1234567890-abcdefgh",
-  "gas_endpoint": "https://script.google.com/...",
   "template": {
     "name": "スタンダード",
     "config": { ... }
@@ -195,17 +206,18 @@
 ```json
 {
   "success": true,
-  "deployUrl": "https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{formId}/config/current.html?v=1234567890",
-  "storageUrl": "https://[project-ref].supabase.co/storage/v1/object/public/forms/prod/forms/{storeId}/{formId}/config/current.html",
+  "deployUrl": "https://nas-rsv.com/api/public-form/reservations/{storeId}/{formId}/index.html?v=1234567890",
+  "storageUrl": "https://[project-ref].supabase.co/storage/v1/object/public/forms/reservations/{storeId}/{formId}/index.html",
   "deployedAt": "2025-01-15T00:00:00Z",
   "environment": "production"
 }
 ```
 
 **注意**: 
-- 環境に応じて自動的に適切なSupabaseプロジェクトのStorageにデプロイされます
-- Staging環境: `staging/forms/{storeId}/{formId}/config/current.html`
-- Production環境: `prod/forms/{storeId}/{formId}/config/current.html`
+- 環境に応じて自動的に適切なSupabaseプロジェクトのStorageにデプロイされます（プロジェクトレベルで分離）
+- 予約フォーム: `reservations/{storeId}/{formId}/index.html`
+- アンケートフォーム: `surveys/{storeId}/{formId}/index.html`
+- 環境プレフィックス（`staging/`, `prod/`, `dev/`）は不要
 - プロキシURL (`/api/public-form/*`) 経由でアクセスすることで、正しいContent-Typeで配信されます
 
 ---
@@ -295,7 +307,7 @@
       "ui_settings": { ... }
     },
     "static_deploy": {
-      "deploy_url": "https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{id}/config/current.html",
+      "deploy_url": "https://nas-rsv.com/api/public-form/surveys/{storeId}/{id}/index.html",
       "storage_url": "https://[project-ref].supabase.co/storage/v1/object/public/forms/...",
       "deployed_at": "2025-01-15T00:00:00Z",
       "status": "deployed"
@@ -389,7 +401,7 @@
 Supabase StorageからフォームHTMLをプロキシ配信
 
 **パラメータ**:
-- `path` (string[]): Supabase Storage内のパス（例: `prod/forms/{storeId}/{formId}/config/current.html`）
+- `path` (string[]): Supabase Storage内のパス（例: `reservations/{storeId}/{formId}/index.html` または `surveys/{storeId}/{formId}/index.html`）
 
 **クエリパラメータ**:
 - `v` (number, optional): キャッシュバスティング用のタイムスタンプ
@@ -422,6 +434,127 @@ Supabase StorageからフォームHTMLをプロキシ配信
 ```
 
 **注意**: 環境に応じて自動的に適切なSupabaseプロジェクトのStorageにアップロードされます
+
+---
+
+## 👥 店舗管理者（Store Admins）API
+
+### `GET /api/stores/{storeId}/admins`
+店舗の管理者一覧を取得（サービス管理者用）
+
+**認証**: サービス管理者のみ
+
+**レスポンス**:
+```json
+[
+  {
+    "id": "uuid-here",
+    "user_id": "uuid-here",
+    "store_id": "uuid-here",
+    "email": "admin@example.com",
+    "created_at": "2025-01-15T00:00:00Z"
+  }
+]
+```
+
+### `POST /api/stores/{storeId}/admins`
+店舗管理者を追加
+
+**リクエストボディ**:
+```json
+{
+  "email": "admin@example.com"
+}
+```
+
+**レスポンス**:
+```json
+{
+  "success": true,
+  "admin": {
+    "id": "uuid-here",
+    "user_id": "uuid-here",
+    "store_id": "uuid-here",
+    "email": "admin@example.com",
+    "created_at": "2025-01-15T00:00:00Z"
+  }
+}
+```
+
+### `DELETE /api/stores/{storeId}/admins/{userId}`
+店舗管理者を削除
+
+**レスポンス**:
+```json
+{
+  "success": true,
+  "message": "店舗管理者を削除しました"
+}
+```
+
+---
+
+## 📊 予約分析（Reservation Analytics）API
+
+### `GET /api/stores/{storeId}/reservations/analytics`
+店舗の予約分析データを取得
+
+**認証**: サービス管理者または店舗管理者
+
+**レスポンス**:
+```json
+{
+  "total": 100,
+  "byStatus": {
+    "pending": 10,
+    "confirmed": 70,
+    "cancelled": 15,
+    "completed": 5
+  },
+  "byMonth": [
+    {
+      "month": "2025-01",
+      "count": 30
+    }
+  ],
+  "recentReservations": [ ... ]
+}
+```
+
+---
+
+## 🔐 認証（Auth）API
+
+### `POST /api/auth/set-cookie`
+認証トークンをクッキーに設定
+
+**リクエストボディ**:
+```json
+{
+  "accessToken": "jwt-token-here"
+}
+```
+
+**レスポンス**:
+```json
+{
+  "success": true
+}
+```
+
+### `GET /api/auth/verify`
+認証トークンを検証
+
+**レスポンス**:
+```json
+{
+  "valid": true,
+  "user": {
+    "id": "uuid-here",
+    "email": "user@example.com"
+  }
+}
+```
 
 ---
 
@@ -463,9 +596,176 @@ Supabase StorageからフォームHTMLをプロキシ配信
 
 ---
 
+## 📡 Webhook API
+
+### `POST /api/webhooks/line`
+LINE Messaging API からの Webhook イベントを受信
+
+**認証**: 不要（署名検証を実施）
+
+**リクエストヘッダー**:
+- `x-line-signature`: LINE が付与する HMAC-SHA256 署名
+
+**署名検証**: `LINE_CHANNEL_SECRET` で HMAC-SHA256 署名を検証（不正リクエストを拒否）
+
+**処理内容**:
+- 予約確認・キャンセルメッセージの受信と処理
+- LINE ユーザーへの返信・プッシュ通知
+
+**レスポンス**:
+```json
+{ "success": true }
+```
+
+---
+
+## 📅 Google Calendar 連携 API
+
+### `GET /api/integrations/google-calendar/connect`
+Google OAuth 認証フローを開始（Google へリダイレクト）
+
+**クエリパラメータ**:
+- `store_id` (string, 必須): 店舗 ID
+
+**レスポンス**: Google OAuth 認証ページへのリダイレクト
+
+---
+
+### `GET /api/integrations/google-calendar/callback`
+Google OAuth コールバック処理。リフレッシュトークンを暗号化して stores テーブルに保存。
+
+**クエリパラメータ**: Google から付与される `code`、`state`
+
+**レスポンス**: 店舗管理画面へリダイレクト
+
+---
+
+### `GET /api/stores/{storeId}/calendar`
+カレンダー連携状態を取得
+
+**レスポンス**:
+```json
+{
+  "google_calendar_id": "calendar-id@group.calendar.google.com",
+  "google_calendar_source": "store_oauth"
+}
+```
+
+---
+
+### `PUT /api/stores/{storeId}/calendar`
+カレンダー ID を手動設定
+
+**リクエストボディ**:
+```json
+{
+  "google_calendar_id": "calendar-id@group.calendar.google.com"
+}
+```
+
+---
+
+### `POST /api/stores/{storeId}/calendar/disconnect`
+Google Calendar 連携を解除（OAuth トークンを削除）
+
+**レスポンス**:
+```json
+{ "success": true }
+```
+
+---
+
+### `GET /api/stores/{storeId}/calendar/availability`
+カレンダーの空き状況を取得
+
+**クエリパラメータ**:
+- `date` (YYYY-MM-DD): 対象日付
+- `duration` (number): 予約時間（分）
+
+**レスポンス**: 空き時間スロットの配列
+
+---
+
+## 👤 CRM API（顧客管理）
+
+### `GET /api/stores/{storeId}/customers`
+顧客一覧を取得（ページネーション・検索対応）
+
+**クエリパラメータ**:
+- `page` (number, default 1): ページ番号
+- `limit` (number, default 20): 1ページあたりの件数
+- `search` (string): 名前・電話番号・メールでの検索
+
+**レスポンス**:
+```json
+{
+  "customers": [
+    {
+      "id": "uuid-here",
+      "store_id": "abc123",
+      "name": "山田太郎",
+      "phone": "090-1234-5678",
+      "email": "customer@example.com",
+      "customer_type": "regular",
+      "total_visits": 5,
+      "last_visit_date": "2026-02-01",
+      "created_at": "2025-06-01T00:00:00Z"
+    }
+  ],
+  "total": 100,
+  "page": 1,
+  "limit": 20
+}
+```
+
+### `POST /api/stores/{storeId}/customers`
+顧客を作成
+
+**リクエストボディ**:
+```json
+{
+  "name": "山田太郎",
+  "phone": "090-1234-5678",
+  "email": "customer@example.com",
+  "line_user_id": "Uxxxxxxx"
+}
+```
+
+### `GET /api/stores/{storeId}/customers/{customerId}`
+顧客詳細を取得（来店履歴含む）
+
+**レスポンス**: 顧客オブジェクト + `visits` 配列
+
+### `PUT /api/stores/{storeId}/customers/{customerId}`
+顧客情報を更新
+
+### `DELETE /api/stores/{storeId}/customers/{customerId}`
+顧客を削除
+
+### `GET /api/stores/{storeId}/customers/analytics`
+顧客分析データを取得（セグメント別件数・来店推移等）
+
+---
+
+## ⚙️ 管理者設定 API
+
+### `GET /api/admin/settings`
+サービス全体設定を取得（Google API 認証情報等）
+
+**認証**: サービス管理者のみ
+
+### `PUT /api/admin/settings`
+サービス全体設定を更新
+
+---
+
 ## 📚 関連ドキュメント
 
 - [データベース設計](../README.md#-データベース設計supabase)
 - [認証システム](../README.md#-認証システム)
 - [セットアップガイド](./SETUP.md)
+
+---
+
+**最終更新**: 2026年3月
 

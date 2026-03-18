@@ -1,223 +1,312 @@
 [
   {
-    "id": "42la8deuxo9j",
+    "id": "g3v71mxst30e",
     "store_id": "st0001",
-    "form_name": "Test A",
-    "basic_info": {
-      "form_name": "Test A",
-      "store_name": "",
-      "liff_id": "あ",
-      "theme_color": "#3B82F6",
-      "show_gender_selection": false
-    },
-    "menu_structure": {
-      "structure_type": "simple",
-      "categories": [
-        {
-          "id": "cat1",
-          "name": "メニュー",
-          "menus": [
-            {
-              "id": "menu1",
-              "name": "カット",
-              "price": 3000,
-              "duration": 60,
-              "description": "スタンダードカット"
-            }
-          ]
-        }
-      ]
-    },
-    "ui_settings": {
-      "theme_color": "#3B82F6",
-      "button_style": "rounded",
-      "show_repeat_booking": false,
-      "show_side_nav": true,
-      "show_visit_count": false,
-      "show_coupon_selection": false
-    },
-    "gas_endpoint": "あ",
-    "line_settings": {
-      "liff_id": "あ"
-    },
-    "business_rules": {
-      "business_hours": {
-        "monday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": false
-        },
-        "tuesday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": false
-        },
-        "wednesday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": false
-        },
-        "thursday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": false
-        },
-        "friday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": false
-        },
-        "saturday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": false
-        },
-        "sunday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": true
+    "config": {
+      "basic_info": {
+        "form_name": "Test 2",
+        "store_name": "",
+        "liff_id": "2008098784-5ZQ1LRn3",
+        "theme_color": "#3B82F6",
+        "show_gender_selection": true
+      },
+      "menu_structure": {
+        "structure_type": "category_based",
+        "allow_cross_category_selection": true,
+        "categories": [
+          {
+            "id": "cat_cut",
+            "name": "カット",
+            "display_name": "◆カット◆",
+            "selection_mode": "multiple",
+            "menus": [
+              {
+                "id": "menu_cut_std",
+                "name": "スタンダードカット",
+                "price": 3000,
+                "duration": 60,
+                "description": "基本的なカットメニュー",
+                "image": "https://placehold.co/400x300/e2e8f0/64748b?text=スタンダードカット",
+                "has_submenu": true,
+                "sub_menu_items": [
+                  {
+                    "id": "sub_short",
+                    "name": "ショート",
+                    "price": 3000,
+                    "duration": 60
+                  },
+                  {
+                    "id": "sub_mid",
+                    "name": "ミディアム",
+                    "price": 3500,
+                    "duration": 70
+                  },
+                  {
+                    "id": "sub_long",
+                    "name": "ロング",
+                    "price": 4000,
+                    "duration": 80
+                  }
+                ],
+                "options": [
+                  {
+                    "id": "opt_quick",
+                    "name": "クイック仕上げ",
+                    "price": 500,
+                    "duration": 10,
+                    "is_default": false
+                  },
+                  {
+                    "id": "opt_set",
+                    "name": "セット（シャンプー込）",
+                    "price": 0,
+                    "duration": 15,
+                    "is_default": true
+                  }
+                ]
+              },
+              {
+                "id": "menu_cut_premium",
+                "name": "プレミアムカット",
+                "price": 5000,
+                "duration": 90,
+                "description": "トップスタイリストによる丁寧なカット",
+                "image": "https://placehold.co/400x300/cbd5e1/475569?text=プレミアムカット",
+                "has_submenu": false,
+                "options": [
+                  {
+                    "id": "opt_scalp",
+                    "name": "頭皮ケア",
+                    "price": 1000,
+                    "duration": 15,
+                    "is_default": false
+                  }
+                ]
+              }
+            ],
+            "options": []
+          },
+          {
+            "id": "cat_color",
+            "name": "カラー",
+            "display_name": "◆カラー◆",
+            "selection_mode": "multiple",
+            "menus": [
+              {
+                "id": "menu_color_full",
+                "name": "フルカラー",
+                "price": 8000,
+                "duration": 120,
+                "description": "全体カラー",
+                "image": "https://placehold.co/400x300/fce7f3/9d174d?text=フルカラー",
+                "has_submenu": false,
+                "options": [
+                  {
+                    "id": "opt_tone",
+                    "name": "トーンアップ",
+                    "price": 500,
+                    "duration": 0,
+                    "is_default": false
+                  }
+                ]
+              },
+              {
+                "id": "menu_color_highlight",
+                "name": "ハイライト",
+                "price": 6000,
+                "duration": 90,
+                "description": "部分ハイライト",
+                "image": "https://placehold.co/400x300/fde68a/854d0e?text=ハイライト",
+                "has_submenu": false,
+                "options": []
+              }
+            ],
+            "options": []
+          },
+          {
+            "id": "cat_treatment",
+            "name": "トリートメント",
+            "display_name": "◆トリートメント◆",
+            "selection_mode": "multiple",
+            "menus": [
+              {
+                "id": "menu_treat_basic",
+                "name": "ベーシックトリートメント",
+                "price": 2000,
+                "duration": 30,
+                "description": "髪質改善",
+                "image": "https://placehold.co/400x300/d1fae5/065f46?text=トリートメント",
+                "has_submenu": false,
+                "options": []
+              }
+            ],
+            "options": []
+          }
+        ],
+        "display_options": {
+          "show_price": true,
+          "show_duration": true,
+          "show_description": true,
+          "show_treatment_info": true
         }
       },
-      "advance_booking_days": 30
-    },
-    "status": "inactive",
-    "created_at": "2025-10-08T07:15:33.307Z",
-    "updated_at": "2025-10-08T07:15:33.307Z",
-    "static_deploy": {
-      "deployed_at": "2025-10-08T07:15:33.318Z",
-      "deploy_url": "/static-forms/42la8deuxo9j.html",
-      "status": "deployed",
-      "environment": "local"
-    }
-  },
-  {
-    "id": "h6scgl3eg4ot",
-    "store_id": "st0001",
-    "form_name": "dd",
-    "basic_info": {
-      "form_name": "dd",
-      "store_name": "",
-      "liff_id": "d",
-      "theme_color": "#0b8b09",
-      "show_gender_selection": true
-    },
-    "menu_structure": {
-      "structure_type": "category",
-      "categories": [
-        {
-          "id": "cat1",
-          "name": "カット",
-          "menus": [
-            {
-              "id": "menu1",
-              "name": "スタンダードカット",
-              "price": 3000,
-              "duration": 60,
-              "description": "基本的なカット",
-              "target_gender": [
-                "male",
-                "female"
-              ],
-              "has_submenu": true,
-              "sub_menu_items": [
-                {
-                  "name": "ショート",
-                  "price": 3000,
-                  "duration": 60
-                },
-                {
-                  "name": "ミディアム",
-                  "price": 3500,
-                  "duration": 70
-                },
-                {
-                  "name": "ロング",
-                  "price": 4000,
-                  "duration": 80
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "id": "cat2",
-          "name": "オプション",
-          "menus": [
-            {
-              "id": "option1",
-              "name": "シャンプー",
-              "price": 500,
-              "duration": 15,
-              "description": "基本シャンプー",
-              "target_gender": [
-                "male",
-                "female"
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    "ui_settings": {
-      "theme_color": "#861a8e",
-      "button_style": "rounded",
-      "show_repeat_booking": false,
-      "show_side_nav": true,
-      "show_visit_count": true,
-      "show_coupon_selection": true
-    },
-    "gas_endpoint": "d",
-    "line_settings": {
-      "liff_id": "d"
-    },
-    "business_rules": {
-      "business_hours": {
-        "monday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": false
-        },
-        "tuesday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": false
-        },
-        "wednesday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": false
-        },
-        "thursday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": false
-        },
-        "friday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": false
-        },
-        "saturday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": false
-        },
-        "sunday": {
-          "open": "09:00",
-          "close": "18:00",
-          "closed": true
-        }
+      "ui_settings": {
+        "theme_color": "#3B82F6",
+        "button_style": "rounded",
+        "show_repeat_booking": true,
+        "show_side_nav": true
       },
-      "advance_booking_days": 30
+      "form_type": "line",
+      "calendar_settings": {
+        "business_hours": {
+          "monday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "tuesday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "wednesday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "thursday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "friday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "saturday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": false
+          },
+          "sunday": {
+            "open": "09:00",
+            "close": "18:00",
+            "closed": true
+          }
+        },
+        "advance_booking_days": 30
+      },
+      "visit_options": [],
+      "gender_selection": {
+        "enabled": true,
+        "required": false,
+        "options": [
+          {
+            "value": "male",
+            "label": "男性"
+          },
+          {
+            "value": "female",
+            "label": "女性"
+          }
+        ]
+      },
+      "visit_count_selection": {
+        "enabled": true,
+        "required": false,
+        "options": [
+          {
+            "value": "first",
+            "label": "初回（+30分）",
+            "duration": 30
+          },
+          {
+            "value": "repeat",
+            "label": "2回目以降",
+            "duration": 0
+          }
+        ]
+      },
+      "coupon_selection": {
+        "enabled": true,
+        "coupon_name": "",
+        "options": [
+          {
+            "value": "use",
+            "label": "利用する"
+          },
+          {
+            "value": "not_use",
+            "label": "利用しない"
+          }
+        ]
+      },
+      "custom_fields": [
+        {
+          "id": "cf1",
+          "type": "text",
+          "title": "ご希望の時間帯",
+          "required": false,
+          "placeholder": "例：午前中"
+        },
+        {
+          "id": "cf2",
+          "type": "textarea",
+          "title": "ご要望・備考",
+          "required": false,
+          "placeholder": "自由記入"
+        },
+        {
+          "id": "cf3",
+          "type": "radio",
+          "title": "施術のご希望",
+          "required": false,
+          "options": [
+            {
+              "label": "ゆったり",
+              "value": "relax"
+            },
+            {
+              "label": "手早く",
+              "value": "quick"
+            }
+          ]
+        },
+        {
+          "id": "cf4",
+          "type": "checkbox",
+          "title": "オプション希望",
+          "required": false,
+          "options": [
+            {
+              "label": "ドライ付き",
+              "value": "dry"
+            },
+            {
+              "label": "セット付き",
+              "value": "set"
+            }
+          ]
+        }
+      ],
+      "validation_rules": {
+        "required_fields": [
+          "name",
+          "phone"
+        ],
+        "phone_format": "japanese",
+        "name_max_length": 50
+      }
     },
-    "status": "inactive",
-    "created_at": "2025-10-08T07:23:16.559Z",
-    "updated_at": "2025-10-10T07:31:06.299Z",
+    "status": "active",
+    "draft_status": "none",
+    "created_at": "2026-02-06T01:41:19.224Z",
+    "updated_at": "2026-02-06T01:41:19.224Z",
     "static_deploy": {
-      "deployed_at": "2025-10-08T07:23:16.602Z",
-      "deploy_url": "/static-forms/h6scgl3eg4ot.html",
-      "status": "deployed",
-      "environment": "local"
+      "deployed_at": "2026-02-06T01:41:19.226Z",
+      "deploy_url": "/static-forms/g3v71mxst30e.html",
+      "status": "deployed"
     }
   }
 ]

@@ -9,6 +9,12 @@ export interface Store {
   phone?: string;
   address?: string;
   website_url?: string;
+  logo_url?: string;          // ロゴ画像URL
+  theme_color?: string;       // テーマカラー（HEX形式）
+  google_calendar_id?: string; // 店舗用GoogleカレンダーID
+  /** 'system' = SA作成カレンダー, 'store_oauth' = 店舗連携のGoogleカレンダー */
+  google_calendar_source?: 'system' | 'store_oauth';
+  line_channel_access_token?: string; // LINEチャネルアクセストークン
   created_at: string;
   updated_at: string;
   status: 'active' | 'inactive';

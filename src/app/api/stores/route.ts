@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAppEnvironment } from '../../../lib/env'
 import { getSupabaseClient, createAdminClient, isServiceAdmin } from '../../../lib/supabase'
 import { generateStoreId } from '../../../lib/store-id-generator'
+import { createStoreCalendar } from '../../../lib/google-calendar'
 import { Store } from '../../../types/store'
 import { promises as fs } from 'fs'
 import path from 'path'
@@ -63,7 +64,7 @@ export async function GET() {
 
   try {
     // サービス管理者の場合は全店舗取得
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: stores, error } = await (adminClient as any)
       .from('stores')
       .select('*')
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { name, owner_name, owner_email, phone, address, description, website_url } = body
+    const { name, owner_name, owner_email, phone, address, description, website_url, line_channel_access_token } = body
     console.log('[API] POST /api/stores - Body:', { name, owner_name, owner_email })
 
     // バリデーション
@@ -137,6 +138,8 @@ export async function POST(request: NextRequest) {
         address: address || '',
         description: description || '',
         website_url: website_url || '',
+        google_calendar_id: '',
+        line_channel_access_token: line_channel_access_token ?? '',
         status: 'active',
         created_at: now,
         updated_at: now
@@ -210,7 +213,7 @@ export async function POST(request: NextRequest) {
     
     // 重複チェック関数
     const checkStoreExists = async (id: string): Promise<boolean> => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const { data, error } = await (adminClient as any)
         .from('stores')
         .select('id')
@@ -246,9 +249,20 @@ export async function POST(request: NextRequest) {
     } while (true)
     
     console.log('[API] Generated unique store ID:', storeId, `(attempts: ${attempts})`)
+
+    let googleCalendarId: string | null = null
+    try {
+      googleCalendarId = await createStoreCalendar(name, body.owner_email ?? null)
+    } catch (calendarError) {
+      console.error('[API] Calendar creation error:', calendarError)
+      return NextResponse.json(
+        { error: 'Googleカレンダーの作成に失敗しました。管理者設定を確認してください。' },
+        { status: 500 }
+      )
+    }
     
     // 店舗を挿入
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data, error } = await (adminClient as any)
       .from('stores')
       .insert([{
@@ -260,7 +274,11 @@ export async function POST(request: NextRequest) {
         address: address || '',
         description: description || '',
         website_url: website_url || '',
-        status: 'active'
+        google_calendar_id: googleCalendarId || '',
+        line_channel_access_token: line_channel_access_token ?? '',
+        status: 'active',
+        created_by: user.id,
+        updated_by: user.id
       }])
       .select()
       .single()

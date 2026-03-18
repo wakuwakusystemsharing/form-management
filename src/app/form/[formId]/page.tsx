@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { Form } from '@/types/form';
+import { normalizeForm } from '@/lib/form-normalizer';
 
 export default function CustomerFormPage() {
   const params = useParams();
@@ -99,8 +100,8 @@ export default function CustomerFormPage() {
         
         const formData = await response.json();
         
-        // フォームデータの正規化
-        const normalizedForm = normalizeFormData(formData);
+        // フォームデータの正規化（共通 normalizer を使用）
+        const normalizedForm = normalizeForm(formData);
         
         // プレビューモードでは全てのステータスのフォームを表示
         setForm(normalizedForm);
@@ -116,127 +117,6 @@ export default function CustomerFormPage() {
       fetchForm();
     }
   }, [formId]);
-
-  // フォームデータ正規化関数
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function normalizeFormData(form: any): Form {
-    // configが存在しない場合は作成
-    if (!form.config) {
-      form.config = {} as Form['config'];
-    }
-    
-    // basic_infoの正規化
-    if (!form.config.basic_info) {
-      form.config.basic_info = {
-        form_name: form.form_name || 'フォーム',
-        store_name: form.store_name || '',
-        theme_color: form.ui_settings?.theme_color || '#3B82F6',
-        liff_id: form.liff_id || form.line_settings?.liff_id || ''
-      };
-    }
-    
-    // ui_settingsの正規化
-    if (!form.config.ui_settings) {
-      form.config.ui_settings = form.ui_settings || {};
-    }
-    
-    // menu_structureの正規化
-    if (!form.config.menu_structure) {
-      form.config.menu_structure = form.menu_structure || { categories: [] };
-    }
-    
-    // menu_structure.display_optionsの正規化
-    if (!form.config.menu_structure.display_options) {
-      form.config.menu_structure.display_options = {
-        show_price: true,
-        show_duration: true,
-        show_description: true
-      };
-    }
-    
-    // gender_selectionの正規化
-    if (!form.config.gender_selection) {
-      form.config.gender_selection = {
-        enabled: false,
-        required: false,
-        options: [
-          { value: 'male', label: '男性' },
-          { value: 'female', label: '女性' }
-        ]
-      };
-    }
-    
-    // calendar_settingsの正規化
-    if (!form.config.calendar_settings) {
-      form.config.calendar_settings = form.business_rules || {
-        advance_booking_days: 30
-      };
-    }
-    
-    // business_hoursの構造を正規化（古い形式から新しい形式へ）
-    if (form.config.calendar_settings.business_hours) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const hours = form.config.calendar_settings.business_hours as any;
-      
-      // 古い形式 {start: '09:00', end: '18:00'} を検出
-      if (hours.start && hours.end && !hours.monday) {
-        // 新しい形式に変換
-        const defaultHours = {
-          open: hours.start || '09:00',
-          close: hours.end || '18:00',
-          closed: false
-        };
-        
-        form.config.calendar_settings.business_hours = {
-          monday: { ...defaultHours },
-          tuesday: { ...defaultHours },
-          wednesday: { ...defaultHours },
-          thursday: { ...defaultHours },
-          friday: { ...defaultHours },
-          saturday: { ...defaultHours },
-          sunday: { ...defaultHours, closed: true }
-        } as Form['config']['calendar_settings']['business_hours'];
-      }
-      
-      // business_hoursが存在しない場合はデフォルト値を設定
-      if (!hours.monday) {
-        const defaultHours = {
-          open: '09:00',
-          close: '18:00',
-          closed: false
-        };
-        
-        form.config.calendar_settings.business_hours = {
-          monday: { ...defaultHours },
-          tuesday: { ...defaultHours },
-          wednesday: { ...defaultHours },
-          thursday: { ...defaultHours },
-          friday: { ...defaultHours },
-          saturday: { ...defaultHours },
-          sunday: { ...defaultHours, closed: true }
-        } as Form['config']['calendar_settings']['business_hours'];
-      }
-    } else {
-      // business_hoursが完全に存在しない場合
-      const defaultHours = {
-        open: '09:00',
-        close: '18:00',
-        closed: false
-      };
-      
-      form.config.calendar_settings.business_hours = {
-        monday: { ...defaultHours },
-        tuesday: { ...defaultHours },
-        wednesday: { ...defaultHours },
-        thursday: { ...defaultHours },
-        friday: { ...defaultHours },
-        saturday: { ...defaultHours },
-        sunday: { ...defaultHours, closed: true }
-      } as Form['config']['calendar_settings']['business_hours'];
-    }
-    
-    return form as Form;
-  }
 
   // ローカルストレージに選択内容を保存
   const saveSelectionToStorage = useCallback(() => {
@@ -572,38 +452,97 @@ export default function CustomerFormPage() {
     setShowConfirmation(true);
   };
 
+  const buildSelectionPayload = useCallback(() => {
+    if (!form) {
+      return { selectedMenus: [], selectedOptions: [] };
+    }
+
+    const selectedMenus: Array<Record<string, unknown>> = [];
+    const selectedOptions: Array<Record<string, unknown>> = [];
+    const categories = form.config.menu_structure?.categories || [];
+
+    const processMenu = (category: any, menu: any, submenu: any, menuId: string) => {
+      const price = submenu ? (submenu.price || 0) : (menu.price || 0);
+      const duration = submenu ? (submenu.duration || 0) : (menu.duration || 0);
+
+      selectedMenus.push({
+        menu_id: menu.id,
+        menu_name: menu.name || '',
+        category_name: category?.name || '',
+        price,
+        duration,
+        ...(submenu ? { submenu_id: submenu.id, submenu_name: submenu.name || '' } : {})
+      });
+
+      const optionIds = formData.selectedMenuOptions?.[menuId] || [];
+      optionIds.forEach(optionId => {
+        const option = menu.options?.find((o: any) => o.id === optionId);
+        if (option) {
+          selectedOptions.push({
+            option_id: option.id,
+            option_name: option.name || '',
+            menu_id: menuId,
+            price: option.price || 0,
+            duration: option.duration || 0
+          });
+        }
+      });
+    };
+
+    categories.forEach(category => {
+      const menuIds = formData.selectedMenus[category.id] || [];
+      menuIds.forEach(menuId => {
+        const menu = category.menus?.find((m: any) => m.id === menuId);
+        if (!menu) return;
+        const subId = formData.selectedSubMenus?.[menuId];
+        const submenu = subId && menu.sub_menu_items ? menu.sub_menu_items.find((s: any) => s.id === subId) : null;
+        processMenu(category, menu, submenu, menuId);
+      });
+    });
+
+    return { selectedMenus, selectedOptions };
+  }, [form, formData]);
+
   const handleConfirmSubmit = async () => {
     if (!form) return;
 
     setSubmitting(true);
     
     try {
-      // GAS エンドポイントに送信
-      if (form.config.gas_endpoint) {
-        const response = await fetch(form.config.gas_endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            formId: form.id,
-            storeId: form.store_id,
-            customerData: formData,
-            submittedAt: new Date().toISOString()
-          }),
-        });
-        
-        if (response.ok) {
-          setSubmitted(true);
-          setShowConfirmation(false);
-        } else {
-          throw new Error('送信に失敗しました');
+      const { selectedMenus, selectedOptions } = buildSelectionPayload();
+      const reservationData = {
+        form_id: form.id,
+        store_id: form.store_id,
+        customer_name: formData.name,
+        customer_phone: formData.phone,
+        reservation_date: formData.selectedDate,
+        reservation_time: formData.selectedTime,
+        message: formData.message || null,
+        selected_menus: selectedMenus,
+        selected_options: selectedOptions,
+        customer_info: {
+          gender: formData.gender || null,
+          visit_count: formData.visitCount || null,
+          coupon: formData.couponUsage || null,
+          custom_fields: formData.customFields || {}
         }
-      } else {
-        // GASエンドポイントが未設定の場合は成功として扱う（デモ用）
-        setSubmitted(true);
-        setShowConfirmation(false);
+      };
+
+      const response = await fetch('/api/reservations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(reservationData),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(errorText || '送信に失敗しました');
       }
+
+      setSubmitted(true);
+      setShowConfirmation(false);
     } catch (error) {
       console.error('Submit error:', error);
       alert('送信に失敗しました。しばらく経ってから再度お試しください。');

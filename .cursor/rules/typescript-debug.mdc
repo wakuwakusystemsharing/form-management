@@ -1,0 +1,26 @@
+---
+description: TypeScript — type-check before commit, error handling
+globs: "**/*.ts,**/*.tsx"
+alwaysApply: false
+---
+
+# TypeScript and debug
+
+## Before commit
+- Run `pnpm type-check`. Fix any type errors before pushing.
+
+## Error handling
+- Do not use empty `catch` blocks. Log and/or rethrow:
+```typescript
+// BAD
+try { await fetchData(); } catch (e) {}
+
+// GOOD
+try {
+  await fetchData();
+} catch (e) {
+  console.error('Fetch failed', e);
+  throw e;
+}
+```
+- Keep user-facing error messages in Japanese; do not change them to English.

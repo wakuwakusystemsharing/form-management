@@ -1,1 +1,238 @@
-[]
+[
+  {
+    "id": "res_001",
+    "form_id": "42la8deuxo9j",
+    "store_id": "st0001",
+    "customer_name": "山田太郎",
+    "customer_phone": "090-1234-5678",
+    "customer_email": "yamada@example.com",
+    "selected_menus": [
+      {
+        "menu_id": "menu1",
+        "menu_name": "カット",
+        "price": 3000,
+        "duration": 60
+      }
+    ],
+    "selected_options": [],
+    "reservation_date": "2025-12-20",
+    "reservation_time": "14:00",
+    "customer_info": {
+      "gender": "male",
+      "visit_count": "first",
+      "notes": "初回来店です"
+    },
+    "status": "confirmed",
+    "created_at": "2025-12-15T10:00:00.000Z",
+    "updated_at": "2025-12-15T10:00:00.000Z"
+  },
+  {
+    "id": "res_002",
+    "form_id": "h6scgl3eg4ot",
+    "store_id": "st0001",
+    "customer_name": "佐藤花子",
+    "customer_phone": "080-2345-6789",
+    "customer_email": "sato@example.com",
+    "selected_menus": [
+      {
+        "menu_id": "menu1",
+        "menu_name": "スタンダードカット",
+        "submenu_name": "ミディアム",
+        "price": 3500,
+        "duration": 70
+      }
+    ],
+    "selected_options": [
+      {
+        "option_id": "option1",
+        "option_name": "シャンプー",
+        "price": 500,
+        "duration": 15
+      }
+    ],
+    "reservation_date": "2025-12-21",
+    "reservation_time": "15:30",
+    "customer_info": {
+      "gender": "female",
+      "visit_count": "repeat",
+      "coupon_used": false,
+      "notes": "リピーターです"
+    },
+    "status": "pending",
+    "created_at": "2025-12-16T11:00:00.000Z",
+    "updated_at": "2025-12-16T11:00:00.000Z"
+  },
+  {
+    "id": "res_003",
+    "form_id": "h6scgl3eg4ot",
+    "store_id": "st0001",
+    "customer_name": "鈴木一郎",
+    "customer_phone": "070-3456-7890",
+    "customer_email": "suzuki@example.com",
+    "selected_menus": [
+      {
+        "menu_id": "menu1",
+        "menu_name": "スタンダードカット",
+        "submenu_name": "ショート",
+        "price": 3000,
+        "duration": 60
+      }
+    ],
+    "selected_options": [],
+    "reservation_date": "2025-12-22",
+    "reservation_time": "10:00",
+    "customer_info": {
+      "gender": "male",
+      "visit_count": "first",
+      "notes": ""
+    },
+    "status": "confirmed",
+    "created_at": "2025-12-17T09:00:00.000Z",
+    "updated_at": "2025-12-17T09:00:00.000Z"
+  },
+  {
+    "id": "res_004",
+    "form_id": "42la8deuxo9j",
+    "store_id": "st0001",
+    "customer_name": "田中美咲",
+    "customer_phone": "090-4567-8901",
+    "customer_email": "tanaka@example.com",
+    "selected_menus": [
+      {
+        "menu_id": "menu1",
+        "menu_name": "カット",
+        "price": 3000,
+        "duration": 60
+      }
+    ],
+    "selected_options": [],
+    "reservation_date": "2025-12-18",
+    "reservation_time": "16:00",
+    "customer_info": {
+      "gender": "female",
+      "visit_count": "repeat",
+      "notes": "定期来店"
+    },
+    "status": "completed",
+    "created_at": "2025-12-10T14:00:00.000Z",
+    "updated_at": "2025-12-18T16:30:00.000Z"
+  },
+  {
+    "id": "res_005",
+    "form_id": "h6scgl3eg4ot",
+    "store_id": "st0001",
+    "customer_name": "伊藤健太",
+    "customer_phone": "080-5678-9012",
+    "customer_email": "ito@example.com",
+    "selected_menus": [
+      {
+        "menu_id": "menu1",
+        "menu_name": "スタンダードカット",
+        "submenu_name": "ロング",
+        "price": 4000,
+        "duration": 80
+      }
+    ],
+    "selected_options": [
+      {
+        "option_id": "option1",
+        "option_name": "シャンプー",
+        "price": 500,
+        "duration": 15
+      }
+    ],
+    "reservation_date": "2025-12-19",
+    "reservation_time": "13:00",
+    "customer_info": {
+      "gender": "male",
+      "visit_count": "first",
+      "coupon_used": true,
+      "notes": "クーポン利用"
+    },
+    "status": "cancelled",
+    "created_at": "2025-12-12T10:00:00.000Z",
+    "updated_at": "2025-12-19T12:00:00.000Z"
+  },
+  {
+    "id": "res_006",
+    "form_id": "42la8deuxo9j",
+    "store_id": "st0001",
+    "customer_name": "高橋さくら",
+    "customer_phone": "070-6789-0123",
+    "customer_email": "takahashi@example.com",
+    "selected_menus": [
+      {
+        "menu_id": "menu1",
+        "menu_name": "カット",
+        "price": 3000,
+        "duration": 60
+      }
+    ],
+    "selected_options": [],
+    "reservation_date": "2025-12-25",
+    "reservation_time": "11:00",
+    "customer_info": {
+      "gender": "female",
+      "visit_count": "first",
+      "notes": ""
+    },
+    "status": "pending",
+    "created_at": "2025-12-20T15:00:00.000Z",
+    "updated_at": "2025-12-20T15:00:00.000Z"
+  },
+  {
+    "id": "res_007",
+    "form_id": "h6scgl3eg4ot",
+    "store_id": "st0001",
+    "customer_name": "渡辺大輔",
+    "customer_phone": "090-7890-1234",
+    "customer_email": "watanabe@example.com",
+    "selected_menus": [
+      {
+        "menu_id": "menu1",
+        "menu_name": "スタンダードカット",
+        "submenu_name": "ミディアム",
+        "price": 3500,
+        "duration": 70
+      }
+    ],
+    "selected_options": [],
+    "reservation_date": "2025-12-23",
+    "reservation_time": "14:30",
+    "customer_info": {
+      "gender": "male",
+      "visit_count": "repeat",
+      "notes": ""
+    },
+    "status": "confirmed",
+    "created_at": "2025-12-18T12:00:00.000Z",
+    "updated_at": "2025-12-18T12:00:00.000Z"
+  },
+  {
+    "id": "res_008",
+    "form_id": "42la8deuxo9j",
+    "store_id": "st0001",
+    "customer_name": "中村麻衣",
+    "customer_phone": "080-8901-2345",
+    "customer_email": "nakamura@example.com",
+    "selected_menus": [
+      {
+        "menu_id": "menu1",
+        "menu_name": "カット",
+        "price": 3000,
+        "duration": 60
+      }
+    ],
+    "selected_options": [],
+    "reservation_date": "2025-12-24",
+    "reservation_time": "15:00",
+    "customer_info": {
+      "gender": "female",
+      "visit_count": "repeat",
+      "notes": "定期来店"
+    },
+    "status": "confirmed",
+    "created_at": "2025-12-19T13:00:00.000Z",
+    "updated_at": "2025-12-19T13:00:00.000Z"
+  }
+]

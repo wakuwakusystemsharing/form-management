@@ -66,7 +66,7 @@ export async function GET(
       }
 
       // 予約データを取得
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       let query = (adminClient as any)
         .from('reservations')
         .select('*')

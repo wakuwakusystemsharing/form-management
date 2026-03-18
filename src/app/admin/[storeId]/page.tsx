@@ -1,14 +1,51 @@
 'use client';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Store } from '@/types/store';
 import { Form } from '@/types/form';
 import { SurveyForm } from '@/types/survey';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
+import StoreAdminManager from '@/components/StoreAdminManager';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/components/ui/use-toast';
+import { getBaseUrl } from '@/lib/env';
+import {
+  ArrowLeft,
+  Edit,
+  Trash2,
+  Plus,
+  FileText,
+  ClipboardList,
+  Calendar,
+  Settings,
+  ExternalLink,
+  Copy,
+  Store as StoreIcon,
+  AlertTriangle,
+  MessageCircle,
+  Info
+} from 'lucide-react';
 
-// アンケートテンプレート定義
+function InfoTooltip({ text }: { text: string }) {
+  return (
+    <span className="relative group inline-flex items-center">
+      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 w-64 -translate-x-1/2 rounded-md border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-md opacity-0 transition-opacity group-hover:opacity-100">
+        {text}
+      </span>
+    </span>
+  );
+}
+
+// アンケートテンプレート定義（既存のまま）
 const SURVEY_TEMPLATES = {
   counseling: {
     name: '📋 カウンセリングシート',
@@ -80,29 +117,33 @@ const SURVEY_TEMPLATES = {
 // テンプレート定義
 const FORM_TEMPLATES = {
   basic: {
-    name: '📝 ベーシック',
+    name: '📝 基本',
     description: 'シンプルなメニュー選択のみ',
     config: {
-      basic_info: {
-        show_gender_selection: false
-      },
+      basic_info: { show_gender_selection: false },
       menu_structure: {
-        structure_type: 'simple',
-        categories: [
-          {
-            id: 'cat1',
-            name: 'メニュー',
-            menus: [
-              {
-                id: 'menu1',
-                name: 'カット',
-                price: 3000,
-                duration: 60,
-                description: 'スタンダードカット'
-              }
-            ]
-          }
-        ]
+        structure_type: 'category_based',
+        categories: [{
+          id: 'cat1',
+          name: 'メニュー',
+          display_name: 'メニュー',
+          selection_mode: 'single',
+          gender_condition: 'all',
+          menus: [{
+            id: 'menu1',
+            name: 'カット',
+            price: 3000,
+            duration: 60,
+            description: 'スタンダードカット'
+          }],
+          options: []
+        }],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
       },
       ui_settings: {
         show_visit_count: false,
@@ -113,68 +154,117 @@ const FORM_TEMPLATES = {
   },
   standard: {
     name: '👫 スタンダード',
-    description: '性別選択 + 来店回数 + クーポン',
+    description: '基本 + 性別選択',
     config: {
-      basic_info: {
-        show_gender_selection: true
-      },
+      basic_info: { show_gender_selection: true },
       menu_structure: {
-        structure_type: 'simple',
+        structure_type: 'category_based',
         categories: [
           {
-            id: 'cat1',
-            name: 'メニュー',
-            menus: [
-              {
-                id: 'menu1',
-                name: 'カット',
-                price: 3000,
-                duration: 60,
-                description: 'スタンダードカット',
-                target_gender: ['male', 'female']
-              }
-            ]
+            id: 'cat_male',
+            name: 'メンズメニュー',
+            display_name: 'メンズメニュー',
+            selection_mode: 'single',
+            gender_condition: 'male',
+            menus: [{
+              id: 'menu_m1',
+              name: 'メンズカット',
+              price: 3000,
+              duration: 60,
+              description: 'スタンダードカット',
+              target_gender: ['male']
+            }],
+            options: []
+          },
+          {
+            id: 'cat_female',
+            name: 'レディースメニュー',
+            display_name: 'レディースメニュー',
+            selection_mode: 'single',
+            gender_condition: 'female',
+            menus: [{
+              id: 'menu_f1',
+              name: 'レディースカット',
+              price: 3500,
+              duration: 60,
+              description: 'スタンダードカット',
+              target_gender: ['female']
+            }],
+            options: []
           }
-        ]
+        ],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
       },
       ui_settings: {
-        show_visit_count: true,
-        show_coupon_selection: true,
+        show_visit_count: false,
+        show_coupon_selection: false,
         show_repeat_booking: false
       }
     }
   },
   premium: {
     name: '⭐ プレミアム',
-    description: '性別選択 + サブメニュー + オプション',
+    description: 'スタンダード + サブメニュー（長さ別など）',
     config: {
-      basic_info: {
-        show_gender_selection: true
-      },
+      basic_info: { show_gender_selection: true },
       menu_structure: {
-        structure_type: 'category',
+        structure_type: 'category_based',
         categories: [
           {
-            id: 'cat1',
+            id: 'cat_cut',
             name: 'カット',
+            display_name: '◆カット◆',
+            selection_mode: 'single',
+            gender_condition: 'all',
             menus: [
               {
-                id: 'menu1',
-                name: 'スタンダードカット',
+                id: 'menu_cut1',
+                name: 'カット',
                 price: 3000,
                 duration: 60,
-                description: '基本的なカット',
-                target_gender: ['male', 'female'],
+                description: '長さ別料金あり',
                 has_submenu: true,
                 sub_menu_items: [
-                  { name: 'ショート', price: 3000, duration: 60 },
-                  { name: 'ミディアム', price: 3500, duration: 70 },
-                  { name: 'ロング', price: 4000, duration: 80 }
-                ]
+                  { id: 'sub_short', name: 'ショート', price: 3000, duration: 60 },
+                  { id: 'sub_mid', name: 'ミディアム', price: 3500, duration: 70 },
+                  { id: 'sub_long', name: 'ロング', price: 4000, duration: 80 }
+                ],
+                options: []
               }
-            ]
+            ],
+            options: []
+          },
+          {
+            id: 'cat_color',
+            name: 'カラー',
+            display_name: '◆カラー◆',
+            selection_mode: 'single',
+            gender_condition: 'all',
+            menus: [
+              {
+                id: 'menu_color1',
+                name: 'フルカラー',
+                price: 8000,
+                duration: 120,
+                description: '全体カラー',
+                has_submenu: false,
+                options: []
+              }
+            ],
+            options: []
           }
-        ]
+        ],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
       },
       ui_settings: {
         show_visit_count: false,
@@ -184,495 +274,290 @@ const FORM_TEMPLATES = {
     }
   },
   complete: {
-    name: '🚀 コンプリート',
-    description: 'すべての機能（性別、サブメニュー、オプション、来店回数、クーポン）',
+    name: '💎 コンプリート',
+    description: 'プレミアム + オプション + 来店回数',
     config: {
-      basic_info: {
-        show_gender_selection: true
-      },
+      basic_info: { show_gender_selection: true },
       menu_structure: {
-        structure_type: 'category',
+        structure_type: 'category_based',
         categories: [
           {
-            id: 'cat1',
+            id: 'cat_cut',
             name: 'カット',
+            display_name: '◆カット◆',
+            selection_mode: 'single',
+            gender_condition: 'all',
             menus: [
               {
-                id: 'menu1',
-                name: 'スタンダードカット',
+                id: 'menu_cut1',
+                name: 'カット',
                 price: 3000,
                 duration: 60,
-                description: '基本的なカット',
-                target_gender: ['male', 'female'],
+                description: '長さ別料金あり',
                 has_submenu: true,
                 sub_menu_items: [
-                  { name: 'ショート', price: 3000, duration: 60 },
-                  { name: 'ミディアム', price: 3500, duration: 70 },
-                  { name: 'ロング', price: 4000, duration: 80 }
+                  { id: 'sub_short', name: 'ショート', price: 3000, duration: 60 },
+                  { id: 'sub_mid', name: 'ミディアム', price: 3500, duration: 70 },
+                  { id: 'sub_long', name: 'ロング', price: 4000, duration: 80 }
+                ],
+                options: [
+                  { id: 'opt_shampoo', name: 'シャンプー込み', price: 0, duration: 15, is_default: true },
+                  { id: 'opt_quick', name: 'クイック仕上げ', price: 500, duration: 10, is_default: false }
                 ]
               }
-            ]
+            ],
+            options: []
           },
           {
-            id: 'cat2',
-            name: 'オプション',
+            id: 'cat_color',
+            name: 'カラー',
+            display_name: '◆カラー◆',
+            selection_mode: 'single',
+            gender_condition: 'all',
             menus: [
               {
-                id: 'option1',
-                name: 'シャンプー',
-                price: 500,
-                duration: 15,
-                description: '基本シャンプー',
-                target_gender: ['male', 'female']
+                id: 'menu_color1',
+                name: 'フルカラー',
+                price: 8000,
+                duration: 120,
+                description: '全体カラー',
+                has_submenu: false,
+                options: [
+                  { id: 'opt_tone', name: 'トーンアップ', price: 500, duration: 0, is_default: false }
+                ]
               }
-            ]
+            ],
+            options: []
           }
+        ],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
+      },
+      visit_count_selection: {
+        enabled: true,
+        required: false,
+        options: [
+          { value: 'first', label: '初回（+30分）', duration: 30 },
+          { value: 'repeat', label: '2回目以降', duration: 0 }
         ]
       },
       ui_settings: {
         show_visit_count: true,
-        show_coupon_selection: true,
+        show_coupon_selection: false,
         show_repeat_booking: false
       }
     }
   },
   ultimate: {
-    name: '💎 アルティメット',
-    description: '最上位版（前回予約機能も含む）',
+    name: '🚀 アルティメット',
+    description: 'コンプリート + クーポン + リピート予約',
     config: {
-      basic_info: {
-        show_gender_selection: true
-      },
+      basic_info: { show_gender_selection: true },
       menu_structure: {
-        structure_type: 'category',
+        structure_type: 'category_based',
         categories: [
           {
-            id: 'cat1',
+            id: 'cat_cut',
             name: 'カット',
+            display_name: '◆カット◆',
+            selection_mode: 'single',
+            gender_condition: 'all',
             menus: [
               {
-                id: 'menu1',
-                name: 'プレミアムカット',
-                price: 5000,
-                duration: 90,
-                description: '上質なカット体験',
-                target_gender: ['male', 'female'],
+                id: 'menu_cut1',
+                name: 'カット',
+                price: 3000,
+                duration: 60,
+                description: '長さ別料金あり',
                 has_submenu: true,
                 sub_menu_items: [
-                  { name: 'ショート', price: 5000, duration: 90 },
-                  { name: 'ミディアム', price: 5500, duration: 100 },
-                  { name: 'ロング', price: 6000, duration: 110 }
+                  { id: 'sub_short', name: 'ショート', price: 3000, duration: 60 },
+                  { id: 'sub_mid', name: 'ミディアム', price: 3500, duration: 70 },
+                  { id: 'sub_long', name: 'ロング', price: 4000, duration: 80 }
+                ],
+                options: [
+                  { id: 'opt_shampoo', name: 'シャンプー込み', price: 0, duration: 15, is_default: true },
+                  { id: 'opt_quick', name: 'クイック仕上げ', price: 500, duration: 10, is_default: false }
                 ]
               }
-            ]
+            ],
+            options: []
           },
           {
-            id: 'cat2',
+            id: 'cat_color',
             name: 'カラー',
+            display_name: '◆カラー◆',
+            selection_mode: 'single',
+            gender_condition: 'all',
             menus: [
               {
-                id: 'color1',
+                id: 'menu_color1',
                 name: 'フルカラー',
                 price: 8000,
                 duration: 120,
-                description: '全体カラーリング',
-                target_gender: ['male', 'female']
+                description: '全体カラー',
+                has_submenu: false,
+                options: [
+                  { id: 'opt_tone', name: 'トーンアップ', price: 500, duration: 0, is_default: false }
+                ]
               }
-            ]
-          },
-          {
-            id: 'cat3',
-            name: 'オプション',
-            menus: [
-              {
-                id: 'option1',
-                name: 'ヘッドスパ',
-                price: 2000,
-                duration: 30,
-                description: 'リラックスヘッドスパ',
-                target_gender: ['male', 'female']
-              }
-            ]
+            ],
+            options: []
           }
+        ],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: false
+        }
+      },
+      visit_count_selection: {
+        enabled: true,
+        required: false,
+        options: [
+          { value: 'first', label: '初回（+30分）', duration: 30 },
+          { value: 'repeat', label: '2回目以降', duration: 0 }
         ]
       },
       ui_settings: {
         show_visit_count: true,
         show_coupon_selection: true,
-        show_repeat_booking: true
+        show_repeat_booking: true,
+        coupon_name: '初回限定クーポン'
       }
     }
   },
   debug: {
-    name: '🐛 デバッグ用（全機能）',
-    description: '全ての機能を網羅したデバッグ用テンプレート',
+    name: '🐛 デバッグ用（全機能・画像付き）',
+    description: '性別・来店回数・クーポン・カテゴリ横断・カスタム項目・画像付きメニューを全て含むテンプレート',
     liff_id: '2008098784-5ZQ1LRn3',
-    gas_endpoint: 'https://script.google.com/macros/s/AKfycby3QfS2E892nXbS-fnfBVrJX8KyJWTSsisKpe9zVz5QGWzvTH7Zc3PlOay9j60aSQLp/exec',
     config: {
-      basic_info: {
-        show_gender_selection: true
-      },
+      basic_info: { show_gender_selection: true },
       menu_structure: {
-        structure_type: 'category',
+        structure_type: 'category_based',
+        allow_cross_category_selection: true,
         categories: [
           {
-            id: 'cat1',
+            id: 'cat_cut',
             name: 'カット',
-            display_name: 'カット',
+            display_name: '◆カット◆',
+            selection_mode: 'multiple',
             menus: [
               {
-                id: 'menu1',
+                id: 'menu_cut_std',
                 name: 'スタンダードカット',
                 price: 3000,
                 duration: 60,
                 description: '基本的なカットメニュー',
-                gender_filter: 'both',
+                image: 'https://placehold.co/400x300/e2e8f0/64748b?text=スタンダードカット',
                 has_submenu: true,
                 sub_menu_items: [
-                  {
-                    id: 'sub1',
-                    name: 'ショートカット',
-                    price: 3000,
-                    duration: 60,
-                    description: 'ショートスタイルのカット'
-                  },
-                  {
-                    id: 'sub2',
-                    name: 'ミディアムカット',
-                    price: 3500,
-                    duration: 70,
-                    description: 'ミディアムスタイルのカット'
-                  },
-                  {
-                    id: 'sub3',
-                    name: 'ロングカット',
-                    price: 4000,
-                    duration: 80,
-                    description: 'ロングスタイルのカット'
-                  }
+                  { id: 'sub_short', name: 'ショート', price: 3000, duration: 60 },
+                  { id: 'sub_mid', name: 'ミディアム', price: 3500, duration: 70 },
+                  { id: 'sub_long', name: 'ロング', price: 4000, duration: 80 }
                 ],
                 options: [
-                  {
-                    id: 'opt1',
-                    name: 'シャンプー',
-                    price: 500,
-                    duration: 15,
-                    description: '基本シャンプー',
-                    is_default: true
-                  },
-                  {
-                    id: 'opt2',
-                    name: 'トリートメント',
-                    price: 1000,
-                    duration: 20,
-                    description: 'ヘアトリートメント',
-                    is_default: false
-                  }
+                  { id: 'opt_quick', name: 'クイック仕上げ', price: 500, duration: 10, is_default: false },
+                  { id: 'opt_set', name: 'セット（シャンプー込）', price: 0, duration: 15, is_default: true }
                 ]
               },
               {
-                id: 'menu2',
-                name: '男性専用カット',
-                price: 2500,
-                duration: 45,
-                description: '男性向けのカットメニュー',
-                gender_filter: 'male',
-                options: [
-                  {
-                    id: 'opt3',
-                    name: 'シェービング',
-                    price: 800,
-                    duration: 10,
-                    description: '顔剃りサービス',
-                    is_default: false
-                  }
-                ]
-              },
-              {
-                id: 'menu3',
-                name: '女性専用カット',
-                price: 4000,
+                id: 'menu_cut_premium',
+                name: 'プレミアムカット',
+                price: 5000,
                 duration: 90,
-                description: '女性向けのカットメニュー',
-                gender_filter: 'female',
+                description: 'トップスタイリストによる丁寧なカット',
+                image: 'https://placehold.co/400x300/cbd5e1/475569?text=プレミアムカット',
+                has_submenu: false,
                 options: [
-                  {
-                    id: 'opt4',
-                    name: 'ブロー',
-                    price: 1500,
-                    duration: 30,
-                    description: 'スタイリングブロー',
-                    is_default: true
-                  }
+                  { id: 'opt_scalp', name: '頭皮ケア', price: 1000, duration: 15, is_default: false }
                 ]
               }
             ],
-            options: [],
-            selection_mode: 'single',
-            gender_condition: 'all'
+            options: []
           },
           {
-            id: 'cat2',
+            id: 'cat_color',
             name: 'カラー',
-            display_name: 'カラー',
+            display_name: '◆カラー◆',
+            selection_mode: 'multiple',
             menus: [
               {
-                id: 'menu4',
+                id: 'menu_color_full',
                 name: 'フルカラー',
                 price: 8000,
                 duration: 120,
-                description: '全体カラーリング',
-                gender_filter: 'both',
-                has_submenu: true,
-                sub_menu_items: [
-                  {
-                    id: 'sub4',
-                    name: 'ベーシックカラー',
-                    price: 8000,
-                    duration: 120,
-                    description: '標準的なカラーリング'
-                  },
-                  {
-                    id: 'sub5',
-                    name: 'プレミアムカラー',
-                    price: 12000,
-                    duration: 150,
-                    description: '高品質なカラーリング'
-                  }
-                ],
+                description: '全体カラー',
+                image: 'https://placehold.co/400x300/fce7f3/9d174d?text=フルカラー',
+                has_submenu: false,
                 options: [
-                  {
-                    id: 'opt5',
-                    name: 'カラートリートメント',
-                    price: 2000,
-                    duration: 20,
-                    description: 'カラー後のトリートメント',
-                    is_default: true
-                  }
+                  { id: 'opt_tone', name: 'トーンアップ', price: 500, duration: 0, is_default: false }
                 ]
               },
               {
-                id: 'menu5',
+                id: 'menu_color_highlight',
                 name: 'ハイライト',
-                price: 10000,
-                duration: 150,
-                description: 'ハイライトカラー',
-                gender_filter: 'female',
-                options: [
-                  {
-                    id: 'opt6',
-                    name: 'オーガニックカラー',
-                    price: 3000,
-                    duration: 30,
-                    description: 'オーガニック素材使用',
-                    is_default: false
-                  }
-                ]
-              }
-            ],
-            options: [],
-            selection_mode: 'single',
-            gender_condition: 'all'
-          },
-          {
-            id: 'cat3',
-            name: 'パーマ',
-            display_name: 'パーマ',
-            menus: [
-              {
-                id: 'menu6',
-                name: 'デジタルパーマ',
                 price: 6000,
-                duration: 120,
-                description: 'デジタルパーマ',
-                gender_filter: 'both',
-                options: [
-                  {
-                    id: 'opt7',
-                    name: 'カット込み',
-                    price: 2000,
-                    duration: 60,
-                    description: 'カットサービス付き',
-                    is_default: true
-                  },
-                  {
-                    id: 'opt8',
-                    name: 'トリートメント込み',
-                    price: 1500,
-                    duration: 20,
-                    description: 'トリートメントサービス付き',
-                    is_default: false
-                  }
-                ]
-              }
-            ],
-            options: [],
-            selection_mode: 'single',
-            gender_condition: 'all'
-          },
-          {
-            id: 'cat4',
-            name: 'オプション',
-            display_name: 'オプション',
-            menus: [
-              {
-                id: 'menu7',
-                name: 'ヘッドスパ',
-                price: 2000,
-                duration: 30,
-                description: 'リラックスヘッドスパ',
-                gender_filter: 'both',
-                options: [
-                  {
-                    id: 'opt9',
-                    name: 'アロマオイル',
-                    price: 500,
-                    duration: 5,
-                    description: 'アロマオイル追加',
-                    is_default: false
-                  }
-                ]
-              },
-              {
-                id: 'menu8',
-                name: 'ヘッドマッサージ',
-                price: 1500,
-                duration: 20,
-                description: '頭皮マッサージ',
-                gender_filter: 'both'
-              }
-            ],
-            options: [],
-            selection_mode: 'single',
-            gender_condition: 'all'
-          }
-        ]
-      },
-      ui_settings: {
-        show_visit_count: true,
-        show_coupon_selection: true,
-        show_repeat_booking: true
-      }
-    }
-  },
-  with_images: {
-    name: '🖼️ 画像付きメニュー',
-    description: '画像表示機能付きのメニュー選択フォーム',
-    liff_id: '2008098784-5ZQ1LRn3',
-    gas_endpoint: 'https://script.google.com/macros/s/AKfycby3QfS2E892nXbS-fnfBVrJX8KyJWTSsisKpe9zVz5QGWzvTH7Zc3PlOay9j60aSQLp/exec',
-    config: {
-      basic_info: {
-        show_gender_selection: true
-      },
-      menu_structure: {
-        structure_type: 'category',
-        categories: [
-          {
-            id: 'cat1',
-            name: 'メニュー',
-            display_name: 'メニュー',
-            menus: [
-              {
-                id: 'menu1',
-                name: 'コースA (1000円/30分)',
-                price: 1000,
-                duration: 30,
-                description: '初回体験向け。軽めの着色汚れを除去。',
-                image: 'https://www.dropbox.com/scl/fi/rp6b5xcnbnt5d03ommeb4/.png?rlkey=y6hhwc2ubinzpavldh3fgzl6p&st=d0cbcp3s&raw=1',
-                gender_filter: 'both',
-                has_submenu: false,
-                options: [
-                  {
-                    id: 'opt1',
-                    name: 'コーヒーやお茶の着色が気になる方',
-                    price: 0,
-                    duration: 0,
-                    description: 'おすすめ',
-                    is_default: true
-                  }
-                ]
-              },
-              {
-                id: 'menu2',
-                name: 'コースB (2000円/60分)',
-                price: 2000,
-                duration: 60,
-                description: '本格的なホワイトニング。より白い歯へ。',
-                image: 'https://www.dropbox.com/scl/fi/adiq6vy9fxdqub025oavy/.png?rlkey=ghg3q2r7a9izp610x7johbl3b&st=eup1t89x&raw=1',
-                gender_filter: 'both',
-                has_submenu: false,
-                options: [
-                  {
-                    id: 'opt2',
-                    name: 'より白い歯を目指す方',
-                    price: 0,
-                    duration: 0,
-                    description: 'おすすめ',
-                    is_default: false
-                  }
-                ]
-              },
-              {
-                id: 'menu3',
-                name: 'コースC (3000円/90分)',
-                price: 3000,
                 duration: 90,
-                description: 'プレミアムホワイトニング。最高の白さを実現。',
-                image: 'https://www.dropbox.com/scl/fi/su141b49bkpnspprslc17/.png?rlkey=guaknyrjpgta2nve3hf9nagkz&st=jyx7zxcn&raw=1',
-                gender_filter: 'both',
+                description: '部分ハイライト',
+                image: 'https://placehold.co/400x300/fde68a/854d0e?text=ハイライト',
                 has_submenu: false,
-                options: [
-                  {
-                    id: 'opt3',
-                    name: '結婚式や重要な行事を控えている方',
-                    price: 0,
-                    duration: 0,
-                    description: 'おすすめ',
-                    is_default: false
-                  }
-                ]
+                options: []
               }
             ],
-            options: [],
-            selection_mode: 'single',
-            gender_condition: 'all'
+            options: []
           },
           {
-            id: 'cat2',
-            name: 'オプション',
-            display_name: 'オプション',
+            id: 'cat_treatment',
+            name: 'トリートメント',
+            display_name: '◆トリートメント◆',
+            selection_mode: 'multiple',
             menus: [
               {
-                id: 'menu4',
-                name: 'フッ素コーティング',
-                price: 500,
-                duration: 10,
-                description: '歯を保護します',
-                image: 'https://www.dropbox.com/scl/fi/rp6b5xcnbnt5d03ommeb4/.png?rlkey=y6hhwc2ubinzpavldh3fgzl6p&st=d0cbcp3s&raw=1',
-                gender_filter: 'both',
-                options: []
-              },
-              {
-                id: 'menu5',
-                name: 'リテーナー（カスタム）',
-                price: 5000,
-                duration: 0,
-                description: 'ホワイトニング維持用',
-                image: 'https://www.dropbox.com/scl/fi/adiq6vy9fxdqub025oavy/.png?rlkey=ghg3q2r7a9izp610x7johbl3b&st=eup1t89x&raw=1',
-                gender_filter: 'both',
+                id: 'menu_treat_basic',
+                name: 'ベーシックトリートメント',
+                price: 2000,
+                duration: 30,
+                description: '髪質改善',
+                image: 'https://placehold.co/400x300/d1fae5/065f46?text=トリートメント',
+                has_submenu: false,
                 options: []
               }
             ],
-            options: [],
-            selection_mode: 'single',
-            gender_condition: 'all'
+            options: []
           }
+        ],
+        display_options: {
+          show_price: true,
+          show_duration: true,
+          show_description: true,
+          show_treatment_info: true
+        }
+      },
+      visit_count_selection: {
+        enabled: true,
+        required: false,
+        options: [
+          { value: 'first', label: '初回（+30分）', duration: 30 },
+          { value: 'repeat', label: '2回目以降', duration: 0 }
         ]
       },
+      custom_fields: [
+        { id: 'cf1', type: 'text', title: 'ご希望の時間帯', required: false, placeholder: '例：午前中' },
+        { id: 'cf2', type: 'textarea', title: 'ご要望・備考', required: false, placeholder: '自由記入' },
+        { id: 'cf3', type: 'radio', title: '施術のご希望', required: false, options: [{ label: 'ゆったり', value: 'relax' }, { label: '手早く', value: 'quick' }] },
+        { id: 'cf4', type: 'checkbox', title: 'オプション希望', required: false, options: [{ label: 'ドライ付き', value: 'dry' }, { label: 'セット付き', value: 'set' }] }
+      ],
       ui_settings: {
         show_visit_count: true,
         show_coupon_selection: true,
-        show_repeat_booking: true
+        show_repeat_booking: true,
+        coupon_name: '2周年記念'
       }
     }
   }
@@ -682,6 +567,7 @@ export default function StoreDetailPage() {
   const params = useParams();
   const router = useRouter();
   const storeId = params.storeId as string;
+  const { toast } = useToast();
   
   const [store, setStore] = useState<Store | null>(null);
   const [forms, setForms] = useState<Form[]>([]);
@@ -696,8 +582,6 @@ export default function StoreDetailPage() {
     form_name: '',
     form_type: 'line' as 'line' | 'web',
     liff_id: '',
-    gas_endpoint: '',
-    calendar_url: '',
     security_secret: '',
     template: 'basic'
   });
@@ -713,13 +597,17 @@ export default function StoreDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [recentReservations, setRecentReservations] = useState<any[]>([]);
   const [loadingReservations, setLoadingReservations] = useState(false);
+  const [selectedReservation, setSelectedReservation] = useState<any | null>(null);
+  const [showReservationDetail, setShowReservationDetail] = useState(false);
+  const [creatingCalendar, setCreatingCalendar] = useState(false);
+  const [disconnectingCalendar, setDisconnectingCalendar] = useState(false);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         
-        // 店舗情報取得
         const storeResponse = await fetch(`/api/stores/${storeId}`, {
           credentials: 'include',
         });
@@ -734,7 +622,6 @@ export default function StoreDetailPage() {
         const storeData = await storeResponse.json();
         setStore(storeData);
         
-        // フォーム一覧取得
         const formsResponse = await fetch(`/api/stores/${storeId}/forms`, {
           credentials: 'include',
         });
@@ -743,7 +630,6 @@ export default function StoreDetailPage() {
           setForms(formsData);
         }
 
-        // アンケート一覧取得
         const surveysResponse = await fetch(`/api/stores/${storeId}/surveys`, {
           credentials: 'include',
         });
@@ -752,13 +638,11 @@ export default function StoreDetailPage() {
           setSurveyForms(surveysData);
         }
 
-        // 最近の予約取得（最新10件）
         const reservationsResponse = await fetch(`/api/stores/${storeId}/reservations`, {
           credentials: 'include',
         });
         if (reservationsResponse.ok) {
           const reservationsData = await reservationsResponse.json();
-          // 最新10件に制限（作成日時の降順でソート済み）
           setRecentReservations(reservationsData.slice(0, 10));
         }
         
@@ -775,112 +659,68 @@ export default function StoreDetailPage() {
     }
   }, [storeId]);
 
+  useEffect(() => {
+    const status = searchParams.get('google_calendar');
+    const message = searchParams.get('message');
+    if (!status || !storeId) return;
+    if (status === 'connected') {
+      toast({ title: '連携完了', description: '店舗のGoogleカレンダーと連携しました' });
+    } else if (status === 'error') {
+      const descriptions: Record<string, string> = {
+        config: 'Google OAuthの設定がありません。管理者設定を確認してください。',
+        unauthorized: 'ログインしてください。',
+        forbidden: 'この店舗へのアクセス権限がありません。',
+        no_code: '認証がキャンセルされました。',
+        no_refresh_token: 'リフレッシュトークンを取得できませんでした。再度お試しください。',
+        exchange: 'トークン取得に失敗しました。',
+        encryption: 'トークンの保存に失敗しました。',
+        save: '店舗の更新に失敗しました。',
+        invalid_state: '無効なリクエストです。',
+        local: 'ローカル環境では利用できません。',
+        server: 'サーバーエラーが発生しました。',
+      };
+      toast({
+        title: 'Googleカレンダー連携エラー',
+        description: (message && descriptions[message]) || '連携に失敗しました。',
+        variant: 'destructive',
+      });
+    }
+    router.replace(`/admin/${storeId}`, { scroll: false });
+  }, [searchParams, storeId, router]);
+
   const handleCreateForm = async () => {
     if (!newFormData.form_name.trim()) {
-      alert('フォーム名を入力してください');
+      toast({
+        title: 'エラー',
+        description: 'フォーム名を入力してください',
+        variant: 'destructive',
+      });
       return;
     }
 
-    // フォームタイプに応じたバリデーション
-    // GASエンドポイント、LIFF ID、カレンダー取得URLは必須から除外（オプショナル）
-    // SECURITY_SECRETはWeb予約フォームの場合のみ必須
-    if (newFormData.form_type === 'web') {
-      if (!newFormData.security_secret.trim()) {
-        alert('SECURITY_SECRETを入力してください');
-        return;
-      }
-    }
-
-    // GASエンドポイントが入力されている場合のみ、URL形式をチェック
-    if (newFormData.gas_endpoint.trim()) {
-      // GASエンドポイントのバリデーション（URL形式チェック）
-      try {
-        new URL(newFormData.gas_endpoint.trim());
-      } catch {
-        alert('有効なURL形式ではありません');
-        return;
-      }
-
-      // Google Apps ScriptのURLパターンチェック
-      const gasUrlPattern = /^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec/;
-      if (!gasUrlPattern.test(newFormData.gas_endpoint.trim())) {
-        alert('Google Apps ScriptのURL形式が正しくありません（例: https://script.google.com/macros/s/xxx/exec）');
-        return;
-      }
+    if (newFormData.form_type === 'web' && !newFormData.security_secret?.trim()) {
+      toast({
+        title: 'エラー',
+        description: 'Web予約フォームの場合、SECURITY_SECRETを入力してください',
+        variant: 'destructive',
+      });
+      return;
     }
 
     setSubmitting(true);
-    
-    // GASエンドポイントが入力されている場合のみ、実際に動作するかテスト（サーバーサイドプロキシ経由）
-    let testPassed = false;
-    if (newFormData.gas_endpoint.trim()) {
-      try {
-        const testStartTime = new Date();
-        testStartTime.setHours(0, 0, 0, 0);
-        const testEndTime = new Date(testStartTime);
-        testEndTime.setDate(testStartTime.getDate() + 7);
-        testEndTime.setHours(23, 59, 59, 999);
 
-        // サーバーサイドプロキシAPIを使用してCORSエラーを回避
-        const testApiUrl = `/api/gas/test?url=${encodeURIComponent(newFormData.gas_endpoint.trim())}&startTime=${encodeURIComponent(testStartTime.toISOString())}&endTime=${encodeURIComponent(testEndTime.toISOString())}`;
-
-        const testResponse = await fetch(testApiUrl, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!testResponse.ok) {
-          const errorData = await testResponse.json().catch(() => ({ error: '不明なエラー' }));
-          throw new Error(errorData.error || `HTTPエラー: ${testResponse.status}`);
-        }
-
-        const result = await testResponse.json();
-        
-        if (!result.success) {
-          throw new Error(result.error || 'テストに失敗しました');
-        }
-
-        // テスト成功
-        testPassed = true;
-        console.log('GASエンドポイントのテスト成功:', result.data);
-      } catch (error) {
-        console.error('GASエンドポイントのテスト失敗:', error);
-        const errorMessage = error instanceof Error ? error.message : '不明なエラー';
-        const shouldContinue = window.confirm(
-          `GASエンドポイントの接続テストに失敗しました。\n\n` +
-          `エラー: ${errorMessage}\n\n` +
-          `それでもフォームを作成しますか？\n\n` +
-          `（注意: カレンダー空き状況が取得できない可能性があります）`
-        );
-        
-        if (!shouldContinue) {
-          setSubmitting(false);
-          return;
-        }
-        // ユーザーが続行を選択した場合は、testPassed = falseのまま続行
-      }
-    }
-
-    // フォーム作成処理
     try {
-      // 選択されたテンプレートを取得
       const selectedTemplate = FORM_TEMPLATES[newFormData.template as keyof typeof FORM_TEMPLATES];
       
       const response = await fetch(`/api/stores/${storeId}/forms`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           form_name: newFormData.form_name.trim(),
           form_type: newFormData.form_type,
-          liff_id: newFormData.form_type === 'line' ? newFormData.liff_id.trim() : '',
-          gas_endpoint: newFormData.gas_endpoint.trim(),
-          calendar_url: newFormData.form_type === 'web' ? newFormData.calendar_url.trim() : '',
-          security_secret: newFormData.form_type === 'web' ? newFormData.security_secret.trim() : '',
+          liff_id: newFormData.form_type === 'line' ? (newFormData.liff_id.trim() || undefined) : undefined,
+          security_secret: newFormData.form_type === 'web' ? newFormData.security_secret.trim() : undefined,
           template: selectedTemplate
         }),
       });
@@ -888,25 +728,28 @@ export default function StoreDetailPage() {
       if (response.ok) {
         const newForm = await response.json();
         setForms([...forms, newForm]);
-        setNewFormData({ 
-          form_name: '', 
-          form_type: 'line',
-          liff_id: '', 
-          gas_endpoint: '', 
-          calendar_url: '',
-          security_secret: '',
-          template: 'basic' 
-        });
+        setNewFormData({ form_name: '', form_type: 'line', liff_id: '', security_secret: '', template: 'basic' });
         setShowCreateForm(false);
         const formName = newForm.config?.basic_info?.form_name || newFormData.form_name.trim();
-        alert(`フォーム「${formName}」を作成しました（ID: ${newForm.id}）\nテンプレート: ${selectedTemplate?.name || 'ベーシック'}`);
+        toast({
+          title: '成功',
+          description: `フォーム「${formName}」を作成しました`,
+        });
       } else {
         const error = await response.json();
-        alert(`エラー: ${error.error}`);
+        toast({
+          title: 'エラー',
+          description: error.error || 'フォーム作成に失敗しました',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('Form creation error:', error);
-      alert('フォーム作成に失敗しました');
+      toast({
+        title: 'エラー',
+        description: 'フォーム作成に失敗しました',
+        variant: 'destructive',
+      });
     } finally {
       setSubmitting(false);
     }
@@ -914,7 +757,11 @@ export default function StoreDetailPage() {
 
   const handleCreateSurveyForm = async () => {
     if (!newSurveyData.form_name.trim()) {
-      alert('フォーム名を入力してください');
+      toast({
+        title: 'エラー',
+        description: 'フォーム名を入力してください',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -923,9 +770,7 @@ export default function StoreDetailPage() {
       const selectedTemplate = SURVEY_TEMPLATES[newSurveyData.template as keyof typeof SURVEY_TEMPLATES];
       const response = await fetch(`/api/stores/${storeId}/surveys`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           form_name: newSurveyData.form_name.trim(),
@@ -939,14 +784,25 @@ export default function StoreDetailPage() {
         setSurveyForms([...surveyForms, newForm]);
         setNewSurveyData({ form_name: '', liff_id: '', template: 'counseling' });
         setShowCreateSurveyForm(false);
-        alert(`アンケートフォーム「${newForm.config.basic_info.title}」を作成しました`);
+        toast({
+          title: '成功',
+          description: `アンケートフォーム「${newForm.config.basic_info.title}」を作成しました`,
+        });
       } else {
         const error = await response.json();
-        alert(`エラー: ${error.error}`);
+        toast({
+          title: 'エラー',
+          description: error.error || 'アンケート作成に失敗しました',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('Survey creation error:', error);
-      alert('アンケート作成に失敗しました');
+      toast({
+        title: 'エラー',
+        description: 'アンケート作成に失敗しました',
+        variant: 'destructive',
+      });
     } finally {
       setSubmitting(false);
     }
@@ -965,14 +821,25 @@ export default function StoreDetailPage() {
 
       if (response.ok) {
         setSurveyForms(surveyForms.filter(f => f.id !== formId));
-        alert('アンケートフォームを削除しました');
+        toast({
+          title: '成功',
+          description: 'アンケートフォームを削除しました',
+        });
       } else {
         const error = await response.json();
-        alert(`削除に失敗しました: ${error.error}`);
+        toast({
+          title: 'エラー',
+          description: error.error || '削除に失敗しました',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('Delete error:', error);
-      alert('削除に失敗しました');
+      toast({
+        title: 'エラー',
+        description: '削除に失敗しました',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -980,8 +847,6 @@ export default function StoreDetailPage() {
     setEditingForm(form);
     setShowEditModal(true);
   };
-
-
 
   const handleEditStore = () => {
     if (store) {
@@ -996,9 +861,7 @@ export default function StoreDetailPage() {
     try {
       const response = await fetch(`/api/stores/${storeId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(editingStore),
       });
@@ -1008,14 +871,94 @@ export default function StoreDetailPage() {
         setStore(updatedStore);
         setShowStoreEditModal(false);
         setEditingStore(null);
-        alert('店舗情報を更新しました');
+        toast({
+          title: '成功',
+          description: '店舗情報を更新しました',
+        });
       } else {
         const error = await response.json();
-        alert(`更新に失敗しました: ${error.error}`);
+        toast({
+          title: 'エラー',
+          description: error.error || '更新に失敗しました',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('Store update error:', error);
-      alert('店舗情報の更新に失敗しました');
+      toast({
+        title: 'エラー',
+        description: '店舗情報の更新に失敗しました',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCreateCalendar = async () => {
+    if (!store) return;
+    setCreatingCalendar(true);
+    try {
+      const response = await fetch(`/api/stores/${storeId}/calendar`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && data.google_calendar_id) {
+        setStore({ ...store, google_calendar_id: data.google_calendar_id });
+        toast({
+          title: '成功',
+          description: 'Googleカレンダーを作成し、店舗に紐づけました',
+        });
+      } else {
+        toast({
+          title: 'エラー',
+          description: data.error || 'カレンダーの作成に失敗しました',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Create calendar error:', error);
+      toast({
+        title: 'エラー',
+        description: 'カレンダーの作成に失敗しました',
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingCalendar(false);
+    }
+  };
+
+  const handleDisconnectCalendar = async () => {
+    if (!storeId || !store) return;
+    setDisconnectingCalendar(true);
+    try {
+      const response = await fetch(`/api/stores/${storeId}/calendar/disconnect`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        setStore({
+          ...store,
+          google_calendar_id: '',
+          google_calendar_source: 'system',
+        });
+        toast({ title: '連携を解除しました' });
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast({
+          title: 'エラー',
+          description: data.error || '連携の解除に失敗しました',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Disconnect calendar error:', error);
+      toast({
+        title: 'エラー',
+        description: '連携の解除に失敗しました',
+        variant: 'destructive',
+      });
+    } finally {
+      setDisconnectingCalendar(false);
     }
   };
 
@@ -1034,18 +977,28 @@ export default function StoreDetailPage() {
       });
 
       if (response.ok) {
-        // フォーム一覧から削除
         setForms(forms.filter(form => form.id !== deletingFormId));
         setShowDeleteConfirm(false);
         setDeletingFormId(null);
-        alert('フォームを削除しました');
+        toast({
+          title: '成功',
+          description: 'フォームを削除しました',
+        });
       } else {
         const error = await response.json();
-        alert(`削除に失敗しました: ${error.error}`);
+        toast({
+          title: 'エラー',
+          description: error.error || '削除に失敗しました',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('Form deletion error:', error);
-      alert('フォームの削除に失敗しました');
+      toast({
+        title: 'エラー',
+        description: 'フォームの削除に失敗しました',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -1062,92 +1015,43 @@ export default function StoreDetailPage() {
       });
 
       if (response.ok) {
-        alert('店舗を削除しました');
+        toast({
+          title: '成功',
+          description: '店舗を削除しました',
+        });
         router.push('/admin');
       } else {
         const error = await response.json();
-        alert(`削除に失敗しました: ${error.error}`);
+        toast({
+          title: 'エラー',
+          description: error.error || '削除に失敗しました',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('Store deletion error:', error);
-      alert('店舗の削除に失敗しました');
+      toast({
+        title: 'エラー',
+        description: '店舗の削除に失敗しました',
+        variant: 'destructive',
+      });
     }
   };
 
-  const getPublicUrls = () => {
-    const baseUrl = window.location.origin;
-    return {
-      storeManagementUrl: `${baseUrl}/${storeId}/admin`,
-      formUrls: forms.map(form => {
-        // static_deploy情報からURLを取得
-        const deployInfo = (form as any).static_deploy;
-        let formUrl = '';
-        let storageUrl = '';
-        
-        if (deployInfo?.deploy_url) {
-          // deploy_url（プロキシURL）を最優先で使用
-          formUrl = deployInfo.deploy_url;
-        } else if (deployInfo?.storage_url) {
-          // Storage URL（直接URL）
-          formUrl = deployInfo.storage_url;
-        } else if (deployInfo?.blob_url) {
-          // Blob URL（旧URL）
-          formUrl = deployInfo.blob_url;
-        } else {
-          // デプロイ情報がない場合はプレビューURL
-          formUrl = `${baseUrl}/preview/${storeId}/forms/${form.id}`;
-        }
-        
-        // storage_urlを別途保存
-        if (deployInfo?.storage_url) {
-          storageUrl = deployInfo.storage_url;
-        }
-        
-        return {
-          id: form.id,
-          name: (form as any).form_name || form.config?.basic_info?.form_name,
-          url: formUrl,
-          storageUrl: storageUrl,
-          status: form.status,
-          environment: deployInfo?.environment || 'production'
-        };
-      }),
-      surveyUrls: surveyForms.map(form => {
-        const deployInfo = form.static_deploy;
-        let formUrl = '';
-        let storageUrl = '';
-        
-        if (deployInfo?.deploy_url) {
-          formUrl = deployInfo.deploy_url;
-        } else if (deployInfo?.storage_url) {
-          formUrl = deployInfo.storage_url;
-        } else {
-          formUrl = `${baseUrl}/preview/${storeId}/surveys/${form.id}`;
-        }
-        
-        if (deployInfo?.storage_url) {
-          storageUrl = deployInfo.storage_url;
-        }
-        
-        return {
-          id: form.id,
-          name: form.config.basic_info.title,
-          url: formUrl,
-          storageUrl: storageUrl,
-          status: form.status,
-          environment: deployInfo?.environment || 'production'
-        };
-      })
-    };
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: 'コピーしました',
+      description: 'URLをクリップボードにコピーしました',
+    });
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-center h-64">
-            <div className="text-gray-500">読み込み中...</div>
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">読み込み中...</p>
         </div>
       </div>
     );
@@ -1155,371 +1059,468 @@ export default function StoreDetailPage() {
 
   if (error || !store) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="text-center">
-              <div className="text-red-600 text-lg font-medium mb-4">
-                {error || '店舗が見つかりません'}
-              </div>
-              <button
-                onClick={() => router.back()}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-              >
-                戻る
-              </button>
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md border-border">
+          <CardContent className="pt-6">
+            <div className="text-center text-destructive">
+              {error || '店舗が見つかりません'}
             </div>
-          </div>
-        </div>
+            <div className="mt-4 text-center">
+              <Button onClick={() => router.back()} variant="outline">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                戻る
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  const urls = getPublicUrls();
-
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 p-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <button
-                onClick={() => router.push('/admin')}
-                className="text-blue-400 hover:text-blue-300 mb-2 transition-colors"
-              >
-                ← 戻る
-              </button>
-              <h1 className="text-3xl font-bold text-gray-100">
-                {store.name}
-              </h1>
-              <p className="text-gray-400 mt-1">店舗ID: {store.id}</p>
-            </div>
-            <div className="flex space-x-4">
-              <button 
-                onClick={() => router.push(`/${storeId}/reservations`)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-              >
-                予約一覧
-              </button>
-              <button 
-                onClick={handleEditStore}
-                className="bg-cyan-600 text-white px-4 py-2 rounded-md hover:bg-cyan-700 transition-colors"
-              >
-                店舗情報編集
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* フォーム一覧表示 */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-600">
-          <h2 className="text-lg font-semibold text-cyan-400 mb-4">
-            📋 フォーム一覧
-          </h2>
-          
-          {/* フォームURLカード（2列グリッドレイアウト） */}
-          {urls.formUrls.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-sm font-medium text-gray-400 mb-2">予約フォーム</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {urls.formUrls.map((form) => (
-                  <div key={form.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                    {/* フォーム名とステータス */}
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-cyan-300 font-medium">{form.name}</h3>
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        form.status === 'active' 
-                          ? 'bg-green-600 text-green-100' 
-                          : 'bg-gray-600 text-gray-300'
-                      }`}>
-                        {form.status === 'active' ? '公開中' : '非公開'}
-                      </span>
-                    </div>
-                    
-                    {/* 本番URL（deploy_url）- 目立つ表示 */}
-                    <div className="mb-3">
-                      <label className="block text-xs text-gray-400 mb-2">顧客向け本番URL</label>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => window.open(form.url, '_blank')}
-                          className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-center"
-                          title="新しいタブで開く"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(form.url);
-                            alert('URLをコピーしました');
-                          }}
-                          className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md text-sm transition-colors"
-                          title="URLをコピー"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {/* Storage URL - 控えめな表示 */}
-                    {form.storageUrl && (
-                      <div className="pt-2 border-t border-gray-600">
-                        <button
-                          onClick={() => window.open(form.storageUrl!, '_blank')}
-                          className="text-xs text-gray-400 hover:text-gray-300 underline"
-                          title="Storage URL を開く"
-                        >
-                          Storage URL を開く
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* アンケートフォームURLカード */}
-          {urls.surveyUrls.length > 0 && (
-            <div>
-              <h3 className="text-sm font-medium text-gray-400 mb-2">アンケートフォーム</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {urls.surveyUrls.map((form) => (
-                  <div key={form.id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                    {/* フォーム名とステータス */}
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-emerald-300 font-medium">{form.name}</h3>
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        form.status === 'active' 
-                          ? 'bg-green-600 text-green-100' 
-                          : 'bg-gray-600 text-gray-300'
-                      }`}>
-                        {form.status === 'active' ? '公開中' : '非公開'}
-                      </span>
-                    </div>
-                    
-                    {/* 本番URL（deploy_url）- 目立つ表示 */}
-                    <div className="mb-3">
-                      <label className="block text-xs text-gray-400 mb-2">顧客向け本番URL</label>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => window.open(form.url, '_blank')}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-center"
-                          title="新しいタブで開く"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(form.url);
-                            alert('URLをコピーしました');
-                          }}
-                          className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-2 rounded-md text-sm transition-colors"
-                          title="URLをコピー"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {/* Storage URL - 控えめな表示 */}
-                    {form.storageUrl && (
-                      <div className="pt-2 border-t border-gray-600">
-                        <button
-                          onClick={() => window.open(form.storageUrl!, '_blank')}
-                          className="text-xs text-gray-400 hover:text-gray-300 underline"
-                          title="Storage URL を開く"
-                        >
-                          Storage URL を開く
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 店舗基本情報 */}
-        <div className="bg-gray-800 rounded-lg shadow-sm p-6 mb-6 border border-gray-600">
-          <h2 className="text-xl font-semibold text-gray-100 mb-4">基本情報</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">
-                店舗名
-              </label>
-              <p className="text-gray-100 font-medium">{store.name}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">
-                オーナー名
-              </label>
-              <p className="text-gray-100 font-medium">{store.owner_name}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">
-                メールアドレス
-              </label>
-              <p className="text-gray-100 font-medium">{store.owner_email}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">
-                電話番号
-              </label>
-              <p className="text-gray-100 font-medium">{store.phone || '未設定'}</p>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-400 mb-1">
-                住所
-              </label>
-              <p className="text-gray-100 font-medium">{store.address || '未設定'}</p>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-400 mb-1">
-                ウェブサイト
-              </label>
-              <p className="text-gray-100 font-medium">{store.website_url || '未設定'}</p>
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-400 mb-1">
-                説明
-              </label>
-              <p className="text-gray-100 font-medium">{store.description || '未設定'}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* 予約フォーム管理 */}
-        <div className="bg-gray-800 rounded-lg shadow-sm p-6 mb-6 border border-gray-600">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-100">予約フォーム</h2>
-            <button
-              onClick={() => setShowCreateForm(!showCreateForm)}
-              className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-500 transition-colors font-medium"
+    <div className="admin-page min-h-screen bg-background">
+      {/* ── ナビゲーションバー ── */}
+      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 lg:px-8 h-14 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/admin')}
+              className="text-muted-foreground hover:text-foreground h-8 px-2 shrink-0"
             >
-              {showCreateForm ? 'キャンセル' : '新規フォーム作成'}
-            </button>
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline text-xs">店舗一覧</span>
+            </Button>
+            <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                <StoreIcon className="w-3.5 h-3.5 text-primary" />
+              </div>
+              <span className="font-semibold text-foreground text-sm truncate">{store.name}</span>
+              <Badge className="bg-violet-600 hover:bg-violet-600 text-white border-0 text-xs px-1.5 py-0 shrink-0 cursor-default">
+                サービス管理者
+              </Badge>
+            </div>
           </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/admin/${storeId}/reservations`)}
+              className="text-muted-foreground hover:text-foreground text-xs h-8"
+            >
+              <Calendar className="h-3.5 w-3.5 mr-1" />
+              <span className="hidden sm:inline">予約一覧</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/${storeId}/admin`)}
+              className="text-muted-foreground hover:text-green-600 text-xs h-8"
+            >
+              <StoreIcon className="h-3.5 w-3.5 mr-1" />
+              <span className="hidden sm:inline">店舗管理者</span>
+            </Button>
+          </div>
+        </div>
+      </header>
 
+      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6 space-y-6">
+        {/* ── 店舗ヘッダーカード ── */}
+        <Card className="border-border bg-card">
+          <CardContent className="p-5">
+            <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-xl font-bold text-foreground">{store.name}</h1>
+                  {store.google_calendar_id && (
+                    <Badge className="bg-green-500/20 text-green-700 border border-green-500/30 text-xs">
+                      カレンダー連携中
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground font-mono mt-1">ID: {store.id}</p>
+              </div>
+              <div className="flex flex-wrap gap-2 items-center">
+                {store.google_calendar_id ? (
+                  <>
+                    <Button variant="outline" size="sm"
+                      onClick={() => window.open(`https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id ?? '')}`, '_blank')}
+                      className="border-border h-8 text-xs"
+                    >
+                      <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                      カレンダーを開く
+                    </Button>
+                    {store.google_calendar_source === 'store_oauth' ? (
+                      <Button variant="outline" size="sm" disabled={disconnectingCalendar}
+                        onClick={handleDisconnectCalendar}
+                        className="border-border h-8 text-xs"
+                      >
+                        {disconnectingCalendar ? '解除中...' : '連携を解除'}
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <Button variant="outline" size="sm"
+                          onClick={() => { window.location.href = `/api/integrations/google-calendar/connect?store_id=${storeId}`; }}
+                          className="border-border h-8 text-xs"
+                        >
+                          <Calendar className="mr-1 h-3.5 w-3.5" />
+                          Googleカレンダー連携
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
+                          onClick={() => copyToClipboard(`${getBaseUrl()}/api/integrations/google-calendar/connect?store_id=${storeId}`)}
+                          title="連携用URLをコピー"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                        <InfoTooltip text="店舗オーナーのGoogleアカウントでOAuth認証を行い、そのカレンダーに予約を自動登録します。コピーボタンで連携URLを取得し、店舗オーナーに共有してください。" />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm" disabled={creatingCalendar}
+                        onClick={handleCreateCalendar}
+                        className="border-border h-8 text-xs"
+                      >
+                        <Calendar className="mr-1 h-3.5 w-3.5" />
+                        {creatingCalendar ? '作成中...' : 'カレンダーを作成'}
+                      </Button>
+                      <InfoTooltip text="サービスアカウント経由でGoogleカレンダーを新規作成します。作成したカレンダーに予約が自動登録されます。店舗オーナーのGoogleアカウントとは連携しません。" />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="sm"
+                        onClick={() => { window.location.href = `/api/integrations/google-calendar/connect?store_id=${storeId}`; }}
+                        className="border-border h-8 text-xs"
+                      >
+                        <Calendar className="mr-1 h-3.5 w-3.5" />
+                        Googleカレンダーと連携
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
+                        onClick={() => copyToClipboard(`${getBaseUrl()}/api/integrations/google-calendar/connect?store_id=${storeId}`)}
+                        title="連携用URLをコピー"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                      <InfoTooltip text="店舗オーナーのGoogleアカウントでOAuth認証を行い、そのカレンダーに予約を自動登録します。コピーボタンで連携URLを取得し、店舗オーナーに共有してください。" />
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── タブナビゲーション ── */}
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList className="h-10 bg-card border border-border p-1 w-full sm:w-auto grid grid-cols-4 sm:inline-grid">
+            <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">概要</TabsTrigger>
+            <TabsTrigger value="forms" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">予約フォーム</TabsTrigger>
+            <TabsTrigger value="surveys" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">アンケート</TabsTrigger>
+            <TabsTrigger value="settings" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">設定</TabsTrigger>
+          </TabsList>
+
+          {/* 概要タブ */}
+          <TabsContent value="overview" className="space-y-6">
+            {/* LINE Messaging API Webhook URL */}
+            <div className="rounded-lg border bg-card p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-sm font-medium">LINE Webhook URL</span>
+                {!store?.line_channel_access_token && (
+                  <span className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 rounded px-2 py-0.5 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> トークン未設定
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-muted px-2 py-1 rounded flex-1 min-w-0 truncate">
+                  {getBaseUrl()}/api/webhooks/line?storeId={storeId}
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 w-7 p-0 shrink-0"
+                  onClick={() => {
+                    const webhookUrl = `${getBaseUrl()}/api/webhooks/line?storeId=${storeId}`;
+                    copyToClipboard(webhookUrl);
+                  }}
+                  aria-label="Webhook URLをコピー"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* フォームURL一覧 + 基本情報 横並び */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="flex flex-col">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">フォームURL一覧</CardTitle>
+                  <CardDescription>顧客向けの公開URL</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1">
+                  {forms.length === 0 && surveyForms.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-6 text-sm">
+                      まだフォームが作成されていません
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {forms.length > 0 && (
+                        <>
+                          <p className="text-xs font-medium text-muted-foreground px-1 pb-0.5">予約フォーム</p>
+                          {forms.map((form) => {
+                            const deployInfo = (form as any).static_deploy;
+                            let formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/forms/${form.id}`;
+                            if (formUrl.startsWith('/') && !formUrl.startsWith('//')) {
+                              formUrl = `${getBaseUrl()}${formUrl}`;
+                            }
+                            return (
+                              <div key={form.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 group">
+                                <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                <span className="text-sm font-medium truncate flex-1 min-w-0">
+                                  {(form as any).form_name || form.config?.basic_info?.form_name}
+                                </span>
+                                <Badge variant={form.status === 'active' ? 'default' : 'secondary'} className="text-xs shrink-0">
+                                  {form.status === 'active' ? '公開中' : '非公開'}
+                                </Badge>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0 opacity-50 group-hover:opacity-100" onClick={() => window.open(formUrl, '_blank')}>
+                                  <ExternalLink className="h-3 w-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0 opacity-50 group-hover:opacity-100" onClick={() => copyToClipboard(formUrl)}>
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
+                      {surveyForms.length > 0 && (
+                        <>
+                          <p className="text-xs font-medium text-muted-foreground px-1 pt-2 pb-0.5">アンケートフォーム</p>
+                          {surveyForms.map((form) => {
+                            const deployInfo = form.static_deploy;
+                            let formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/surveys/${form.id}`;
+                            if (formUrl.startsWith('/') && !formUrl.startsWith('//')) {
+                              formUrl = `${getBaseUrl()}${formUrl}`;
+                            }
+                            return (
+                              <div key={form.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 group">
+                                <ClipboardList className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                <span className="text-sm font-medium truncate flex-1 min-w-0">
+                                  {form.config.basic_info.title}
+                                </span>
+                                <Badge variant={form.status === 'active' ? 'default' : 'secondary'} className="text-xs shrink-0">
+                                  {form.status === 'active' ? '公開中' : '非公開'}
+                                </Badge>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0 opacity-50 group-hover:opacity-100" onClick={() => window.open(formUrl, '_blank')}>
+                                  <ExternalLink className="h-3 w-3" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0 opacity-50 group-hover:opacity-100" onClick={() => copyToClipboard(formUrl)}>
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* 店舗基本情報 */}
+              <Card className="flex flex-col">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">基本情報</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleEditStore}
+                      className="text-muted-foreground hover:text-foreground h-7 w-7 p-0"
+                      aria-label="店舗情報編集"
+                    >
+                      <Edit className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex-1">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">店舗名</Label>
+                      <p className="text-sm font-medium mt-0.5">{store.name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">オーナー名</Label>
+                      <p className="text-sm font-medium mt-0.5">{store.owner_name}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs text-muted-foreground">メールアドレス</Label>
+                      <p className="text-sm font-medium mt-0.5 break-all">{store.owner_email}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">電話番号</Label>
+                      <p className="text-sm font-medium mt-0.5">{store.phone || '未設定'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">ウェブサイト</Label>
+                      <p className="text-sm font-medium mt-0.5 truncate">{store.website_url || '未設定'}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs text-muted-foreground">住所</Label>
+                      <p className="text-sm font-medium mt-0.5">{store.address || '未設定'}</p>
+                    </div>
+                    {store.description && (
+                      <div className="col-span-2">
+                        <Label className="text-xs text-muted-foreground">説明</Label>
+                        <p className="text-sm font-medium mt-0.5">{store.description}</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* 最近の予約 */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>最近の予約</CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push(`/admin/${storeId}/reservations`)}
+                  >
+                    すべて見る
+                  </Button>
+        </div>
+              </CardHeader>
+              <CardContent>
+                {loadingReservations ? (
+                  <p className="text-center text-muted-foreground py-8 text-sm">読み込み中...</p>
+                ) : recentReservations.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8 text-sm">まだ予約がありません</p>
+                ) : (
+                  <div className="divide-y divide-border -mx-6">
+                    {recentReservations.map((reservation) => {
+                      const selectedMenus = reservation.selected_menus || [];
+                      const menuInfo = selectedMenus.length > 0 ? selectedMenus[0] : null;
+                      const menuName = menuInfo?.menu_name || reservation.menu_name || '未選択';
+                      const submenuName = menuInfo?.submenu_name || reservation.submenu_name;
+                      const fullMenuName = submenuName ? `${menuName} > ${submenuName}` : menuName;
+                      const statusMap: Record<string, { label: string; className: string }> = {
+                        confirmed: { label: '確認済み', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+                        pending:   { label: '保留中',   className: 'bg-amber-50 text-amber-700 border-amber-200' },
+                        cancelled: { label: 'キャンセル', className: 'bg-red-50 text-red-600 border-red-200' },
+                        completed: { label: '完了',     className: 'bg-green-50 text-green-700 border-green-200' },
+                      };
+                      const status = statusMap[reservation.status] ?? statusMap.pending;
+
+                      return (
+                        <div
+                          key={reservation.id}
+                          className="flex items-center gap-3 px-6 py-3 cursor-pointer hover:bg-muted/40 transition-colors"
+                          onClick={() => {
+                            setSelectedReservation(reservation);
+                            setShowReservationDetail(true);
+                          }}
+                        >
+                          {/* 日時ブロック */}
+                          <div className="shrink-0 w-16 text-center">
+                            <p className="text-xs font-semibold text-foreground leading-tight">
+                              {new Date(reservation.reservation_date).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{reservation.reservation_time}</p>
+                          </div>
+                          {/* 縦線 */}
+                          <div className="w-px h-8 bg-border shrink-0" />
+                          {/* 顧客・メニュー */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{reservation.customer_name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{fullMenuName}</p>
+                          </div>
+                          {/* ステータスバッジ */}
+                          <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full border font-medium ${status.className}`}>
+                            {status.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* 予約フォームタブ */}
+          <TabsContent value="forms" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>予約フォーム</CardTitle>
+                  <Button
+              onClick={() => setShowCreateForm(!showCreateForm)}
+                    className="w-full sm:w-auto"
+            >
+                    <Plus className="mr-2 h-4 w-4" />
+              {showCreateForm ? 'キャンセル' : '新規フォーム作成'}
+                  </Button>
+          </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
           {/* フォーム作成フォーム */}
           {showCreateForm && (
-            <div className="bg-gray-700 rounded-lg p-4 mb-4 border border-gray-500">
-              <h3 className="text-lg font-medium mb-3 text-gray-100">新しいフォームを作成</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    フォーム名 <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
+                  <Card className="border-primary/50">
+                    <CardHeader>
+                      <CardTitle className="text-lg">新しいフォームを作成</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="form_name">
+                          フォーム名 <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="form_name"
                     value={newFormData.form_name}
                     onChange={(e) => setNewFormData({...newFormData, form_name: e.target.value})}
                     placeholder="例：カット＆カラー予約フォーム"
-                    className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    フォームタイプ <span className="text-red-400">*</span>
-                  </label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="relative">
-                      <input
-                        type="radio"
-                        id="form-type-line"
-                        name="form_type"
-                        value="line"
-                        checked={newFormData.form_type === 'line'}
-                        onChange={(e) => setNewFormData({...newFormData, form_type: 'line'})}
-                        className="sr-only"
-                      />
-                      <label
-                        htmlFor="form-type-line"
-                        className={`block p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
-                          newFormData.form_type === 'line'
-                            ? 'border-emerald-500 bg-emerald-900/20 ring-2 ring-emerald-500/20'
-                            : 'border-gray-500 bg-gray-700 hover:border-emerald-400 hover:bg-gray-600'
-                        }`}
-                      >
-                        <div className="flex items-start space-x-3">
-                          <div className="flex-shrink-0">
-                            <div className={`w-5 h-5 rounded-full border-2 ${
-                              newFormData.form_type === 'line'
-                                ? 'border-emerald-500 bg-emerald-500'
-                                : 'border-gray-400'
-                            } flex items-center justify-center`}>
-                              {newFormData.form_type === 'line' && (
-                                <div className="w-2 h-2 bg-white rounded-full"></div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-medium text-gray-100">
-                              LINE予約フォーム
-                            </h4>
-                            <p className="text-xs text-gray-400 mt-1">
-                              LINE公式アカウント経由で予約（LIFF ID必須）
-                            </p>
-                          </div>
+                      <div className="space-y-2">
+                        <Label>フォームの種類</Label>
+                        <div className="flex gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="form_type"
+                              checked={newFormData.form_type === 'line'}
+                              onChange={() => setNewFormData({ ...newFormData, form_type: 'line' })}
+                              className="rounded-full border-primary text-primary"
+                            />
+                            <span>LINE予約フォーム</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="form_type"
+                              checked={newFormData.form_type === 'web'}
+                              onChange={() => setNewFormData({ ...newFormData, form_type: 'web' })}
+                              className="rounded-full border-primary text-primary"
+                            />
+                            <span>Web予約フォーム</span>
+                          </label>
                         </div>
-                      </label>
-                    </div>
-                    <div className="relative">
-                      <input
-                        type="radio"
-                        id="form-type-web"
-                        name="form_type"
-                        value="web"
-                        checked={newFormData.form_type === 'web'}
-                        onChange={(e) => setNewFormData({...newFormData, form_type: 'web'})}
-                        className="sr-only"
-                      />
-                      <label
-                        htmlFor="form-type-web"
-                        className={`block p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
-                          newFormData.form_type === 'web'
-                            ? 'border-emerald-500 bg-emerald-900/20 ring-2 ring-emerald-500/20'
-                            : 'border-gray-500 bg-gray-700 hover:border-emerald-400 hover:bg-gray-600'
-                        }`}
-                      >
-                        <div className="flex items-start space-x-3">
-                          <div className="flex-shrink-0">
-                            <div className={`w-5 h-5 rounded-full border-2 ${
-                              newFormData.form_type === 'web'
-                                ? 'border-emerald-500 bg-emerald-500'
-                                : 'border-gray-400'
-                            } flex items-center justify-center`}>
-                              {newFormData.form_type === 'web' && (
-                                <div className="w-2 h-2 bg-white rounded-full"></div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-medium text-gray-100">
-                              Web予約フォーム
-                            </h4>
-                            <p className="text-xs text-gray-400 mt-1">
-                              URLだけで予約可能（LIFF ID不要）
-                            </p>
-                          </div>
-                        </div>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    テンプレート選択 <span className="text-red-400">*</span>
-                  </label>
+                        <p className="text-xs text-muted-foreground">
+                          {newFormData.form_type === 'web'
+                            ? 'URLだけで予約可能（LIFF ID不要）'
+                            : 'LINEアプリ内で開く予約フォーム'}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>テンプレート選択 <span className="text-destructive">*</span></Label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {Object.entries(FORM_TEMPLATES).map(([key, template]) => (
                       <div key={key} className="relative">
@@ -1537,14 +1538,10 @@ export default function StoreDetailPage() {
                               template: selectedKey
                             };
                             
-                            // デバッグ用テンプレートが選ばれた場合、LIFF IDとGASエンドポイントを自動設定
                             if (selectedKey === 'debug') {
                               const debugTemplate = selectedTemplate as any;
                               if (debugTemplate.liff_id) {
                                 updatedData.liff_id = debugTemplate.liff_id;
-                              }
-                              if (debugTemplate.gas_endpoint) {
-                                updatedData.gas_endpoint = debugTemplate.gas_endpoint;
                               }
                             }
                             
@@ -1554,215 +1551,189 @@ export default function StoreDetailPage() {
                         />
                         <label
                           htmlFor={`template-${key}`}
-                          className={`block p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                                className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
                             newFormData.template === key
-                              ? 'border-emerald-500 bg-emerald-900/20 ring-2 ring-emerald-500/20'
-                              : 'border-gray-500 bg-gray-700 hover:border-emerald-400 hover:bg-gray-600'
+                                    ? 'border-primary bg-primary/10'
+                                    : 'border-border hover:border-primary/50'
                           }`}
                         >
                           <div className="flex items-start space-x-3">
-                            <div className="flex-shrink-0">
                               <div className={`w-5 h-5 rounded-full border-2 ${
                                 newFormData.template === key
-                                  ? 'border-emerald-500 bg-emerald-500'
-                                  : 'border-gray-400'
-                              } flex items-center justify-center`}>
+                                      ? 'border-primary bg-primary'
+                                      : 'border-muted-foreground'
+                                  } flex items-center justify-center mt-0.5`}>
                                 {newFormData.template === key && (
                                   <div className="w-2 h-2 bg-white rounded-full"></div>
                                 )}
                               </div>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className="text-sm font-medium text-gray-100">
-                                {template.name}
-                              </h4>
-                              <p className="text-xs text-gray-400 mt-1">
-                                {template.description}
-                              </p>
+                                  <div className="flex-1">
+                                    <h4 className="text-sm font-medium">{template.name}</h4>
+                                    <p className="text-xs text-muted-foreground mt-1">{template.description}</p>
                             </div>
                           </div>
                         </label>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-3 p-3 bg-gray-700/50 rounded-md">
-                    <h5 className="text-sm font-medium text-cyan-300 mb-2">選択中のテンプレート機能:</h5>
-                    <div className="text-xs text-gray-300 space-y-1">
-                      {(() => {
-                        const current = FORM_TEMPLATES[newFormData.template as keyof typeof FORM_TEMPLATES];
-                        const features = [];
-                        if (current.config.basic_info.show_gender_selection) features.push('性別選択');
-                        if (current.config.menu_structure.structure_type === 'category') features.push('カテゴリー分け');
-                        if (current.config.menu_structure.categories.some((cat: any) => 
-                          cat.menus.some((menu: any) => menu.has_submenu))) features.push('サブメニュー');
-                        if (current.config.ui_settings.show_visit_count) features.push('来店回数選択');
-                        if (current.config.ui_settings.show_coupon_selection) features.push('クーポン利用');
-                        if (current.config.ui_settings.show_repeat_booking) features.push('前回予約機能');
-                        return features.length > 0 ? features.join(' • ') : 'シンプル構成';
-                      })()}
                     </div>
-                  </div>
-                </div>
-                {newFormData.form_type === 'line' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      LIFF ID
-                    </label>
-                    <input
-                      type="text"
-                      value={newFormData.liff_id}
-                      onChange={(e) => setNewFormData({...newFormData, liff_id: e.target.value})}
-                      placeholder="例：1234567890-abcdefgh"
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">LINE Developersで作成したLIFF IDを入力</p>
-                  </div>
-                )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Google App Script エンドポイント（予約送信用）
-                  </label>
-                  <input
-                    type="url"
-                    value={newFormData.gas_endpoint}
-                    onChange={(e) => setNewFormData({...newFormData, gas_endpoint: e.target.value})}
-                    placeholder="例：https://script.google.com/macros/s/xxx/exec"
-                    className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
-                  />
-                  <p className="text-xs text-gray-400 mt-1">
-                    {newFormData.form_type === 'line'
-                      ? 'カレンダー空き状況取得用のGASエンドポイント'
-                      : '予約データをGoogle Calendarに登録するためのGASエンドポイント'}
-                  </p>
-                </div>
-                {newFormData.form_type === 'web' && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1">
-                        カレンダー取得URL
-                      </label>
-                      <input
-                        type="url"
-                        value={newFormData.calendar_url}
-                        onChange={(e) => setNewFormData({...newFormData, calendar_url: e.target.value})}
-                        placeholder="例：https://script.google.com/macros/s/xxx/exec"
-                        className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
-                      />
-                      <p className="text-xs text-gray-400 mt-1">Google Calendarの空き状況を取得するためのGASエンドポイント</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1">
-                        SECURITY_SECRET <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={newFormData.security_secret}
-                        onChange={(e) => setNewFormData({...newFormData, security_secret: e.target.value})}
-                        placeholder="例：9f3a7c1e5b2d48a0c6e1f4d9b3a8c2e7d5f0a1b6c3d8e2f7a9b0c4e6d1f3a5b7"
-                        className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
-                      />
-                      <p className="text-xs text-gray-400 mt-1">フォーム送信時の簡易署名用の秘密鍵</p>
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="flex items-center space-x-3 mt-6">
-                <button
+                      {newFormData.form_type === 'line' && (
+                        <div className="space-y-2">
+                          <Label htmlFor="liff_id">LIFF ID</Label>
+                          <Input
+                            id="liff_id"
+                            value={newFormData.liff_id}
+                            onChange={(e) => setNewFormData({ ...newFormData, liff_id: e.target.value })}
+                            placeholder="例：1234567890-abcdefgh"
+                          />
+                          <p className="text-xs text-muted-foreground">LINE Developersで作成したLIFF IDを入力（任意）</p>
+                        </div>
+                      )}
+                      {newFormData.form_type === 'web' && (
+                        <div className="space-y-2">
+                          <Label htmlFor="security_secret">
+                            SECURITY_SECRET <span className="text-destructive">*</span>
+                          </Label>
+                          <Input
+                            id="security_secret"
+                            type="password"
+                            autoComplete="off"
+                            value={newFormData.security_secret}
+                            onChange={(e) => setNewFormData({ ...newFormData, security_secret: e.target.value })}
+                            placeholder="Web予約フォーム用の秘密鍵"
+                          />
+                          <p className="text-xs text-muted-foreground">Web予約フォームの認証用。任意の文字列を設定してください。</p>
+                        </div>
+                      )}
+                      <div className="flex gap-3">
+                        <Button
                   onClick={handleCreateForm}
                   disabled={submitting}
-                  className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-gray-700"
+                          className="flex-1 sm:flex-none"
                 >
                   {submitting ? '作成中...' : 'フォームを作成'}
-                </button>
-                <button
+                        </Button>
+                        <Button
+                          variant="outline"
                   onClick={() => setShowCreateForm(false)}
-                  className="bg-gray-600 text-gray-200 px-4 py-2 rounded-md hover:bg-gray-500 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-700"
+                          className="flex-1 sm:flex-none"
                 >
                   キャンセル
-                </button>
+                        </Button>
               </div>
-            </div>
+                    </CardContent>
+                  </Card>
           )}
 
-          {/* 予約フォーム一覧 */}
+                {/* フォーム一覧 */}
           <div className="space-y-3">
-            <h2 className="text-xl font-semibold text-gray-100 mb-4">予約フォーム</h2>
             {forms.length === 0 ? (
-              <div className="text-gray-400 text-center py-8">
+                    <p className="text-center text-muted-foreground py-8">
                 まだ予約フォームが作成されていません
-              </div>
+                    </p>
             ) : (
-              forms.map((form) => (
-                <div key={form.id} className="border border-gray-600 rounded-lg p-4 bg-gray-700">
+              forms.map((form) => {
+                const deployInfo = (form as any).static_deploy;
+                let formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/forms/${form.id}`;
+                if (formUrl.startsWith('/') && !formUrl.startsWith('//')) {
+                  formUrl = `${getBaseUrl()}${formUrl}`;
+                }
+                return (
+                      <Card key={form.id}>
+                        <CardContent className="p-4 space-y-2">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-medium text-gray-100">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <h3 className="font-medium truncate">
 {(form as any).form_name || form.config?.basic_info?.form_name}
+                                </h3>
                         {form.draft_status === 'draft' && (
-                          <span className="ml-2 px-2 py-1 text-xs bg-yellow-600 text-yellow-100 rounded-full">
-                            下書き
-                          </span>
-                        )}
-                      </h3>
-                      <p className="text-sm text-gray-400">
-                        ID: {form.id} • ステータス: {form.status === 'active' ? '公開中' : '非公開'}
-                        {form.draft_status === 'draft' && ' • 未保存の変更があります'}
+                                  <Badge variant="outline" className="text-orange-600 border-orange-600 shrink-0">
+                                    下書き
+                                  </Badge>
+                                )}
+                                <Badge variant={form.status === 'active' ? 'default' : 'secondary'} className="shrink-0">
+                                  {form.status === 'active' ? '公開中' : '非公開'}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground font-mono truncate">
+                                ID: {form.id}
                       </p>
                     </div>
-                    <div className="flex space-x-2">
-                      <button 
+                            <div className="flex gap-2 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="outline"
                         onClick={() => handleEditForm(form)}
-                        className="bg-cyan-600 text-white px-3 py-1 rounded text-sm hover:bg-cyan-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      >
-                        編集
-                      </button>
-                      <button 
+                              >
+                                <Edit className="mr-2 h-4 w-4" />
+                                編集
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
                         onClick={() => handleDeleteForm(form.id)}
-                        className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500"
                       >
+                                <Trash2 className="mr-2 h-4 w-4" />
                         削除
-                      </button>
+                              </Button>
                     </div>
                   </div>
-                </div>
-              ))
+                          <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1">
+                            <code className="text-xs text-muted-foreground truncate flex-1 min-w-0">{formUrl}</code>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => window.open(formUrl, '_blank')} title="開く">
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => copyToClipboard(formUrl)} title="コピー">
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                );
+              })
             )}
           </div>
-        </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        {/* アンケートフォーム管理 */}
-        <div className="bg-gray-800 rounded-lg shadow-sm p-6 mb-6 border border-gray-600">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-100">アンケートフォーム</h2>
-            <button
+          {/* アンケートタブ */}
+          <TabsContent value="surveys" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>アンケートフォーム</CardTitle>
+                  <Button
               onClick={() => setShowCreateSurveyForm(!showCreateSurveyForm)}
-              className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-500 transition-colors font-medium"
+                    className="w-full sm:w-auto"
             >
+                    <Plus className="mr-2 h-4 w-4" />
               {showCreateSurveyForm ? 'キャンセル' : '新規アンケート作成'}
-            </button>
+                  </Button>
           </div>
-
+              </CardHeader>
+              <CardContent className="space-y-6">
           {/* アンケート作成フォーム */}
           {showCreateSurveyForm && (
-            <div className="bg-gray-700 rounded-lg p-4 mb-4 border border-gray-500">
-              <h3 className="text-lg font-medium mb-3 text-gray-100">新しいアンケートを作成</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    フォーム名 <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
+                  <Card className="border-primary/50">
+                    <CardHeader>
+                      <CardTitle className="text-lg">新しいアンケートを作成</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="survey_form_name">
+                          フォーム名 <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="survey_form_name"
                     value={newSurveyData.form_name}
                     onChange={(e) => setNewSurveyData({...newSurveyData, form_name: e.target.value})}
                     placeholder="例：初回カウンセリングシート"
-                    className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    テンプレート選択
-                  </label>
+                      <div className="space-y-2">
+                        <Label>テンプレート選択</Label>
                   <div className="grid grid-cols-1 gap-3">
                     {Object.entries(SURVEY_TEMPLATES).map(([key, template]) => (
                       <div
@@ -1770,329 +1741,256 @@ export default function StoreDetailPage() {
                         onClick={() => setNewSurveyData({ ...newSurveyData, template: key })}
                         className={`cursor-pointer border rounded-lg p-3 transition-colors ${
                           newSurveyData.template === key
-                            ? 'border-emerald-500 bg-emerald-900/20'
-                            : 'border-gray-600 hover:border-gray-500 bg-gray-800'
+                                  ? 'border-primary bg-primary/10'
+                                  : 'border-border hover:border-primary/50'
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-gray-200">{template.name}</span>
+                                <span className="font-medium">{template.name}</span>
                           {newSurveyData.template === key && (
-                            <span className="text-emerald-500">
-                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            </span>
+                                  <span className="text-primary">✓</span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400">{template.description}</p>
+                              <p className="text-xs text-muted-foreground">{template.description}</p>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    LIFF ID
-                  </label>
-                  <input
-                    type="text"
+                      <div className="space-y-2">
+                        <Label htmlFor="survey_liff_id">LIFF ID</Label>
+                        <Input
+                          id="survey_liff_id"
                     value={newSurveyData.liff_id}
                     onChange={(e) => setNewSurveyData({...newSurveyData, liff_id: e.target.value})}
                     placeholder="例：1234567890-abcdefgh"
-                    className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-gray-600 text-gray-100 placeholder-gray-400"
                   />
-                  <p className="text-xs text-gray-400 mt-1">LINE Developersで作成したLIFF IDを入力（任意）</p>
+                        <p className="text-xs text-muted-foreground">LINE Developersで作成したLIFF IDを入力（任意）</p>
                 </div>
-              </div>
-              <div className="flex items-center space-x-3 mt-6">
-                <button
+                      <div className="flex gap-3">
+                        <Button
                   onClick={handleCreateSurveyForm}
                   disabled={submitting}
-                  className="bg-emerald-600 text-white px-4 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-50 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-gray-700"
+                          className="flex-1 sm:flex-none"
                 >
                   {submitting ? '作成中...' : 'アンケートを作成'}
-                </button>
-                <button
+                        </Button>
+                        <Button
+                          variant="outline"
                   onClick={() => setShowCreateSurveyForm(false)}
-                  className="bg-gray-600 text-gray-200 px-4 py-2 rounded-md hover:bg-gray-500 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-700"
+                          className="flex-1 sm:flex-none"
                 >
                   キャンセル
-                </button>
+                        </Button>
               </div>
-            </div>
+                    </CardContent>
+                  </Card>
           )}
 
           {/* アンケート一覧 */}
           <div className="space-y-3">
             {surveyForms.length === 0 ? (
-              <div className="text-gray-400 text-center py-8">
+                    <p className="text-center text-muted-foreground py-8">
                 まだアンケートが作成されていません
-              </div>
+                    </p>
             ) : (
-              surveyForms.map((form) => (
-                <div key={form.id} className="border border-gray-600 rounded-lg p-4 bg-gray-700">
+              surveyForms.map((form) => {
+                const deployInfo = form.static_deploy;
+                let formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/surveys/${form.id}`;
+                if (formUrl.startsWith('/') && !formUrl.startsWith('//')) {
+                  formUrl = `${getBaseUrl()}${formUrl}`;
+                }
+                return (
+                      <Card key={form.id}>
+                        <CardContent className="p-4 space-y-2">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-medium text-gray-100">
-                        {form.config.basic_info.title}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <h3 className="font-medium truncate">{form.config.basic_info.title}</h3>
                         {form.draft_status === 'draft' && (
-                          <span className="ml-2 px-2 py-1 text-xs bg-yellow-600 text-yellow-100 rounded-full">
-                            下書き
-                          </span>
-                        )}
-                      </h3>
-                      <p className="text-sm text-gray-400">
-                        ID: {form.id} • ステータス: {form.status === 'active' ? '公開中' : '非公開'}
-                        {form.draft_status === 'draft' && ' • 未保存の変更があります'}
+                                  <Badge variant="outline" className="text-orange-600 border-orange-600 shrink-0">
+                                    下書き
+                                  </Badge>
+                                )}
+                                <Badge variant={form.status === 'active' ? 'default' : 'secondary'} className="shrink-0">
+                                  {form.status === 'active' ? '公開中' : '非公開'}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground font-mono truncate">
+                                ID: {form.id}
                       </p>
                     </div>
-                    <div className="flex space-x-2">
-                      <button 
+                            <div className="flex gap-2 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="outline"
                         onClick={() => handleEditForm(form)}
-                        className="bg-cyan-600 text-white px-3 py-1 rounded text-sm hover:bg-cyan-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      >
-                        編集
-                      </button>
-                      <button 
+                              >
+                                <Edit className="mr-2 h-4 w-4" />
+                                編集
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
                         onClick={() => handleDeleteSurveyForm(form.id)}
-                        className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500"
                       >
+                                <Trash2 className="mr-2 h-4 w-4" />
                         削除
-                      </button>
+                              </Button>
                     </div>
                   </div>
-                </div>
-              ))
+                          <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1">
+                            <code className="text-xs text-muted-foreground truncate flex-1 min-w-0">{formUrl}</code>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => window.open(formUrl, '_blank')} title="開く">
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => copyToClipboard(formUrl)} title="コピー">
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                );
+              })
             )}
           </div>
-        </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        {/* 予約履歴 */}
-        <div className="bg-gray-900 rounded-lg shadow-sm p-6 border border-gray-700 mb-12">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-white">最近の予約</h2>
-            <button
-              onClick={() => router.push(`/${storeId}/reservations`)}
-              className="text-cyan-400 hover:text-cyan-300 text-sm font-medium transition-colors"
-            >
-              予約一覧・分析を見る →
-            </button>
-          </div>
-          {loadingReservations ? (
-            <div className="text-gray-400 text-center py-8">
-              読み込み中...
-            </div>
-          ) : recentReservations.length === 0 ? (
-            <div className="text-gray-400 text-center py-8">
-              まだ予約がありません
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {recentReservations.map((reservation) => {
-                const selectedMenus = reservation.selected_menus || [];
-                const menuInfo = selectedMenus.length > 0 ? selectedMenus[0] : null;
-                const menuName = menuInfo?.menu_name || reservation.menu_name || '未選択';
-                const submenuName = menuInfo?.submenu_name || reservation.submenu_name;
-                const fullMenuName = submenuName ? `${menuName} > ${submenuName}` : menuName;
-                
-                return (
-                  <div key={reservation.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-gray-100 font-medium">{reservation.customer_name}</span>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            reservation.status === 'pending' 
-                              ? 'bg-yellow-900/50 text-yellow-200 border border-yellow-700'
-                              : reservation.status === 'confirmed'
-                              ? 'bg-green-900/50 text-green-200 border border-green-700'
-                              : 'bg-red-900/50 text-red-200 border border-red-700'
-                          }`}>
-                            {reservation.status === 'pending' ? '保留中' : 
-                             reservation.status === 'confirmed' ? '確認済み' : 'キャンセル'}
-                          </span>
-                        </div>
-                        <div className="text-sm text-gray-400 space-y-1">
-                          <div>📅 {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}</div>
-                          <div>📋 {fullMenuName}</div>
-                          <div>📞 {reservation.customer_phone}</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+          {/* 設定タブ */}
+          <TabsContent value="settings" className="space-y-6">
+            {/* 店舗管理者管理 */}
+            <StoreAdminManager storeId={storeId} />
 
-        {/* 危険ゾーン: 店舗削除 */}
-        <div className="bg-gray-800 rounded-lg border-2 border-red-600/50 p-6">
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold text-red-400 mb-2">危険ゾーン</h2>
-            <p className="text-gray-400 text-sm">
+            {/* 危険ゾーン */}
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  <CardTitle className="text-destructive">危険ゾーン</CardTitle>
+                        </div>
+                <CardDescription>
               この操作は取り消すことができません。店舗を削除すると、関連する全てのフォームと予約データも削除されます。
-            </p>
-          </div>
-          <button
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  variant="destructive"
             onClick={() => {
               if (confirm(`店舗「${store.name}」を本当に削除しますか？\n\nこの操作は取り消せません。関連する全てのフォームと予約データも削除されます。`)) {
                 handleDeleteStore();
               }
             }}
-            className="bg-red-600 text-white px-6 py-3 rounded-md hover:bg-red-700 transition-colors font-medium"
           >
+                  <Trash2 className="mr-2 h-4 w-4" />
             この店舗を削除する
-          </button>
-        </div>
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
 
-
-
       {/* 店舗編集モーダル */}
-      {showStoreEditModal && editingStore && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-900 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col border border-gray-700">
-            {/* モーダルヘッダー */}
-            <div className="p-6 border-b border-gray-700">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white">
-                  店舗情報編集: {editingStore.name}
-                </h2>
-                <button
-                  onClick={() => setShowStoreEditModal(false)}
-                  className="text-gray-400 hover:text-gray-200"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            {/* モーダルコンテンツ */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="space-y-6">
+      <Dialog open={showStoreEditModal} onOpenChange={setShowStoreEditModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>店舗情報編集: {editingStore?.name}</DialogTitle>
+          </DialogHeader>
+          {editingStore && (
+            <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      店舗名 <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="text"
+                <div className="space-y-2">
+                  <Label htmlFor="edit_name">
+                    店舗名 <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="edit_name"
                       value={editingStore.name}
-                      onChange={(e) => setEditingStore({
-                        ...editingStore,
-                        name: e.target.value
-                      })}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 bg-gray-600 text-gray-100"
+                    onChange={(e) => setEditingStore({...editingStore, name: e.target.value})}
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      オーナー名 <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="text"
+                <div className="space-y-2">
+                  <Label htmlFor="edit_owner_name">
+                    オーナー名 <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="edit_owner_name"
                       value={editingStore.owner_name}
-                      onChange={(e) => setEditingStore({
-                        ...editingStore,
-                        owner_name: e.target.value
-                      })}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 bg-gray-600 text-gray-100"
+                    onChange={(e) => setEditingStore({...editingStore, owner_name: e.target.value})}
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      メールアドレス <span className="text-red-400">*</span>
-                    </label>
-                    <input
+                <div className="space-y-2">
+                  <Label htmlFor="edit_owner_email">メールアドレス</Label>
+                  <Input
+                    id="edit_owner_email"
                       type="email"
                       value={editingStore.owner_email}
-                      onChange={(e) => setEditingStore({
-                        ...editingStore,
-                        owner_email: e.target.value
-                      })}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 bg-gray-600 text-gray-100"
+                    onChange={(e) => setEditingStore({...editingStore, owner_email: e.target.value})}
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      電話番号
-                    </label>
-                    <input
+                <div className="space-y-2">
+                  <Label htmlFor="edit_phone">電話番号</Label>
+                  <Input
+                    id="edit_phone"
                       type="tel"
                       value={editingStore.phone || ''}
-                      onChange={(e) => setEditingStore({
-                        ...editingStore,
-                        phone: e.target.value
-                      })}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 bg-gray-600 text-gray-100"
+                    onChange={(e) => setEditingStore({...editingStore, phone: e.target.value})}
                     />
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      住所
-                    </label>
-                    <input
-                      type="text"
+                <div className="md:col-span-2 space-y-2">
+                  <Label htmlFor="edit_address">住所</Label>
+                  <Input
+                    id="edit_address"
                       value={editingStore.address || ''}
-                      onChange={(e) => setEditingStore({
-                        ...editingStore,
-                        address: e.target.value
-                      })}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 bg-gray-600 text-gray-100"
+                    onChange={(e) => setEditingStore({...editingStore, address: e.target.value})}
                     />
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      ウェブサイトURL
-                    </label>
-                    <input
+                <div className="md:col-span-2 space-y-2">
+                  <Label htmlFor="edit_website_url">ウェブサイトURL</Label>
+                  <Input
+                    id="edit_website_url"
                       type="url"
                       value={editingStore.website_url || ''}
-                      onChange={(e) => setEditingStore({
-                        ...editingStore,
-                        website_url: e.target.value
-                      })}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 bg-gray-600 text-gray-100"
+                    onChange={(e) => setEditingStore({...editingStore, website_url: e.target.value})}
                     />
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      店舗説明
-                    </label>
+                <div className="md:col-span-2 space-y-2">
+                  <Label htmlFor="edit_description">店舗説明</Label>
                     <textarea
-                      rows={4}
+                    id="edit_description"
+                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       value={editingStore.description || ''}
-                      onChange={(e) => setEditingStore({
-                        ...editingStore,
-                        description: e.target.value
-                      })}
-                      className="w-full px-3 py-2 border border-gray-500 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 bg-gray-600 text-gray-100"
+                    onChange={(e) => setEditingStore({...editingStore, description: e.target.value})}
                     />
                   </div>
+                <div className="md:col-span-2 space-y-2">
+                  <Label htmlFor="edit_line_channel_access_token">LINE チャネルアクセストークン（任意）</Label>
+                  <Input
+                    id="edit_line_channel_access_token"
+                    type="password"
+                    placeholder="未設定の場合は空欄のまま"
+                    value={editingStore.line_channel_access_token || ''}
+                    onChange={(e) => setEditingStore({...editingStore, line_channel_access_token: e.target.value})}
+                    autoComplete="off"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Webhook・リマインドで使用します。
+                  </p>
+                </div>
                 </div>
               </div>
-            </div>
-
-            {/* モーダルフッター */}
-            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-700">
-              <button
-                onClick={() => setShowStoreEditModal(false)}
-                className="bg-gray-600 text-gray-200 px-4 py-2 rounded-md hover:bg-gray-500 transition-colors"
-              >
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowStoreEditModal(false)}>
                 キャンセル
-              </button>
-              <button
-                onClick={handleSaveStore}
-                className="bg-cyan-600 text-white px-4 py-2 rounded-md hover:bg-cyan-700 transition-colors"
-              >
-                保存
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </Button>
+            <Button onClick={handleSaveStore}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* フォーム編集モーダル */}
       {editingForm && (
@@ -2105,16 +2003,14 @@ export default function StoreDetailPage() {
           form={editingForm}
           storeId={storeId}
           onSave={async (updatedForm) => {
-            const isSurvey = 'questions' in updatedForm.config;
+            const isSurvey = updatedForm.config && 'questions' in updatedForm.config;
             const endpoint = isSurvey 
               ? `/api/surveys/${updatedForm.id}`
               : `/api/forms/${updatedForm.id}`;
             
             const response = await fetch(endpoint, {
               method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-              },
+              headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
               body: JSON.stringify(updatedForm),
             });
@@ -2126,59 +2022,250 @@ export default function StoreDetailPage() {
               } else {
                  setForms(forms.map(f => f.id === savedForm.id ? (savedForm as Form) : f));
               }
+              toast({
+                title: '成功',
+                description: 'フォームを保存しました',
+              });
             } else {
               throw new Error('保存に失敗しました');
             }
           }}
-          theme="dark"
+          theme="light"
           userRole="service_admin"
         />
       )}
 
-      {/* フォーム削除確認モーダル */}
-      {showDeleteConfirm && deletingFormId && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-900 rounded-lg shadow-xl max-w-md w-full mx-4 border border-gray-700">
-            <div className="p-6">
-              <div className="flex items-center mb-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                  </svg>
-                </div>
-                <div className="ml-4">
-                  <h3 className="text-lg font-medium text-white">フォームを削除</h3>
-                  <p className="text-sm text-gray-400">この操作は取り消せません</p>
-                </div>
-              </div>
-              
-              <div className="mb-4">
-                <p className="text-gray-300">
-フォーム「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === deletingFormId) as any).form_name || forms.find(f => f.id === deletingFormId)?.config?.basic_info?.form_name) : ''}」を削除しますか？
+      {/* フォーム削除確認ダイアログ */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>フォームを削除</DialogTitle>
+            <DialogDescription>
+              この操作は取り消せません
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>
+Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === deletingFormId) as any).form_name || forms.find(f => f.id === deletingFormId)?.config?.basic_info?.form_name) : ''}」を削除しますか？
                 </p>
-                <p className="text-sm text-gray-400 mt-2">
+            <p className="text-sm text-muted-foreground">
                   削除すると、このフォームに関連する予約データも全て削除されます。
                 </p>
               </div>
-
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={cancelDeleteForm}
-                  className="bg-gray-600 text-gray-200 px-4 py-2 rounded-md hover:bg-gray-500 transition-colors"
-                >
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelDeleteForm}>
                   キャンセル
-                </button>
-                <button
-                  onClick={confirmDeleteForm}
-                  className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
-                >
-                  削除する
-                </button>
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteForm}>
+              削除する
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 予約詳細モーダル */}
+      <Dialog open={showReservationDetail} onOpenChange={setShowReservationDetail}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>予約詳細</DialogTitle>
+            <DialogDescription>
+              {selectedReservation && (
+                <>予約ID: {selectedReservation.id}</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedReservation && (
+            <div className="space-y-4">
+              {/* 基本情報 */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">基本情報</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm text-muted-foreground">顧客名</Label>
+                      <p className="font-medium">{selectedReservation.customer_name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">電話番号</Label>
+                      <p className="font-medium">{selectedReservation.customer_phone}</p>
+                    </div>
+                    {selectedReservation.customer_email && (
+                      <div>
+                        <Label className="text-sm text-muted-foreground">メールアドレス</Label>
+                        <p className="font-medium">{selectedReservation.customer_email}</p>
+                      </div>
+                    )}
+                    <div>
+                      <Label className="text-sm text-muted-foreground">予約日時</Label>
+                      <p className="font-medium">
+                        {new Date(selectedReservation.reservation_date).toLocaleDateString('ja-JP')} {selectedReservation.reservation_time}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">ステータス</Label>
+                      <div className="mt-1">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                          selectedReservation.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          selectedReservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          selectedReservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
+                          'bg-green-50 text-green-700 border-green-200'
+                        }`}>
+                          {selectedReservation.status === 'pending' ? '保留中' :
+                           selectedReservation.status === 'confirmed' ? '確認済み' :
+                           selectedReservation.status === 'cancelled' ? 'キャンセル' : '完了'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">フォーム</Label>
+                      <p className="font-medium">
+                        {forms.find(f => f.id === selectedReservation.form_id) 
+                          ? ((forms.find(f => f.id === selectedReservation.form_id) as any)?.form_name || forms.find(f => f.id === selectedReservation.form_id)?.config?.basic_info?.form_name || 'フォーム')
+                          : 'フォーム不明'}
+                      </p>
+                      <p className="text-xs text-muted-foreground font-mono">{selectedReservation.form_id}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 選択メニュー */}
+              {(() => {
+                const menus = selectedReservation.selected_menus;
+                return menus && Array.isArray(menus) && menus.length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">選択メニュー</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {(menus as any[]).map((menu: any, index: number) => (
+                          <div key={index} className="p-3 border rounded-lg">
+                            <div className="font-medium">{menu.menu_name || menu.name || 'メニュー'}</div>
+                            {menu.submenu_name && (
+                              <div className="text-sm text-muted-foreground">サブメニュー: {menu.submenu_name}</div>
+                            )}
+                            {menu.price && (
+                              <div className="text-sm text-muted-foreground">料金: ¥{menu.price.toLocaleString()}</div>
+                            )}
+                            {menu.duration && (
+                              <div className="text-sm text-muted-foreground">所要時間: {menu.duration}分</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null;
+              })()}
+
+              {/* 選択オプション */}
+              {(() => {
+                const options = selectedReservation.selected_options;
+                return options && Array.isArray(options) && options.length > 0 ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">選択オプション</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {(options as any[]).map((option: any, index: number) => (
+                          <div key={index} className="p-3 border rounded-lg">
+                            <div className="font-medium">{option.option_name || option.name || 'オプション'}</div>
+                            {option.price && (
+                              <div className="text-sm text-muted-foreground">料金: ¥{option.price.toLocaleString()}</div>
+                            )}
+                            {option.duration && (
+                              <div className="text-sm text-muted-foreground">所要時間: {option.duration}分</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null;
+              })()}
+
+              {/* その他情報 */}
+              {(() => {
+                const info = selectedReservation.customer_info as Record<string, any> | null;
+                if (!info || typeof info !== 'object') return null;
+
+                const formConfig = forms.find(f => f.id === selectedReservation.form_id)?.config;
+
+                // gender の値 → ラベル
+                const genderLabel = (v: string) => {
+                  const opt = formConfig?.gender_selection?.options?.find(o => o.value === v);
+                  if (opt) return opt.label;
+                  return v === 'male' ? '男性' : v === 'female' ? '女性' : v;
+                };
+
+                // visit_count の値 → ラベル
+                const visitCountLabel = (v: string) => {
+                  const opt = formConfig?.visit_count_selection?.options?.find(o => o.value === v);
+                  if (opt) return opt.label;
+                  return v === 'first' ? '初回' : v === 'repeat' ? '2回目以降' : v;
+                };
+
+                // coupon の値 → ラベル
+                const couponLabel = (v: string) => {
+                  const opt = formConfig?.coupon_selection?.options?.find(o => o.value === v);
+                  if (opt) return opt.label;
+                  return v === 'use' ? '利用する' : v === 'not_use' ? '利用しない' : v;
+                };
+
+                const rows: { label: string; value: string }[] = [];
+
+                if (info.gender) rows.push({ label: '性別', value: genderLabel(String(info.gender)) });
+                if (info.visit_count) rows.push({ label: '来店回数', value: visitCountLabel(String(info.visit_count)) });
+                if (info.coupon) rows.push({ label: 'クーポン', value: couponLabel(String(info.coupon)) });
+                if (info.notes && String(info.notes).trim()) rows.push({ label: 'メモ', value: String(info.notes) });
+                if (info.total_price != null) rows.push({ label: '合計料金', value: `¥${Number(info.total_price).toLocaleString()}` });
+                if (info.total_duration != null) rows.push({ label: '合計所要時間', value: `${info.total_duration}分` });
+                if (info.preferred_date2) rows.push({ label: '第2希望日時', value: `${info.preferred_date2}${info.preferred_time2 ? ' ' + info.preferred_time2 : ''}` });
+                if (info.preferred_date3) rows.push({ label: '第3希望日時', value: `${info.preferred_date3}${info.preferred_time3 ? ' ' + info.preferred_time3 : ''}` });
+
+                // カスタムフィールド
+                if (info.custom_fields && typeof info.custom_fields === 'object') {
+                  Object.entries(info.custom_fields as Record<string, any>).forEach(([fieldId, fieldValue]) => {
+                    const fieldDef = formConfig?.custom_fields?.find(f => f.id === fieldId);
+                    const label = fieldDef?.title || fieldId;
+                    const val = Array.isArray(fieldValue) ? fieldValue.join(', ') : String(fieldValue ?? '');
+                    if (val) rows.push({ label, value: val });
+                  });
+                }
+
+                if (rows.length === 0) return null;
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">その他情報</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {rows.map(({ label, value }) => (
+                          <div key={label} className="flex justify-between items-start gap-4">
+                            <span className="text-sm text-muted-foreground shrink-0">{label}</span>
+                            <span className="text-sm font-medium text-right">{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
+              {/* 作成日時 */}
+              <div className="text-xs text-muted-foreground">
+                作成日時: {new Date(selectedReservation.created_at).toLocaleString('ja-JP')}
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

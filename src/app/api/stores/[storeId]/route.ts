@@ -54,7 +54,8 @@ export async function GET(
         );
       }
 
-      return NextResponse.json(store);
+      const { google_calendar_refresh_token: _t, ...storeSafe } = store as Store & { google_calendar_refresh_token?: string };
+      return NextResponse.json(storeSafe);
     }
 
     // staging/production: Supabase から取得
@@ -66,7 +67,7 @@ export async function GET(
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: store, error } = await (adminClient as any)
       .from('stores')
       .select('*')
@@ -81,7 +82,8 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(store);
+    const { google_calendar_refresh_token: _token, ...storeSafe } = store;
+    return NextResponse.json(storeSafe);
   } catch (error) {
     console.error('Store fetch error:', error);
     return NextResponse.json(
@@ -145,7 +147,7 @@ export async function PUT(
     delete updateData.id;
     delete updateData.created_at;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { data: updatedStore, error } = await (adminClient as any)
       .from('stores')
       .update(updateData)
@@ -249,9 +251,9 @@ export async function DELETE(
     }
 
     // 関連フォーム数をチェック（予約フォーム）
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { count: formsCount, error: formsCountError } = await (adminClient as any)
-      .from('forms')
+      .from('reservation_forms')
       .select('*', { count: 'exact', head: true })
       .eq('store_id', storeId);
 
@@ -264,7 +266,7 @@ export async function DELETE(
     }
 
     // 関連アンケートフォーム数をチェック
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { count: surveyFormsCount, error: surveyFormsCountError } = await (adminClient as any)
       .from('survey_forms')
       .select('*', { count: 'exact', head: true })
@@ -295,7 +297,7 @@ export async function DELETE(
     }
 
     // 関連フォームと予約データは CASCADE で自動削除される（migration設定済み）
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const { error } = await (adminClient as any)
       .from('stores')
       .delete()

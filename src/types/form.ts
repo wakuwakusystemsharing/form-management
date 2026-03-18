@@ -6,6 +6,7 @@ export interface MenuOption {
   duration: number;          // 分単位
   description?: string;
   is_default?: boolean;      // デフォルトで選択されるか
+  hide_price?: boolean;      // 料金を非表示にするか
 }
 
 // サブメニューの型定義
@@ -16,6 +17,7 @@ export interface SubMenuItem {
   duration: number;          // 分単位
   description?: string;
   image?: string;            // 画像URL
+  hide_price?: boolean;      // 料金を非表示にするか
 }
 
 // 予約フォームの型定義
@@ -34,6 +36,7 @@ export interface MenuItem {
   options?: MenuOption[];    // メニューオプション
   has_submenu?: boolean;     // サブメニューを使用するかどうか
   sub_menu_items?: SubMenuItem[];  // サブメニュー項目
+  hide_price?: boolean;      // 料金を非表示にするか
 }
 
 export interface MenuCategory {
@@ -69,6 +72,7 @@ export interface FormConfig {
     liff_id?: string;  // オプショナル：Web予約フォームの場合は不要
     theme_color: string;
     logo_url?: string;
+    notice?: string;   // フォーム上部に表示する注意書き（任意）
   };
   
   visit_options: VisitOption[];
@@ -156,11 +160,7 @@ export interface FormConfig {
     name_max_length: number;
   };
 
-  // Google App Script エンドポイント
-  gas_endpoint?: string;
-  
   // Web予約フォーム用の設定
-  calendar_url?: string;      // カレンダー取得URL（空き状況取得用）
   security_secret?: string;   // SECURITY_SECRET（セキュリティ用の秘密鍵）
   form_type?: 'line' | 'web'; // フォームタイプ（LINE予約フォーム or Web予約フォーム）
 }
@@ -346,6 +346,8 @@ export interface Database {
           reservation_date: string;
           reservation_time: string;
           customer_info: Json;
+          line_user_id: string | null; // LINEユーザーID
+          customer_id: string | null; // 顧客ID (CRM連携)
           status: 'pending' | 'confirmed' | 'cancelled';
           created_at: string;
           updated_at: string;
@@ -362,6 +364,8 @@ export interface Database {
           reservation_date: string;
           reservation_time: string;
           customer_info: Json;
+          line_user_id?: string | null; // LINEユーザーID
+          customer_id?: string | null; // 顧客ID (CRM連携)
           status?: 'pending' | 'confirmed' | 'cancelled';
           created_at?: string;
           updated_at?: string;
@@ -378,11 +382,256 @@ export interface Database {
           reservation_date?: string;
           reservation_time?: string;
           customer_info?: Json;
+          line_user_id?: string | null; // LINEユーザーID
+          customer_id?: string | null; // 顧客ID (CRM連携)
           status?: 'pending' | 'confirmed' | 'cancelled';
           created_at?: string;
           updated_at?: string;
         };
       };
+      customers: {
+        Row: {
+          id: string;
+          store_id: string;
+          line_user_id: string | null;
+          // 基本情報
+          name: string;
+          name_kana: string | null;
+          phone: string | null;
+          email: string | null;
+          birthday: string | null;
+          gender: 'male' | 'female' | 'other' | 'unknown' | null;
+          // LINE連携情報
+          line_display_name: string | null;
+          line_picture_url: string | null;
+          line_status_message: string | null;
+          line_email: string | null;
+          line_friend_flag: boolean;
+          line_friend_added_at: string | null;
+          line_language: string | null;
+          line_os: 'ios' | 'android' | 'web' | null;
+          // 顧客属性
+          customer_type: 'new' | 'regular' | 'vip' | 'inactive';
+          preferred_contact_method: string | null;
+          allergies: string | null;
+          medical_history: string | null;
+          notes: string | null;
+          tags: string[] | null;
+          // 統計情報
+          total_visits: number;
+          total_spent: number;
+          first_visit_date: string | null;
+          last_visit_date: string | null;
+          average_visit_interval_days: number | null;
+          // タイムスタンプ
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          store_id: string;
+          line_user_id?: string | null;
+          // 基本情報
+          name: string;
+          name_kana?: string | null;
+          phone?: string | null;
+          email?: string | null;
+          birthday?: string | null;
+          gender?: 'male' | 'female' | 'other' | 'unknown' | null;
+          // LINE連携情報
+          line_display_name?: string | null;
+          line_picture_url?: string | null;
+          line_status_message?: string | null;
+          line_email?: string | null;
+          line_friend_flag?: boolean;
+          line_friend_added_at?: string | null;
+          line_language?: string | null;
+          line_os?: 'ios' | 'android' | 'web' | null;
+          // 顧客属性
+          customer_type?: 'new' | 'regular' | 'vip' | 'inactive';
+          preferred_contact_method?: string | null;
+          allergies?: string | null;
+          medical_history?: string | null;
+          notes?: string | null;
+          tags?: string[] | null;
+          // 統計情報
+          total_visits?: number;
+          total_spent?: number;
+          first_visit_date?: string | null;
+          last_visit_date?: string | null;
+          average_visit_interval_days?: number | null;
+          // タイムスタンプ
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          store_id?: string;
+          line_user_id?: string | null;
+          // 基本情報
+          name?: string;
+          name_kana?: string | null;
+          phone?: string | null;
+          email?: string | null;
+          birthday?: string | null;
+          gender?: 'male' | 'female' | 'other' | 'unknown' | null;
+          // LINE連携情報
+          line_display_name?: string | null;
+          line_picture_url?: string | null;
+          line_status_message?: string | null;
+          line_email?: string | null;
+          line_friend_flag?: boolean;
+          line_friend_added_at?: string | null;
+          line_language?: string | null;
+          line_os?: 'ios' | 'android' | 'web' | null;
+          // 顧客属性
+          customer_type?: 'new' | 'regular' | 'vip' | 'inactive';
+          preferred_contact_method?: string | null;
+          allergies?: string | null;
+          medical_history?: string | null;
+          notes?: string | null;
+          tags?: string[] | null;
+          // 統計情報
+          total_visits?: number;
+          total_spent?: number;
+          first_visit_date?: string | null;
+          last_visit_date?: string | null;
+          average_visit_interval_days?: number | null;
+          // タイムスタンプ
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      customer_visits: {
+        Row: {
+          id: string;
+          customer_id: string;
+          store_id: string;
+          reservation_id: string | null;
+          // 来店情報
+          visit_date: string;
+          visit_time: string | null;
+          visit_type: 'reservation' | 'walk_in' | 'follow_up';
+          // 施術情報
+          treatment_menus: Json | null;
+          treatment_notes: string | null;
+          therapist_name: string | null;
+          satisfaction_score: number | null;
+          // 金額情報
+          amount: number | null;
+          payment_method: string | null;
+          // タイムスタンプ
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_id: string;
+          store_id: string;
+          reservation_id?: string | null;
+          // 来店情報
+          visit_date: string;
+          visit_time?: string | null;
+          visit_type?: 'reservation' | 'walk_in' | 'follow_up';
+          // 施術情報
+          treatment_menus?: Json | null;
+          treatment_notes?: string | null;
+          therapist_name?: string | null;
+          satisfaction_score?: number | null;
+          // 金額情報
+          amount?: number | null;
+          payment_method?: string | null;
+          // タイムスタンプ
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          customer_id?: string;
+          store_id?: string;
+          reservation_id?: string | null;
+          // 来店情報
+          visit_date?: string;
+          visit_time?: string | null;
+          visit_type?: 'reservation' | 'walk_in' | 'follow_up';
+          // 施術情報
+          treatment_menus?: Json | null;
+          treatment_notes?: string | null;
+          therapist_name?: string | null;
+          satisfaction_score?: number | null;
+          // 金額情報
+          amount?: number | null;
+          payment_method?: string | null;
+          // タイムスタンプ
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      customer_interactions: {
+        Row: {
+          id: string;
+          customer_id: string;
+          store_id: string;
+          // やり取り情報
+          interaction_type: 'call' | 'email' | 'line_message' | 'sms' | 'note' | 'reminder';
+          direction: 'inbound' | 'outbound' | null;
+          subject: string | null;
+          content: string | null;
+          // LINE連携
+          line_message_id: string | null;
+          // 作成者
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_id: string;
+          store_id: string;
+          // やり取り情報
+          interaction_type: 'call' | 'email' | 'line_message' | 'sms' | 'note' | 'reminder';
+          direction?: 'inbound' | 'outbound' | null;
+          subject?: string | null;
+          content?: string | null;
+          // LINE連携
+          line_message_id?: string | null;
+          // 作成者
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          customer_id?: string;
+          store_id?: string;
+          // やり取り情報
+          interaction_type?: 'call' | 'email' | 'line_message' | 'sms' | 'note' | 'reminder';
+          direction?: 'inbound' | 'outbound' | null;
+          subject?: string | null;
+          content?: string | null;
+          // LINE連携
+          line_message_id?: string | null;
+          // 作成者
+          created_by?: string | null;
+          created_at?: string;
+        };
+      };
     };
   };
 }
+
+// CRM関連の型定義
+export type Customer = Database['public']['Tables']['customers']['Row'];
+export type CustomerInsert = Database['public']['Tables']['customers']['Insert'];
+export type CustomerUpdate = Database['public']['Tables']['customers']['Update'];
+
+export type CustomerVisit = Database['public']['Tables']['customer_visits']['Row'];
+export type CustomerVisitInsert = Database['public']['Tables']['customer_visits']['Insert'];
+export type CustomerVisitUpdate = Database['public']['Tables']['customer_visits']['Update'];
+
+export type CustomerInteraction = Database['public']['Tables']['customer_interactions']['Row'];
+export type CustomerInteractionInsert = Database['public']['Tables']['customer_interactions']['Insert'];
+export type CustomerInteractionUpdate = Database['public']['Tables']['customer_interactions']['Update'];
+
+export type CustomerType = 'new' | 'regular' | 'vip' | 'inactive';
+export type CustomerSegment = 'new' | 'repeat' | 'vip' | 'dormant';
+export type VisitType = 'reservation' | 'walk_in' | 'follow_up';
+export type InteractionType = 'call' | 'email' | 'line_message' | 'sms' | 'note' | 'reminder';

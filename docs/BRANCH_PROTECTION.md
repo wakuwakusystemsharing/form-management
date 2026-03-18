@@ -1,8 +1,8 @@
 # ブランチ保護ルール設定ガイド
 
-このドキュメントでは、Production < Staging < Development の階層的な制限を実現するためのGitHubブランチ保護ルールの設定方法を説明します。
+このドキュメントでは、Production < Staging < Development の階層的な制限を実現するための GitHub ブランチ保護ルールの設定方法を説明します。
 
-## 📋 概要
+## 概要
 
 安全な運用のため、以下の階層的な制限を設定します：
 
@@ -15,11 +15,11 @@ Development (dev)
   ↑ 直接プッシュ可能
 ```
 
-## 🔒 ブランチ保護ルールの設定
+## ブランチ保護ルールの設定
 
-### 1. GitHubリポジトリの設定にアクセス
+### 1. GitHub リポジトリの設定にアクセス
 
-1. GitHubリポジトリを開く
+1. GitHub リポジトリを開く
 2. **Settings** → **Branches** を選択
 
 ### 2. main (Production) ブランチの保護ルール
@@ -33,36 +33,37 @@ main
 
 #### 保護設定
 
-✅ **Require a pull request before merging**
-- ✅ Require approvals: `1` (推奨: 2)
-- ✅ Dismiss stale pull request approvals when new commits are pushed
-- ✅ Require review from Code Owners (推奨)
+**Require a pull request before merging**
+- Require approvals: `1` (推奨: 2)
+- Dismiss stale pull request approvals when new commits are pushed
+- Require review from Code Owners (推奨)
 
-✅ **Require status checks to pass before merging**
-- ✅ Require branches to be up to date before merging
+**Require status checks to pass before merging**
+- Require branches to be up to date before merging
 - Status checks:
   - `lint-and-type-check`
   - `build`
   - `validate-branch-flow` (branch-protection.yml)
   - `check-commit-messages` (branch-protection.yml)
 
-✅ **Require conversation resolution before merging**
+**Require conversation resolution before merging**
 
-✅ **Restrict who can push to matching branches**
+**Restrict who can push to matching branches**
 - 管理者のみ許可（オプション）
 
-✅ **Do not allow bypassing the above settings**
+**Do not allow bypassing the above settings**
 - 管理者も含めて全員に適用
 
-✅ **Allow force pushes**: ❌ **無効化**
-✅ **Allow deletions**: ❌ **無効化**
+**Allow force pushes**: 無効化
+
+**Allow deletions**: 無効化
 
 #### 追加設定（推奨）
 
-✅ **Require linear history**
+**Require linear history**
 - マージコミットではなく、リベースまたはスカッシュマージを強制
 
-✅ **Include administrators**
+**Include administrators**
 - 管理者も保護ルールに従う
 
 ---
@@ -78,19 +79,20 @@ staging
 
 #### 保護設定
 
-⚠️ **Require a pull request before merging**: ❌ **無効化**（直接プッシュを許可）
+**Require a pull request before merging**: 無効化（直接プッシュを許可）
 
-✅ **Require status checks to pass before merging** (PR作成時のみ)
-- ✅ Require branches to be up to date before merging
+**Require status checks to pass before merging** (PR 作成時のみ)
+- Require branches to be up to date before merging
 - Status checks:
   - `lint-and-type-check`
   - `build`
   - `validate-branch-flow` (branch-protection.yml)
 
-✅ **Allow force pushes**: ❌ **無効化**（推奨）
-✅ **Allow deletions**: ❌ **無効化**（推奨）
+**Allow force pushes**: 無効化（推奨）
 
-> **注意**: stagingブランチは直接プッシュ可能ですが、PR経由でのマージも引き続き利用できます。
+**Allow deletions**: 無効化（推奨）
+
+> staging ブランチは直接プッシュ可能ですが、PR 経由でのマージも引き続き利用できます。
 
 ---
 
@@ -105,21 +107,22 @@ dev
 
 #### 保護設定
 
-✅ **Require status checks to pass before merging** (PR作成時のみ)
+**Require status checks to pass before merging** (PR 作成時のみ)
 - Status checks:
   - `lint-and-type-check`
   - `build`
 
-✅ **Allow force pushes**: ✅ **有効化** (開発用のため)
-✅ **Allow deletions**: ✅ **有効化** (開発用のため)
+**Allow force pushes**: 有効化 (開発用のため)
+
+**Allow deletions**: 有効化 (開発用のため)
 
 ---
 
-## 🔄 ワークフロー
+## ワークフロー
 
 ### Development → Staging
 
-1. **devブランチで開発**
+1. **dev ブランチで開発**
    ```bash
    git checkout dev
    git add .
@@ -127,56 +130,56 @@ dev
    git push origin dev
    ```
 
-2. **Pull Requestを作成**
+2. **Pull Request を作成**
    - Base: `staging`
    - Compare: `dev`
    - タイトル: `feat: 新機能を追加`
 
 3. **レビュー & マージ**
    - コードレビュー
-   - CI/CDチェックの成功確認
+   - CI/CD チェックの成功確認
    - マージ
 
 ### Staging → Production
 
-1. **stagingブランチで検証完了後**
+1. **staging ブランチで検証完了後**
    ```bash
    git checkout staging
    git pull origin staging
    # 動作確認
    ```
 
-2. **Pull Requestを作成**
+2. **Pull Request を作成**
    - Base: `main`
    - Compare: `staging`
    - タイトル: `Release: v1.2.0` など
 
 3. **レビュー & マージ**
    - コードレビュー（必須）
-   - CI/CDチェックの成功確認
-   - Staging環境での動作確認完了を確認
+   - CI/CD チェックの成功確認
+   - Staging 環境での動作確認完了を確認
    - マージ
 
 ---
 
-## 🚫 禁止事項
+## 禁止事項
 
-### ❌ 直接プッシュ
+### 直接プッシュ禁止
 
 以下のブランチへの直接プッシュは**禁止**です：
 
 - `main` (Production)
 
 ```bash
-# ❌ 禁止
+# 禁止
 git push origin main
 
-# ✅ 許可
+# 許可
 git push origin staging
 git push origin dev
 ```
 
-### ❌ 不適切なマージフロー
+### 不適切なマージフロー禁止
 
 以下のマージは**禁止**です：
 
@@ -185,25 +188,25 @@ git push origin dev
 - `main` → `staging` (逆方向)
 
 ```bash
-# ❌ 禁止
+# 禁止
 git checkout main
 git merge dev  # 直接マージは禁止
 
-# ✅ 許可
-# 1. dev → staging へのPR
-# 2. staging → main へのPR
+# 許可
+# 1. dev → staging への PR
+# 2. staging → main への PR
 ```
 
 ---
 
-## 🔍 検証方法
+## 検証方法
 
 ### GitHub Actions による自動検証
 
 以下のワークフローが自動的に検証します：
 
 1. **branch-protection.yml**
-   - PRのブランチフローを検証
+   - PR のブランチフローを検証
    - コミットメッセージの形式をチェック
 
 2. **prevent-direct-push.yml**
@@ -224,15 +227,15 @@ git branch -r
 
 ---
 
-## 🛠 トラブルシューティング
+## トラブルシューティング
 
-### 問題1: PRがマージできない
+### 問題1: PR がマージできない
 
 **原因**: ブランチ保護ルールの要件を満たしていない
 
 **解決策**:
 - 必要なレビュー承認があるか確認
-- CI/CDチェックが全て成功しているか確認
+- CI/CD チェックが全て成功しているか確認
 - ブランチが最新の状態か確認（`Update branch` ボタンを使用）
 
 ### 問題2: 直接プッシュができてしまう
@@ -253,11 +256,11 @@ git branch -r
 3. **保護ルールを再度有効化**
 4. 事後レビューを実施
 
-> ⚠️ **注意**: 緊急時の対応は記録を残し、事後レビューを必ず実施してください。
+> **注意**: 緊急時の対応は記録を残し、事後レビューを必ず実施してください。
 
 ---
 
-## 📚 参考資料
+## 参考資料
 
 - [GitHub Branch Protection Rules](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
@@ -265,7 +268,7 @@ git branch -r
 
 ---
 
-## ✅ チェックリスト
+## チェックリスト
 
 ブランチ保護ルールの設定が完了したら、以下を確認してください：
 
@@ -278,6 +281,4 @@ git branch -r
 
 ---
 
-**最終更新**: 2025-01-31  
-**担当**: AI Assistant (form-management プロジェクト)
-
+**最終更新**: 2026年3月
