@@ -31,8 +31,11 @@ import {
   Store as StoreIcon,
   AlertTriangle,
   MessageCircle,
-  Info
+  Info,
+  HelpCircle
 } from 'lucide-react';
+import { getStoreSetupStatus } from '@/lib/store-setup-status';
+import Link from 'next/link';
 
 function InfoTooltip({ text }: { text: string }) {
   return (
@@ -1107,6 +1110,15 @@ export default function StoreDetailPage() {
             <Button
               variant="ghost"
               size="sm"
+              onClick={() => router.push(`/admin/help?storeId=${storeId}`)}
+              className="text-muted-foreground hover:text-foreground text-xs h-8"
+              title="セットアップガイド"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => router.push(`/admin/${storeId}/reservations`)}
               className="text-muted-foreground hover:text-foreground text-xs h-8"
             >
@@ -1632,7 +1644,9 @@ export default function StoreDetailPage() {
                 まだ予約フォームが作成されていません
                     </p>
             ) : (
-              forms.map((form) => {
+              (() => {
+                const setupStatus = getStoreSetupStatus(store);
+                return forms.map((form) => {
                 const deployInfo = (form as any).static_deploy;
                 let formUrl = deployInfo?.deploy_url || deployInfo?.storage_url || `/preview/${storeId}/forms/${form.id}`;
                 if (formUrl.startsWith('/') && !formUrl.startsWith('//')) {
@@ -1656,6 +1670,34 @@ export default function StoreDetailPage() {
                                   {form.status === 'active' ? '公開中' : '非公開'}
                                 </Badge>
                               </div>
+                              {/* 設定ステータスバッジ */}
+                              {(() => {
+                                const formType = form.config?.form_type ?? 'line';
+                                const missing = setupStatus.getMissingFor(formType as 'line' | 'web');
+                                if (missing.length > 0) {
+                                  return (
+                                    <div className="flex gap-1.5 flex-wrap mt-0.5">
+                                      {missing.map((item) => (
+                                        <Link
+                                          key={item.key}
+                                          href={`/admin/help?storeId=${storeId}#${item.helpAnchor}`}
+                                          className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded-full text-[11px] hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+                                        >
+                                          <AlertTriangle className="h-3 w-3" />
+                                          {item.label}未設定
+                                        </Link>
+                                      ))}
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className="flex gap-1.5 mt-0.5">
+                                    <span className="inline-flex items-center gap-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded-full text-[11px]">
+                                      ✓ 設定完了
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                               <p className="text-xs text-muted-foreground font-mono truncate">
                                 ID: {form.id}
                       </p>
@@ -1691,7 +1733,8 @@ export default function StoreDetailPage() {
                         </CardContent>
                       </Card>
                 );
-              })
+              });
+              })()
             )}
           </div>
               </CardContent>
