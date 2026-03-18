@@ -229,6 +229,7 @@ export default function AdminPage() {
           await supabase.auth.signOut();
           if (isMounted) {
             setUser(null);
+            setLoading(false);
           }
         } else {
           if (isMounted) {
@@ -285,6 +286,7 @@ export default function AdminPage() {
         // 店舗管理者として登録されていない場合、ログアウト
         supabase.auth.signOut();
         setUser(null);
+        setLoading(false);
       } else {
         setUser(nextUser);
         if (nextUser && session) {
