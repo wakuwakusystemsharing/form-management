@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Trash2, Search, UserPlus } from 'lucide-react';
+import { Plus, Trash2, Search, UserPlus, Copy, Pencil } from 'lucide-react';
+import { getBaseUrl } from '@/lib/env';
 
 interface StoreAdmin {
   id: string;
@@ -135,6 +136,23 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
     }
   };
 
+  const handleCopyLoginUrl = async () => {
+    const url = `${getBaseUrl()}/${storeId}/admin`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: 'ログインURLをコピーしました',
+        description: `URL: ${url}`,
+      });
+    } catch {
+      toast({
+        title: 'エラー',
+        description: 'URLのコピーに失敗しました',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleDeleteAdmin = async (userId: string) => {
     if (!confirm('この店舗管理者を削除しますか？')) {
       return;
@@ -181,10 +199,16 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
             <CardTitle>店舗管理者管理</CardTitle>
             <CardDescription>この店舗にアクセスできるユーザーを管理します</CardDescription>
           </div>
-          <Button onClick={() => setShowAddDialog(true)}>
-            <UserPlus className="mr-2 h-4 w-4" />
-            ユーザー追加
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleCopyLoginUrl}>
+              <Copy className="mr-2 h-4 w-4" />
+              ログインURLをコピー
+            </Button>
+            <Button onClick={() => setShowAddDialog(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              ユーザー追加
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
