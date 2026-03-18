@@ -412,7 +412,7 @@ async function main() {
     // 2. 既存のフォームを確認または作成（3つ）
     console.log('📝 フォームを確認中...');
     const { data: existingForms } = await (adminClient as any)
-      .from('forms')
+      .from('reservation_forms')
       .select('id, config')
       .eq('store_id', storeId);
 
@@ -437,7 +437,7 @@ async function main() {
         const formConfig = createFormConfig(formName);
 
         const { data: form, error: formError } = await (adminClient as any)
-          .from('forms')
+          .from('reservation_forms')
           .insert([{
             id: formId,
             store_id: storeId,

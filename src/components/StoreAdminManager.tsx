@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Trash2, Search, UserPlus } from 'lucide-react';
+import { Plus, Trash2, Search, UserPlus, Copy, Pencil } from 'lucide-react';
+import { getBaseUrl } from '@/lib/env';
 
 interface StoreAdmin {
   id: string;
@@ -33,6 +34,10 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { toast } = useToast();
+  const [editingAdmin, setEditingAdmin] = useState<StoreAdmin | null>(null);
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const fetchAdmins = useCallback(async () => {
     try {
@@ -135,6 +140,101 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
     }
   };
 
+  const handleCopyLoginUrl = async () => {
+    const url = `${getBaseUrl()}/${storeId}/admin`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: 'ログインURLをコピーしました',
+        description: `URL: ${url}`,
+      });
+    } catch {
+      toast({
+        title: 'エラー',
+        description: 'URLのコピーに失敗しました',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleOpenEditDialog = (admin: StoreAdmin) => {
+    setEditingAdmin(admin);
+    setEditEmail(admin.email || '');
+    setEditPassword('');
+  };
+
+  const handleSaveAdmin = async () => {
+    if (!editingAdmin) return;
+
+    // メールが変更なし、パスワードも空の場合は何もしない
+    const emailChanged = editEmail.trim() !== (editingAdmin.email || '');
+    if (!emailChanged && !editPassword) {
+      setEditingAdmin(null);
+      return;
+    }
+
+    if (!editEmail.trim()) {
+      toast({
+        title: 'エラー',
+        description: 'メールアドレスを入力してください',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (editPassword && editPassword.length < 6) {
+      toast({
+        title: 'エラー',
+        description: 'パスワードは6文字以上で入力してください',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const response = await fetch(`/api/stores/${storeId}/admins/${editingAdmin.user_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: emailChanged ? editEmail.trim() : undefined,
+          password: editPassword || undefined,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        // テーブルのメールアドレスを更新
+        setAdmins(prev => prev.map(a =>
+          a.user_id === editingAdmin.user_id
+            ? { ...a, email: result.email ?? editEmail.trim() }
+            : a
+        ));
+        setEditingAdmin(null);
+        toast({
+          title: '更新しました',
+          description: 'ユーザー情報を更新しました',
+        });
+      } else {
+        const error = await response.json();
+        toast({
+          title: 'エラー',
+          description: error.error || 'ユーザー情報の更新に失敗しました',
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: 'エラー',
+        description: 'ユーザー情報の更新に失敗しました',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleDeleteAdmin = async (userId: string) => {
     if (!confirm('この店舗管理者を削除しますか？')) {
       return;
@@ -181,10 +281,16 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
             <CardTitle>店舗管理者管理</CardTitle>
             <CardDescription>この店舗にアクセスできるユーザーを管理します</CardDescription>
           </div>
-          <Button onClick={() => setShowAddDialog(true)}>
-            <UserPlus className="mr-2 h-4 w-4" />
-            ユーザー追加
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleCopyLoginUrl}>
+              <Copy className="mr-2 h-4 w-4" />
+              ログインURLをコピー
+            </Button>
+            <Button onClick={() => setShowAddDialog(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              ユーザー追加
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -220,14 +326,24 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
                       {new Date(admin.created_at).toLocaleDateString('ja-JP')}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteAdmin(admin.user_id)}
-                        disabled={deletingId === admin.user_id}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenEditDialog(admin)}
+                          aria-label="ユーザーを編集"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteAdmin(admin.user_id)}
+                          disabled={deletingId === admin.user_id}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -305,6 +421,56 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
             </Button>
             <Button onClick={handleAddAdmin} disabled={isAdding}>
               {isAdding ? '追加中...' : '追加'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ユーザー編集ダイアログ */}
+      <Dialog open={!!editingAdmin} onOpenChange={(open) => {
+        if (!open) {
+          setEditingAdmin(null);
+          setEditEmail('');
+          setEditPassword('');
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ユーザー情報を編集</DialogTitle>
+            <DialogDescription>
+              メールアドレスまたはパスワードを変更できます。パスワードは空白のままにすると変更されません。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">メールアドレス</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-password">新しいパスワード（任意）</Label>
+              <Input
+                id="edit-password"
+                type="password"
+                placeholder="変更しない場合は空白のまま"
+                value={editPassword}
+                onChange={(e) => setEditPassword(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                6文字以上で入力してください
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingAdmin(null)}>
+              キャンセル
+            </Button>
+            <Button onClick={handleSaveAdmin} disabled={isSaving}>
+              {isSaving ? '保存中...' : '保存'}
             </Button>
           </DialogFooter>
         </DialogContent>

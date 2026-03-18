@@ -1,8 +1,18 @@
-{
-  "mcpServers": {
-    "supabase": {
-      "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=qbmftuzqncrtgmwsnwma"
+ {                                                                                               
+    "mcpServers": {
+      "supabase-staging": {                                                                         
+        "type": "http",
+        "url": "https://mcp.supabase.com/mcp?project_ref=ohplaysshllkinaiqksb",                     
+        "headers": {                                                                                
+          "Authorization": "Bearer <>"
+        }                                                                                           
+      },                                                                                          
+      "supabase-prod": {                                                                            
+        "type": "http",
+        "url": "https://mcp.supabase.com/mcp?project_ref=tpuqjpdaasxfwsvjcbum",                     
+        "headers": {                                                                                
+           "Authorization": "Bearer <>"                                        
+        }                                                                                           
+      }                                                                                           
     }
   }
-}
