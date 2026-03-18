@@ -203,7 +203,7 @@ export default function AdminPage() {
           currentUser = session?.user ?? null;
         }
 
-        // サービス管理者でない場合、ログアウトして店舗管理者ページにリダイレクト
+        // サービス管理者でない場合、店舗管理者ページにリダイレクト（サインアウトしない）
         if (currentUser && !ADMIN_EMAILS.includes(currentUser.email || '')) {
           // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
           const supabaseClient = getSupabaseClient();
@@ -213,23 +213,19 @@ export default function AdminPage() {
               .from('store_admins')
               .select('store_id')
               .limit(1);
-            
+
             if (storeAdmins && storeAdmins.length > 0) {
               const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
-              await supabase.auth.signOut();
-              if (isMounted) {
-                setUser(null);
-              }
               router.push(`/${firstStoreId}/admin`);
               return;
             }
           }
-          
-          // 店舗管理者として登録されていない場合、ログアウト
+
+          // 店舗管理者として登録されていない場合のみサインアウト
           await supabase.auth.signOut();
           if (isMounted) {
             setUser(null);
-            setLoading(false);
+            setLoginError('このアカウントにはアクセス権限がありません。');
           }
         } else {
           if (isMounted) {
@@ -268,26 +264,24 @@ export default function AdminPage() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const nextUser = session?.user ?? null;
 
-      // サービス管理者でない場合、ログアウトして店舗管理者ページにリダイレクト
+      // サービス管理者でない場合、店舗管理者ページにリダイレクト（サインアウトしない）
       if (nextUser && !ADMIN_EMAILS.includes(nextUser.email || '')) {
         // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
         const { data: storeAdmins } = await (supabase as any)
           .from('store_admins')
           .select('store_id')
           .limit(1);
-        
+
         if (storeAdmins && storeAdmins.length > 0) {
           const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
-          supabase.auth.signOut();
-          setUser(null);
           router.push(`/${firstStoreId}/admin`);
           return;
         }
-        
-        // 店舗管理者として登録されていない場合、ログアウト
+
+        // 店舗管理者として登録されていない場合のみサインアウト
         supabase.auth.signOut();
         setUser(null);
-        setLoading(false);
+        setLoginError('このアカウントにはアクセス権限がありません。');
       } else {
         setUser(nextUser);
         if (nextUser && session) {
