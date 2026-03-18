@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock, Settings, Calendar } from 'lucide-react';
+import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock, Settings, Calendar, HelpCircle } from 'lucide-react';
 
 const ADMIN_EMAILS = [
   'wakuwakusystemsharing@gmail.com',
@@ -695,6 +695,15 @@ export default function AdminPage() {
           </div>
           <div className="flex items-center gap-1">
             <span className="hidden sm:block text-xs text-muted-foreground mr-2">{user?.email}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/admin/help')}
+              className="text-muted-foreground hover:text-foreground text-xs h-8"
+              title="セットアップガイド"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+            </Button>
             <Button
               variant="ghost"
               size="sm"
