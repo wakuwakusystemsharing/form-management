@@ -256,6 +256,7 @@ export default function AdminPage() {
         }
       } catch (error) {
         console.error('Error checking authentication:', error);
+      } finally {
         if (isMounted) {
           setLoading(false);
         }
