@@ -402,48 +402,40 @@ export default function StoreAdminPage() {
     switch (activeTab) {
       case 'dashboard':
     return (
-          <div className="space-y-6 p-4 lg:p-6">
+          <div className="space-y-5 p-4 lg:p-6">
             {/* 統計カード */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardDescription>フォーム数</CardDescription>
-                </CardHeader>
-                <CardContent>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <Card className="shadow-sm">
+                <CardContent className="p-4">
+                  <p className="text-xs font-medium text-muted-foreground mb-1">フォーム数</p>
                   <div className="text-2xl font-bold">{stats.total}</div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardDescription>公開中</CardDescription>
-                </CardHeader>
-                <CardContent>
+              <Card className="shadow-sm">
+                <CardContent className="p-4">
+                  <p className="text-xs font-medium text-muted-foreground mb-1">公開中</p>
                   <div className="text-2xl font-bold text-green-600">{stats.active}</div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardDescription>アンケート</CardDescription>
-                </CardHeader>
-                <CardContent>
+              <Card className="shadow-sm">
+                <CardContent className="p-4">
+                  <p className="text-xs font-medium text-muted-foreground mb-1">アンケート</p>
                   <div className="text-2xl font-bold text-blue-600">{stats.surveys}</div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardDescription>予約数</CardDescription>
-                </CardHeader>
-                <CardContent>
+              <Card className="shadow-sm">
+                <CardContent className="p-4">
+                  <p className="text-xs font-medium text-muted-foreground mb-1">予約数</p>
                   <div className="text-2xl font-bold text-purple-600">{stats.reservations}</div>
                 </CardContent>
               </Card>
           </div>
 
             {/* 最近の予約 */}
-            <Card>
+            <Card className="shadow-sm">
               <CardHeader>
           <div className="flex items-center justify-between">
-                  <CardTitle>最近の予約</CardTitle>
+                  <CardTitle className="text-base">最近の予約</CardTitle>
                   <Button
                     variant="outline"
                     size="sm"
@@ -496,12 +488,12 @@ export default function StoreAdminPage() {
 
       case 'forms':
   return (
-          <div className="space-y-6 p-4 lg:p-6">
-            <Card>
-              <CardHeader>
+          <div className="space-y-5 p-4 lg:p-6">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-                    <CardTitle>フォーム管理</CardTitle>
+                    <CardTitle className="text-base">フォーム管理</CardTitle>
                     <CardDescription>予約フォームの編集・管理を行います</CardDescription>
             </div>
                   <div className="relative w-full sm:w-auto">
@@ -527,10 +519,10 @@ export default function StoreAdminPage() {
                     )}
         </div>
             ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {filteredForms.map((form) => (
-                      <Card key={form.id} className="hover:shadow-md transition-shadow">
-                        <CardContent className="p-4 sm:p-6">
+                      <Card key={form.id} className="shadow-sm hover:shadow-md transition-shadow border-border/60">
+                        <CardContent className="p-4">
                           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                             <div className="flex-1 space-y-3">
                               <div className="flex flex-wrap items-center gap-2">
@@ -632,10 +624,10 @@ export default function StoreAdminPage() {
 
       case 'reservations':
         return (
-          <div className="space-y-6 p-4 lg:p-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>予約管理</CardTitle>
+          <div className="space-y-5 p-4 lg:p-6">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base">予約管理</CardTitle>
                 <CardDescription>予約の確認・管理を行います</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -648,15 +640,15 @@ export default function StoreAdminPage() {
                       <p className="text-sm">まだフォームが作成されていません</p>
               </div>
             ) : (
-                    <div className="flex flex-wrap gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {filteredForms.map((form) => (
-                        <Card key={form.id} className="flex-1 min-w-[300px] max-w-[500px] hover:shadow-md transition-shadow">
+                        <Card key={form.id} className="shadow-sm hover:shadow-md transition-shadow border-border/60">
                           <CardContent className="p-4">
-                            <div className="space-y-3">
+                            <div className="space-y-2.5">
                               {/* フォーム名とステータス、右側にID・日付情報 */}
-                              <div className="flex items-center justify-between gap-4 flex-wrap">
+                              <div className="flex items-center justify-between gap-3 flex-wrap">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <h4 className="text-base font-semibold">
+                                  <h4 className="text-sm font-semibold">
                           {(form as any).form_name || form.config?.basic_info?.form_name || 'フォーム'}
                                   </h4>
                                   <Badge className={getFormStatusColor(form.status)}>
@@ -858,10 +850,10 @@ export default function StoreAdminPage() {
 
       case 'surveys':
         return (
-          <div className="space-y-6 p-4 lg:p-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>アンケート管理</CardTitle>
+          <div className="space-y-5 p-4 lg:p-6">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base">アンケート管理</CardTitle>
                 <CardDescription>アンケートフォームの編集・管理を行います</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -879,20 +871,20 @@ export default function StoreAdminPage() {
                       <p className="text-sm">まだアンケートが作成されていません</p>
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {surveyForms.filter(survey => {
                         if (!formSearchQuery) return true;
                         const query = formSearchQuery.toLowerCase();
                         const surveyTitle = survey.config?.basic_info?.title || '';
                         return surveyTitle.toLowerCase().includes(query);
                       }).map((survey) => (
-                        <Card key={survey.id} className="flex-1 min-w-[300px] max-w-[500px] hover:shadow-md transition-shadow">
+                        <Card key={survey.id} className="shadow-sm hover:shadow-md transition-shadow border-border/60">
                           <CardContent className="p-4">
-                            <div className="space-y-3">
+                            <div className="space-y-2.5">
                               {/* アンケート名とステータス、右側にID・日付情報 */}
-                              <div className="flex items-center justify-between gap-4 flex-wrap">
+                              <div className="flex items-center justify-between gap-3 flex-wrap">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <h4 className="text-base font-semibold">
+                                  <h4 className="text-sm font-semibold">
                                     {survey.config?.basic_info?.title || 'アンケート'}
                                   </h4>
                                   <Badge className={getFormStatusColor(survey.status)}>
@@ -984,12 +976,12 @@ export default function StoreAdminPage() {
                 </div>
 
                 {/* 回答一覧セクション */}
-                <div className="border-t pt-6">
-                  <Card>
-                    <CardHeader>
+                <div className="border-t pt-5">
+                  <Card className="shadow-sm border-border/60">
+                    <CardHeader className="pb-4">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
-                      <CardTitle>回答一覧</CardTitle>
+                      <CardTitle className="text-base">回答一覧</CardTitle>
                       <CardDescription>アンケートの回答を確認します</CardDescription>
                         </div>
                         <Select 
@@ -1035,11 +1027,11 @@ export default function StoreAdminPage() {
                                 : response.responses;
 
                               return (
-                                <Card key={response.id} className="hover:shadow-md transition-shadow">
-                                  <CardHeader>
+                                <Card key={response.id} className="shadow-sm hover:shadow-md transition-shadow border-border/60">
+                                  <CardHeader className="pb-3">
                                     <div className="flex items-center justify-between">
                                       <div>
-                                        <CardTitle className="text-base">
+                                        <CardTitle className="text-sm">
                                           {surveyForm?.config?.basic_info?.title || 'アンケート'}
                                         </CardTitle>
                                         <CardDescription className="mt-1">
@@ -1081,10 +1073,10 @@ export default function StoreAdminPage() {
 
       case 'customers':
         return (
-          <div className="space-y-6 p-4 lg:p-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>顧客管理</CardTitle>
+          <div className="space-y-5 p-4 lg:p-6">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base">顧客管理</CardTitle>
                 <CardDescription>顧客情報の確認・管理を行います</CardDescription>
               </CardHeader>
               <CardContent>
@@ -1127,10 +1119,10 @@ export default function StoreAdminPage() {
 
       case 'settings':
         return (
-          <div className="space-y-6 p-4 lg:p-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>店舗設定</CardTitle>
+          <div className="space-y-4 p-4 lg:p-6">
+            <Card className="shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base">店舗設定</CardTitle>
                 <CardDescription>店舗の基本情報を確認・編集します</CardDescription>
               </CardHeader>
               <CardContent>
@@ -1154,9 +1146,9 @@ export default function StoreAdminPage() {
           </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>ログイン画面のカスタマイズ</CardTitle>
+            <Card className="shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base">ログイン画面のカスタマイズ</CardTitle>
                 <CardDescription>ログイン画面に表示するロゴとカラーを設定します</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1260,9 +1252,9 @@ export default function StoreAdminPage() {
           </div>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>アカウント管理</CardTitle>
+            <Card className="shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base">アカウント管理</CardTitle>
                 <CardDescription>ログアウトを行います</CardDescription>
               </CardHeader>
               <CardContent>
