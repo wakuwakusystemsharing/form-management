@@ -206,7 +206,7 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
       if (response.ok) {
         const result = await response.json();
         // テーブルのメールアドレスを更新
-        setAdmins(admins.map(a =>
+        setAdmins(prev => prev.map(a =>
           a.user_id === editingAdmin.user_id
             ? { ...a, email: result.email ?? editEmail.trim() }
             : a
@@ -331,6 +331,7 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleOpenEditDialog(admin)}
+                          aria-label="ユーザーを編集"
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
