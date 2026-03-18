@@ -163,6 +163,21 @@ export async function PATCH(
       );
     }
 
+    // storeId に対する userId の所有権確認
+    const { data: adminRecord, error: adminCheckError } = await adminClient
+      .from('store_admins')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('store_id', storeId)
+      .single();
+
+    if (adminCheckError || !adminRecord) {
+      return NextResponse.json(
+        { error: '指定された店舗管理者が見つかりません' },
+        { status: 404 }
+      );
+    }
+
     const updatePayload: { email?: string; password?: string } = {};
     if (email) updatePayload.email = email;
     if (password) updatePayload.password = password;
