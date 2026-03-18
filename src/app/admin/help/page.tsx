@@ -194,28 +194,55 @@ function HelpPageContent() {
               <div className="mt-4 bg-card border border-border rounded-lg p-5 space-y-4">
                 <p className="text-sm text-muted-foreground">
                   予約管理に必要です。全てのフォームタイプ（LINE・Web）で必須の設定です。
+                  店舗の状況に応じて2つの方式を使い分けます。
                 </p>
 
-                <SubSection title="方式A: サービスアカウント（推奨）">
-                  <ol className="list-decimal list-inside text-sm text-muted-foreground space-y-2">
-                    <li>管理画面のトップで対象店舗の「カレンダー」ボタンをクリック</li>
-                    <li>「カレンダーを作成」ボタンで Google Calendar を自動作成</li>
-                    <li>カレンダーIDが自動的に店舗に設定されます</li>
-                  </ol>
+                <div className="bg-muted/50 rounded-md p-4 text-sm space-y-2">
+                  <p><strong>方式A（サービスアカウント）:</strong> 店舗が Google Calendar を持っていない場合。サービス管理者がカレンダーを作成し、予約を管理します。</p>
+                  <p><strong>方式B（店舗OAuth連携）:</strong> 店舗が既に Google Calendar を使用している場合。店舗の既存カレンダーに予約を直接反映します。</p>
+                </div>
+
+                <SubSection title="初期設定: GCPプロジェクト & Vercel環境変数">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    両方式とも、事前に GCP プロジェクトの設定と Vercel 環境変数の登録が必要です（1回のみ）。
+                  </p>
+                  <div className="bg-muted/50 rounded-md p-3 text-xs font-mono space-y-1">
+                    <p># 方式A用（サービスアカウント）</p>
+                    <p>GOOGLE_SERVICE_ACCOUNT_JSON=&#123;サービスアカウントのJSON全体&#125;</p>
+                    <p className="mt-2"># 方式B用（店舗OAuth連携）</p>
+                    <p>GOOGLE_OAUTH_CLIENT_ID=&#123;OAuthクライアントID&#125;</p>
+                    <p>GOOGLE_OAUTH_CLIENT_SECRET=&#123;OAuthクライアントシークレット&#125;</p>
+                    <p>GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=&#123;暗号化キー&#125;</p>
+                  </div>
                   <InfoBox>
-                    この方式を使用するには、admin_settings テーブルに Google サービスアカウント JSON が設定されている必要があります。
+                    設定手順の詳細は docs/GCP_SETUP.md を参照してください。GCP プロジェクト作成 → API有効化 → 認証情報作成 → Vercel設定 の流れです。
                   </InfoBox>
                 </SubSection>
 
-                <SubSection title="方式B: 店舗OAuth連携">
+                <SubSection title="方式A: サービスアカウント — カレンダーを持っていない店舗向け">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    サービスアカウントが店舗専用カレンダーを自動作成します。作成されたカレンダーは wakuwakusystemsharing@gmail.com で一覧確認できます。
+                  </p>
                   <ol className="list-decimal list-inside text-sm text-muted-foreground space-y-2">
-                    <li>店舗管理者がGoogleアカウントで認証（OAuth フロー）</li>
-                    <li>既存カレンダーを選択または新規作成</li>
-                    <li>リフレッシュトークンが暗号化されて保存されます</li>
+                    <li>管理画面のトップで対象店舗の「カレンダー」ボタンをクリック</li>
+                    <li>「カレンダーを作成」ボタンで「予約 - &#123;店舗名&#125;」カレンダーが自動作成される</li>
+                    <li>カレンダーIDが自動的に店舗に設定されます</li>
                   </ol>
                   <InfoBox>
-                    この方式では admin_settings に Google OAuth クライアント ID / シークレット、および GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY 環境変数が必要です。
+                    1つのサービスアカウントで複数店舗のカレンダーを管理できます。店舗ごとに独立したカレンダーが作成されます。
                   </InfoBox>
+                </SubSection>
+
+                <SubSection title="方式B: 店舗OAuth連携 — 既存カレンダーを使いたい店舗向け">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    店舗が既に使っている Google Calendar に予約イベントを直接書き込みます。
+                  </p>
+                  <ol className="list-decimal list-inside text-sm text-muted-foreground space-y-2">
+                    <li>管理画面で店舗のカレンダー設定を開く</li>
+                    <li>「Googleアカウントで連携」から店舗のGoogleアカウントで認証（OAuth フロー）</li>
+                    <li>使用するカレンダーを選択</li>
+                    <li>リフレッシュトークンが暗号化されて保存され、以降自動で予約が反映されます</li>
+                  </ol>
                 </SubSection>
               </div>
             </section>
