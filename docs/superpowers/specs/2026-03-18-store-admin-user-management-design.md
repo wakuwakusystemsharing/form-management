@@ -24,9 +24,10 @@
 
 ### URLフォーマット
 ```
-{baseUrl}/store/{storeId}
+{baseUrl}/{storeId}/admin
 ```
 - `getBaseUrl()` 関数（`src/lib/env.ts`）を使用して環境ごとのベースURLを取得
+- ミドルウェア (`src/middleware.ts`) で `/{storeId}/admin` が店舗管理者ダッシュボードと定義されていることを確認済み
 
 ---
 
