@@ -21,8 +21,6 @@ import { createAuthenticatedClient, checkStoreAccess } from './lib/supabase';
 
 const ADMIN_EMAILS = [
   'wakuwakusystemsharing@gmail.com',
-  'admin@wakuwakusystemsharing.com',
-  'manager@wakuwakusystemsharing.com'
 ];
 
 export async function middleware(request: NextRequest) {

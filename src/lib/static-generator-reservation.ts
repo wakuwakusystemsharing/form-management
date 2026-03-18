@@ -1035,23 +1035,32 @@ class BookingForm {
         });
     }
     
-    // カテゴリータブ切り替え
-    showCategory(categoryId) {
-        document.querySelectorAll('.category-section').forEach(sec => {
-            sec.style.display = 'none';
-        });
+    // カテゴリーアコーディオン切り替え
+    toggleCategory(categoryId) {
+        const allowCross = this.config.menu_structure?.allow_cross_category_selection || false;
         const target = document.getElementById('category-section-' + categoryId);
-        if (target) target.style.display = 'block';
-        document.querySelectorAll('.category-tab-button').forEach(btn => {
-            const themeColor = this.config.basic_info?.theme_color || '#3B82F6';
-            if (btn.dataset.categorySection === categoryId) {
-                btn.style.background = themeColor;
-                btn.style.color = 'white';
-            } else {
-                btn.style.background = 'white';
-                btn.style.color = themeColor;
-            }
-        });
+        const header = document.querySelector('.category-header[data-category-id="' + categoryId + '"]');
+        if (!target) return;
+
+        const isOpen = target.style.display !== 'none';
+
+        if (!allowCross) {
+            // 排他モード: 他をすべて閉じる
+            document.querySelectorAll('.category-section').forEach(sec => {
+                sec.style.display = 'none';
+            });
+            document.querySelectorAll('.category-header').forEach(h => {
+                h.classList.remove('open');
+            });
+        }
+
+        if (isOpen && allowCross) {
+            target.style.display = 'none';
+            if (header) header.classList.remove('open');
+        } else {
+            target.style.display = 'block';
+            if (header) header.classList.add('open');
+        }
     }
 
     // 月移動
@@ -1821,7 +1830,6 @@ if (document.readyState === 'loading') {
     if (!config.menu_structure.categories.length) return '';
     const themeColor = config.basic_info.theme_color || '#3B82F6';
     const multiCat = config.menu_structure.categories.length > 1;
-    const showTabs = multiCat && !config.menu_structure.allow_cross_category_selection;
     const firstCatId = config.menu_structure.categories[0]?.id || '';
 
     const renderMenuButton = (menu: import('@/types/form').MenuItem, categoryId: string) => `
@@ -1893,22 +1901,14 @@ if (document.readyState === 'loading') {
             <!-- メニュー選択 -->
             <div class="field" id="menu-field">
                 <label class="field-label">メニューをお選びください</label>
-                ${showTabs ? `
-                <div class="category-selector" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1rem;">
-                    ${config.menu_structure.categories.map((cat, idx) => `
-                        <button type="button" class="category-tab-button" data-category-section="${cat.id}" onclick="window.bookingForm.showCategory('${cat.id}')"
-                            style="padding:0.5rem 1rem;border:2px solid ${themeColor};border-radius:2rem;background:${idx === 0 ? themeColor : 'white'};color:${idx === 0 ? 'white' : themeColor};font-size:0.875rem;font-weight:500;cursor:pointer;transition:all 0.15s;">
-                            ${this.escapeHtml(cat.name)}
-                        </button>
-                    `).join('')}
-                </div>
-                ` : ''}
                 ${config.menu_structure.categories.map((category, idx) => `
-                    <div id="category-section-${category.id}" class="category-section" style="${showTabs && idx > 0 ? 'display:none;' : ''}">
-                        ${multiCat && (category.display_name || category.name) ? `
-                        <div style="text-align:center;font-weight:600;font-size:1rem;margin-bottom:0.75rem;color:#374151;">
-                            ${this.escapeHtml(category.display_name || category.name)}
-                        </div>` : ''}
+                    ${multiCat ? `
+                    <button type="button" class="category-header${idx === 0 ? ' open' : ''}" data-category-id="${category.id}" onclick="window.bookingForm.toggleCategory('${category.id}')">
+                        <span class="category-header-name">${this.escapeHtml(category.display_name || category.name)}</span>
+                        <span class="category-header-chevron"></span>
+                    </button>
+                    ` : ''}
+                    <div id="category-section-${category.id}" class="category-section" style="${multiCat && idx > 0 ? 'display:none;' : ''}">
                         <div class="menu-list">
                             ${category.menus.map(menu => renderMenuButton(menu, category.id)).join('')}
                         </div>
@@ -2204,10 +2204,57 @@ if (document.readyState === 'loading') {
             color: #1e40af;
         }
         
+        .category-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            background: #f9fafb;
+            cursor: pointer;
+            margin-bottom: 0;
+            font-size: 0.9375rem;
+            font-weight: 600;
+            color: #374151;
+            transition: all 0.15s;
+        }
+        .category-header:hover {
+            background: #f3f4f6;
+        }
+        .category-header + .category-section {
+            border: 1px solid #e5e7eb;
+            border-top: none;
+            border-radius: 0 0 0.5rem 0.5rem;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+        .category-header.open {
+            border-radius: 0.5rem 0.5rem 0 0;
+            margin-bottom: 0;
+        }
+        .category-header-chevron {
+            display: inline-block;
+            width: 0.5rem;
+            height: 0.5rem;
+            border-right: 2px solid #6b7280;
+            border-bottom: 2px solid #6b7280;
+            transform: rotate(45deg);
+            transition: transform 0.2s;
+        }
+        .category-header.open .category-header-chevron {
+            transform: rotate(-135deg);
+        }
+
         .menu-list {
             border: 1px solid #e5e7eb;
             border-radius: 0.5rem;
             padding: 1rem;
+        }
+        .category-header + .category-section .menu-list {
+            border: none;
+            padding: 0.25rem 0;
         }
         
         .menu-item {

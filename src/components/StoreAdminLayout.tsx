@@ -84,14 +84,14 @@ const MenuContent = ({ onItemClick, storeName, userEmail, activeTab, onTabChange
               }}
               title={isCollapsed ? item.label : undefined}
               className={cn(
-                "w-full flex items-center rounded-lg text-sm font-medium transition-colors",
+                "w-full flex items-center rounded-lg text-sm font-medium transition-[background-color,color] duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
                 isCollapsed ? "justify-center px-2 py-2" : "space-x-3 px-3 py-2",
                 isActive
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               )}
             >
-              <Icon className="h-5 w-5" />
+              <Icon className="h-5 w-5" aria-hidden="true" />
               {!isCollapsed && <span>{item.label}</span>}
             </button>
           );
@@ -109,7 +109,7 @@ const MenuContent = ({ onItemClick, storeName, userEmail, activeTab, onTabChange
             onClick={onLogout}
             title={isCollapsed ? "ログアウト" : undefined}
           >
-            <LogOut className="h-5 w-5" />
+            <LogOut className="h-5 w-5" aria-hidden="true" />
             {!isCollapsed && <span className="ml-3">ログアウト</span>}
           </Button>
         </div>
@@ -138,10 +138,10 @@ export default function StoreAdminLayout({
   };
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-muted/40">
       {/* デスクトップサイドバー */}
       <aside className={cn(
-        "hidden lg:flex lg:flex-col lg:border-r transition-all duration-300 relative",
+        "hidden lg:flex lg:flex-col lg:border-r transition-[width] duration-300 relative bg-background",
         sidebarCollapsed ? "lg:w-16" : "lg:w-64"
       )}>
         <MenuContent 
@@ -157,13 +157,13 @@ export default function StoreAdminLayout({
           variant="ghost"
           size="icon"
           className={cn(
-            "absolute rounded-full border bg-background shadow-sm hover:bg-accent z-10 transition-all",
+            "absolute rounded-full border bg-background shadow-sm hover:bg-accent z-10 transition-[right,width,height] duration-150",
             sidebarCollapsed 
               ? "-right-3 top-4 h-6 w-6" 
               : "-right-3 top-4 h-6 w-6"
           )}
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          title={sidebarCollapsed ? "サイドバーを展開" : "サイドバーを折りたたむ"}
+          aria-label={sidebarCollapsed ? "サイドバーを展開" : "サイドバーを折りたたむ"}
         >
           {sidebarCollapsed ? (
             <ChevronRight className="h-4 w-4" />
@@ -176,13 +176,13 @@ export default function StoreAdminLayout({
       {/* メインコンテンツ */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* モバイルヘッダー */}
-        <header className="lg:hidden border-b bg-background">
+        <header className="lg:hidden border-b bg-background shadow-sm">
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center space-x-3">
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <Menu className="h-5 w-5" />
+                  <Button variant="ghost" size="icon" aria-label="メニューを開く">
+                    <Menu className="h-5 w-5" aria-hidden="true" />
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-64 p-0">
