@@ -58,7 +58,7 @@ export async function middleware(request: NextRequest) {
   // /admin ルート自体では認証チェックをスキップ（ページ内でログイン画面表示）
   // /admin/[storeId] も許可（サービス管理者の店舗詳細ページ）
   // 6文字のランダム文字列または旧形式（st0001）に対応
-  if (pathname === '/admin' || pathname.match(/^\/admin\/([a-z0-9]{6}|st\d{4})$/)) {
+  if (pathname === '/admin' || pathname === '/admin/help' || pathname.match(/^\/admin\/([a-z0-9]{6}|st\d{4})$/)) {
     return NextResponse.next();
   }
 
