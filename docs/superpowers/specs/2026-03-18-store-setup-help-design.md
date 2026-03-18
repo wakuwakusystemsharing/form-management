@@ -96,6 +96,23 @@ function getStoreSetupStatus(store: Store): StoreSetupStatus
 | `src/app/admin/[storeId]/page.tsx` | 変更 | フォームカードバッジ + ヘッダーヘルプリンク |
 | `src/app/admin/page.tsx` | 変更 | ヘッダーヘルプリンク |
 
+## 補足事項
+
+### Middleware対応
+`/admin/help` はサービス管理者専用のため、認証必須で問題ない。現在のmiddleware（`src/middleware.ts`）は `/admin` 以下を認証必須としているが、`/admin/help` パスは既存のパターンマッチ（`/admin` 完全一致 or `/admin/{storeId}` パターン）に該当しない可能性がある。必要に応じてmiddlewareのルート判定を更新する。
+
+### form_type のデフォルト値
+`config.form_type` が `undefined` の場合は `'line'` として扱う（既存のフォーム作成フォームのデフォルトが `'line'`）。バッジ表示時は `form.config?.form_type ?? 'line'` で判定。
+
+### アンケートフォーム
+今回のスコープは予約フォームのみ。アンケートフォームへの拡張は別タスク。
+
+### バッジ配置
+既存のフォームカード構造（フォーム名 + ステータスバッジ行 → ID行 → URL行 → アクションボタン）に対し、ステータスバッジ行とID行の間に設定ステータスバッジ行を挿入する。
+
+### ヘルプページの店舗データ取得
+`?storeId` がある場合、クライアントサイドで `/api/stores/{storeId}` をfetchして設定状態を表示。storeIdが無効または取得失敗時はサマリーを非表示にし、手順のみ表示。
+
 ## UI仕様
 
 - shadcn/ui + Tailwind CSS v4
