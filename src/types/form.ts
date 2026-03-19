@@ -161,7 +161,6 @@ export interface FormConfig {
   };
 
   // Web予約フォーム用の設定
-  security_secret?: string;   // SECURITY_SECRET（セキュリティ用の秘密鍵）
   form_type?: 'line' | 'web'; // フォームタイプ（LINE予約フォーム or Web予約フォーム）
 }
 

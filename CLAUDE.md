@@ -368,7 +368,6 @@ export async function GET(req, { params }) {
 - `config.basic_info.form_name` - フォーム名
 - `MenuItem.hide_price` / `SubMenuItem.hide_price` / `MenuOption.hide_price` - 料金を非表示にするフラグ（任意）
 - `config.calendar_settings.booking_mode` - 予約モード（`'calendar'` | `'multiple_dates'`）
-- `config.security_secret` - フォームアクセスのセキュリティシークレット
 - `config.form_type` - フォームの種類（`'line'` | `'web'`）
 
 ## テストアプローチ

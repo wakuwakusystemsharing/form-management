@@ -2505,9 +2505,8 @@ if (document.readyState === 'loading') {
         
         @media (max-width: 768px) {
             .menu-item-image {
-                width: 50px;
-                aspect-ratio: 16 / 9;
-                margin-right: 0.5rem;
+                width: 100%;
+                padding-top: 45%;
             }
             
             #calendar-table {
