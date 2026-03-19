@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CalendarDays, MessageSquare, Calendar, Users } from "lucide-react";
+import { CalendarDays, MessageSquare, Calendar, Users, Globe } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "ホーム",
@@ -12,6 +13,11 @@ const features = [
     icon: CalendarDays,
     title: "予約フォーム作成・管理",
     description: "テンプレートから簡単にフォームを作成。メニュー、料金、時間帯を自由にカスタマイズできます。",
+  },
+  {
+    icon: Globe,
+    title: "Web予約フォーム",
+    description: "LINE不要のWeb予約フォームにも対応。WebサイトやSNSからのリンクで誰でも簡単に予約できます。",
   },
   {
     icon: MessageSquare,
@@ -27,6 +33,7 @@ const features = [
     icon: Users,
     title: "顧客管理（CRM）",
     description: "顧客情報と来店履歴を一元管理。セグメント分析でリピーター育成を支援します。",
+    badge: "Beta",
   },
 ];
 
@@ -57,6 +64,9 @@ export default function HomePage() {
               <CardHeader className="flex flex-row items-center gap-3 pb-2">
                 <feature.icon className="h-5 w-5 text-primary" />
                 <CardTitle className="text-base">{feature.title}</CardTitle>
+                {"badge" in feature && feature.badge && (
+                  <Badge variant="secondary" className="text-xs">{feature.badge}</Badge>
+                )}
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">{feature.description}</p>
