@@ -17,8 +17,6 @@ export interface CustomerFormData {
   gender: string;
   customer_type: string;
   notes: string;
-  allergies: string;
-  medical_history: string;
 }
 
 interface CustomerFormProps {
@@ -39,8 +37,6 @@ function toFormData(customer?: Partial<CustomerFormData>): CustomerFormData {
     gender: customer?.gender || '',
     customer_type: customer?.customer_type || 'new',
     notes: customer?.notes || '',
-    allergies: customer?.allergies || '',
-    medical_history: customer?.medical_history || '',
   };
 }
 
@@ -54,8 +50,6 @@ export function customerToFormData(customer: Customer): CustomerFormData {
     gender: customer.gender ?? '',
     customer_type: customer.customer_type ?? 'new',
     notes: customer.notes ?? '',
-    allergies: customer.allergies ?? '',
-    medical_history: customer.medical_history ?? '',
   });
 }
 
@@ -183,29 +177,6 @@ export default function CustomerForm({
               <SelectItem value="inactive">休止</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-      </div>
-
-      {/* 医療・アレルギー情報 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="customer-allergies">アレルギー</Label>
-          <Input
-            id="customer-allergies"
-            value={form.allergies}
-            onChange={(e) => updateField('allergies', e.target.value)}
-            placeholder="例: 金属アレルギー"
-            autoComplete="off"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="customer-medical">既往歴</Label>
-          <Input
-            id="customer-medical"
-            value={form.medical_history}
-            onChange={(e) => updateField('medical_history', e.target.value)}
-            autoComplete="off"
-          />
         </div>
       </div>
 

@@ -4,14 +4,14 @@
         "type": "http",
         "url": "https://mcp.supabase.com/mcp?project_ref=ohplaysshllkinaiqksb",                     
         "headers": {                                                                                
-          "Authorization": "Bearer <>"
+          "Authorization": "Bearer <>"                         
         }                                                                                           
       },                                                                                          
       "supabase-prod": {                                                                            
         "type": "http",
         "url": "https://mcp.supabase.com/mcp?project_ref=tpuqjpdaasxfwsvjcbum",                     
         "headers": {                                                                                
-           "Authorization": "Bearer <>"                                        
+           "Authorization": "Bearer <>"      
         }                                                                                           
       }                                                                                           
     }

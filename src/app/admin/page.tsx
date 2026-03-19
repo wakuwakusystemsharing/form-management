@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
+import Image from 'next/image';
 import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock, Settings, Calendar, HelpCircle } from 'lucide-react';
 
 const ADMIN_EMAILS = [
@@ -622,8 +623,8 @@ export default function AdminPage() {
         <div className="w-full max-w-md space-y-6">
           {/* ブランドヘッダー */}
           <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 mb-2">
-              <Settings className="w-7 h-7 text-primary" />
+            <div className="inline-flex items-center justify-center w-16 h-16 mb-2">
+              <Image src="/icon.png" alt="NAS ロゴ" width={64} height={64} priority />
             </div>
             <h1 className="text-2xl font-bold text-foreground">サービス管理者</h1>
             <p className="text-sm text-muted-foreground">NAS 管理コンソール</p>
@@ -685,9 +686,7 @@ export default function AdminPage() {
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <Settings className="w-4 h-4 text-primary" />
-            </div>
+            <Image src="/icon.png" alt="NAS ロゴ" width={28} height={28} />
             <span className="font-semibold text-foreground text-sm">NAS</span>
             <Badge className="bg-violet-600 hover:bg-violet-600 text-white border-0 text-xs px-2 py-0.5 cursor-default">
               サービス管理者

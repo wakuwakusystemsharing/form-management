@@ -233,21 +233,6 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                       )}
                     </div>
 
-                    {/* アレルギー・既往歴 */}
-                    <div className="grid grid-cols-2 gap-4">
-                      {customer.allergies && (
-                        <div>
-                          <p className="text-sm text-muted-foreground">アレルギー</p>
-                          <p>{customer.allergies}</p>
-                        </div>
-                      )}
-                      {customer.medical_history && (
-                        <div>
-                          <p className="text-sm text-muted-foreground">既往歴</p>
-                          <p>{customer.medical_history}</p>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </div>
               </CardContent>
