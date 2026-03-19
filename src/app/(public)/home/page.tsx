@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CalendarDays, MessageSquare, Calendar, Users } from "lucide-react";
+import { CalendarDays, MessageSquare, Calendar, Users, Globe } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "ホーム",
@@ -13,6 +13,11 @@ const features = [
     icon: CalendarDays,
     title: "予約フォーム作成・管理",
     description: "テンプレートから簡単にフォームを作成。メニュー、料金、時間帯を自由にカスタマイズできます。",
+  },
+  {
+    icon: Globe,
+    title: "Web予約フォーム",
+    description: "LINE不要のWeb予約フォームにも対応。WebサイトやSNSからのリンクで誰でも簡単に予約できます。",
   },
   {
     icon: MessageSquare,
