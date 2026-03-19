@@ -1,3 +1,6 @@
+# superpowers brainstorming artifacts
+.superpowers/
+
 # dependencies
 node_modules/
 .pnp

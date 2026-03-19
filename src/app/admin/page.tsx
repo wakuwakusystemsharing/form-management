@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock, Settings, Calendar } from 'lucide-react';
+import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock, Settings, Calendar, HelpCircle } from 'lucide-react';
 
 const ADMIN_EMAILS = [
   'wakuwakusystemsharing@gmail.com',
@@ -203,7 +203,7 @@ export default function AdminPage() {
           currentUser = session?.user ?? null;
         }
 
-        // サービス管理者でない場合、ログアウトして店舗管理者ページにリダイレクト
+        // サービス管理者でない場合、店舗管理者ページにリダイレクト（サインアウトしない）
         if (currentUser && !ADMIN_EMAILS.includes(currentUser.email || '')) {
           // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
           const supabaseClient = getSupabaseClient();
@@ -213,23 +213,19 @@ export default function AdminPage() {
               .from('store_admins')
               .select('store_id')
               .limit(1);
-            
+
             if (storeAdmins && storeAdmins.length > 0) {
               const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
-              await supabase.auth.signOut();
-              if (isMounted) {
-                setUser(null);
-              }
               router.push(`/${firstStoreId}/admin`);
               return;
             }
           }
-          
-          // 店舗管理者として登録されていない場合、ログアウト
+
+          // 店舗管理者として登録されていない場合のみサインアウト
           await supabase.auth.signOut();
           if (isMounted) {
             setUser(null);
-            setLoading(false);
+            setLoginError('このアカウントにはアクセス権限がありません。');
           }
         } else {
           if (isMounted) {
@@ -268,26 +264,24 @@ export default function AdminPage() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const nextUser = session?.user ?? null;
 
-      // サービス管理者でない場合、ログアウトして店舗管理者ページにリダイレクト
+      // サービス管理者でない場合、店舗管理者ページにリダイレクト（サインアウトしない）
       if (nextUser && !ADMIN_EMAILS.includes(nextUser.email || '')) {
         // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
         const { data: storeAdmins } = await (supabase as any)
           .from('store_admins')
           .select('store_id')
           .limit(1);
-        
+
         if (storeAdmins && storeAdmins.length > 0) {
           const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
-          supabase.auth.signOut();
-          setUser(null);
           router.push(`/${firstStoreId}/admin`);
           return;
         }
-        
-        // 店舗管理者として登録されていない場合、ログアウト
+
+        // 店舗管理者として登録されていない場合のみサインアウト
         supabase.auth.signOut();
         setUser(null);
-        setLoading(false);
+        setLoginError('このアカウントにはアクセス権限がありません。');
       } else {
         setUser(nextUser);
         if (nextUser && session) {
@@ -701,6 +695,15 @@ export default function AdminPage() {
           </div>
           <div className="flex items-center gap-1">
             <span className="hidden sm:block text-xs text-muted-foreground mr-2">{user?.email}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push('/admin/help')}
+              className="text-muted-foreground hover:text-foreground text-xs h-8"
+              title="セットアップガイド"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+            </Button>
             <Button
               variant="ghost"
               size="sm"
