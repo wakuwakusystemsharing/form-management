@@ -585,7 +585,6 @@ export default function StoreDetailPage() {
     form_name: '',
     form_type: 'line' as 'line' | 'web',
     liff_id: '',
-    security_secret: '',
     template: 'basic'
   });
   const [showCreateSurveyForm, setShowCreateSurveyForm] = useState(false);
@@ -701,15 +700,6 @@ export default function StoreDetailPage() {
       return;
     }
 
-    if (newFormData.form_type === 'web' && !newFormData.security_secret?.trim()) {
-      toast({
-        title: 'エラー',
-        description: 'Web予約フォームの場合、SECURITY_SECRETを入力してください',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     setSubmitting(true);
 
     try {
@@ -723,7 +713,6 @@ export default function StoreDetailPage() {
           form_name: newFormData.form_name.trim(),
           form_type: newFormData.form_type,
           liff_id: newFormData.form_type === 'line' ? (newFormData.liff_id.trim() || undefined) : undefined,
-          security_secret: newFormData.form_type === 'web' ? newFormData.security_secret.trim() : undefined,
           template: selectedTemplate
         }),
       });
@@ -731,7 +720,7 @@ export default function StoreDetailPage() {
       if (response.ok) {
         const newForm = await response.json();
         setForms([...forms, newForm]);
-        setNewFormData({ form_name: '', form_type: 'line', liff_id: '', security_secret: '', template: 'basic' });
+        setNewFormData({ form_name: '', form_type: 'line', liff_id: '', template: 'basic' });
         setShowCreateForm(false);
         const formName = newForm.config?.basic_info?.form_name || newFormData.form_name.trim();
         toast({
@@ -1599,22 +1588,6 @@ export default function StoreDetailPage() {
                             placeholder="例：1234567890-abcdefgh"
                           />
                           <p className="text-xs text-muted-foreground">LINE Developersで作成したLIFF IDを入力（任意）</p>
-                        </div>
-                      )}
-                      {newFormData.form_type === 'web' && (
-                        <div className="space-y-2">
-                          <Label htmlFor="security_secret">
-                            SECURITY_SECRET <span className="text-destructive">*</span>
-                          </Label>
-                          <Input
-                            id="security_secret"
-                            type="password"
-                            autoComplete="off"
-                            value={newFormData.security_secret}
-                            onChange={(e) => setNewFormData({ ...newFormData, security_secret: e.target.value })}
-                            placeholder="Web予約フォーム用の秘密鍵"
-                          />
-                          <p className="text-xs text-muted-foreground">Web予約フォームの認証用。任意の文字列を設定してください。</p>
                         </div>
                       )}
                       <div className="flex gap-3">
