@@ -1458,26 +1458,71 @@ export default function StoreAdminPage() {
                 ) : null;
               })()}
 
-              {/* 顧客情報 */}
+              {/* その他情報 */}
               {(() => {
-                const info = selectedReservation.customer_info;
-                return info && typeof info === 'object' && info !== null && Object.keys(info).length > 0 ? (
+                const info = selectedReservation.customer_info as Record<string, any> | null;
+                if (!info || typeof info !== 'object') return null;
+
+                const formConfig = forms.find(f => f.id === selectedReservation.form_id)?.config;
+
+                const genderLabel = (v: string) => {
+                  const opt = formConfig?.gender_selection?.options?.find((o: any) => o.value === v);
+                  if (opt) return opt.label;
+                  return v === 'male' ? '男性' : v === 'female' ? '女性' : v;
+                };
+
+                const visitCountLabel = (v: string) => {
+                  const opt = formConfig?.visit_count_selection?.options?.find((o: any) => o.value === v);
+                  if (opt) return opt.label;
+                  return v === 'first' ? '初回' : v === 'repeat' ? '2回目以降' : v;
+                };
+
+                const couponLabel = (v: string) => {
+                  const opt = formConfig?.coupon_selection?.options?.find((o: any) => o.value === v);
+                  if (opt) return opt.label;
+                  return v === 'use' ? '利用する' : v === 'not_use' ? '利用しない' : v;
+                };
+
+                const rows: { label: string; value: string }[] = [];
+
+                if (info.gender) rows.push({ label: '性別', value: genderLabel(String(info.gender)) });
+                if (info.visit_count) rows.push({ label: '来店回数', value: visitCountLabel(String(info.visit_count)) });
+                if (info.coupon) rows.push({ label: 'クーポン', value: couponLabel(String(info.coupon)) });
+                if (info.notes && String(info.notes).trim()) rows.push({ label: 'メモ', value: String(info.notes) });
+                if (info.total_price != null) rows.push({ label: '合計料金', value: `¥${Number(info.total_price).toLocaleString()}` });
+                if (info.total_duration != null) rows.push({ label: '合計所要時間', value: `${info.total_duration}分` });
+                if (info.preferred_date2) rows.push({ label: '第2希望日時', value: `${info.preferred_date2}${info.preferred_time2 ? ' ' + info.preferred_time2 : ''}` });
+                if (info.preferred_date3) rows.push({ label: '第3希望日時', value: `${info.preferred_date3}${info.preferred_time3 ? ' ' + info.preferred_time3 : ''}` });
+
+                // カスタムフィールド
+                if (info.custom_fields && typeof info.custom_fields === 'object') {
+                  Object.entries(info.custom_fields as Record<string, any>).forEach(([fieldId, fieldValue]) => {
+                    const fieldDef = formConfig?.custom_fields?.find((f: any) => f.id === fieldId);
+                    const label = fieldDef?.title || fieldId;
+                    const val = Array.isArray(fieldValue) ? fieldValue.join(', ') : String(fieldValue ?? '');
+                    if (val) rows.push({ label, value: val });
+                  });
+                }
+
+                if (rows.length === 0) return null;
+
+                return (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">その他情報</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        {Object.entries(info as Record<string, any>).map(([key, value]) => (
-                          <div key={key} className="flex justify-between">
-                            <span className="text-sm text-muted-foreground">{key}:</span>
-                            <span className="text-sm font-medium">{value != null ? String(value) : ''}</span>
+                        {rows.map(({ label, value }) => (
+                          <div key={label} className="flex justify-between items-start gap-4">
+                            <span className="text-sm text-muted-foreground shrink-0">{label}</span>
+                            <span className="text-sm font-medium text-right">{value}</span>
                           </div>
                         ))}
                       </div>
                     </CardContent>
                   </Card>
-                ) : null;
+                );
               })()}
 
               {/* 作成日時 */}
