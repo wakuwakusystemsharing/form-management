@@ -1484,6 +1484,62 @@ export default function StoreAdminPage() {
               <div className="text-xs text-muted-foreground">
                 作成日時: {new Date(selectedReservation.created_at).toLocaleString('ja-JP')}
               </div>
+
+              {/* ステータス変更ボタン */}
+              {selectedReservation.status !== 'cancelled' && (
+                <div className="flex gap-2 pt-2 border-t">
+                  {selectedReservation.status !== 'confirmed' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                      onClick={async () => {
+                        if (!confirm('この予約を確認済みにしますか？')) return;
+                        try {
+                          const res = await fetch(`/api/reservations/${selectedReservation.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({ status: 'confirmed' }),
+                          });
+                          if (res.ok) {
+                            setSelectedReservation({ ...selectedReservation, status: 'confirmed' });
+                            setReservations(prev => prev.map(r => r.id === selectedReservation.id ? { ...r, status: 'confirmed' } : r));
+                          } else {
+                            alert('ステータスの更新に失敗しました');
+                          }
+                        } catch { alert('ステータスの更新に失敗しました'); }
+                      }}
+                    >
+                      確認済みにする
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-red-600 border-red-200 hover:bg-red-50"
+                    onClick={async () => {
+                      if (!confirm('この予約をキャンセルしますか？')) return;
+                      try {
+                        const res = await fetch(`/api/reservations/${selectedReservation.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({ status: 'cancelled' }),
+                        });
+                        if (res.ok) {
+                          setSelectedReservation({ ...selectedReservation, status: 'cancelled' });
+                          setReservations(prev => prev.map(r => r.id === selectedReservation.id ? { ...r, status: 'cancelled' } : r));
+                        } else {
+                          alert('キャンセルに失敗しました');
+                        }
+                      } catch { alert('キャンセルに失敗しました'); }
+                    }}
+                  >
+                    キャンセルする
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

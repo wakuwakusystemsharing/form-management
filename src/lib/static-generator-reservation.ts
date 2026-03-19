@@ -1336,21 +1336,44 @@ class BookingForm {
     }
     
     async handleSubmit() {
+        // 二重送信防止
+        if (this.state.isSubmitting) return;
+        this.state.isSubmitting = true;
+        const submitBtn = document.getElementById('submit-button');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = '送信中...';
+            submitBtn.style.opacity = '0.6';
+        }
+
+        const resetSubmitState = () => {
+            this.state.isSubmitting = false;
+            const btn = document.getElementById('submit-button');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '予約する';
+                btn.style.opacity = '1';
+            }
+        };
+
         // バリデーション
         if (!this.state.name || !this.state.phone) {
             alert('お名前と電話番号を入力してください');
+            resetSubmitState();
             return;
         }
         const allowCross = this.config.menu_structure?.allow_cross_category_selection || false;
-        const hasSelection = allowCross 
+        const hasSelection = allowCross
             ? (Object.values(this.state.selectedMenus || {}).flat().length > 0)
             : (this.state.selectedMenu || this.state.selectedSubmenu);
         if (!hasSelection) {
             alert('メニューを選択してください');
+            resetSubmitState();
             return;
         }
         if (!this.state.selectedDate || !this.state.selectedTime) {
             alert('予約日時を選択してください');
+            resetSubmitState();
             return;
         }
         // カスタムフィールドの必須チェック
@@ -1363,6 +1386,7 @@ class BookingForm {
                     alert(field.title + 'を入力・選択してください');
                     const wrap = document.getElementById('custom-field-wrap-' + field.id);
                     if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    resetSubmitState();
                     return;
                 }
             }
@@ -1551,6 +1575,7 @@ class BookingForm {
         } catch (error) {
             console.error('Submit error:', error);
             alert('送信に失敗しました。もう一度お試しください。');
+            resetSubmitState();
         }
     }
     

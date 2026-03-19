@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Form } from '@/types/form';
 import { SurveyForm } from '@/types/survey';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -39,6 +39,8 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
     userRole === 'service_admin' ? 'basic' : 'menu'
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const previewUrlRef = useRef<string | null>(null);
   const { toast } = useToast();
 
   // フォームが変更されたら状態を更新
@@ -87,9 +89,10 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        credentials: 'include',
+        body: JSON.stringify({
           storeId: storeId,
-          formId: editingForm.id 
+          formId: editingForm.id
         }),
       });
       
@@ -119,11 +122,48 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
     }
   };
 
-  const handlePreview = () => {
-    const previewUrl = isSurvey(editingForm)
-      ? `/preview/${storeId}/surveys/${editingForm.id}`
-      : `/preview/${storeId}/forms/${editingForm.id}`;
-    window.open(previewUrl, '_blank');
+  const handlePreview = async () => {
+    try {
+      setIsPreviewing(true);
+      const formType = isSurvey(editingForm) ? 'survey' : 'reservation';
+
+      const response = await fetch('/api/preview/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          form: editingForm,
+          storeId,
+          formType,
+        }),
+      });
+
+      if (!response.ok) {
+        toast({ title: 'プレビューの生成に失敗しました', variant: 'destructive' });
+        return;
+      }
+
+      // 前回の Blob URL を解放
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+
+      const html = await response.text();
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      previewUrlRef.current = url;
+      window.open(url, '_blank');
+      // メモリリーク防止: 60秒後に URL を解放
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        if (previewUrlRef.current === url) previewUrlRef.current = null;
+      }, 60000);
+    } catch (error) {
+      console.error('Preview error:', error);
+      toast({ title: 'プレビューの生成に失敗しました', variant: 'destructive' });
+    } finally {
+      setIsPreviewing(false);
+    }
   };
 
   return (
@@ -155,11 +195,11 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
             <Button
               variant="outline"
               onClick={handlePreview}
-              disabled={isSaving}
+              disabled={isSaving || isPreviewing}
               className="flex-1 sm:flex-initial"
             >
               <Eye className="mr-2 h-4 w-4" />
-              プレビュー
+              {isPreviewing ? 'プレビュー生成中...' : 'プレビュー'}
             </Button>
             <Button
               onClick={handleSaveAndDeploy}
