@@ -176,6 +176,7 @@ export async function POST(req: NextRequest) {
       .select('reservation_date,reservation_time,menu_name,submenu_name')
       .eq('store_id', storeId)
       .eq('line_user_id', userId)
+      .neq('status', 'cancelled')
       .gte('reservation_date', todayStr)
       .order('reservation_date', { ascending: true })
       .order('reservation_time', { ascending: true });
@@ -217,6 +218,7 @@ export async function POST(req: NextRequest) {
       .select('reservation_date,reservation_time,menu_name,submenu_name')
       .eq('store_id', storeId)
       .eq('line_user_id', userId)
+      .neq('status', 'cancelled')
       .gte('reservation_date', todayStr)
       .order('reservation_date', { ascending: true })
       .order('reservation_time', { ascending: true });
@@ -256,8 +258,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   }
 
-  if (messageText.startsWith('キャンセル:')) {
-    const index = parseInt(messageText.replace('キャンセル:', '').trim(), 10);
+  if (messageText.startsWith('キャンセル:') || messageText.startsWith('キャンセル: ')) {
+    const index = parseInt(messageText.replace(/^キャンセル:\s*/, '').trim(), 10);
     if (Number.isNaN(index)) {
       await replyFlexMessage(replyToken, accessToken, 'エラー', [
         makeSimpleBubble('エラー', 'キャンセル番号が正しくありません。\n\n「予約をキャンセル」と送ると予約一覧を確認できます。')
@@ -272,6 +274,7 @@ export async function POST(req: NextRequest) {
       .select('*')
       .eq('store_id', storeId)
       .eq('line_user_id', userId)
+      .neq('status', 'cancelled')
       .gte('reservation_date', todayStr)
       .order('reservation_date', { ascending: true })
       .order('reservation_time', { ascending: true });
@@ -348,77 +351,22 @@ export async function POST(req: NextRequest) {
   }
 
   if (messageText.startsWith('【予約フォーム】')) {
+    // 予約はフォームのAPI直接呼び出し（/api/reservations）で既に作成済み。
+    // Webhookでは確認メッセージの返信のみ行う（二重予約防止）。
     const details = parseReservationForm(messageText);
-    if (!details.name || !details.phone || !details.dateTime) {
+    if (details.dateTime) {
+      const reservationDate = details.dateTime.toISOString().split('T')[0];
+      const reservationTime = details.dateTime.toTimeString().slice(0, 5);
       await replyLineMessage(replyToken, accessToken, [{
         type: 'text',
-        text: '予約フォームの情報が不足しています。'
+        text: `予約を受け付けました。\n${reservationDate} ${reservationTime}`
       }]);
-      return NextResponse.json({ success: true });
-    }
-
-    const { data: formData } = await (adminClient as any)
-      .from('reservation_forms')
-      .select('id')
-      .eq('store_id', storeId)
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!formData?.id) {
+    } else {
       await replyLineMessage(replyToken, accessToken, [{
         type: 'text',
-        text: '利用可能な予約フォームが見つかりません。'
+        text: '予約を受け付けました。'
       }]);
-      return NextResponse.json({ success: true });
     }
-
-    const reservationDate = details.dateTime.toISOString().split('T')[0];
-    const reservationTime = details.dateTime.toTimeString().slice(0, 5);
-    const selectedMenus = details.menus.map(menu => ({
-      menu_id: '',
-      menu_name: menu,
-      category_name: '',
-      price: 0,
-      duration: 0
-    }));
-
-    const reservationResponse = await fetch(new URL('/api/reservations', req.url), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        form_id: formData.id,
-        store_id: storeId,
-        customer_name: details.name,
-        customer_phone: details.phone,
-        reservation_date: reservationDate,
-        reservation_time: reservationTime,
-        message: details.message || null,
-        selected_menus: selectedMenus,
-        selected_options: [],
-        customer_info: {
-          visit_count: details.visitCount || null,
-          course: details.course || null
-        },
-        line_user_id: userId
-      })
-    });
-
-    if (!reservationResponse.ok) {
-      await replyLineMessage(replyToken, accessToken, [{
-        type: 'text',
-        text: '予約の作成に失敗しました。'
-      }]);
-      return NextResponse.json({ success: true });
-    }
-
-    await replyLineMessage(replyToken, accessToken, [{
-      type: 'text',
-      text: `予約を受け付けました。\n${reservationDate} ${reservationTime}`
-    }]);
     return NextResponse.json({ success: true });
   }
 
