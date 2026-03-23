@@ -233,6 +233,8 @@ export async function createReservationEvent(
     lineUserId?: string | null;
     lineDisplayName?: string | null;
     message?: string | null;
+    course?: string | null;
+    visitCount?: string | null;
     selectedMenus?: Array<Record<string, any>>;
     selectedOptions?: Array<Record<string, any>>;
   },
@@ -255,9 +257,12 @@ export async function createReservationEvent(
     `≪LINEの名前≫ ${params.lineDisplayName || ''}`,
     `≪お名前≫ ${params.customerName}`,
     `≪電話番号≫ ${params.customerPhone}`,
-    `≪メニュー≫`,
+    `≪コース≫ `,
+    params.course ? `・${params.course}` : '',
+    `≪メニュー≫ `,
     menuText,
-    `≪メッセージ≫`,
+    `≪ご来店回数≫ ${params.visitCount || ''}`,
+    `≪メッセージ≫ `,
     params.message || ''
   ].join('\n');
 

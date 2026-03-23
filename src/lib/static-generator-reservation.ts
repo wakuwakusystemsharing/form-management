@@ -1537,10 +1537,27 @@ class BookingForm {
             // 予約完了後に選択内容をlocalStorageへ保存（前回と同じメニューで予約する機能用）
             try {
                 const bookingKey = \`booking_\${this.config.basic_info?.form_name || this.config.id || 'default'}\`;
+                // 単一選択モードの場合、selectedMenu/selectedSubmenuからselectedMenus形式に変換
+                let menusToSave = this.state.selectedMenus || {};
+                let subMenusToSave = this.state.selectedSubMenus || {};
+                if ((!menusToSave || Object.keys(menusToSave).length === 0) && this.state.selectedMenu) {
+                    // selectedMenuからcategoryIdを探す
+                    const cats = this.config.menu_structure?.categories || [];
+                    for (const cat of cats) {
+                        const found = (cat.menus || []).find(m => m.id === this.state.selectedMenu.id);
+                        if (found) {
+                            menusToSave = { [cat.id]: [found.id] };
+                            if (this.state.selectedSubmenu && this.state.selectedSubmenu.id) {
+                                subMenusToSave = { [found.id]: this.state.selectedSubmenu.id };
+                            }
+                            break;
+                        }
+                    }
+                }
                 localStorage.setItem(bookingKey, JSON.stringify({
                     timestamp: Date.now(),
-                    selectedMenus: this.state.selectedMenus,
-                    selectedSubMenus: this.state.selectedSubMenus,
+                    selectedMenus: menusToSave,
+                    selectedSubMenus: subMenusToSave,
                     selectedMenuOptions: this.state.selectedOptions,
                     selectedCategoryOptions: this.state.selectedCategoryOptions,
                     gender: this.state.gender,

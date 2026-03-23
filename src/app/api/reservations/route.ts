@@ -466,6 +466,8 @@ export async function POST(request: Request) {
             lineUserId: body.line_user_id || null,
             lineDisplayName: body.line_display_name || null,
             message: body.message || null,
+            course: customerInfo.course || null,
+            visitCount: customerInfo.visit_count || null,
             selectedMenus,
             selectedOptions: body.selected_options || []
           },
