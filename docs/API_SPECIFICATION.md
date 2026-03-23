@@ -281,6 +281,26 @@
 
 **クエリパラメータ**: `/api/reservations` と同じ
 
+**注意**: キャンセル済み（`status: 'cancelled'`）の予約はデフォルトで除外されます。
+
+### `PATCH /api/reservations/{reservationId}`
+予約ステータスを更新（管理者用）
+
+**リクエストボディ**:
+```json
+{
+  "status": "confirmed"
+}
+```
+
+**有効なステータス**: `pending`, `confirmed`, `cancelled`, `completed`
+
+**レスポンス**: 更新された予約オブジェクト
+
+**注意**:
+- `cancelled` に変更した場合、予約に紐づく Google Calendar イベントも自動削除されます
+- カレンダーイベント削除に失敗しても、予約ステータスの更新は成功として返されます
+
 ---
 
 ## 📋 アンケートフォーム（Survey Forms）API
@@ -386,7 +406,7 @@
 ```json
 {
   "deployed_at": "2025-01-15T00:00:00Z",
-  "deploy_url": "https://nas-rsv.com/api/public-form/prod/forms/{storeId}/{id}/config/current.html",
+  "deploy_url": "https://nas-rsv.com/api/public-form/surveys/{storeId}/{id}/index.html",
   "storage_url": "https://[project-ref].supabase.co/storage/v1/object/public/forms/...",
   "status": "deployed",
   "environment": "production"
@@ -744,6 +764,36 @@ Google Calendar 連携を解除（OAuth トークンを削除）
 
 ### `GET /api/stores/{storeId}/customers/analytics`
 顧客分析データを取得（セグメント別件数・来店推移等）
+
+---
+
+## 🔍 プレビュー（Preview）API
+
+### `POST /api/preview/generate`
+フォームのプレビュー HTML を生成（保存前の編集状態をプレビュー可能）
+
+**認証**: 必須（ローカル環境ではスキップ）
+
+**リクエストボディ**:
+```json
+{
+  "form": { ... },
+  "storeId": "abc123",
+  "formType": "reservation"
+}
+```
+
+| パラメータ | 型 | 必須 | 説明 |
+|-----------|------|------|------|
+| `form` | object | ✅ | フォームオブジェクト（予約フォームまたはアンケートフォーム） |
+| `storeId` | string | ✅ | 店舗ID |
+| `formType` | string | ✅ | `"reservation"` または `"survey"` |
+
+**レスポンス**: HTML コンテンツ（Content-Type: `text/html; charset=utf-8`）
+
+**注意**:
+- デプロイせずにフォームの現在の編集状態をプレビューするためのエンドポイント
+- `Cache-Control: no-cache` でキャッシュ無効化
 
 ---
 
