@@ -101,15 +101,25 @@ async function replyFlexMessage(replyToken: string, accessToken: string, altText
   });
 }
 
-function makeHeaderBox(title: string) {
+function makeHeaderBox(title: string, storeName?: string) {
+  const contents: object[] = [];
+  if (storeName) {
+    contents.push({ type: 'text', text: storeName, color: '#ffffff', size: 'sm' });
+  }
+  contents.push({ type: 'text', text: title, color: '#ffffff', size: 'xl', weight: 'bold', flex: 4 });
   return {
     type: 'box',
     layout: 'vertical',
-    contents: [{ type: 'text', text: title, color: '#ffffff', size: 'xl', weight: 'bold' }],
+    contents: [{
+      type: 'box',
+      layout: 'vertical',
+      contents
+    }],
     paddingAll: '20px',
     backgroundColor: '#f7a3a3',
+    spacing: 'md',
     height: '70px',
-    paddingTop: '22px'
+    paddingTop: '12px'
   };
 }
 
@@ -141,7 +151,7 @@ export async function POST(req: NextRequest) {
 
   const { data: store, error: storeError } = await (adminClient as any)
     .from('stores')
-    .select('id, line_channel_access_token, google_calendar_id')
+    .select('id, name, line_channel_access_token, google_calendar_id')
     .eq('id', storeId)
     .single();
 
@@ -190,18 +200,20 @@ export async function POST(req: NextRequest) {
 
     const bubbles = reservations.map((r: any, index: number) => {
       const menu = r.submenu_name ? `${r.menu_name} > ${r.submenu_name}` : r.menu_name;
+      const timeMinutes = r.reservation_time ? formatTime(r.reservation_time) : '';
+      const [h, m] = timeMinutes.split(':');
+      const timeText = h && m ? `${parseInt(h)}時${parseInt(m)}分` : timeMinutes;
       return {
         type: 'bubble',
         size: 'mega',
-        header: makeHeaderBox('予約内容'),
+        header: makeHeaderBox('予約内容', store.name),
         body: {
           type: 'box',
           layout: 'vertical',
           contents: [
             { type: 'text', text: `【${index + 1}件目】`, weight: 'bold', margin: 'md' },
-            { type: 'text', text: `📅 ${formatDate(r.reservation_date)}`, margin: 'md', wrap: true },
-            { type: 'text', text: `🕐 ${formatTime(r.reservation_time)}`, margin: 'sm' },
-            { type: 'text', text: `📌 ${menu}`, margin: 'sm', wrap: true }
+            { type: 'text', text: `  【予約日】\n・${formatDate(r.reservation_date)} ${timeText}`, margin: 'md', wrap: true },
+            { type: 'text', text: `  【メニュー】\n・${menu}`, margin: 'md', wrap: true }
           ]
         }
       };
@@ -230,30 +242,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    const cancelContents: object[] = [];
+    const eventList: object[] = [];
     reservations.forEach((r: any, index: number) => {
       const menu = r.submenu_name ? `${r.menu_name} > ${r.submenu_name}` : r.menu_name;
-      if (index > 0) cancelContents.push({ type: 'separator', margin: 'lg' });
-      cancelContents.push(
-        { type: 'text', text: `📅 ${formatDate(r.reservation_date)}`, margin: 'lg', wrap: true },
-        { type: 'text', text: `🕐 ${formatTime(r.reservation_time)}`, margin: 'sm' },
-        { type: 'text', text: `📌 ${menu}`, margin: 'sm', wrap: true },
+      const timeMinutes = r.reservation_time ? formatTime(r.reservation_time) : '';
+      const [h, m] = timeMinutes.split(':');
+      const timeText = h && m ? `${parseInt(h)}時${parseInt(m)}分` : timeMinutes;
+      eventList.push(
+        {
+          type: 'text',
+          text: `  【予約日付】\n・${formatDate(r.reservation_date)} ${timeText}\n\n  【メニュー】\n・${menu}\n`,
+          margin: 'md',
+          wrap: true
+        },
         {
           type: 'button',
-          action: { type: 'message', label: `予約${index + 1}をキャンセルする`, text: `キャンセル: ${index}` },
-          color: '#f7a3a3',
-          style: 'primary',
-          margin: 'md'
+          action: { type: 'message', label: `予約 ${index + 1}をキャンセルする`, text: `キャンセル: ${index}` },
+          color: '#17c950',
+          style: 'primary'
         }
       );
     });
-    cancelContents.push({ type: 'text', text: '↑ タップしてキャンセル', size: 'sm', color: '#888888', align: 'center', margin: 'lg' });
+    eventList.push({ type: 'text', text: '↑タップしてください', size: 'sm', color: '#333333', align: 'center', margin: 'lg', wrap: true });
 
     await replyFlexMessage(replyToken, accessToken, '予約をキャンセル', [{
       type: 'bubble',
       size: 'mega',
-      header: makeHeaderBox('予約をキャンセル'),
-      body: { type: 'box', layout: 'vertical', contents: cancelContents }
+      header: makeHeaderBox('予約をキャンセル', store.name),
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: [
+          { type: 'text', text: '　　【ご予約された予約内容】', margin: 'md', wrap: true },
+          { type: 'box', layout: 'vertical', spacing: 'sm', contents: eventList }
+        ]
+      }
     }]);
     return NextResponse.json({ success: true });
   }
@@ -329,21 +352,20 @@ export async function POST(req: NextRequest) {
     const menu = target.submenu_name
       ? `${target.menu_name} > ${target.submenu_name}`
       : target.menu_name;
+    const cancelTimeStr = target.reservation_time ? formatTime(target.reservation_time) : '';
+    const [ch, cm] = cancelTimeStr.split(':');
+    const cancelTimeText = ch && cm ? `${parseInt(ch)}時${parseInt(cm)}分` : cancelTimeStr;
+    const cancelDateText = `${formatDate(target.reservation_date)} ${cancelTimeText}`;
+
     await replyFlexMessage(replyToken, accessToken, 'キャンセル完了', [{
       type: 'bubble',
       size: 'mega',
-      header: makeHeaderBox('キャンセル完了'),
+      header: makeHeaderBox('予約をキャンセル', store.name),
       body: {
         type: 'box',
         layout: 'vertical',
         contents: [
-          { type: 'text', text: '以下の予約をキャンセルしました。', margin: 'md', wrap: true },
-          { type: 'separator', margin: 'lg' },
-          { type: 'text', text: `📅 ${formatDate(target.reservation_date)}`, margin: 'lg', wrap: true },
-          { type: 'text', text: `🕐 ${formatTime(target.reservation_time)}`, margin: 'sm' },
-          { type: 'text', text: `📌 ${menu || ''}`, margin: 'sm', wrap: true },
-          { type: 'separator', margin: 'lg' },
-          { type: 'text', text: 'またのご利用をお待ちしております。', margin: 'lg', wrap: true, color: '#888888', size: 'sm' }
+          { type: 'text', text: `${cancelDateText}の\n予約をキャンセルしました。`, margin: 'md', wrap: true }
         ]
       }
     }]);
@@ -354,19 +376,36 @@ export async function POST(req: NextRequest) {
     // 予約はフォームのAPI直接呼び出し（/api/reservations）で既に作成済み。
     // Webhookでは確認メッセージの返信のみ行う（二重予約防止）。
     const details = parseReservationForm(messageText);
-    if (details.dateTime) {
-      const reservationDate = details.dateTime.toISOString().split('T')[0];
-      const reservationTime = details.dateTime.toTimeString().slice(0, 5);
-      await replyLineMessage(replyToken, accessToken, [{
-        type: 'text',
-        text: `予約を受け付けました。\n${reservationDate} ${reservationTime}`
-      }]);
-    } else {
-      await replyLineMessage(replyToken, accessToken, [{
-        type: 'text',
-        text: '予約を受け付けました。'
-      }]);
+
+    // 予約情報をFlexメッセージで返信（元のGASスタイルに合わせる）
+    const bodyContents: object[] = [];
+
+    if (details.name) {
+      bodyContents.push({ type: 'text', text: `  【お名前】\n・${details.name}`, margin: 'md', wrap: true });
     }
+    if (details.menus.length > 0) {
+      bodyContents.push({ type: 'text', text: `\n  【メニュー】\n・${details.menus.join('\n・')}`, margin: 'md', wrap: true });
+    }
+    if (details.dateTime) {
+      const dt = details.dateTime;
+      const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+      const dateText = `${dt.getFullYear()}年${String(dt.getMonth() + 1).padStart(2, '0')}月${String(dt.getDate()).padStart(2, '0')}日(${weekdays[dt.getDay()]}) ${dt.getHours()}時${dt.getMinutes()}分`;
+      bodyContents.push({ type: 'text', text: `\n  【予約日】\n・${dateText}`, margin: 'md', wrap: true });
+    }
+
+    bodyContents.push({ type: 'separator', margin: 'xxl' });
+    bodyContents.push({ type: 'text', text: '予約完了いたしました。\nご来店心よりお待ちしております。', margin: 'md', wrap: true });
+
+    await replyFlexMessage(replyToken, accessToken, '予約通知', [{
+      type: 'bubble',
+      size: 'mega',
+      header: makeHeaderBox('予約通知', store.name),
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        contents: bodyContents
+      }
+    }]);
     return NextResponse.json({ success: true });
   }
 
