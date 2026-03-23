@@ -468,6 +468,10 @@ export async function POST(request: Request) {
             message: body.message || null,
             course: customerInfo.course || null,
             visitCount: customerInfo.visit_count || null,
+            preferredDate2: body.reservation_date2 || customerInfo.preferred_date2 || null,
+            preferredTime2: body.reservation_time2 || customerInfo.preferred_time2 || null,
+            preferredDate3: body.reservation_date3 || customerInfo.preferred_date3 || null,
+            preferredTime3: body.reservation_time3 || customerInfo.preferred_time3 || null,
             selectedMenus,
             selectedOptions: body.selected_options || []
           },
