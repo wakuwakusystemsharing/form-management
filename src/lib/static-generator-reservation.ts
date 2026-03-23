@@ -1576,18 +1576,22 @@ class BookingForm {
                 </div>
             \`;
             
-            // LIFF メッセージ送信
-            if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
-                liff.sendMessages([{
-                    type: 'text',
-                    text: messageText
-                }]).then(() => {
-                    // メッセージ送信成功後にウィンドウを閉じる
-                    alert('当日キャンセルは無いようにお願いいたします。');
-                    liff.closeWindow();
-                }).catch((err) => {
-                    console.error('メッセージの送信に失敗しました', err);
-                });
+            // LIFF メッセージ送信（Web予約フォームやLIFF未初期化の場合はスキップ）
+            try {
+                if (this.state.lineUserId && typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
+                    liff.sendMessages([{
+                        type: 'text',
+                        text: messageText
+                    }]).then(() => {
+                        // メッセージ送信成功後にウィンドウを閉じる
+                        alert('当日キャンセルは無いようにお願いいたします。');
+                        liff.closeWindow();
+                    }).catch((err) => {
+                        console.error('メッセージの送信に失敗しました', err);
+                    });
+                }
+            } catch (liffError) {
+                console.warn('LIFF message send skipped:', liffError);
             }
         } catch (error) {
             console.error('Submit error:', error);
