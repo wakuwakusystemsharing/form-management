@@ -125,9 +125,31 @@ GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=  # リフレッシュトークン暗号化
 - LINE チャネルシークレット（`LINE_CHANNEL_SECRET`）で署名検証
 - 受信イベントに基づき予約確認メッセージ等を送信
 
+**プレビュー機能:**
+- `POST /api/preview/generate` - 保存前のフォーム編集状態からプレビュー HTML を生成
+- `formType`: `'reservation'` または `'survey'` を指定
+- デプロイは行わず、HTML を直接レスポンスとして返す
+
+**予約ステータス更新:**
+- `PATCH /api/reservations/{reservationId}` - 予約ステータスの変更（管理者用）
+- 有効なステータス: `pending`, `confirmed`, `cancelled`, `completed`
+- キャンセル時は Google Calendar イベントも自動削除
+- キャンセル済み予約はデフォルトでクエリ結果から除外
+
 **予約分析機能:**
 - `/api/stores/{storeId}/reservations/analytics` - 予約分析 API
 - `ReservationAnalytics.tsx` - 日別・週別・月別の予約統計表示
+
+**公開ページ:**
+- `/home` - 公開ホームページ（Web 予約フォーム機能紹介）
+- `/privacy` - プライバシーポリシー
+- `/terms` - 利用規約
+- `src/app/(public)/layout.tsx` - 公開ページ共通レイアウト（ヘッダー・フッター）
+
+**店舗セットアップヘルプ:**
+- `/admin/help` - 店舗セットアップガイドページ
+- `src/lib/store-setup-status.ts` - `getStoreSetupStatus()` で店舗の設定完了状態を判定
+- フォームカードにセットアップ状態バッジを表示
 
 **店舗管理者管理:**
 - `/api/stores/{storeId}/admins` - 管理者一覧・追加
@@ -159,6 +181,7 @@ GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=  # リフレッシュトークン暗号化
 - `src/lib/google-calendar-token.ts` - OAuth トークン暗号化
 - `src/lib/customer-utils.ts` - CRM 顧客管理ユーティリティ
 - `src/lib/auth-helper.ts` - 認証ヘルパー（`getCurrentUser()` など）
+- `src/lib/store-setup-status.ts` - 店舗セットアップ状態判定
 
 **Middleware & 認証:**
 - `src/middleware.ts` - ルート保護（UI ページアクセス制御のみ）、RLS バイパスルーティング
@@ -257,6 +280,12 @@ export async function GET(req, { params }) {
 - `PUT /api/forms/{formId}` - 保護（店舗管理者）
 - `POST /api/forms/{formId}/deploy` - Supabase Storage へデプロイ
 - アンケートフォームは `/api/surveys/{id}` で同じパターン
+
+### プレビュー API:
+- `POST /api/preview/generate` - 保存前のフォーム編集状態からプレビュー HTML 生成
+
+### 予約ステータス API:
+- `PATCH /api/reservations/{reservationId}` - 予約ステータス更新（pending/confirmed/cancelled/completed）
 
 ### 顧客管理 API:
 - `GET /api/stores/{storeId}/customers` - 顧客一覧（ページネーション、検索対応）

@@ -23,6 +23,19 @@ function formatTime(timeStr: string): string {
   return timeStr.slice(0, 5);
 }
 
+function parseDateTimeString(str: string): Date | null {
+  // "2026年03月25日 09:00" or "第一希望：2026年03月25日 09:00" 形式に対応
+  const match = str.match(/(\d{4})年(\d{1,2})月(\d{1,2})日\s+(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return new Date(
+    parseInt(match[1], 10),
+    parseInt(match[2], 10) - 1,
+    parseInt(match[3], 10),
+    parseInt(match[4], 10),
+    parseInt(match[5], 10)
+  );
+}
+
 function parseReservationForm(text: string) {
   const lines = text.split('\n');
   const details: {
@@ -33,39 +46,56 @@ function parseReservationForm(text: string) {
     course?: string;
     message?: string;
     dateTime?: Date | null;
+    dateTime2?: Date | null;
+    dateTime3?: Date | null;
   } = {
     menus: [],
   };
 
-  let nextLineIsDate = false;
+  let inDateSection = false;
   for (const line of lines) {
     if (line.startsWith('お名前：')) {
       details.name = line.replace('お名前：', '').trim();
+      inDateSection = false;
     } else if (line.startsWith('電話番号：')) {
       details.phone = line.replace('電話番号：', '').trim();
+      inDateSection = false;
     } else if (line.startsWith('メニュー：')) {
       const menuText = line.replace('メニュー：', '').trim();
       details.menus = menuText ? menuText.split(',').map(item => item.trim()).filter(Boolean) : [];
+      inDateSection = false;
     } else if (line.startsWith('ご来店回数：')) {
       details.visitCount = line.replace('ご来店回数：', '').trim();
+      inDateSection = false;
     } else if (line.startsWith('コース：')) {
       details.course = line.replace('コース：', '').trim();
+      inDateSection = false;
     } else if (line.startsWith('希望日時：')) {
-      nextLineIsDate = true;
-    } else if (nextLineIsDate && line.trim()) {
-      const match = line.trim().match(/^(\d{4})年(\d{1,2})月(\d{1,2})日 (\d{1,2}):(\d{2})$/);
-      if (match) {
-        const year = parseInt(match[1], 10);
-        const month = parseInt(match[2], 10) - 1;
-        const day = parseInt(match[3], 10);
-        const hour = parseInt(match[4], 10);
-        const minute = parseInt(match[5], 10);
-        details.dateTime = new Date(year, month, day, hour, minute);
+      inDateSection = true;
+    } else if (inDateSection && line.trim()) {
+      const trimmed = line.trim();
+      // 「メッセージ：」等の次セクションに到達したら日時セクション終了
+      if (trimmed.startsWith('メッセージ：') || trimmed.startsWith('合計') || trimmed.startsWith('性別：') || trimmed.startsWith('クーポン：')) {
+        inDateSection = false;
+        if (trimmed.startsWith('メッセージ：')) {
+          details.message = trimmed.replace('メッセージ：', '').trim();
+        }
+        continue;
       }
-      nextLineIsDate = false;
+      const dt = parseDateTimeString(trimmed);
+      if (dt) {
+        if (trimmed.includes('第二希望')) {
+          details.dateTime2 = dt;
+        } else if (trimmed.includes('第三希望')) {
+          details.dateTime3 = dt;
+        } else {
+          // 第一希望 or プレフィックスなし
+          if (!details.dateTime) details.dateTime = dt;
+        }
+      }
     } else if (line.startsWith('メッセージ：')) {
       details.message = line.replace('メッセージ：', '').trim();
-      nextLineIsDate = false;
+      inDateSection = false;
     }
   }
 
@@ -387,10 +417,18 @@ export async function POST(req: NextRequest) {
       bodyContents.push({ type: 'text', text: `\n  【メニュー】\n・${details.menus.join('\n・')}`, margin: 'md', wrap: true });
     }
     if (details.dateTime) {
-      const dt = details.dateTime;
       const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
-      const dateText = `${dt.getFullYear()}年${String(dt.getMonth() + 1).padStart(2, '0')}月${String(dt.getDate()).padStart(2, '0')}日(${weekdays[dt.getDay()]}) ${dt.getHours()}時${dt.getMinutes()}分`;
-      bodyContents.push({ type: 'text', text: `\n  【予約日】\n・${dateText}`, margin: 'md', wrap: true });
+      const fmtDt = (dt: Date) => `${dt.getFullYear()}年${String(dt.getMonth() + 1).padStart(2, '0')}月${String(dt.getDate()).padStart(2, '0')}日(${weekdays[dt.getDay()]}) ${dt.getHours()}時${dt.getMinutes()}分`;
+
+      if (details.dateTime2 || details.dateTime3) {
+        // 第三希望日時モード
+        let dateLines = `・第一希望：${fmtDt(details.dateTime)}`;
+        if (details.dateTime2) dateLines += `\n・第二希望：${fmtDt(details.dateTime2)}`;
+        if (details.dateTime3) dateLines += `\n・第三希望：${fmtDt(details.dateTime3)}`;
+        bodyContents.push({ type: 'text', text: `\n  【希望日時】\n${dateLines}`, margin: 'md', wrap: true });
+      } else {
+        bodyContents.push({ type: 'text', text: `\n  【予約日】\n・${fmtDt(details.dateTime)}`, margin: 'md', wrap: true });
+      }
     }
 
     bodyContents.push({ type: 'separator', margin: 'xxl' });

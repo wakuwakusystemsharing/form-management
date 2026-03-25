@@ -233,6 +233,12 @@ export async function createReservationEvent(
     lineUserId?: string | null;
     lineDisplayName?: string | null;
     message?: string | null;
+    course?: string | null;
+    visitCount?: string | null;
+    preferredDate2?: string | null;
+    preferredTime2?: string | null;
+    preferredDate3?: string | null;
+    preferredTime3?: string | null;
     selectedMenus?: Array<Record<string, any>>;
     selectedOptions?: Array<Record<string, any>>;
   },
@@ -250,14 +256,26 @@ export async function createReservationEvent(
   const menuLines = buildMenuLines(params.selectedMenus);
   const menuText = menuLines.length > 0 ? menuLines.map(line => `・${line}`).join('\n') : '';
 
+  // 希望日時テキスト（第二・第三希望がある場合は複数行）
+  const dateTimeLines = [`≪第一希望≫ ${params.reservationDate} ${params.reservationTime}`];
+  if (params.preferredDate2 && params.preferredTime2) {
+    dateTimeLines.push(`≪第二希望≫ ${params.preferredDate2} ${params.preferredTime2}`);
+  }
+  if (params.preferredDate3 && params.preferredTime3) {
+    dateTimeLines.push(`≪第三希望≫ ${params.preferredDate3} ${params.preferredTime3}`);
+  }
+
   const description = [
-    `≪希望日時≫ ${params.reservationDate} ${params.reservationTime}`,
+    ...dateTimeLines,
     `≪LINEの名前≫ ${params.lineDisplayName || ''}`,
     `≪お名前≫ ${params.customerName}`,
     `≪電話番号≫ ${params.customerPhone}`,
-    `≪メニュー≫`,
+    `≪コース≫ `,
+    params.course ? `・${params.course}` : '',
+    `≪メニュー≫ `,
     menuText,
-    `≪メッセージ≫`,
+    `≪ご来店回数≫ ${params.visitCount || ''}`,
+    `≪メッセージ≫ `,
     params.message || ''
   ].join('\n');
 
