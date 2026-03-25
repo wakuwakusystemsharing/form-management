@@ -7,6 +7,7 @@ export interface MenuOption {
   description?: string;
   is_default?: boolean;      // デフォルトで選択されるか
   hide_price?: boolean;      // 料金を非表示にするか
+  hide_duration?: boolean;   // 所要時間を非表示にするか
 }
 
 // サブメニューの型定義
@@ -18,6 +19,7 @@ export interface SubMenuItem {
   description?: string;
   image?: string;            // 画像URL
   hide_price?: boolean;      // 料金を非表示にするか
+  hide_duration?: boolean;   // 所要時間を非表示にするか
 }
 
 // 予約フォームの型定義
@@ -37,6 +39,7 @@ export interface MenuItem {
   has_submenu?: boolean;     // サブメニューを使用するかどうか
   sub_menu_items?: SubMenuItem[];  // サブメニュー項目
   hide_price?: boolean;      // 料金を非表示にするか
+  hide_duration?: boolean;   // 所要時間を非表示にするか
 }
 
 export interface MenuCategory {
