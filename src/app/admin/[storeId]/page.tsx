@@ -1634,6 +1634,9 @@ export default function StoreDetailPage() {
                                 <h3 className="font-medium truncate">
 {(form as any).form_name || form.config?.basic_info?.form_name}
                                 </h3>
+                                <Badge variant="outline" className={`shrink-0 ${(form.config?.form_type ?? 'line') === 'web' ? 'text-blue-600 border-blue-600 dark:text-blue-400 dark:border-blue-400' : 'text-green-600 border-green-600 dark:text-green-400 dark:border-green-400'}`}>
+                                  {(form.config?.form_type ?? 'line') === 'web' ? 'Web' : 'LINE'}
+                                </Badge>
                         {form.draft_status === 'draft' && (
                                   <Badge variant="outline" className="text-orange-600 border-orange-600 shrink-0">
                                     下書き

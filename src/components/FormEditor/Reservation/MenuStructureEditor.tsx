@@ -80,6 +80,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [cropperOpen, setCropperOpen] = useState(false);
   const [hidePrice, setHidePrice] = useState(false);
+  const [hideDuration, setHideDuration] = useState(false);
 
   React.useEffect(() => {
     if (subMenuItem) {
@@ -89,6 +90,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
       setDescription(subMenuItem.description || '');
       setImage(subMenuItem.image || '');
       setHidePrice(subMenuItem.hide_price || false);
+      setHideDuration(subMenuItem.hide_duration || false);
     } else {
       setName('');
       setPrice('');
@@ -96,6 +98,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
       setDescription('');
       setImage('');
       setHidePrice(false);
+      setHideDuration(false);
     }
   }, [subMenuItem]);
 
@@ -107,7 +110,8 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
       duration: parseInt(duration) || 0,
       description: description || undefined,
       image: image || undefined,
-      hide_price: hidePrice || undefined
+      hide_price: hidePrice || undefined,
+      hide_duration: hideDuration || undefined
     };
     onSave(newSubMenuItem);
     onClose();
@@ -180,6 +184,16 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
                 onChange={(e) => setDuration(e.target.value)}
                 min="0"
               />
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  type="checkbox"
+                  id="submenu-hide-duration"
+                  checked={!!hideDuration}
+                  onChange={(e) => setHideDuration(e.target.checked)}
+                  className="h-4 w-4 rounded"
+                />
+                <label htmlFor="submenu-hide-duration" className="text-xs text-muted-foreground">所要時間を非表示</label>
+              </div>
             </div>
           </div>
 
@@ -338,6 +352,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
   const [description, setDescription] = useState('');
   const [isDefault, setIsDefault] = useState(false);
   const [hidePrice, setHidePrice] = useState(false);
+  const [hideDuration, setHideDuration] = useState(false);
 
   React.useEffect(() => {
     if (option) {
@@ -347,6 +362,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       setDescription(option.description || '');
       setIsDefault(option.is_default || false);
       setHidePrice(option.hide_price || false);
+      setHideDuration(option.hide_duration || false);
     } else {
       setName('');
       setPrice('');
@@ -354,6 +370,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       setDescription('');
       setIsDefault(false);
       setHidePrice(false);
+      setHideDuration(false);
     }
   }, [option]);
 
@@ -365,7 +382,8 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       duration: parseInt(duration) || 0,
       description: description || undefined,
       is_default: isDefault,
-      hide_price: hidePrice || undefined
+      hide_price: hidePrice || undefined,
+      hide_duration: hideDuration || undefined
     };
     onSave(newOption);
     onClose();
@@ -451,6 +469,16 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
                   min="0"
                   className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
                 />
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="checkbox"
+                    id="option-hide-duration"
+                    checked={!!hideDuration}
+                    onChange={(e) => setHideDuration(e.target.checked)}
+                    className="h-4 w-4 rounded"
+                  />
+                  <label htmlFor="option-hide-duration" className={`text-xs ${themeClasses.text.tertiary}`}>所要時間を非表示</label>
+                </div>
               </div>
             </div>
 
@@ -527,6 +555,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [cropperOpen, setCropperOpen] = useState(false);
   const [hidePrice, setHidePrice] = useState(false);
+  const [hideDuration, setHideDuration] = useState(false);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -541,6 +570,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setHasSubmenu(menuItem.has_submenu || false);
         setSubMenuItems(menuItem.sub_menu_items || []);
         setHidePrice(menuItem.hide_price || false);
+        setHideDuration(menuItem.hide_duration || false);
       } else {
         setName('');
         setPrice('');
@@ -552,6 +582,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setHasSubmenu(false);
         setSubMenuItems([]);
         setHidePrice(false);
+        setHideDuration(false);
       }
     }
   }, [menuItem, isOpen]);
@@ -569,7 +600,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       options: hasSubmenu ? undefined : (options.length > 0 ? options : undefined),
       has_submenu: hasSubmenu,
       sub_menu_items: hasSubmenu ? subMenuItems : undefined,
-      hide_price: hidePrice || undefined
+      hide_price: hidePrice || undefined,
+      hide_duration: hideDuration || undefined
     };
     onSave(newMenuItem);
     onClose();
@@ -744,6 +776,16 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                           min="0"
                           className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
                         />
+                        <div className="flex items-center gap-2 mt-1">
+                          <input
+                            type="checkbox"
+                            id="hide-duration"
+                            checked={!!hideDuration}
+                            onChange={(e) => setHideDuration(e.target.checked)}
+                            className="h-4 w-4 rounded"
+                          />
+                          <label htmlFor="hide-duration" className={`text-xs ${themeClasses.text.tertiary}`}>所要時間を非表示</label>
+                        </div>
                       </div>
                     </div>
                   </>

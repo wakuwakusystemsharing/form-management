@@ -95,8 +95,8 @@ const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({
         />
       </div>
 
-      {/* システム管理者のみ表示 */}
-      {userRole === 'service_admin' && (
+      {/* システム管理者のみ表示、かつLINEフォームのみ */}
+      {userRole === 'service_admin' && (form.config?.form_type ?? 'line') === 'line' && (
         <>
           <div className="space-y-2">
             <Label htmlFor="liff_id">LINE LIFF ID</Label>

@@ -22,6 +22,7 @@ export class StaticSurveyGenerator {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${this.escapeHtml(safeConfig.basic_info.title)}</title>
+    <link rel="icon" href="data:,">
     <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
     <style>
         ${css}

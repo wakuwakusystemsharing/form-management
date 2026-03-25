@@ -114,6 +114,7 @@ export class StaticReservationGenerator {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${this.escapeHtml(safeConfig.basic_info.form_name)}</title>
+    <link rel="icon" href="data:,">
     <script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
     <style>${this.generateCSS(safeConfig)}</style>
 </head>
@@ -694,8 +695,8 @@ class BookingForm {
                         \${sub.description ? \`<div class="menu-item-desc">\${sub.description}</div>\` : ''}
                     </div>
                     <div class="menu-item-info">
-                        <div class="menu-item-price">¥\${sub.price.toLocaleString()}</div>
-                        <div class="menu-item-duration">\${sub.duration}分</div>
+                        \${!sub.hide_price ? \`<div class="menu-item-price">¥\${sub.price.toLocaleString()}</div>\` : ''}
+                        \${!sub.hide_duration ? \`<div class="menu-item-duration">\${sub.duration}分</div>\` : ''}
                     </div>
                 </button>
             \`).join('')}
@@ -1893,7 +1894,7 @@ if (document.readyState === 'loading') {
                                         ${!menu.has_submenu && (menu.price !== undefined || menu.duration) ? `
                                             <div class="menu-item-info">
                                                 ${(menu.price || 0) > 0 && !menu.hide_price ? `<div class="menu-item-price">¥${(menu.price || 0).toLocaleString()}</div>` : ''}
-                                                ${menu.duration ? `<div class="menu-item-duration">${menu.duration}分</div>` : ''}
+                                                ${menu.duration && !menu.hide_duration ? `<div class="menu-item-duration">${menu.duration}分</div>` : ''}
                                             </div>
                                         ` : `<div class="menu-item-info"><div class="menu-item-desc">サブメニューを選択</div></div>`}
                                     </button>
@@ -1913,7 +1914,7 @@ if (document.readyState === 'loading') {
                                                     </div>
                                                     <div style="text-align:right;margin-left:0.5rem;">
                                                         ${!option.hide_price ? `<div style="font-weight:500;font-size:0.875rem;">${option.price > 0 ? `+¥${option.price.toLocaleString()}` : '無料'}</div>` : ''}
-                                                        ${option.duration > 0 ? `<div style="font-size:0.75rem;opacity:0.7;">+${option.duration}分</div>` : ''}
+                                                        ${option.duration > 0 && !option.hide_duration ? `<div style="font-size:0.75rem;opacity:0.7;">+${option.duration}分</div>` : ''}
                                                     </div>
                                                 </button>
                                             `).join('')}
@@ -1935,7 +1936,7 @@ if (document.readyState === 'loading') {
                                             </div>
                                             <div style="text-align:right;margin-left:0.5rem;">
                                                 ${(opt.price || 0) > 0 && !opt.hide_price ? `<div style="font-weight:500;font-size:0.875rem;">+¥${(opt.price || 0).toLocaleString()}</div>` : ''}
-                                                ${(opt.duration || 0) > 0 ? `<div style="font-size:0.75rem;opacity:0.7;">+${opt.duration}分</div>` : ''}
+                                                ${(opt.duration || 0) > 0 && !opt.hide_duration ? `<div style="font-size:0.75rem;opacity:0.7;">+${opt.duration}分</div>` : ''}
                                             </div>
                                         </button>
                                     `).join('')}
