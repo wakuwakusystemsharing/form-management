@@ -191,7 +191,8 @@ class BookingForm {
             lineStatusMessage: null, // LINEステータスメッセージ
             lineEmail: null, // LINEメールアドレス
             lineLanguage: null, // LINE言語設定
-            lineOs: null // デバイスOS
+            lineOs: null, // デバイスOS
+            lineFriendFlag: false // 友だち追加状態
         };
         this.currentDate = new Date();
         this.availabilityCache = {}; // カレンダー空き状況のキャッシュ
@@ -273,6 +274,15 @@ class BookingForm {
                     }
                 } catch (idTokenError) {
                     console.warn('LINE User ID取得に失敗しました:', idTokenError);
+                }
+
+                // 友だち追加状態を取得
+                try {
+                    const friendship = await liff.getFriendship();
+                    this.state.lineFriendFlag = friendship.friendFlag;
+                } catch (friendError) {
+                    console.warn('友だち追加状態の取得に失敗しました:', friendError);
+                    this.state.lineFriendFlag = false;
                 }
             }
         } catch (error) {
@@ -1446,7 +1456,8 @@ class BookingForm {
                 line_picture_url: this.state.linePictureUrl || null, // LINEプロフィール画像URL
                 line_status_message: this.state.lineStatusMessage || null, // LINEステータスメッセージ
                 line_language: this.state.lineLanguage || null, // LINE言語設定
-                line_os: this.state.lineOs || null // デバイスOS
+                line_os: this.state.lineOs || null, // デバイスOS
+                line_friend_flag: this.state.lineFriendFlag || false // 友だち追加状態
             };
             
             // /api/reservationsにPOSTリクエストを送信

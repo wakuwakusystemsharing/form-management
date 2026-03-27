@@ -56,12 +56,13 @@ export class StaticSurveyGenerator {
     <script>
         // LINEユーザーIDを保持する変数
         let lineUserId = null;
-        
+        let lineFriendFlag = false;
+
         // LIFF初期化
         document.addEventListener('DOMContentLoaded', async function () {
             const liffId = '${safeConfig.basic_info.liff_id}';
             if (!liffId || liffId.length < 10) return;
-            
+
             try {
                 await liff.init({ liffId });
                 if (liff.isLoggedIn()) {
@@ -74,6 +75,15 @@ export class StaticSurveyGenerator {
                     } catch (idTokenError) {
                         console.warn('LINE User ID取得に失敗しました:', idTokenError);
                     }
+
+                    // 友だち追加状態を取得
+                    try {
+                        const friendship = await liff.getFriendship();
+                        lineFriendFlag = friendship.friendFlag;
+                    } catch (friendError) {
+                        console.warn('友だち追加状態の取得に失敗しました:', friendError);
+                    }
+
                     console.log('LIFF初期化成功');
                 }
             } catch (err) {
@@ -159,7 +169,8 @@ export class StaticSurveyGenerator {
                         survey_form_id: surveyFormId,
                         store_id: storeId,
                         responses: formData,
-                        line_user_id: lineUserId || null // LINEユーザーID
+                        line_user_id: lineUserId || null, // LINEユーザーID
+                        line_friend_flag: lineFriendFlag // 友だち追加状態
                     })
                 }).catch((err) => {
                     console.error('データベースへの保存に失敗しました', err);

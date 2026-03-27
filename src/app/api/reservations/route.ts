@@ -232,6 +232,7 @@ export async function POST(request: Request) {
             line_picture_url: body.line_picture_url || existingCustomer.line_picture_url,
             line_status_message: body.line_status_message || existingCustomer.line_status_message,
             line_os: body.line_os || existingCustomer.line_os,
+            line_friend_flag: body.line_friend_flag || existingCustomer.line_friend_flag,
           });
           customerId = existingCustomer.id;
         } else {
@@ -249,6 +250,7 @@ export async function POST(request: Request) {
             line_email: body.line_email,
             line_language: body.line_language,
             line_os: body.line_os,
+            line_friend_flag: body.line_friend_flag || false,
             customer_type: 'new',
             first_visit_date: body.reservation_date,
             last_visit_date: body.reservation_date,
@@ -339,6 +341,7 @@ export async function POST(request: Request) {
           line_picture_url: body.line_picture_url || existingCustomer.line_picture_url,
           line_status_message: body.line_status_message || existingCustomer.line_status_message,
           line_os: body.line_os || existingCustomer.line_os,
+          line_friend_flag: body.line_friend_flag || existingCustomer.line_friend_flag,
         });
         customerId = existingCustomer.id;
       } else {
@@ -356,6 +359,7 @@ export async function POST(request: Request) {
           line_email: body.line_email,
           line_language: body.line_language,
           line_os: body.line_os,
+          line_friend_flag: body.line_friend_flag || false,
           customer_type: 'new',
           first_visit_date: body.reservation_date,
           last_visit_date: body.reservation_date,

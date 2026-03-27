@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export interface CustomerFormData {
   name: string;
@@ -25,6 +26,8 @@ interface CustomerFormProps {
   onCancel: () => void;
   submitLabel?: string;
   isSubmitting?: boolean;
+  linePictureUrl?: string | null;
+  customerName?: string;
 }
 
 function toFormData(customer?: Partial<CustomerFormData>): CustomerFormData {
@@ -59,6 +62,8 @@ export default function CustomerForm({
   onCancel,
   submitLabel = '保存',
   isSubmitting = false,
+  linePictureUrl,
+  customerName,
 }: CustomerFormProps) {
   const [form, setForm] = useState<CustomerFormData>(toFormData(initialData));
   const [error, setError] = useState('');
@@ -85,6 +90,19 @@ export default function CustomerForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* アバター表示 */}
+      <div className="flex items-center gap-4 pb-2">
+        <Avatar className="h-16 w-16">
+          {linePictureUrl && (
+            <AvatarImage src={linePictureUrl} alt={customerName || form.name} />
+          )}
+          <AvatarFallback className="text-xl">{(customerName || form.name || '?').charAt(0)}</AvatarFallback>
+        </Avatar>
+        <p className="text-sm text-muted-foreground">
+          プロフィール画像はLINE連携情報から自動取得されます
+        </p>
+      </div>
+
       {/* 基本情報 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
