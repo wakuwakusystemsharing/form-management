@@ -28,6 +28,7 @@ import {
   Settings,
   ExternalLink,
   Copy,
+  CopyPlus,
   Store as StoreIcon,
   AlertTriangle,
   MessageCircle,
@@ -596,6 +597,7 @@ export default function StoreDetailPage() {
   const [showStoreEditModal, setShowStoreEditModal] = useState(false);
   const [editingStore, setEditingStore] = useState<Store | null>(null);
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
+  const [duplicatingFormId, setDuplicatingFormId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [recentReservations, setRecentReservations] = useState<any[]>([]);
   const [loadingReservations, setLoadingReservations] = useState(false);
@@ -838,6 +840,80 @@ export default function StoreDetailPage() {
   const handleEditForm = (form: Form | SurveyForm) => {
     setEditingForm(form);
     setShowEditModal(true);
+  };
+
+  const handleDuplicateForm = async (formId: string) => {
+    setDuplicatingFormId(formId);
+    try {
+      const response = await fetch(`/api/forms/${formId}/duplicate`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const newForm = await response.json();
+        setForms(prev => [newForm, ...prev]);
+        toast({
+          title: '成功',
+          description: 'フォームを複製しました',
+        });
+        // 複製後に編集モーダルを開く
+        handleEditForm(newForm);
+      } else {
+        const error = await response.json();
+        toast({
+          title: 'エラー',
+          description: error.error || 'フォームの複製に失敗しました',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Form duplicate error:', error);
+      toast({
+        title: 'エラー',
+        description: 'フォームの複製に失敗しました',
+        variant: 'destructive',
+      });
+    } finally {
+      setDuplicatingFormId(null);
+    }
+  };
+
+  const handleDuplicateSurveyForm = async (formId: string) => {
+    setDuplicatingFormId(formId);
+    try {
+      const response = await fetch(`/api/surveys/${formId}/duplicate`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const newForm = await response.json();
+        setSurveyForms(prev => [newForm, ...prev]);
+        toast({
+          title: '成功',
+          description: 'アンケートフォームを複製しました',
+        });
+        // 複製後に編集モーダルを開く
+        handleEditForm(newForm);
+      } else {
+        const error = await response.json();
+        toast({
+          title: 'エラー',
+          description: error.error || 'アンケートフォームの複製に失敗しました',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Survey duplicate error:', error);
+      toast({
+        title: 'エラー',
+        description: 'アンケートフォームの複製に失敗しました',
+        variant: 'destructive',
+      });
+    } finally {
+      setDuplicatingFormId(null);
+    }
   };
 
   const handleEditStore = () => {
@@ -1689,6 +1765,15 @@ export default function StoreDetailPage() {
                               </Button>
                               <Button
                                 size="sm"
+                                variant="outline"
+                                onClick={() => handleDuplicateForm(form.id)}
+                                disabled={duplicatingFormId === form.id}
+                              >
+                                <CopyPlus className="mr-2 h-4 w-4" />
+                                {duplicatingFormId === form.id ? '複製中...' : '複製'}
+                              </Button>
+                              <Button
+                                size="sm"
                                 variant="destructive"
                         onClick={() => handleDeleteForm(form.id)}
                       >
@@ -1846,6 +1931,15 @@ export default function StoreDetailPage() {
                               >
                                 <Edit className="mr-2 h-4 w-4" />
                                 編集
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleDuplicateSurveyForm(form.id)}
+                                disabled={duplicatingFormId === form.id}
+                              >
+                                <CopyPlus className="mr-2 h-4 w-4" />
+                                {duplicatingFormId === form.id ? '複製中...' : '複製'}
                               </Button>
                               <Button
                                 size="sm"
