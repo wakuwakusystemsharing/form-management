@@ -105,7 +105,7 @@ export async function PUT(
         const index = forms.findIndex((f: SurveyForm) => f.id === id);
         
         if (index !== -1) {
-          forms[index] = { ...forms[index], ...body, updated_at: new Date().toISOString() };
+          forms[index] = { ...forms[index], ...body, draft_status: 'none', draft_config: undefined, updated_at: new Date().toISOString() };
           fs.writeFileSync(filePath, JSON.stringify(forms, null, 2));
           return NextResponse.json(forms[index]);
         }
@@ -126,6 +126,8 @@ export async function PUT(
       .update({
         config: body.config,
         status: body.status,
+        draft_status: 'none',
+        draft_config: null,
         updated_at: new Date().toISOString(),
         updated_by: currentUserId
       })

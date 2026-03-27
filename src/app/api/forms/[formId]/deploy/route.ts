@@ -119,6 +119,8 @@ export async function POST(
       const updatedForm: Form = {
         ...normalizedForm,
         static_deploy: deployInfo,
+        draft_status: 'none',
+        draft_config: undefined,
         updated_at: new Date().toISOString()
       };
 
@@ -137,6 +139,8 @@ export async function POST(
           .from('reservation_forms')
           .update({
             static_deploy: deployInfo,
+            draft_status: 'none',
+            draft_config: null,
             updated_at: new Date().toISOString()
           })
           .eq('id', formId);
