@@ -138,10 +138,10 @@ export default function StoreAdminLayout({
   };
 
   return (
-    <div className="flex h-screen bg-muted/40">
+    <div className="store-admin-bg flex h-screen bg-background">
       {/* デスクトップサイドバー */}
       <aside className={cn(
-        "hidden lg:flex lg:flex-col lg:border-r transition-[width] duration-300 relative bg-background",
+        "hidden lg:flex lg:flex-col lg:border-r transition-[width] duration-300 relative bg-white",
         sidebarCollapsed ? "lg:w-16" : "lg:w-64"
       )}>
         <MenuContent 
@@ -176,7 +176,7 @@ export default function StoreAdminLayout({
       {/* メインコンテンツ */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* モバイルヘッダー */}
-        <header className="lg:hidden border-b bg-background shadow-sm">
+        <header className="lg:hidden border-b bg-white shadow-sm">
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center space-x-3">
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>

@@ -850,15 +850,14 @@ export default function StoreAdminPage() {
       case 'surveys':
         return (
           <div className="space-y-5 p-4 lg:p-6">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-base">アンケート管理</CardTitle>
-                <CardDescription>アンケートフォームの編集・管理を行います</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* フォーム管理セクション */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">フォーム管理</h3>
+            <div>
+              <h2 className="text-lg font-semibold">アンケート管理</h2>
+              <p className="text-sm text-muted-foreground">アンケートフォームの編集・管理を行います</p>
+            </div>
+            <div className="space-y-6">
+              {/* フォーム管理セクション */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-muted-foreground">フォーム管理</h3>
                   {surveyForms.filter(survey => {
                     if (!formSearchQuery) return true;
                     const query = formSearchQuery.toLowerCase();
@@ -1065,8 +1064,7 @@ export default function StoreAdminPage() {
                     </CardContent>
                   </Card>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
           </div>
         );
 
