@@ -644,8 +644,8 @@ export default function StoreAdminPage() {
                         <Card key={form.id} className="shadow-sm hover:shadow-md transition-shadow border-border/60">
                           <CardContent className="p-4">
                             <div className="space-y-2.5">
-                              {/* フォーム名とステータス、右側にID・日付情報 */}
-                              <div className="flex items-center justify-between gap-3 flex-wrap">
+                              {/* フォーム名とステータス */}
+                              <div className="space-y-1">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <h4 className="text-sm font-semibold">
                           {(form as any).form_name || form.config?.basic_info?.form_name || 'フォーム'}
@@ -659,7 +659,7 @@ export default function StoreAdminPage() {
                                     </Badge>
                         )}
                       </div>
-                                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                                <div className="hidden md:flex items-center gap-3 text-xs text-muted-foreground">
                         <div>
                                     <span className="font-medium">フォームID:</span>
                                     <span className="ml-1 font-mono">{form.id}</span>
@@ -775,70 +775,116 @@ export default function StoreAdminPage() {
                     </TabsContent>
 
                     <TabsContent value="list" className="space-y-6">
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>顧客名</TableHead>
-                              <TableHead>フォーム</TableHead>
-                              <TableHead>電話番号</TableHead>
-                              <TableHead>予約日時</TableHead>
-                              <TableHead>メニュー</TableHead>
-                              <TableHead>ステータス</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {filteredReservations.length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                                  予約がありません
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              filteredReservations.map((reservation) => (
-                                <TableRow 
-                                  key={reservation.id}
-                                  className="cursor-pointer hover:bg-accent"
-                                  onClick={() => {
-                                    setSelectedReservation(reservation);
-                                    setShowReservationDetail(true);
-                                  }}
-                                >
-                                  <TableCell className="font-medium">{reservation.customer_name}</TableCell>
-                                  <TableCell>
-                                    <div className="text-sm">
-                                      <div className="font-medium">{getFormName(reservation.form_id)}</div>
-                                      <div className="text-xs text-muted-foreground font-mono">{reservation.form_id}</div>
-                            </div>
-                                  </TableCell>
-                                  <TableCell>{reservation.customer_phone}</TableCell>
-                                  <TableCell>
+                      {filteredReservations.length === 0 ? (
+                        <div className="text-center text-muted-foreground py-8">
+                          予約がありません
+                        </div>
+                      ) : (
+                        <>
+                          {/* モバイル: カードリスト */}
+                          <div className="space-y-3 md:hidden">
+                            {filteredReservations.map((reservation) => (
+                              <div
+                                key={reservation.id}
+                                className="border rounded-lg p-3 cursor-pointer hover:bg-accent transition-colors"
+                                onClick={() => {
+                                  setSelectedReservation(reservation);
+                                  setShowReservationDetail(true);
+                                }}
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-medium text-sm">{reservation.customer_name}</span>
+                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                                    reservation.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                    reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                    reservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
+                                    'bg-green-50 text-green-700 border-green-200'
+                                  }`}>
+                                    {reservation.status === 'pending' ? '保留中' :
+                                     reservation.status === 'confirmed' ? '確認済み' :
+                                     reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
+                                  <div>
+                                    <span className="font-medium">予約日時: </span>
                                     {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
-                                  </TableCell>
-                                  <TableCell>
-                                    {(reservation as any).menu_name || (reservation.selected_menus && Array.isArray(reservation.selected_menus) && reservation.selected_menus.length > 0 
+                                  </div>
+                                  <div>
+                                    <span className="font-medium">電話: </span>
+                                    {reservation.customer_phone}
+                                  </div>
+                                  <div className="col-span-2">
+                                    <span className="font-medium">メニュー: </span>
+                                    {(reservation as any).menu_name || (reservation.selected_menus && Array.isArray(reservation.selected_menus) && reservation.selected_menus.length > 0
                                       ? (reservation.selected_menus as any[]).map((m: any) => m.menu_name || m.name).join(', ')
                                       : 'メニュー不明')}
                                     {(reservation as any).submenu_name && ` - ${(reservation as any).submenu_name}`}
-                                  </TableCell>
-                                  <TableCell>
-                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
-                                      reservation.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                      reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                      reservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
-                                      'bg-green-50 text-green-700 border-green-200'
-                                    }`}>
-                                      {reservation.status === 'pending' ? '保留中' :
-                                       reservation.status === 'confirmed' ? '確認済み' :
-                                       reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
-                                    </span>
-                                  </TableCell>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* デスクトップ: テーブル */}
+                          <div className="hidden md:block overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>顧客名</TableHead>
+                                  <TableHead>フォーム</TableHead>
+                                  <TableHead>電話番号</TableHead>
+                                  <TableHead>予約日時</TableHead>
+                                  <TableHead>メニュー</TableHead>
+                                  <TableHead>ステータス</TableHead>
                                 </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                        </div>
+                              </TableHeader>
+                              <TableBody>
+                                {filteredReservations.map((reservation) => (
+                                  <TableRow
+                                    key={reservation.id}
+                                    className="cursor-pointer hover:bg-accent"
+                                    onClick={() => {
+                                      setSelectedReservation(reservation);
+                                      setShowReservationDetail(true);
+                                    }}
+                                  >
+                                    <TableCell className="font-medium">{reservation.customer_name}</TableCell>
+                                    <TableCell>
+                                      <div className="text-sm">
+                                        <div className="font-medium">{getFormName(reservation.form_id)}</div>
+                                        <div className="text-xs text-muted-foreground font-mono">{reservation.form_id}</div>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>{reservation.customer_phone}</TableCell>
+                                    <TableCell>
+                                      {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
+                                    </TableCell>
+                                    <TableCell>
+                                      {(reservation as any).menu_name || (reservation.selected_menus && Array.isArray(reservation.selected_menus) && reservation.selected_menus.length > 0
+                                        ? (reservation.selected_menus as any[]).map((m: any) => m.menu_name || m.name).join(', ')
+                                        : 'メニュー不明')}
+                                      {(reservation as any).submenu_name && ` - ${(reservation as any).submenu_name}`}
+                                    </TableCell>
+                                    <TableCell>
+                                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                                        reservation.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                        reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                        reservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
+                                        'bg-green-50 text-green-700 border-green-200'
+                                      }`}>
+                                        {reservation.status === 'pending' ? '保留中' :
+                                         reservation.status === 'confirmed' ? '確認済み' :
+                                         reservation.status === 'cancelled' ? 'キャンセル' : '完了'}
+                                      </span>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </>
+                      )}
                     </TabsContent>
                   </Tabs>
                             </div>
@@ -879,8 +925,8 @@ export default function StoreAdminPage() {
                         <Card key={survey.id} className="shadow-sm hover:shadow-md transition-shadow border-border/60">
                           <CardContent className="p-4">
                             <div className="space-y-2.5">
-                              {/* アンケート名とステータス、右側にID・日付情報 */}
-                              <div className="flex items-center justify-between gap-3 flex-wrap">
+                              {/* アンケート名とステータス */}
+                              <div className="space-y-1">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <h4 className="text-sm font-semibold">
                                     {survey.config?.basic_info?.title || 'アンケート'}
@@ -894,7 +940,7 @@ export default function StoreAdminPage() {
                                     </Badge>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                                <div className="hidden md:flex items-center gap-3 text-xs text-muted-foreground">
                                   <div>
                                     <span className="font-medium">アンケートID:</span>
                                     <span className="ml-1 font-mono">{survey.id}</span>
@@ -1354,19 +1400,19 @@ export default function StoreAdminPage() {
                   <CardTitle className="text-lg">基本情報</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <Label className="text-sm text-muted-foreground">顧客名</Label>
                       <p className="font-medium">{selectedReservation.customer_name}</p>
-    </div>
+                    </div>
                     <div>
                       <Label className="text-sm text-muted-foreground">電話番号</Label>
                       <p className="font-medium">{selectedReservation.customer_phone}</p>
                     </div>
                     {selectedReservation.customer_email && (
-                      <div>
+                      <div className="sm:col-span-2">
                         <Label className="text-sm text-muted-foreground">メールアドレス</Label>
-                        <p className="font-medium">{selectedReservation.customer_email}</p>
+                        <p className="font-medium text-sm break-all">{selectedReservation.customer_email}</p>
                       </div>
                     )}
                     <div>
@@ -1393,7 +1439,7 @@ export default function StoreAdminPage() {
                     <div>
                       <Label className="text-sm text-muted-foreground">フォーム</Label>
                       <p className="font-medium">{getFormName(selectedReservation.form_id)}</p>
-                      <p className="text-xs text-muted-foreground font-mono">{selectedReservation.form_id}</p>
+                      <p className="text-xs text-muted-foreground font-mono break-all">{selectedReservation.form_id}</p>
                     </div>
                   </div>
                 </CardContent>
