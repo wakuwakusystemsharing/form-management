@@ -171,6 +171,8 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
             onCancel={() => setIsEditing(false)}
             submitLabel="更新"
             isSubmitting={isSaving}
+            linePictureUrl={customer.line_picture_url}
+            customerName={customer.name}
           />
         ) : (
           /* 表示モード */

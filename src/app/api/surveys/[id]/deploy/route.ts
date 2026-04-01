@@ -85,6 +85,8 @@ export async function POST(
       const index = forms.findIndex((f: SurveyForm) => f.id === id);
       if (index !== -1) {
         forms[index].static_deploy = deployInfo;
+        forms[index].draft_status = 'none';
+        forms[index].draft_config = undefined;
         fs.writeFileSync(formsPath, JSON.stringify(forms, null, 2));
       }
     } else {
@@ -93,7 +95,7 @@ export async function POST(
         await adminClient
           .from('survey_forms')
           // @ts-expect-error Supabase型定義不足のため
-          .update({ static_deploy: deployInfo })
+          .update({ static_deploy: deployInfo, draft_status: 'none', draft_config: null })
           .eq('id', id);
       }
     }

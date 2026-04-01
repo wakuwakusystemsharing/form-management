@@ -920,7 +920,7 @@ export default function AdminPage() {
                       variant="outline"
                       size="sm"
                       onClick={(e) => { e.stopPropagation(); router.push(`/admin/${store.id}`); }}
-                      className="flex-1 h-7 text-xs border-border hover:border-primary/50 hover:text-primary"
+                      className="flex-1 h-7 text-xs border-border hover:border-primary/50 hover:bg-primary hover:text-primary-foreground"
                     >
                       <Settings className="mr-1 h-3 w-3" />
                       管理
@@ -930,7 +930,7 @@ export default function AdminPage() {
                         variant="outline"
                         size="sm"
                         onClick={(e) => { e.stopPropagation(); window.open(`https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(store.google_calendar_id ?? '')}`, '_blank'); }}
-                        className="flex-1 h-7 text-xs border-border hover:border-primary/50 hover:text-primary"
+                        className="flex-1 h-7 text-xs border-border hover:border-primary/50 hover:bg-primary hover:text-primary-foreground"
                       >
                         <ExternalLink className="mr-1 h-3 w-3" />
                         カレンダー
@@ -940,7 +940,7 @@ export default function AdminPage() {
                       variant="outline"
                       size="sm"
                       onClick={(e) => { e.stopPropagation(); router.push(`/${store.id}/admin`); }}
-                      className="flex-1 h-7 text-xs border-border hover:border-green-500/50 hover:text-green-500"
+                      className="flex-1 h-7 text-xs border-border hover:border-green-600 hover:bg-green-600 hover:text-white"
                     >
                       <StoreIcon className="mr-1 h-3 w-3" />
                       店舗管理者

@@ -156,10 +156,12 @@ export async function PUT(
         const mergedForm = {
           ...globalForms[formIndex],
           ...updatedFormData,
+          draft_status: 'none',
+          draft_config: undefined,
           updated_at: new Date().toISOString()
         };
         const updatedForm = normalizeForm(mergedForm);
-        
+
         globalForms[formIndex] = updatedForm;
         writeForms(globalForms);
         
@@ -187,10 +189,12 @@ export async function PUT(
           const mergedForm = {
             ...storeFormsData[storeFormIndex],
             ...updatedFormData,
+            draft_status: 'none',
+            draft_config: undefined,
             updated_at: new Date().toISOString()
           };
           const updatedForm = normalizeForm(mergedForm);
-          
+
           storeFormsData[storeFormIndex] = updatedForm;
           fs.writeFileSync(storeFormFile, JSON.stringify(storeFormsData, null, 2));
           
@@ -201,10 +205,12 @@ export async function PUT(
         const mergedForm = {
           ...storeForm,
           ...updatedFormData,
+          draft_status: 'none',
+          draft_config: undefined,
           updated_at: new Date().toISOString()
         };
         const updatedForm = normalizeForm(mergedForm);
-        
+
         fs.writeFileSync(storeFormFile, JSON.stringify([updatedForm], null, 2));
         return NextResponse.json(updatedForm);
       }
@@ -229,6 +235,8 @@ export async function PUT(
     
     const updateData = {
       ...updatedFormData,
+      draft_status: 'none',
+      draft_config: null,
       updated_at: new Date().toISOString(),
       updated_by: currentUserId
     };

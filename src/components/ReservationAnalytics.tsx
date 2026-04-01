@@ -150,13 +150,15 @@ export default function ReservationAnalytics({
   return (
     <div className="space-y-6">
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="overview">概要</TabsTrigger>
-          <TabsTrigger value="menus">メニュー分析</TabsTrigger>
-          <TabsTrigger value="time">時間帯分析</TabsTrigger>
-          <TabsTrigger value="customers">顧客属性</TabsTrigger>
-          <TabsTrigger value="revenue">売上分析</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-1 px-1">
+          <TabsList className="inline-flex w-auto min-w-full md:grid md:w-full md:grid-cols-5">
+            <TabsTrigger value="overview" className="text-xs md:text-sm">概要</TabsTrigger>
+            <TabsTrigger value="menus" className="text-xs md:text-sm">メニュー分析</TabsTrigger>
+            <TabsTrigger value="time" className="text-xs md:text-sm">時間帯分析</TabsTrigger>
+            <TabsTrigger value="customers" className="text-xs md:text-sm">顧客属性</TabsTrigger>
+            <TabsTrigger value="revenue" className="text-xs md:text-sm">売上分析</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* 概要タブ */}
         <TabsContent value="overview" className="space-y-6">
