@@ -22,8 +22,20 @@ interface Reservation {
   reservation_date: string;
   reservation_time: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+  source_medium?: string;
   created_at: string;
 }
+
+const SOURCE_MEDIUM_LABELS: Record<string, string> = {
+  line: 'LINE',
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  x_twitter: 'X（旧Twitter）',
+  google_maps: 'Googleマップ',
+  google_search: 'Google検索',
+  yahoo_search: 'Yahoo!検索',
+  direct: '直接アクセス',
+};
 
 export default function AllReservationsPage() {
   const router = useRouter();
@@ -242,6 +254,7 @@ export default function AllReservationsPage() {
                           <TableHead>店舗ID</TableHead>
                           <TableHead>顧客名</TableHead>
                           <TableHead>電話番号</TableHead>
+                          <TableHead>経路</TableHead>
                           <TableHead>ステータス</TableHead>
                           <TableHead>作成日時</TableHead>
                         </TableRow>
@@ -259,6 +272,9 @@ export default function AllReservationsPage() {
                             </TableCell>
                             <TableCell>{reservation.customer_name}</TableCell>
                             <TableCell>{reservation.customer_phone}</TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {reservation.source_medium ? (SOURCE_MEDIUM_LABELS[reservation.source_medium] || reservation.source_medium) : '-'}
+                            </TableCell>
                             <TableCell>
                               {getStatusBadge(reservation.status)}
                             </TableCell>
