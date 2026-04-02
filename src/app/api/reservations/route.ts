@@ -45,6 +45,8 @@ interface Reservation {
   updated_at: string;
 }
 
+const VALID_SOURCE_MEDIUMS = ['line', 'instagram', 'facebook', 'x_twitter', 'google_maps', 'google_search', 'yahoo_search', 'direct'] as const;
+
 // 一時的なJSONファイルでのデータ保存（開発用）
 const DATA_DIR = path.join(process.cwd(), 'data');
 const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
@@ -281,6 +283,7 @@ export async function POST(request: Request) {
         reservation_time: body.reservation_time,
         customer_info: body.customer_info,
         line_user_id: body.line_user_id || null, // LINEユーザーID
+        source_medium: VALID_SOURCE_MEDIUMS.includes(body.source_medium) ? body.source_medium : null,
         status: 'pending',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -413,6 +416,7 @@ export async function POST(request: Request) {
       customer_info: customerInfo,
       line_user_id: body.line_user_id || null, // LINEユーザーID
       customer_id: customerId, // 顧客ID (CRM連携)
+      source_medium: VALID_SOURCE_MEDIUMS.includes(body.source_medium) ? body.source_medium : null,
       status: 'pending'
     };
 
