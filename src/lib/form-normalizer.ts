@@ -180,13 +180,30 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         google_calendar_url: (existingConfig?.calendar_settings?.google_calendar_url || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.google_calendar_url) as string | undefined,
         // 日時選択モードのデフォルト値設定
         booking_mode: (existingConfig?.calendar_settings?.booking_mode || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.booking_mode || 'calendar') as Form['config']['calendar_settings']['booking_mode'],
-        multiple_dates_settings: (existingConfig?.calendar_settings?.multiple_dates_settings || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.multiple_dates_settings || {
-          time_interval: 30,
-          date_range_days: 30,
-          exclude_weekdays: [0], // 日曜日
-          start_time: '09:00',
-          end_time: '18:00'
-        }) as Form['config']['calendar_settings']['multiple_dates_settings']
+        multiple_dates_settings: (() => {
+          const existing = existingConfig?.calendar_settings?.multiple_dates_settings || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.multiple_dates_settings;
+          const base = existing || {
+            time_interval: 30,
+            date_range_days: 30,
+            exclude_weekdays: [0], // 日曜日
+            start_time: '09:00',
+            end_time: '18:00'
+          };
+          // weekday_hours が未設定の場合、デフォルト値を補完
+          if (!base.weekday_hours) {
+            base.weekday_hours = {
+              '0': { open: '09:00', close: '18:00', closed: true },   // 日曜
+              '1': { open: '09:00', close: '18:00', closed: false },  // 月曜
+              '2': { open: '09:00', close: '18:00', closed: false },  // 火曜
+              '3': { open: '09:00', close: '18:00', closed: false },  // 水曜
+              '4': { open: '09:00', close: '18:00', closed: false },  // 木曜
+              '5': { open: '09:00', close: '18:00', closed: false },  // 金曜
+              '6': { open: '09:00', close: '18:00', closed: false },  // 土曜
+            };
+          }
+          return base;
+        })() as Form['config']['calendar_settings']['multiple_dates_settings'],
+        allow_exceed_business_hours: existingConfig?.calendar_settings?.allow_exceed_business_hours ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.allow_exceed_business_hours ?? false
       },
       ui_settings: {
         theme_color: (existingConfig?.ui_settings?.theme_color || (typedConfig?.basic_info as Form['config']['basic_info'])?.theme_color || (typedBasicInfo?.theme_color as string) || (typedConfig?.ui_settings as Form['config']['ui_settings'])?.theme_color || (typedUiSettings?.theme_color as string) || '#3B82F6') as string,

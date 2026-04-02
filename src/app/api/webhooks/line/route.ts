@@ -52,50 +52,84 @@ function parseReservationForm(text: string) {
     menus: [],
   };
 
-  let inDateSection = false;
-  for (const line of lines) {
-    if (line.startsWith('お名前：')) {
-      details.name = line.replace('お名前：', '').trim();
-      inDateSection = false;
-    } else if (line.startsWith('電話番号：')) {
-      details.phone = line.replace('電話番号：', '').trim();
-      inDateSection = false;
-    } else if (line.startsWith('メニュー：')) {
-      const menuText = line.replace('メニュー：', '').trim();
-      details.menus = menuText ? menuText.split(',').map(item => item.trim()).filter(Boolean) : [];
-      inDateSection = false;
-    } else if (line.startsWith('ご来店回数：')) {
-      details.visitCount = line.replace('ご来店回数：', '').trim();
-      inDateSection = false;
-    } else if (line.startsWith('コース：')) {
-      details.course = line.replace('コース：', '').trim();
-      inDateSection = false;
-    } else if (line.startsWith('希望日時：')) {
-      inDateSection = true;
-    } else if (inDateSection && line.trim()) {
-      const trimmed = line.trim();
-      // 「メッセージ：」等の次セクションに到達したら日時セクション終了
-      if (trimmed.startsWith('メッセージ：') || trimmed.startsWith('合計') || trimmed.startsWith('性別：') || trimmed.startsWith('クーポン：')) {
+  // 新フォーマット（《ラベル》\n値）を検出
+  const isNewFormat = text.includes('《お名前》');
+
+  if (isNewFormat) {
+    let pendingLabel = '';
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) { pendingLabel = ''; continue; }
+
+      if (line === '《お名前》') { pendingLabel = 'name'; }
+      else if (line === '《電話番号》') { pendingLabel = 'phone'; }
+      else if (line === '《メニュー》') { pendingLabel = 'menu'; }
+      else if (line === '《ご来店回数》') { pendingLabel = 'visitCount'; }
+      else if (line === '《メッセージ》') { pendingLabel = 'message'; }
+      else if (line === '《第一希望日》' || line === '《希望日》') { pendingLabel = 'date1'; }
+      else if (line === '《第二希望日》') { pendingLabel = 'date2'; }
+      else if (line === '《第三希望日》') { pendingLabel = 'date3'; }
+      else if (line.startsWith('【') || line.startsWith('《')) {
+        pendingLabel = '';
+      } else if (pendingLabel) {
+        switch (pendingLabel) {
+          case 'name': details.name = line; break;
+          case 'phone': details.phone = line; break;
+          case 'menu': details.menus = line ? line.split(',').map(s => s.trim()).filter(Boolean) : []; break;
+          case 'visitCount': details.visitCount = line; break;
+          case 'message': details.message = line; break;
+          case 'date1': { const dt = parseDateTimeString(line); if (dt) details.dateTime = dt; break; }
+          case 'date2': { const dt = parseDateTimeString(line); if (dt) details.dateTime2 = dt; break; }
+          case 'date3': { const dt = parseDateTimeString(line); if (dt) details.dateTime3 = dt; break; }
+        }
+        pendingLabel = '';
+      }
+    }
+  } else {
+    // 旧フォーマット（ラベル：値）
+    let inDateSection = false;
+    for (const line of lines) {
+      if (line.startsWith('お名前：')) {
+        details.name = line.replace('お名前：', '').trim();
         inDateSection = false;
-        if (trimmed.startsWith('メッセージ：')) {
-          details.message = trimmed.replace('メッセージ：', '').trim();
+      } else if (line.startsWith('電話番号：')) {
+        details.phone = line.replace('電話番号：', '').trim();
+        inDateSection = false;
+      } else if (line.startsWith('メニュー：')) {
+        const menuText = line.replace('メニュー：', '').trim();
+        details.menus = menuText ? menuText.split(',').map(item => item.trim()).filter(Boolean) : [];
+        inDateSection = false;
+      } else if (line.startsWith('ご来店回数：')) {
+        details.visitCount = line.replace('ご来店回数：', '').trim();
+        inDateSection = false;
+      } else if (line.startsWith('コース：')) {
+        details.course = line.replace('コース：', '').trim();
+        inDateSection = false;
+      } else if (line.startsWith('希望日時：')) {
+        inDateSection = true;
+      } else if (inDateSection && line.trim()) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('メッセージ：') || trimmed.startsWith('合計') || trimmed.startsWith('性別：') || trimmed.startsWith('クーポン：')) {
+          inDateSection = false;
+          if (trimmed.startsWith('メッセージ：')) {
+            details.message = trimmed.replace('メッセージ：', '').trim();
+          }
+          continue;
         }
-        continue;
-      }
-      const dt = parseDateTimeString(trimmed);
-      if (dt) {
-        if (trimmed.includes('第二希望')) {
-          details.dateTime2 = dt;
-        } else if (trimmed.includes('第三希望')) {
-          details.dateTime3 = dt;
-        } else {
-          // 第一希望 or プレフィックスなし
-          if (!details.dateTime) details.dateTime = dt;
+        const dt = parseDateTimeString(trimmed);
+        if (dt) {
+          if (trimmed.includes('第二希望')) {
+            details.dateTime2 = dt;
+          } else if (trimmed.includes('第三希望')) {
+            details.dateTime3 = dt;
+          } else {
+            if (!details.dateTime) details.dateTime = dt;
+          }
         }
+      } else if (line.startsWith('メッセージ：')) {
+        details.message = line.replace('メッセージ：', '').trim();
+        inDateSection = false;
       }
-    } else if (line.startsWith('メッセージ：')) {
-      details.message = line.replace('メッセージ：', '').trim();
-      inDateSection = false;
     }
   }
 
@@ -439,7 +473,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   }
 
-  if (messageText.startsWith('【予約フォーム】')) {
+  if (messageText.startsWith('【予約フォーム】') || (messageText.startsWith('【') && messageText.includes('《お名前》'))) {
     // 予約はフォームのAPI直接呼び出し（/api/reservations）で既に作成済み。
     // Webhookでは確認メッセージの返信のみ行う（二重予約防止）。
     const details = parseReservationForm(messageText);

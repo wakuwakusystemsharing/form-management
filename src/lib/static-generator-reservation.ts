@@ -908,18 +908,24 @@ class BookingForm {
         // 終了時間が翌日になる場合は不可
         let isNextDay = slotEnd.getDate() !== slotStart.getDate();
         
-        // 18時以降に終了する予約を不可にする（17:30は可）
-        let endsAfter18 = false;
-        if (slotEnd.getHours() === 18 && slotEnd.getMinutes() > 0) {
-            endsAfter18 = true;
-        } else if (slotEnd.getHours() > 18) {
-            endsAfter18 = true;
+        // 営業時間超過チェック（閉店時間を動的参照）
+        let endsAfterClose = false;
+        const allowExceed = this.config?.calendar_settings?.allow_exceed_business_hours || false;
+        if (!allowExceed && !isClosed && dayHours) {
+            const closeTime2 = dayHours.close || '18:00';
+            const closeH = parseInt(closeTime2.split(':')[0]);
+            const closeM = parseInt(closeTime2.split(':')[1]);
+            const endH = slotEnd.getHours();
+            const endM = slotEnd.getMinutes();
+            if (endH > closeH || (endH === closeH && endM > closeM)) {
+                endsAfterClose = true;
+            }
         }
-        
+
         // 空き状況の判定
         let isAvailable = false;
-        
-        if (isPast || isNextDay || endsAfter18 || !withinWindow || isClosed || !isWithinBusinessHours) {
+
+        if (isPast || isNextDay || endsAfterClose || !withinWindow || isClosed || !isWithinBusinessHours) {
             isAvailable = false;
         } else if (this.availabilityData && this.availabilityData.length > 0) {
             // カレンダーAPIから取得したデータがある場合
@@ -1433,6 +1439,22 @@ class BookingForm {
             const dateObj = new Date(this.state.selectedDate);
             const reservationDate = \`\${dateObj.getFullYear()}-\${String(dateObj.getMonth() + 1).padStart(2, '0')}-\${String(dateObj.getDate()).padStart(2, '0')}\`;
             
+            // 流入経路を推定（Web予約フォームのみ）
+            const sourceMedium = (function() {
+              try {
+                const ref = (document.referrer || '').toLowerCase();
+                const ua = (navigator.userAgent || '').toLowerCase();
+                if (ua.includes('line/') || ref.includes('liff.line.me')) return 'line';
+                if (ua.includes('instagram') || ref.includes('instagram.com')) return 'instagram';
+                if (ua.includes('fbav') || ua.includes('fban') || ref.includes('facebook.com') || ref.includes('l.facebook.com')) return 'facebook';
+                if (ua.includes('twitter') || ref.includes('t.co') || ref.includes('x.com')) return 'x_twitter';
+                if (ref.includes('google.') && ref.includes('/maps')) return 'google_maps';
+                if (ref.includes('google.')) return 'google_search';
+                if (ref.includes('yahoo.')) return 'yahoo_search';
+                return 'direct';
+              } catch(e) { return 'direct'; }
+            })();
+
             // APIに送信するデータを構築（合計金額・時間を構造化データに含める）
             const reservationData = {
                 form_id: FORM_ID,
@@ -1457,7 +1479,8 @@ class BookingForm {
                 line_status_message: this.state.lineStatusMessage || null, // LINEステータスメッセージ
                 line_language: this.state.lineLanguage || null, // LINE言語設定
                 line_os: this.state.lineOs || null, // デバイスOS
-                line_friend_flag: this.state.lineFriendFlag || false // 友だち追加状態
+                line_friend_flag: this.state.lineFriendFlag || false, // 友だち追加状態
+                source_medium: sourceMedium
             };
             
             // /api/reservationsにPOSTリクエストを送信
@@ -1495,54 +1518,56 @@ class BookingForm {
             const formattedDate2 = formatDateStr(this.state.selectedDate2, this.state.selectedTime2);
             const formattedDate3 = formatDateStr(this.state.selectedDate3, this.state.selectedTime3);
             
-            // メッセージ本文を構築（old_index.htmlとbooking.gsのparseReservationFormに合わせた形式）
-            // booking.gsが期待する順序：お名前、電話番号、ご来店回数、コース、メニュー、希望日時、メッセージ
-            let messageText = '【予約フォーム】\\n';
-            
+            // メッセージ本文を構築（《ラベル》\\n値 形式）
+            const formName = this.config.basic_info?.form_name || '予約フォーム';
+            let messageText = '【' + formName + '】\\n';
+
             // 常に表示：お名前、電話番号
-            messageText += \`お名前：\${this.state.name || ''}\\n\`;
-            messageText += \`電話番号：\${this.state.phone || ''}\\n\`;
-            
-            // ご来店回数（old_index.htmlでは常に表示、booking.gsも期待している）
+            messageText += \`《お名前》\\n\${this.state.name || ''}\\n\`;
+            messageText += \`《電話番号》\\n\${this.state.phone || ''}\\n\`;
+
+            // ご来店回数
             let visitCountText = '';
             if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
                 const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
                 visitCountText = visitLabel || this.state.visitCount || '';
             }
-            messageText += \`ご来店回数：\${visitCountText}\\n\`;
-            
-            // メニュー（buildSelectionPayload で構築したテキスト＋合計）
-            messageText += \`メニュー：\${menuTextForMessage || ''}\\n\`;
+            messageText += \`《ご来店回数》\\n\${visitCountText}\\n\`;
+
+            // メニュー
+            messageText += \`\\n《メニュー》\\n\${menuTextForMessage || ''}\\n\`;
             if (totalPrice > 0 || totalDuration > 0) {
-                if (totalPrice > 0) messageText += \`合計金額：¥\${totalPrice.toLocaleString()}\\n\`;
-                if (totalDuration > 0) messageText += \`合計時間：\${totalDuration}分\\n\`;
+                if (totalPrice > 0) messageText += \`\\n《合計金額》\\n¥\${totalPrice.toLocaleString()}\\n\`;
+                if (totalDuration > 0) messageText += \`\\n《合計時間》\\n\${totalDuration}分\\n\`;
             }
-            
-            // 希望日時（booking.gsは「希望日時：」の次の行を日時として解析）
+
+            // 希望日時
             const bookingModeForMsg = this.config.calendar_settings?.booking_mode || 'calendar';
+            messageText += \`\\n【希望日時】\\n\`;
             if (bookingModeForMsg === 'multiple_dates') {
-                messageText += \`希望日時：\\n 第一希望：\${formattedDate}\\n\`;
-                if (formattedDate2) messageText += \` 第二希望：\${formattedDate2}\\n\`;
-                if (formattedDate3) messageText += \` 第三希望：\${formattedDate3}\\n\`;
+                messageText += \`《第一希望日》\\n\${formattedDate}\\n\`;
+                if (formattedDate2) messageText += \`《第二希望日》\\n\${formattedDate2}\\n\`;
+                if (formattedDate3) messageText += \`《第三希望日》\\n\${formattedDate3}\\n\`;
             } else {
-                messageText += \`希望日時：\\n \${formattedDate}\\n\`;
+                messageText += \`《希望日》\\n\${formattedDate}\\n\`;
             }
-            
-            // メッセージ（常に表示、空文字列でも）
-            messageText += \`メッセージ：\${this.state.message || ''}\`;
-            
-            // 性別とクーポンはbooking.gsが解析しないため、メッセージの最後に追加（オプション）
+
+            // メッセージ
+            messageText += \`\\n《メッセージ》\\n\${this.state.message || 'なし'}\`;
+
+            // 性別（オプション）
             if (this.config.gender_selection?.enabled && this.state.gender) {
                 const genderLabel = this.config.gender_selection.options.find(o => o.value === this.state.gender)?.label;
                 if (genderLabel) {
-                    messageText += \`\\n性別：\${genderLabel}\`;
+                    messageText += \`\\n\\n《性別》\\n\${genderLabel}\`;
                 }
             }
-            
+
+            // クーポン（オプション）
             if (this.config.coupon_selection?.enabled && this.state.coupon) {
                 const couponLabel = this.config.coupon_selection.options.find(o => o.value === this.state.coupon)?.label;
                 if (couponLabel) {
-                    messageText += \`\\nクーポン：\${couponLabel}\`;
+                    messageText += \`\\n\\n《クーポン》\\n\${couponLabel}\`;
                 }
             }
             
@@ -1621,43 +1646,62 @@ class BookingForm {
             start_time: '09:00',
             end_time: '18:00'
         };
-        
+
         // 各希望日時の初期化
         for (let i = 1; i <= 3; i++) {
             this.populateDateOptions(i, settings);
             this.populateTimeOptions(i, settings);
-            
+
             // イベントリスナー追加
             const daySelect = document.getElementById(\`date\${i}_day\`);
             const timeSelect = document.getElementById(\`date\${i}_time\`);
             if (daySelect && timeSelect) {
-                daySelect.addEventListener('change', () => this.updateDateTime(i));
+                daySelect.addEventListener('change', () => {
+                    // 日付変更時に曜日に応じた時間スロットを再生成
+                    this.populateTimeOptions(i, settings, daySelect.value);
+                    this.updateDateTime(i);
+                });
                 timeSelect.addEventListener('change', () => this.updateDateTime(i));
             }
         }
     }
-    
+
+    getWeekdayHours(settings, dayOfWeek) {
+        // weekday_hours がある場合はそちらを優先
+        if (settings.weekday_hours && settings.weekday_hours[String(dayOfWeek)]) {
+            const wh = settings.weekday_hours[String(dayOfWeek)];
+            return { open: wh.open, close: wh.close, closed: wh.closed };
+        }
+        // レガシー互換: exclude_weekdays + start_time/end_time
+        return {
+            open: settings.start_time || '09:00',
+            close: settings.end_time || '18:00',
+            closed: (settings.exclude_weekdays || []).includes(dayOfWeek)
+        };
+    }
+
     populateDateOptions(index, settings) {
         const select = document.getElementById(\`date\${index}_day\`);
         if (!select) return;
-        
+
         const today = new Date();
-        
+
         // デフォルトオプション
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
         defaultOption.textContent = '日付を選択';
         select.appendChild(defaultOption);
-        
+
         for (let i = 0; i < settings.date_range_days; i++) {
             const date = new Date(today);
             date.setDate(today.getDate() + i);
-            
-            // 除外曜日チェック
-            if (settings.exclude_weekdays.includes(date.getDay())) {
+
+            // 曜日別の定休日チェック
+            const hours = this.getWeekdayHours(settings, date.getDay());
+            if (hours.closed) {
                 continue;
             }
-            
+
             const option = document.createElement('option');
             option.value = date.toISOString().split('T')[0];
             option.textContent = date.toLocaleDateString('ja-JP', {
@@ -1668,20 +1712,35 @@ class BookingForm {
             select.appendChild(option);
         }
     }
-    
-    populateTimeOptions(index, settings) {
+
+    populateTimeOptions(index, settings, selectedDateStr) {
         const select = document.getElementById(\`date\${index}_time\`);
         if (!select) return;
-        
+
+        // 既存オプションをクリア
+        select.innerHTML = '';
+
         // デフォルトオプション
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
         defaultOption.textContent = '時間を選択';
         select.appendChild(defaultOption);
-        
+
+        // 選択された日付の曜日に基づいて時間スロットを生成
+        let startTime = settings.start_time || '09:00';
+        let endTime = settings.end_time || '18:00';
+
+        if (selectedDateStr) {
+            const selectedDate = new Date(selectedDateStr + 'T00:00:00');
+            const dayOfWeek = selectedDate.getDay();
+            const hours = this.getWeekdayHours(settings, dayOfWeek);
+            startTime = hours.open;
+            endTime = hours.close;
+        }
+
         // 時間スロット生成
-        const timeSlots = this.generateTimeSlots(settings.start_time, settings.end_time, settings.time_interval);
-        
+        const timeSlots = this.generateTimeSlots(startTime, endTime, settings.time_interval);
+
         timeSlots.forEach(time => {
             const option = document.createElement('option');
             option.value = time;

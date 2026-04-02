@@ -598,6 +598,8 @@ export default function StoreDetailPage() {
   const [editingStore, setEditingStore] = useState<Store | null>(null);
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
   const [duplicatingFormId, setDuplicatingFormId] = useState<string | null>(null);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [duplicateTargetFormId, setDuplicateTargetFormId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [recentReservations, setRecentReservations] = useState<any[]>([]);
   const [loadingReservations, setLoadingReservations] = useState(false);
@@ -842,12 +844,23 @@ export default function StoreDetailPage() {
     setShowEditModal(true);
   };
 
-  const handleDuplicateForm = async (formId: string) => {
+  const openDuplicateDialog = (formId: string) => {
+    setDuplicateTargetFormId(formId);
+    setShowDuplicateDialog(true);
+  };
+
+  const handleDuplicateWithType = async (targetFormType: 'line' | 'web') => {
+    const formId = duplicateTargetFormId;
+    setShowDuplicateDialog(false);
+    if (!formId) return;
+
     setDuplicatingFormId(formId);
     try {
       const response = await fetch(`/api/forms/${formId}/duplicate`, {
         method: 'POST',
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_form_type: targetFormType }),
       });
 
       if (response.ok) {
@@ -855,9 +868,8 @@ export default function StoreDetailPage() {
         setForms(prev => [newForm, ...prev]);
         toast({
           title: '成功',
-          description: 'フォームを複製しました',
+          description: `${targetFormType === 'web' ? 'Web予約' : 'LINE'}フォームとして複製しました`,
         });
-        // 複製後に編集モーダルを開く
         handleEditForm(newForm);
       } else {
         const error = await response.json();
@@ -894,7 +906,6 @@ export default function StoreDetailPage() {
           title: '成功',
           description: 'アンケートフォームを複製しました',
         });
-        // 複製後に編集モーダルを開く
         handleEditForm(newForm);
       } else {
         const error = await response.json();
@@ -1766,7 +1777,7 @@ export default function StoreDetailPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleDuplicateForm(form.id)}
+                                onClick={() => openDuplicateDialog(form.id)}
                                 disabled={duplicatingFormId === form.id}
                               >
                                 <CopyPlus className="mr-2 h-4 w-4" />
@@ -2149,6 +2160,38 @@ export default function StoreDetailPage() {
       )}
 
       {/* フォーム削除確認ダイアログ */}
+      {/* フォーム複製タイプ選択ダイアログ */}
+      <Dialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>フォームを複製</DialogTitle>
+            <DialogDescription>
+              複製先のフォームタイプを選択してください
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-4">
+            <Button
+              variant="outline"
+              className="flex flex-col items-center gap-2 h-auto py-4 border-2 hover:border-green-500 hover:bg-green-50 hover:text-green-700 dark:hover:bg-green-950/20 dark:hover:text-green-300"
+              onClick={() => handleDuplicateWithType('line')}
+            >
+              <MessageCircle className="h-6 w-6 text-green-600" />
+              <span className="font-medium">LINEフォーム</span>
+              <span className="text-xs text-muted-foreground">LIFF経由で利用</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="flex flex-col items-center gap-2 h-auto py-4 border-2 hover:border-blue-500 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/20 dark:hover:text-blue-300"
+              onClick={() => handleDuplicateWithType('web')}
+            >
+              <ExternalLink className="h-6 w-6 text-blue-600" />
+              <span className="font-medium">Web予約フォーム</span>
+              <span className="text-xs text-muted-foreground">ブラウザから直接利用</span>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <DialogContent>
           <DialogHeader>
