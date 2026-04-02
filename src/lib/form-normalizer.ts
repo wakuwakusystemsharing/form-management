@@ -215,9 +215,10 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         required_fields: (existingConfig?.validation_rules?.required_fields || (typedConfig?.validation_rules as Form['config']['validation_rules'])?.required_fields || ['name', 'phone']) as Form['config']['validation_rules']['required_fields'],
         phone_format: (existingConfig?.validation_rules?.phone_format || (typedConfig?.validation_rules as Form['config']['validation_rules'])?.phone_format || 'japanese') as 'japanese' | 'international',
         name_max_length: (existingConfig?.validation_rules?.name_max_length || (typedConfig?.validation_rules as Form['config']['validation_rules'])?.name_max_length || 50) as number
-      }
+      },
+      form_type: (existingConfig?.form_type || (typedConfig as Form['config'])?.form_type) as Form['config']['form_type'],
     }
   };
-  
+
   return normalizedForm;
 }
