@@ -143,9 +143,16 @@ export interface FormConfig {
     multiple_dates_settings?: {
       time_interval: 15 | 30 | 60;        // 時間間隔（分）
       date_range_days: number;            // 選択可能日数（本日から何日後まで）
-      exclude_weekdays: number[];         // 除外曜日 (0:日曜, 1:月曜, ...)
-      start_time: string;                 // 開始時間 "09:00"
-      end_time: string;                   // 終了時間 "18:00"
+      exclude_weekdays: number[];         // 除外曜日 (0:日曜, 1:月曜, ...) - レガシー互換
+      start_time: string;                 // 開始時間 "09:00" - レガシー互換
+      end_time: string;                   // 終了時間 "18:00" - レガシー互換
+      weekday_hours?: {                   // 曜日別の時間設定（優先）
+        [key: string]: {                  // "0":日曜 ~ "6":土曜 (getDay() 形式)
+          open: string;                   // "09:00"
+          close: string;                  // "18:00"
+          closed: boolean;                // 定休日
+        };
+      };
     };
   };
   

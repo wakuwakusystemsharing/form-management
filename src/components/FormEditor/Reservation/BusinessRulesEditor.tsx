@@ -33,20 +33,35 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     form.config?.calendar_settings?.booking_mode || 'calendar'
   );
 
+  const defaultWeekdayHours: { [key: string]: { open: string; close: string; closed: boolean } } = {
+    '0': { open: '09:00', close: '18:00', closed: true },
+    '1': { open: '09:00', close: '18:00', closed: false },
+    '2': { open: '09:00', close: '18:00', closed: false },
+    '3': { open: '09:00', close: '18:00', closed: false },
+    '4': { open: '09:00', close: '18:00', closed: false },
+    '5': { open: '09:00', close: '18:00', closed: false },
+    '6': { open: '09:00', close: '18:00', closed: false },
+  };
+
   const [multipleDatesSettings, setMultipleDatesSettings] = useState<{
     time_interval: 15 | 30 | 60;
     date_range_days: number;
     exclude_weekdays: number[];
     start_time: string;
     end_time: string;
+    weekday_hours?: { [key: string]: { open: string; close: string; closed: boolean } };
   }>(
-    form.config?.calendar_settings?.multiple_dates_settings || {
-      time_interval: 30,
-      date_range_days: 30,
-      exclude_weekdays: [0],
-      start_time: '09:00',
-      end_time: '18:00'
-    }
+    (() => {
+      const existing = form.config?.calendar_settings?.multiple_dates_settings;
+      return {
+        time_interval: existing?.time_interval || 30,
+        date_range_days: existing?.date_range_days || 30,
+        exclude_weekdays: existing?.exclude_weekdays || [0],
+        start_time: existing?.start_time || '09:00',
+        end_time: existing?.end_time || '18:00',
+        weekday_hours: existing?.weekday_hours || defaultWeekdayHours,
+      };
+    })()
   );
 
   const [expandedSections, setExpandedSections] = useState({
@@ -128,7 +143,42 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
       [key]: value
     };
     setMultipleDatesSettings(updatedSettings);
-    
+
+    const updatedForm = {
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          multiple_dates_settings: updatedSettings
+        }
+      }
+    };
+    onUpdate(updatedForm);
+  };
+
+  const handleWeekdayHoursChange = (dayIndex: string, field: 'open' | 'close' | 'closed', value: string | boolean) => {
+    const currentHours = multipleDatesSettings.weekday_hours || defaultWeekdayHours;
+    const updatedHours = {
+      ...currentHours,
+      [dayIndex]: {
+        ...currentHours[dayIndex],
+        [field]: value
+      }
+    };
+
+    // レガシーフィールドも同期（exclude_weekdays）
+    const excludeWeekdays = Object.entries(updatedHours)
+      .filter(([, h]) => h.closed)
+      .map(([k]) => parseInt(k));
+
+    const updatedSettings = {
+      ...multipleDatesSettings,
+      weekday_hours: updatedHours,
+      exclude_weekdays: excludeWeekdays,
+    };
+    setMultipleDatesSettings(updatedSettings);
+
     const updatedForm = {
       ...form,
       config: {
@@ -311,8 +361,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
             {bookingMode === 'multiple_dates' && (
               <div className={`rounded-lg p-4 ${theme === 'light' ? 'bg-blue-50 border border-blue-200' : 'bg-blue-900/20 border border-blue-700'}`}>
                 <h4 className={`text-sm font-medium mb-4 ${theme === 'light' ? 'text-blue-700' : 'text-blue-300'}`}>第三希望日時モード設定</h4>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   {/* 時間間隔 */}
                   <div>
                     <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
@@ -344,60 +394,73 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     />
                     <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>本日から何日後まで選択可能にするか</p>
                   </div>
-
-                  {/* 開始時間 */}
-                  <div>
-                    <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
-                      開始時間
-                    </label>
-                    <input
-                      type="time"
-                      value={multipleDatesSettings.start_time}
-                      onChange={(e) => handleMultipleDatesSettingsChange('start_time', e.target.value)}
-                      className={themeClasses.timeInput}
-                    />
-                  </div>
-
-                  {/* 終了時間 */}
-                  <div>
-                    <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
-                      終了時間
-                    </label>
-                    <input
-                      type="time"
-                      value={multipleDatesSettings.end_time}
-                      onChange={(e) => handleMultipleDatesSettingsChange('end_time', e.target.value)}
-                      className={themeClasses.timeInput}
-                    />
-                  </div>
                 </div>
 
-                {/* 除外曜日 */}
-                <div className="mt-4">
+                {/* 曜日別時間設定 */}
+                <div>
                   <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
-                    除外曜日（定休日）
+                    曜日別の受付時間
                   </label>
-                  <div className="flex flex-wrap gap-2">
-                    {weekdayLabels.map((day, index) => (
-                      <label key={index} className="flex items-center space-x-1">
-                        <input
-                          type="checkbox"
-                          checked={multipleDatesSettings.exclude_weekdays.includes(index)}
-                          onChange={(e) => {
-                            const currentExcluded = [...multipleDatesSettings.exclude_weekdays];
-                            if (e.target.checked) {
-                              currentExcluded.push(index);
-                            } else {
-                              const idx = currentExcluded.indexOf(index);
-                              if (idx > -1) currentExcluded.splice(idx, 1);
-                            }
-                            handleMultipleDatesSettingsChange('exclude_weekdays', currentExcluded);
-                          }}
-                          className="text-cyan-600 focus:ring-cyan-500"
-                        />
-                        <span className={`text-sm ${themeClasses.text.secondary}`}>{day}</span>
-                      </label>
-                    ))}
+                  <div className="space-y-2">
+                    {weekdayLabels.map((dayLabel, index) => {
+                      const dayKey = String(index);
+                      const hours = (multipleDatesSettings.weekday_hours || defaultWeekdayHours)[dayKey] || { open: '09:00', close: '18:00', closed: false };
+                      return (
+                        <div key={index} className={`rounded-lg p-3 ${
+                          theme === 'light'
+                            ? 'border border-gray-300 bg-white'
+                            : 'border border-gray-700 bg-gray-900/50'
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                            <div className={`w-full sm:w-16 text-sm font-medium ${themeClasses.text.secondary} flex-shrink-0`}>
+                              {dayLabel}
+                            </div>
+
+                            <label className="flex items-center space-x-2 flex-shrink-0">
+                              <input
+                                type="checkbox"
+                                checked={!hours.closed}
+                                onChange={(e) => handleWeekdayHoursChange(dayKey, 'closed', !e.target.checked)}
+                                className={`rounded text-cyan-600 focus:ring-cyan-500 ${
+                                  theme === 'light'
+                                    ? 'border-gray-300 bg-gray-100'
+                                    : 'border-gray-600 bg-gray-700'
+                                }`}
+                              />
+                              <span className={`text-sm ${themeClasses.text.secondary}`}>受付</span>
+                            </label>
+
+                            {!hours.closed && (
+                              <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-1">
+                                <input
+                                  type="time"
+                                  value={hours.open}
+                                  onChange={(e) => handleWeekdayHoursChange(dayKey, 'open', e.target.value)}
+                                  className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
+                                />
+                                <span className={`text-sm ${themeClasses.text.secondary} hidden sm:inline`}>〜</span>
+                                <input
+                                  type="time"
+                                  value={hours.close}
+                                  onChange={(e) => handleWeekdayHoursChange(dayKey, 'close', e.target.value)}
+                                  className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
+                                />
+                              </div>
+                            )}
+
+                            {hours.closed && (
+                              <span className={`px-2 py-1 text-xs rounded ${
+                                theme === 'light'
+                                  ? 'bg-gray-200 text-gray-600 border border-gray-300'
+                                  : 'bg-gray-700 text-gray-400 border border-gray-600'
+                              }`}>
+                                定休日
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

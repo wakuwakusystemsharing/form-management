@@ -1623,43 +1623,62 @@ class BookingForm {
             start_time: '09:00',
             end_time: '18:00'
         };
-        
+
         // 各希望日時の初期化
         for (let i = 1; i <= 3; i++) {
             this.populateDateOptions(i, settings);
             this.populateTimeOptions(i, settings);
-            
+
             // イベントリスナー追加
             const daySelect = document.getElementById(\`date\${i}_day\`);
             const timeSelect = document.getElementById(\`date\${i}_time\`);
             if (daySelect && timeSelect) {
-                daySelect.addEventListener('change', () => this.updateDateTime(i));
+                daySelect.addEventListener('change', () => {
+                    // 日付変更時に曜日に応じた時間スロットを再生成
+                    this.populateTimeOptions(i, settings, daySelect.value);
+                    this.updateDateTime(i);
+                });
                 timeSelect.addEventListener('change', () => this.updateDateTime(i));
             }
         }
     }
-    
+
+    getWeekdayHours(settings, dayOfWeek) {
+        // weekday_hours がある場合はそちらを優先
+        if (settings.weekday_hours && settings.weekday_hours[String(dayOfWeek)]) {
+            const wh = settings.weekday_hours[String(dayOfWeek)];
+            return { open: wh.open, close: wh.close, closed: wh.closed };
+        }
+        // レガシー互換: exclude_weekdays + start_time/end_time
+        return {
+            open: settings.start_time || '09:00',
+            close: settings.end_time || '18:00',
+            closed: (settings.exclude_weekdays || []).includes(dayOfWeek)
+        };
+    }
+
     populateDateOptions(index, settings) {
         const select = document.getElementById(\`date\${index}_day\`);
         if (!select) return;
-        
+
         const today = new Date();
-        
+
         // デフォルトオプション
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
         defaultOption.textContent = '日付を選択';
         select.appendChild(defaultOption);
-        
+
         for (let i = 0; i < settings.date_range_days; i++) {
             const date = new Date(today);
             date.setDate(today.getDate() + i);
-            
-            // 除外曜日チェック
-            if (settings.exclude_weekdays.includes(date.getDay())) {
+
+            // 曜日別の定休日チェック
+            const hours = this.getWeekdayHours(settings, date.getDay());
+            if (hours.closed) {
                 continue;
             }
-            
+
             const option = document.createElement('option');
             option.value = date.toISOString().split('T')[0];
             option.textContent = date.toLocaleDateString('ja-JP', {
@@ -1670,20 +1689,35 @@ class BookingForm {
             select.appendChild(option);
         }
     }
-    
-    populateTimeOptions(index, settings) {
+
+    populateTimeOptions(index, settings, selectedDateStr) {
         const select = document.getElementById(\`date\${index}_time\`);
         if (!select) return;
-        
+
+        // 既存オプションをクリア
+        select.innerHTML = '';
+
         // デフォルトオプション
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
         defaultOption.textContent = '時間を選択';
         select.appendChild(defaultOption);
-        
+
+        // 選択された日付の曜日に基づいて時間スロットを生成
+        let startTime = settings.start_time || '09:00';
+        let endTime = settings.end_time || '18:00';
+
+        if (selectedDateStr) {
+            const selectedDate = new Date(selectedDateStr + 'T00:00:00');
+            const dayOfWeek = selectedDate.getDay();
+            const hours = this.getWeekdayHours(settings, dayOfWeek);
+            startTime = hours.open;
+            endTime = hours.close;
+        }
+
         // 時間スロット生成
-        const timeSlots = this.generateTimeSlots(settings.start_time, settings.end_time, settings.time_interval);
-        
+        const timeSlots = this.generateTimeSlots(startTime, endTime, settings.time_interval);
+
         timeSlots.forEach(time => {
             const option = document.createElement('option');
             option.value = time;
