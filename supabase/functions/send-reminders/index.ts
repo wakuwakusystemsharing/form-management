@@ -18,8 +18,149 @@ function getTomorrowDateStringJst() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-async function sendLinePush(accessToken: string, to: string, text: string) {
-  await fetch("https://api.line.me/v2/bot/message/push", {
+function formatDateJapanese(dateStr: string, timeStr: string): string {
+  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+  const d = new Date(dateStr);
+  const dayOfWeek = weekdays[d.getDay()];
+  // dateStr: "2026-04-03" → "2026年04月03日（木）"
+  const [year, month, day] = dateStr.split("-");
+  return `${year}年${month}月${day}日（${dayOfWeek}） ${timeStr}`;
+}
+
+function buildFlexMessage(
+  storeName: string,
+  themeColor: string,
+  dateText: string,
+  menuText: string,
+  customerName: string
+) {
+  return {
+    type: "flex",
+    altText: "【予約前日メッセージ】明日の予約をお知らせします",
+    contents: {
+      type: "bubble",
+      size: "mega",
+      header: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          {
+            type: "text",
+            text: storeName,
+            color: "#ffffff66",
+            size: "sm",
+          },
+          {
+            type: "text",
+            text: "【予約前日メッセージ】",
+            color: "#ffffff",
+            size: "xl",
+            weight: "bold",
+          },
+        ],
+        paddingAll: "20px",
+        backgroundColor: themeColor,
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          {
+            type: "text",
+            text: "明日の予約をお知らせします",
+            weight: "bold",
+            size: "lg",
+            color: "#333333",
+            wrap: true,
+            align: "center",
+            margin: "md",
+          },
+          {
+            type: "separator",
+            margin: "lg",
+            color: "#CCCCCC",
+          },
+          {
+            type: "box",
+            layout: "vertical",
+            contents: [
+              {
+                type: "text",
+                text: "📅 日時",
+                color: "#666666",
+                size: "sm",
+                weight: "bold",
+                margin: "md",
+              },
+              {
+                type: "text",
+                text: dateText,
+                wrap: true,
+                size: "sm",
+                color: "#333333",
+                margin: "xs",
+              },
+              {
+                type: "text",
+                text: "📝 メニュー",
+                color: "#666666",
+                size: "sm",
+                weight: "bold",
+                margin: "lg",
+              },
+              {
+                type: "text",
+                text: menuText,
+                wrap: true,
+                size: "sm",
+                color: "#333333",
+                margin: "xs",
+              },
+              {
+                type: "text",
+                text: "👤 お名前",
+                color: "#666666",
+                size: "sm",
+                weight: "bold",
+                margin: "lg",
+              },
+              {
+                type: "text",
+                text: `${customerName}様`,
+                wrap: true,
+                size: "sm",
+                color: "#333333",
+                margin: "xs",
+              },
+            ],
+            margin: "lg",
+          },
+          {
+            type: "separator",
+            margin: "xxl",
+            color: "#CCCCCC",
+          },
+          {
+            type: "text",
+            text: "心よりお待ちしております",
+            wrap: true,
+            margin: "xl",
+            size: "sm",
+            align: "center",
+            color: "#474646",
+          },
+        ],
+      },
+    },
+  };
+}
+
+async function sendLinePush(
+  accessToken: string,
+  to: string,
+  flexMessage: Record<string, unknown>
+): Promise<{ ok: boolean; status: number; body: string }> {
+  const res = await fetch("https://api.line.me/v2/bot/message/push", {
     method: "POST",
     headers: {
       "Content-Type": "application/json; charset=UTF-8",
@@ -27,22 +168,28 @@ async function sendLinePush(accessToken: string, to: string, text: string) {
     },
     body: JSON.stringify({
       to,
-      messages: [{ type: "text", text }],
+      messages: [flexMessage],
     }),
   });
+  const body = await res.text();
+  return { ok: res.ok, status: res.status, body };
 }
 
 Deno.serve(async () => {
   const targetDate = getTomorrowDateStringJst();
+  console.log(`リマインド対象日: ${targetDate}`);
 
   const { data: reservations, error } = await supabase
     .from("reservations")
-    .select("id,store_id,reservation_date,reservation_time,menu_name,submenu_name,line_user_id,status,customer_name")
+    .select(
+      "id,store_id,reservation_date,reservation_time,menu_name,submenu_name,line_user_id,status,customer_name"
+    )
     .eq("reservation_date", targetDate)
     .neq("status", "cancelled")
     .not("line_user_id", "is", null);
 
   if (error) {
+    console.error("予約取得エラー:", error.message);
     return new Response(JSON.stringify({ error: "予約取得に失敗しました" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
@@ -50,43 +197,85 @@ Deno.serve(async () => {
   }
 
   if (!reservations || reservations.length === 0) {
+    console.log("対象の予約がありません");
     return new Response(JSON.stringify({ sent: 0 }), {
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  const storeIds = Array.from(new Set(reservations.map(r => r.store_id)));
+  console.log(`対象予約数: ${reservations.length}件`);
+
+  const storeIds = Array.from(new Set(reservations.map((r) => r.store_id)));
   const { data: stores } = await supabase
     .from("stores")
-    .select("id,line_channel_access_token")
+    .select("id,name,line_channel_access_token,theme_color")
     .in("id", storeIds);
 
-  const tokenMap = new Map<string, string>();
-  (stores || []).forEach(store => {
+  const storeMap = new Map<
+    string,
+    { token: string; name: string; themeColor: string }
+  >();
+  (stores || []).forEach((store) => {
     if (store.line_channel_access_token) {
-      tokenMap.set(store.id, store.line_channel_access_token);
+      storeMap.set(store.id, {
+        token: store.line_channel_access_token,
+        name: store.name || "店舗",
+        themeColor: store.theme_color || "#877059",
+      });
     }
   });
 
   let sent = 0;
+  const errors: Array<{ reservationId: string; status: number; body: string }> =
+    [];
+
   for (const reservation of reservations) {
-    const accessToken = tokenMap.get(reservation.store_id);
-    if (!accessToken || !reservation.line_user_id) continue;
+    const storeInfo = storeMap.get(reservation.store_id);
+    if (!storeInfo || !reservation.line_user_id) continue;
 
     const menu = reservation.submenu_name
       ? `${reservation.menu_name} > ${reservation.submenu_name}`
-      : reservation.menu_name;
-    const message = `明日の予約をお知らせします。\n${reservation.reservation_date} ${reservation.reservation_time}\n${menu}\n${reservation.customer_name}様`;
+      : reservation.menu_name || "未設定";
 
-    try {
-      await sendLinePush(accessToken, reservation.line_user_id, message);
+    const dateText = formatDateJapanese(
+      reservation.reservation_date,
+      reservation.reservation_time
+    );
+
+    const flexMessage = buildFlexMessage(
+      storeInfo.name,
+      storeInfo.themeColor,
+      dateText,
+      menu,
+      reservation.customer_name || "お客"
+    );
+
+    const result = await sendLinePush(
+      storeInfo.token,
+      reservation.line_user_id,
+      flexMessage
+    );
+
+    if (result.ok) {
+      console.log(
+        `送信成功: reservation=${reservation.id} user=${reservation.line_user_id}`
+      );
       sent += 1;
-    } catch (_error) {
-      // 送信失敗はスキップ
+    } else {
+      console.error(
+        `送信失敗: reservation=${reservation.id} status=${result.status} body=${result.body}`
+      );
+      errors.push({
+        reservationId: reservation.id,
+        status: result.status,
+        body: result.body,
+      });
     }
   }
 
-  return new Response(JSON.stringify({ sent }), {
+  console.log(`送信結果: 成功=${sent}件 失敗=${errors.length}件`);
+
+  return new Response(JSON.stringify({ sent, errors: errors.length }), {
     headers: { "Content-Type": "application/json" },
   });
 });

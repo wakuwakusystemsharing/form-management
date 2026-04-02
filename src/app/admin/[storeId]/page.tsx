@@ -2277,12 +2277,29 @@ Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === de
                     <div>
                       <Label className="text-sm text-muted-foreground">フォーム</Label>
                       <p className="font-medium">
-                        {forms.find(f => f.id === selectedReservation.form_id) 
+                        {forms.find(f => f.id === selectedReservation.form_id)
                           ? ((forms.find(f => f.id === selectedReservation.form_id) as any)?.form_name || forms.find(f => f.id === selectedReservation.form_id)?.config?.basic_info?.form_name || 'フォーム')
                           : 'フォーム不明'}
                       </p>
                       <p className="text-xs text-muted-foreground font-mono">{selectedReservation.form_id}</p>
                     </div>
+                    {selectedReservation.source_medium && (
+                      <div>
+                        <Label className="text-sm text-muted-foreground">流入経路</Label>
+                        <p className="font-medium">
+                          {({
+                            line: 'LINE',
+                            instagram: 'Instagram',
+                            facebook: 'Facebook',
+                            x_twitter: 'X（旧Twitter）',
+                            google_maps: 'Googleマップ',
+                            google_search: 'Google検索',
+                            yahoo_search: 'Yahoo!検索',
+                            direct: '直接アクセス',
+                          } as Record<string, string>)[selectedReservation.source_medium] || selectedReservation.source_medium}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
