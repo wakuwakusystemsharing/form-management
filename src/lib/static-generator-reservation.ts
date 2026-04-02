@@ -908,18 +908,24 @@ class BookingForm {
         // 終了時間が翌日になる場合は不可
         let isNextDay = slotEnd.getDate() !== slotStart.getDate();
         
-        // 18時以降に終了する予約を不可にする（17:30は可）
-        let endsAfter18 = false;
-        if (slotEnd.getHours() === 18 && slotEnd.getMinutes() > 0) {
-            endsAfter18 = true;
-        } else if (slotEnd.getHours() > 18) {
-            endsAfter18 = true;
+        // 営業時間超過チェック（閉店時間を動的参照）
+        let endsAfterClose = false;
+        const allowExceed = this.config?.calendar_settings?.allow_exceed_business_hours || false;
+        if (!allowExceed && !isClosed && dayHours) {
+            const closeTime2 = dayHours.close || '18:00';
+            const closeH = parseInt(closeTime2.split(':')[0]);
+            const closeM = parseInt(closeTime2.split(':')[1]);
+            const endH = slotEnd.getHours();
+            const endM = slotEnd.getMinutes();
+            if (endH > closeH || (endH === closeH && endM > closeM)) {
+                endsAfterClose = true;
+            }
         }
-        
+
         // 空き状況の判定
         let isAvailable = false;
-        
-        if (isPast || isNextDay || endsAfter18 || !withinWindow || isClosed || !isWithinBusinessHours) {
+
+        if (isPast || isNextDay || endsAfterClose || !withinWindow || isClosed || !isWithinBusinessHours) {
             isAvailable = false;
         } else if (this.availabilityData && this.availabilityData.length > 0) {
             // カレンダーAPIから取得したデータがある場合

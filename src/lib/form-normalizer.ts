@@ -202,7 +202,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             };
           }
           return base;
-        })() as Form['config']['calendar_settings']['multiple_dates_settings']
+        })() as Form['config']['calendar_settings']['multiple_dates_settings'],
+        allow_exceed_business_hours: existingConfig?.calendar_settings?.allow_exceed_business_hours ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.allow_exceed_business_hours ?? false
       },
       ui_settings: {
         theme_color: (existingConfig?.ui_settings?.theme_color || (typedConfig?.basic_info as Form['config']['basic_info'])?.theme_color || (typedBasicInfo?.theme_color as string) || (typedConfig?.ui_settings as Form['config']['ui_settings'])?.theme_color || (typedUiSettings?.theme_color as string) || '#3B82F6') as string,

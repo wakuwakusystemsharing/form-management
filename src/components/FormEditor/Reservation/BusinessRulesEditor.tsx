@@ -508,10 +508,51 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>何日先まで予約を受け付けるか</p>
             </div>
             
+            <div className="flex items-center justify-between">
+              <div>
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  営業時間を超える予約を許可
+                </label>
+                <p className={`text-xs ${themeClasses.text.secondary} mt-0.5`}>
+                  ONにすると、施術終了時間が閉店時間を超えても予約可能になります
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const newValue = !(form.config?.calendar_settings?.allow_exceed_business_hours || false);
+                  onUpdate({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      calendar_settings: {
+                        ...form.config?.calendar_settings,
+                        allow_exceed_business_hours: newValue
+                      }
+                    }
+                  });
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                  form.config?.calendar_settings?.allow_exceed_business_hours
+                    ? 'bg-green-500'
+                    : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    form.config?.calendar_settings?.allow_exceed_business_hours ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
             <div className={`${themeClasses.highlight} rounded-lg p-4`}>
               <h4 className={`text-sm font-medium mb-2 ${theme === 'light' ? 'text-cyan-700' : 'text-cyan-300'}`}>現在の設定:</h4>
               <p className={`text-sm ${theme === 'light' ? 'text-cyan-600' : 'text-cyan-200'}`}>
                 • 事前予約: {advanceBookingDays}日先まで
+              </p>
+              <p className={`text-sm ${theme === 'light' ? 'text-cyan-600' : 'text-cyan-200'}`}>
+                • 営業時間超過: {form.config?.calendar_settings?.allow_exceed_business_hours ? '許可' : '不可'}
               </p>
             </div>
           </div>

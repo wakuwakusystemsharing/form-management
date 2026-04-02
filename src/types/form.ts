@@ -154,8 +154,9 @@ export interface FormConfig {
         };
       };
     };
+    allow_exceed_business_hours?: boolean;  // 営業時間超過の予約を許可
   };
-  
+
   ui_settings: {
     theme_color: string;
     button_style: 'rounded' | 'square';
