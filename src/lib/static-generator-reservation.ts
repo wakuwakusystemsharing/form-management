@@ -1439,6 +1439,22 @@ class BookingForm {
             const dateObj = new Date(this.state.selectedDate);
             const reservationDate = \`\${dateObj.getFullYear()}-\${String(dateObj.getMonth() + 1).padStart(2, '0')}-\${String(dateObj.getDate()).padStart(2, '0')}\`;
             
+            // 流入経路を推定（Web予約フォームのみ）
+            const sourceMedium = (function() {
+              try {
+                const ref = (document.referrer || '').toLowerCase();
+                const ua = (navigator.userAgent || '').toLowerCase();
+                if (ua.includes('line/') || ref.includes('liff.line.me')) return 'line';
+                if (ua.includes('instagram') || ref.includes('instagram.com')) return 'instagram';
+                if (ua.includes('fbav') || ua.includes('fban') || ref.includes('facebook.com') || ref.includes('l.facebook.com')) return 'facebook';
+                if (ua.includes('twitter') || ref.includes('t.co') || ref.includes('x.com')) return 'x_twitter';
+                if (ref.includes('google.') && ref.includes('/maps')) return 'google_maps';
+                if (ref.includes('google.')) return 'google_search';
+                if (ref.includes('yahoo.')) return 'yahoo_search';
+                return 'direct';
+              } catch(e) { return 'direct'; }
+            })();
+
             // APIに送信するデータを構築（合計金額・時間を構造化データに含める）
             const reservationData = {
                 form_id: FORM_ID,
@@ -1463,7 +1479,8 @@ class BookingForm {
                 line_status_message: this.state.lineStatusMessage || null, // LINEステータスメッセージ
                 line_language: this.state.lineLanguage || null, // LINE言語設定
                 line_os: this.state.lineOs || null, // デバイスOS
-                line_friend_flag: this.state.lineFriendFlag || false // 友だち追加状態
+                line_friend_flag: this.state.lineFriendFlag || false, // 友だち追加状態
+                source_medium: sourceMedium
             };
             
             // /api/reservationsにPOSTリクエストを送信
