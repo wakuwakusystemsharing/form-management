@@ -39,6 +39,7 @@ interface Reservation {
   reservation_time: string;
   customer_info?: Record<string, string>;
   line_user_id?: string | null; // LINEユーザーID
+  source_medium?: string | null; // 流入経路（web予約のみ）
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
   created_at: string;
   updated_at: string;

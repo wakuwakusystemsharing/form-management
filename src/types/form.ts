@@ -358,6 +358,7 @@ export interface Database {
           customer_info: Json;
           line_user_id: string | null; // LINEユーザーID
           customer_id: string | null; // 顧客ID (CRM連携)
+          source_medium: string | null; // 流入経路（web予約のみ）
           status: 'pending' | 'confirmed' | 'cancelled';
           created_at: string;
           updated_at: string;
@@ -376,6 +377,7 @@ export interface Database {
           customer_info: Json;
           line_user_id?: string | null; // LINEユーザーID
           customer_id?: string | null; // 顧客ID (CRM連携)
+          source_medium?: string | null; // 流入経路（web予約のみ）
           status?: 'pending' | 'confirmed' | 'cancelled';
           created_at?: string;
           updated_at?: string;
@@ -394,6 +396,7 @@ export interface Database {
           customer_info?: Json;
           line_user_id?: string | null; // LINEユーザーID
           customer_id?: string | null; // 顧客ID (CRM連携)
+          source_medium?: string | null; // 流入経路（web予約のみ）
           status?: 'pending' | 'confirmed' | 'cancelled';
           created_at?: string;
           updated_at?: string;
