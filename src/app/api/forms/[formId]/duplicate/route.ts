@@ -26,6 +26,17 @@ export async function POST(
     const env = getAppEnvironment();
     const now = new Date().toISOString();
 
+    // リクエストボディからターゲットフォームタイプを取得
+    let targetFormType: 'line' | 'web' | undefined;
+    try {
+      const body = await request.json();
+      if (body.target_form_type === 'line' || body.target_form_type === 'web') {
+        targetFormType = body.target_form_type;
+      }
+    } catch {
+      // ボディなしの場合は元のフォームタイプを維持
+    }
+
     if (env === 'local') {
       // ローカル: JSONファイルから元フォームを検索
       let sourceForm: Form | undefined;
@@ -64,6 +75,16 @@ export async function POST(
       if (newConfig.basic_info) {
         newConfig.basic_info.form_name = (newConfig.basic_info.form_name || '') + '（コピー）';
         newConfig.basic_info.liff_id = '';
+      }
+      // ターゲットフォームタイプを設定
+      if (targetFormType) {
+        newConfig.form_type = targetFormType;
+        if (targetFormType === 'web') {
+          // Webフォームの場合、LINE固有フィールドをクリア
+          if (newConfig.basic_info) {
+            newConfig.basic_info.liff_id = '';
+          }
+        }
       }
 
       const newForm: Form = {
@@ -124,6 +145,15 @@ export async function POST(
     if (config.basic_info) {
       config.basic_info.form_name = (config.basic_info.form_name || '') + '（コピー）';
       config.basic_info.liff_id = '';
+    }
+    // ターゲットフォームタイプを設定
+    if (targetFormType) {
+      config.form_type = targetFormType;
+      if (targetFormType === 'web') {
+        if (config.basic_info) {
+          config.basic_info.liff_id = '';
+        }
+      }
     }
 
     const { data: newForm, error: insertError } = await (adminClient as any)
