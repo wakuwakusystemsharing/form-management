@@ -1495,54 +1495,56 @@ class BookingForm {
             const formattedDate2 = formatDateStr(this.state.selectedDate2, this.state.selectedTime2);
             const formattedDate3 = formatDateStr(this.state.selectedDate3, this.state.selectedTime3);
             
-            // メッセージ本文を構築（old_index.htmlとbooking.gsのparseReservationFormに合わせた形式）
-            // booking.gsが期待する順序：お名前、電話番号、ご来店回数、コース、メニュー、希望日時、メッセージ
-            let messageText = '【予約フォーム】\\n';
-            
+            // メッセージ本文を構築（《ラベル》\\n値 形式）
+            const formName = this.config.basic_info?.form_name || '予約フォーム';
+            let messageText = '【' + formName + '】\\n';
+
             // 常に表示：お名前、電話番号
-            messageText += \`お名前：\${this.state.name || ''}\\n\`;
-            messageText += \`電話番号：\${this.state.phone || ''}\\n\`;
-            
-            // ご来店回数（old_index.htmlでは常に表示、booking.gsも期待している）
+            messageText += \`《お名前》\\n\${this.state.name || ''}\\n\`;
+            messageText += \`《電話番号》\\n\${this.state.phone || ''}\\n\`;
+
+            // ご来店回数
             let visitCountText = '';
             if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
                 const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
                 visitCountText = visitLabel || this.state.visitCount || '';
             }
-            messageText += \`ご来店回数：\${visitCountText}\\n\`;
-            
-            // メニュー（buildSelectionPayload で構築したテキスト＋合計）
-            messageText += \`メニュー：\${menuTextForMessage || ''}\\n\`;
+            messageText += \`《ご来店回数》\\n\${visitCountText}\\n\`;
+
+            // メニュー
+            messageText += \`\\n《メニュー》\\n\${menuTextForMessage || ''}\\n\`;
             if (totalPrice > 0 || totalDuration > 0) {
-                if (totalPrice > 0) messageText += \`合計金額：¥\${totalPrice.toLocaleString()}\\n\`;
-                if (totalDuration > 0) messageText += \`合計時間：\${totalDuration}分\\n\`;
+                if (totalPrice > 0) messageText += \`\\n《合計金額》\\n¥\${totalPrice.toLocaleString()}\\n\`;
+                if (totalDuration > 0) messageText += \`\\n《合計時間》\\n\${totalDuration}分\\n\`;
             }
-            
-            // 希望日時（booking.gsは「希望日時：」の次の行を日時として解析）
+
+            // 希望日時
             const bookingModeForMsg = this.config.calendar_settings?.booking_mode || 'calendar';
+            messageText += \`\\n【希望日時】\\n\`;
             if (bookingModeForMsg === 'multiple_dates') {
-                messageText += \`希望日時：\\n 第一希望：\${formattedDate}\\n\`;
-                if (formattedDate2) messageText += \` 第二希望：\${formattedDate2}\\n\`;
-                if (formattedDate3) messageText += \` 第三希望：\${formattedDate3}\\n\`;
+                messageText += \`《第一希望日》\\n\${formattedDate}\\n\`;
+                if (formattedDate2) messageText += \`《第二希望日》\\n\${formattedDate2}\\n\`;
+                if (formattedDate3) messageText += \`《第三希望日》\\n\${formattedDate3}\\n\`;
             } else {
-                messageText += \`希望日時：\\n \${formattedDate}\\n\`;
+                messageText += \`《希望日》\\n\${formattedDate}\\n\`;
             }
-            
-            // メッセージ（常に表示、空文字列でも）
-            messageText += \`メッセージ：\${this.state.message || ''}\`;
-            
-            // 性別とクーポンはbooking.gsが解析しないため、メッセージの最後に追加（オプション）
+
+            // メッセージ
+            messageText += \`\\n《メッセージ》\\n\${this.state.message || 'なし'}\`;
+
+            // 性別（オプション）
             if (this.config.gender_selection?.enabled && this.state.gender) {
                 const genderLabel = this.config.gender_selection.options.find(o => o.value === this.state.gender)?.label;
                 if (genderLabel) {
-                    messageText += \`\\n性別：\${genderLabel}\`;
+                    messageText += \`\\n\\n《性別》\\n\${genderLabel}\`;
                 }
             }
-            
+
+            // クーポン（オプション）
             if (this.config.coupon_selection?.enabled && this.state.coupon) {
                 const couponLabel = this.config.coupon_selection.options.find(o => o.value === this.state.coupon)?.label;
                 if (couponLabel) {
-                    messageText += \`\\nクーポン：\${couponLabel}\`;
+                    messageText += \`\\n\\n《クーポン》\\n\${couponLabel}\`;
                 }
             }
             
