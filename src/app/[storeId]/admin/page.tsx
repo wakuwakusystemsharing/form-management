@@ -51,6 +51,7 @@ interface Reservation {
   selected_menus?: unknown[];
   selected_options?: unknown[];
   customer_info?: unknown;
+  source_medium?: string | null;
 }
 
 export default function StoreAdminPage() {
@@ -1441,6 +1442,23 @@ export default function StoreAdminPage() {
                       <p className="font-medium">{getFormName(selectedReservation.form_id)}</p>
                       <p className="text-xs text-muted-foreground font-mono break-all">{selectedReservation.form_id}</p>
                     </div>
+                    {selectedReservation.source_medium && (
+                      <div>
+                        <Label className="text-sm text-muted-foreground">流入経路</Label>
+                        <p className="font-medium">
+                          {({
+                            line: 'LINE',
+                            instagram: 'Instagram',
+                            facebook: 'Facebook',
+                            x_twitter: 'X（旧Twitter）',
+                            google_maps: 'Googleマップ',
+                            google_search: 'Google検索',
+                            yahoo_search: 'Yahoo!検索',
+                            direct: '直接アクセス',
+                          } as Record<string, string>)[selectedReservation.source_medium] || selectedReservation.source_medium}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
