@@ -51,10 +51,10 @@ export const themeClasses: Record<ThemeType, ThemeClasses> = {
     modalOverlay: 'bg-black/30 backdrop-blur-sm',
     card: 'bg-gray-50 border border-gray-200',
     cardHeader: 'bg-white border-b border-gray-200',
-    input: 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent',
-    timeInput: 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent [&::-webkit-calendar-picker-indicator]:filter-none [&::-webkit-calendar-picker-indicator]:cursor-pointer',
-    textarea: 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent',
-    select: 'bg-white border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent',
+    input: 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[rgb(244,144,49)] focus:border-transparent',
+    timeInput: 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[rgb(244,144,49)] focus:border-transparent [&::-webkit-calendar-picker-indicator]:filter-none [&::-webkit-calendar-picker-indicator]:cursor-pointer',
+    textarea: 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[rgb(244,144,49)] focus:border-transparent',
+    select: 'bg-white border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[rgb(244,144,49)] focus:border-transparent',
     label: 'text-gray-700 font-medium',
     labelSecondary: 'text-gray-600',
     text: {
@@ -63,26 +63,26 @@ export const themeClasses: Record<ThemeType, ThemeClasses> = {
       tertiary: 'text-gray-500'
     },
     button: {
-      primary: 'bg-cyan-600 hover:bg-cyan-700 text-white transition-colors',
+      primary: 'bg-[rgb(254,225,190)] text-[rgb(200,100,10)] border border-[rgb(244,144,49)]/40 hover:bg-[rgb(244,144,49)] hover:text-white hover:border-[rgb(244,144,49)] transition-colors',
       secondary: 'border border-gray-300 hover:bg-gray-50 text-gray-700 transition-colors',
       danger: 'bg-red-600 hover:bg-red-700 text-white transition-colors',
-      edit: 'text-cyan-600 hover:text-cyan-700 hover:bg-cyan-50 transition-colors',
+      edit: 'text-[rgb(244,144,49)] hover:text-[rgb(220,125,35)] hover:bg-orange-50 transition-colors',
       delete: 'text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors'
     },
     toggle: {
-      enabled: 'bg-cyan-600',
+      enabled: 'bg-[rgb(244,144,49)]',
       disabled: 'bg-gray-300'
     },
-    highlight: 'bg-cyan-50 border border-cyan-200 text-cyan-700',
+    highlight: 'bg-orange-50 border border-orange-200 text-[rgb(244,144,49)]',
     emptyState: 'bg-gray-50 border border-gray-200 text-gray-500',
     divider: 'border-gray-200',
     badge: {
-      primary: 'bg-cyan-100 text-cyan-800 border border-cyan-200',
+      primary: 'bg-orange-100 text-[rgb(244,144,49)] border border-orange-200',
       secondary: 'bg-gray-100 text-gray-800 border border-gray-200',
       success: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
       warning: 'bg-orange-100 text-orange-800 border border-orange-200',
       danger: 'bg-red-100 text-red-800 border border-red-200',
-      cyan: 'px-2 py-1 text-xs bg-cyan-100 text-cyan-800 border border-cyan-200 rounded'
+      cyan: 'px-2 py-1 text-xs bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border border-[rgb(55,114,58)]/20 rounded'
     }
   },
   dark: {

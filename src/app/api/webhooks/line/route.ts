@@ -219,7 +219,7 @@ export async function POST(req: NextRequest) {
 
   const { data: store, error: storeError } = await (adminClient as any)
     .from('stores')
-    .select('id, name, line_channel_access_token, google_calendar_id, theme_color')
+    .select('id, name, line_channel_access_token, google_calendar_id')
     .eq('id', storeId)
     .single();
 
@@ -234,7 +234,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'LINEチャネルアクセストークンが未設定です' }, { status: 400 });
   }
 
-  const themeColor = store.theme_color || DEFAULT_HEADER_COLOR;
+  const themeColor = DEFAULT_HEADER_COLOR;
 
   const body = await req.json().catch(() => null);
   const event = (body?.events?.[0] || {}) as LineEvent;

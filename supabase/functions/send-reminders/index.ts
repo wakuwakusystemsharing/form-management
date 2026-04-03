@@ -208,9 +208,10 @@ Deno.serve(async () => {
   const storeIds = Array.from(new Set(reservations.map((r) => r.store_id)));
   const { data: stores } = await supabase
     .from("stores")
-    .select("id,name,line_channel_access_token,theme_color")
+    .select("id,name,line_channel_access_token")
     .in("id", storeIds);
 
+  const DEFAULT_THEME_COLOR = "#877059";
   const storeMap = new Map<
     string,
     { token: string; name: string; themeColor: string }
@@ -220,7 +221,7 @@ Deno.serve(async () => {
       storeMap.set(store.id, {
         token: store.line_channel_access_token,
         name: store.name || "店舗",
-        themeColor: store.theme_color || "#877059",
+        themeColor: DEFAULT_THEME_COLOR,
       });
     }
   });

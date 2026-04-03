@@ -60,7 +60,7 @@ const FormEditorTabs: React.FC<FormEditorTabsProps> = ({
             ${activeTab === tab.id
               ? theme === 'dark'
                 ? 'border-b-2 border-cyan-500 text-cyan-400'
-                : 'border-b-2 border-cyan-600 text-cyan-600'
+                : 'border-b-2 border-[rgb(244,144,49)] text-[rgb(244,144,49)]'
               : theme === 'dark'
                 ? 'text-gray-400 hover:text-gray-300'
                 : 'text-gray-600 hover:text-gray-900'

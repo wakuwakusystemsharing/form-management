@@ -168,7 +168,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl w-full max-h-[90vh] p-0 flex flex-col sm:max-h-[90vh]">
+      <DialogContent className="store-admin-bg max-w-5xl w-full max-h-[90vh] p-0 flex flex-col sm:max-h-[90vh]">
         {/* モーダルヘッダー */}
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <div className="flex items-center justify-between">
@@ -179,8 +179,13 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
                   : `${(editingForm as Form).config?.basic_info?.form_name || (editingForm as any).form_name || '予約フォーム'} 編集`}
               </DialogTitle>
             </div>
-            <div className="flex items-center gap-4">
-              <Badge variant={editingForm.status === 'active' ? 'default' : 'secondary'}>
+            <div className="flex items-center gap-4 mr-8">
+              <Badge
+                variant="outline"
+                className={editingForm.status === 'active'
+                  ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20'
+                  : ''}
+              >
                 {editingForm.status === 'active' ? '公開中' : '非公開'}
               </Badge>
               {editingForm.draft_status === 'draft' && (
@@ -196,7 +201,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
               variant="outline"
               onClick={handlePreview}
               disabled={isSaving || isPreviewing}
-              className="flex-1 sm:flex-initial"
+              className="flex-1 sm:flex-initial bg-[rgb(254,225,190)] text-[rgb(200,100,10)] border border-[rgb(244,144,49)]/40 hover:bg-[rgb(244,144,49)] hover:text-white hover:border-[rgb(244,144,49)]"
             >
               <Eye className="mr-2 h-4 w-4" />
               {isPreviewing ? 'プレビュー生成中...' : 'プレビュー'}
@@ -204,7 +209,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
             <Button
               onClick={handleSaveAndDeploy}
               disabled={isSaving}
-              className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700"
+              className="flex-1 sm:flex-initial bg-[rgb(209,241,209)] text-[rgb(55,114,58)] hover:bg-[rgb(55,114,58)] hover:text-white border-[rgb(55,114,58)]/20"
             >
               <Upload className="mr-2 h-4 w-4" />
               {isSaving ? '更新中...' : '更新'}
@@ -270,7 +275,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
           <Button
             onClick={handleSave}
             disabled={isSaving}
-            className="w-full sm:w-auto"
+            className="w-full sm:w-auto bg-[rgb(254,225,190)] text-[rgb(200,100,10)] border border-[rgb(244,144,49)]/40 hover:bg-[rgb(244,144,49)] hover:text-white hover:border-[rgb(244,144,49)]"
           >
             <Save className="mr-2 h-4 w-4" />
             {isSaving ? '保存中...' : '保存'}

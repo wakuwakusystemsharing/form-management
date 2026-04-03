@@ -252,7 +252,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                         type="checkbox"
                         checked={!businessHours[day]?.closed}
                         onChange={(e) => handleBusinessHoursChange(day, 'closed', !e.target.checked)}
-                        className={`rounded text-cyan-600 focus:ring-cyan-500 ${
+                        className={`rounded text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)] ${
                           theme === 'light' 
                             ? 'border-gray-300 bg-gray-100' 
                             : 'border-gray-600 bg-gray-700'
@@ -334,7 +334,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     value="calendar"
                     checked={bookingMode === 'calendar'}
                     onChange={(e) => handleBookingModeChange(e.target.value as 'calendar')}
-                    className="text-cyan-600 focus:ring-cyan-500"
+                    className="text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)]"
                   />
                   <div>
                     <div className={`font-medium ${themeClasses.text.primary}`}>カレンダー表示</div>
@@ -347,7 +347,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     value="multiple_dates"
                     checked={bookingMode === 'multiple_dates'}
                     onChange={(e) => handleBookingModeChange(e.target.value as 'multiple_dates')}
-                    className="text-cyan-600 focus:ring-cyan-500"
+                    className="text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)]"
                   />
                   <div>
                     <div className={`font-medium ${themeClasses.text.primary}`}>第三希望日時選択</div>
@@ -421,7 +421,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                                 type="checkbox"
                                 checked={!hours.closed}
                                 onChange={(e) => handleWeekdayHoursChange(dayKey, 'closed', !e.target.checked)}
-                                className={`rounded text-cyan-600 focus:ring-cyan-500 ${
+                                className={`rounded text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)] ${
                                   theme === 'light'
                                     ? 'border-gray-300 bg-gray-100'
                                     : 'border-gray-600 bg-gray-700'
@@ -547,11 +547,11 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
             </div>
 
             <div className={`${themeClasses.highlight} rounded-lg p-4`}>
-              <h4 className={`text-sm font-medium mb-2 ${theme === 'light' ? 'text-cyan-700' : 'text-cyan-300'}`}>現在の設定:</h4>
-              <p className={`text-sm ${theme === 'light' ? 'text-cyan-600' : 'text-cyan-200'}`}>
+              <h4 className={`text-sm font-medium mb-2 ${theme === 'light' ? 'text-[rgb(244,144,49)]' : 'text-cyan-300'}`}>現在の設定:</h4>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • 事前予約: {advanceBookingDays}日先まで
               </p>
-              <p className={`text-sm ${theme === 'light' ? 'text-cyan-600' : 'text-cyan-200'}`}>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • 営業時間超過: {form.config?.calendar_settings?.allow_exceed_business_hours ? '許可' : '不可'}
               </p>
             </div>
