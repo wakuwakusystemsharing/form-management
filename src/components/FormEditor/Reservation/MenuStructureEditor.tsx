@@ -500,7 +500,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
                 id="is_default"
                 checked={isDefault}
                 onChange={(e) => setIsDefault(e.target.checked)}
-                className="h-4 w-4 text-cyan-600 focus:ring-cyan-500 rounded"
+                className="h-4 w-4 text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)] rounded"
               />
               <label htmlFor="is_default" className={`ml-2 block text-sm ${themeClasses.label}`}>
                 デフォルトで選択する
@@ -704,7 +704,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                       id="has_submenu"
                       checked={hasSubmenu}
                       onChange={(e) => setHasSubmenu(e.target.checked)}
-                      className="h-4 w-4 text-cyan-600 focus:ring-cyan-500 rounded"
+                      className="h-4 w-4 text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)] rounded"
                     />
                     <label htmlFor="has_submenu" className={`ml-2 block text-sm ${themeClasses.label}`}>
                       サブメニューを使用する
@@ -1241,7 +1241,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
   const renderToggle = (checked: boolean, onChange: (v: boolean) => void) => (
     <label className="relative inline-flex items-center cursor-pointer">
       <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="sr-only" />
-      <div className={`w-11 h-6 rounded-full transition-colors ${checked ? 'bg-cyan-600' : 'bg-gray-600'}`}>
+      <div className={`w-11 h-6 rounded-full transition-colors ${checked ? themeClasses.toggle.enabled : themeClasses.toggle.disabled}`}>
         <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'} mt-0.5 ml-0.5`}></div>
       </div>
     </label>
@@ -1317,8 +1317,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             />
             <div className={`w-11 h-6 rounded-full transition-colors ${
               form.config?.menu_structure?.allow_cross_category_selection 
-                ? 'bg-cyan-600' 
-                : 'bg-gray-600'
+                ? themeClasses.toggle.enabled
+                : themeClasses.toggle.disabled
             }`}>
               <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
                 form.config?.menu_structure?.allow_cross_category_selection 
@@ -1401,8 +1401,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             />
             <div className={`w-11 h-6 rounded-full transition-colors ${
               form.config?.gender_selection?.enabled 
-                ? 'bg-cyan-600' 
-                : 'bg-gray-600'
+                ? themeClasses.toggle.enabled
+                : themeClasses.toggle.disabled
             }`}>
               <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
                 form.config?.gender_selection?.enabled 
@@ -1432,7 +1432,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                   };
                   onUpdate(updatedForm);
                 }}
-                className={`h-4 w-4 text-cyan-600 focus:ring-cyan-500 rounded mr-2 ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'}`}
+                className={`h-4 w-4 text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)] rounded mr-2 ${theme === 'dark' ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'}`}
               />
               <span className={themeClasses.text.primary}>性別選択を必須にする</span>
             </label>
@@ -1475,8 +1475,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             />
             <div className={`w-11 h-6 rounded-full transition-colors ${
               form.config?.ui_settings?.show_repeat_booking 
-                ? 'bg-cyan-600' 
-                : 'bg-gray-600'
+                ? themeClasses.toggle.enabled
+                : themeClasses.toggle.disabled
             }`}>
               <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
                 form.config?.ui_settings?.show_repeat_booking 
@@ -1533,8 +1533,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             />
             <div className={`w-11 h-6 rounded-full transition-colors ${
               form.config?.visit_count_selection?.enabled 
-                ? 'bg-cyan-600' 
-                : 'bg-gray-600'
+                ? themeClasses.toggle.enabled
+                : themeClasses.toggle.disabled
             }`}>
               <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
                 form.config?.visit_count_selection?.enabled 
@@ -1612,8 +1612,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             />
             <div className={`w-11 h-6 rounded-full transition-colors ${
               form.config?.coupon_selection?.enabled 
-                ? 'bg-cyan-600' 
-                : 'bg-gray-600'
+                ? themeClasses.toggle.enabled
+                : themeClasses.toggle.disabled
             }`}>
               <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
                 form.config?.coupon_selection?.enabled 
@@ -1652,7 +1652,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                 className={themeClasses.input}
               />
             </div>
-            <div className={`p-2 ${themeClasses.highlight} rounded text-xs ${theme === 'light' ? 'text-cyan-700' : 'text-cyan-300'}`}>
+            <div className={`p-2 ${themeClasses.highlight} rounded text-xs ${theme === 'light' ? 'text-[rgb(244,144,49)]' : 'text-cyan-300'}`}>
               ✅ 「クーポン利用あり」「クーポン利用なし」の選択肢を表示
             </div>
           </div>
@@ -1931,7 +1931,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                         };
                         onUpdate(updatedForm);
                       }}
-                      className={`text-sm ${theme === 'light' ? 'text-cyan-600 hover:text-cyan-700' : 'text-cyan-400 hover:text-cyan-300'}`}
+                      className={`text-sm ${theme === 'light' ? 'text-[rgb(244,144,49)] hover:text-[rgb(220,125,35)]' : 'text-cyan-400 hover:text-cyan-300'}`}
                     >
                       + 選択肢を追加
                     </button>
@@ -2002,7 +2002,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                 <div className="flex space-x-1 ml-2" onClick={e => e.stopPropagation()}>
                   <button
                     onClick={() => handleOpenEditCategory(category)}
-                    className={`p-1.5 rounded text-cyan-400 hover:text-cyan-300 ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+                    className={`p-1.5 rounded ${theme === 'light' ? 'text-[rgb(244,144,49)] hover:text-[rgb(220,125,35)] hover:bg-gray-100' : 'text-cyan-400 hover:text-cyan-300 hover:bg-gray-700'}`}
                     title="カテゴリー編集"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2059,7 +2059,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                               </p>
                             </div>
                             <div className="flex space-x-1 ml-2">
-                              <button onClick={() => handleEditMenuItem(category.id, menu)} className={`p-1.5 rounded text-cyan-400 hover:text-cyan-300 ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}>
+                              <button onClick={() => handleEditMenuItem(category.id, menu)} className={`p-1.5 rounded ${theme === 'light' ? 'text-[rgb(244,144,49)] hover:text-[rgb(220,125,35)] hover:bg-white' : 'text-cyan-400 hover:text-cyan-300 hover:bg-gray-700'}`}>
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                               </button>
                               <button onClick={() => handleDeleteMenuItem(category.id, menu.id)} className={`p-1.5 rounded text-red-400 hover:text-red-300 ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}>
@@ -2102,7 +2102,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                               </p>
                             </div>
                             <div className="flex space-x-1">
-                              <button onClick={() => handleEditCatOpt(category.id, opt)} className={`p-1.5 rounded text-cyan-400 hover:text-cyan-300 ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}>
+                              <button onClick={() => handleEditCatOpt(category.id, opt)} className={`p-1.5 rounded ${theme === 'light' ? 'text-[rgb(244,144,49)] hover:text-[rgb(220,125,35)] hover:bg-white' : 'text-cyan-400 hover:text-cyan-300 hover:bg-gray-700'}`}>
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                               </button>
                               <button onClick={() => handleDeleteCatOpt(category.id, opt.id)} className={`p-1.5 rounded text-red-400 hover:text-red-300 ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}>

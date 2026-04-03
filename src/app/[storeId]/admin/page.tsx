@@ -342,7 +342,7 @@ export default function StoreAdminPage() {
 
   const getFormStatusColor = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
+      case 'active': return 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)]';
       case 'inactive': return 'bg-gray-100 text-gray-800';
       case 'paused': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -409,25 +409,25 @@ export default function StoreAdminPage() {
               <Card className="shadow-sm">
                 <CardContent className="p-4">
                   <p className="text-xs font-medium text-muted-foreground mb-1">フォーム数</p>
-                  <div className="text-2xl font-bold">{stats.total}</div>
+                  <div className="text-2xl font-bold text-[rgb(55,114,58)]">{stats.total}</div>
                 </CardContent>
               </Card>
               <Card className="shadow-sm">
                 <CardContent className="p-4">
                   <p className="text-xs font-medium text-muted-foreground mb-1">公開中</p>
-                  <div className="text-2xl font-bold text-green-600">{stats.active}</div>
+                  <div className="text-2xl font-bold text-[rgb(55,114,58)]">{stats.active}</div>
                 </CardContent>
               </Card>
               <Card className="shadow-sm">
                 <CardContent className="p-4">
                   <p className="text-xs font-medium text-muted-foreground mb-1">アンケート</p>
-                  <div className="text-2xl font-bold text-blue-600">{stats.surveys}</div>
+                  <div className="text-2xl font-bold text-[rgb(55,114,58)]">{stats.surveys}</div>
                 </CardContent>
               </Card>
               <Card className="shadow-sm">
                 <CardContent className="p-4">
                   <p className="text-xs font-medium text-muted-foreground mb-1">予約数</p>
-                  <div className="text-2xl font-bold text-purple-600">{stats.reservations}</div>
+                  <div className="text-2xl font-bold text-[rgb(55,114,58)]">{stats.reservations}</div>
                 </CardContent>
               </Card>
           </div>
@@ -455,7 +455,7 @@ export default function StoreAdminPage() {
                       <button
                         key={reservation.id}
                         type="button"
-                        className="w-full flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-accent transition-[background-color] duration-150 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+                        className="w-full flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-[rgb(244,144,49)]/10 transition-[background-color] duration-150 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
                         onClick={() => {
                           setSelectedReservation(reservation);
                           setShowReservationDetail(true);
@@ -468,10 +468,10 @@ export default function StoreAdminPage() {
                           </p>
       </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
-                          reservation.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          reservation.status === 'confirmed' ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20' :
                           reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                           reservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
-                          'bg-green-50 text-green-700 border-green-200'
+                          'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20'
                         }`}>
                           {reservation.status === 'pending' ? '保留中' :
                            reservation.status === 'confirmed' ? '確認済み' :
@@ -533,7 +533,7 @@ export default function StoreAdminPage() {
                           {getFormStatusText(form.status)}
                                 </Badge>
                         {form.draft_status === 'draft' && (
-                                  <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                  <Badge variant="outline" className="text-[rgb(244,144,49)] border-[rgb(244,144,49)]">
                             下書きあり
                                   </Badge>
                         )}
@@ -580,9 +580,9 @@ export default function StoreAdminPage() {
         </div>
                                 </div>
                               ) : (
-                                <Card className="bg-blue-50 border-blue-200">
+                                <Card className="bg-[rgb(254,225,190)] border-[rgb(244,144,49)]/30">
                                   <CardContent className="p-4">
-                                    <p className="text-sm text-blue-800">
+                                    <p className="text-sm text-[rgb(200,100,10)]">
                                       📝 準備中 - 数秒後にページを再読み込みしてください
                                     </p>
                                   </CardContent>
@@ -655,7 +655,7 @@ export default function StoreAdminPage() {
                           {getFormStatusText(form.status)}
                                   </Badge>
                         {form.draft_status === 'draft' && (
-                                    <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                    <Badge variant="outline" className="text-[rgb(244,144,49)] border-[rgb(244,144,49)]">
                             下書きあり
                                     </Badge>
                         )}
@@ -702,7 +702,7 @@ export default function StoreAdminPage() {
                           </div>
                                 </div>
                               ) : (
-                                <div className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded p-2">
+                                <div className="text-xs text-muted-foreground bg-[rgb(254,225,190)] border border-[rgb(244,144,49)]/30 rounded p-2 text-[rgb(200,100,10)]">
                                   📝 準備中 - 数秒後にページを再読み込みしてください
                                 </div>
                               )}
@@ -787,7 +787,7 @@ export default function StoreAdminPage() {
                             {filteredReservations.map((reservation) => (
                               <div
                                 key={reservation.id}
-                                className="border rounded-lg p-3 cursor-pointer hover:bg-accent transition-colors"
+                                className="border rounded-lg p-3 cursor-pointer hover:bg-[rgb(244,144,49)]/10 transition-colors"
                                 onClick={() => {
                                   setSelectedReservation(reservation);
                                   setShowReservationDetail(true);
@@ -796,10 +796,10 @@ export default function StoreAdminPage() {
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="font-medium text-sm">{reservation.customer_name}</span>
                                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
-                                    reservation.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                    reservation.status === 'confirmed' ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20' :
                                     reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                                     reservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
-                                    'bg-green-50 text-green-700 border-green-200'
+                                    'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20'
                                   }`}>
                                     {reservation.status === 'pending' ? '保留中' :
                                      reservation.status === 'confirmed' ? '確認済み' :
@@ -844,7 +844,7 @@ export default function StoreAdminPage() {
                                 {filteredReservations.map((reservation) => (
                                   <TableRow
                                     key={reservation.id}
-                                    className="cursor-pointer hover:bg-accent"
+                                    className="cursor-pointer hover:bg-[rgb(244,144,49)]/10"
                                     onClick={() => {
                                       setSelectedReservation(reservation);
                                       setShowReservationDetail(true);
@@ -869,10 +869,10 @@ export default function StoreAdminPage() {
                                     </TableCell>
                                     <TableCell>
                                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
-                                        reservation.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                        reservation.status === 'confirmed' ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20' :
                                         reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                                         reservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
-                                        'bg-green-50 text-green-700 border-green-200'
+                                        'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20'
                                       }`}>
                                         {reservation.status === 'pending' ? '保留中' :
                                          reservation.status === 'confirmed' ? '確認済み' :
@@ -936,7 +936,7 @@ export default function StoreAdminPage() {
                                     {getFormStatusText(survey.status)}
                                   </Badge>
                                   {survey.draft_status === 'draft' && (
-                                    <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                    <Badge variant="outline" className="text-[rgb(244,144,49)] border-[rgb(244,144,49)]">
                                       下書きあり
                                     </Badge>
                                   )}
@@ -983,7 +983,7 @@ export default function StoreAdminPage() {
                                   </div>
                                 </div>
                               ) : (
-                                <div className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded p-2">
+                                <div className="text-xs text-muted-foreground bg-[rgb(254,225,190)] border border-[rgb(244,144,49)]/30 rounded p-2 text-[rgb(200,100,10)]">
                                   📝 準備中 - 数秒後にページを再読み込みしてください
                                 </div>
                               )}
@@ -1384,7 +1384,7 @@ export default function StoreAdminPage() {
 
       {/* 予約詳細モーダル */}
       <Dialog open={showReservationDetail} onOpenChange={setShowReservationDetail}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="store-admin-bg max-w-2xl max-h-[90vh] overflow-y-auto bg-gray-50">
           <DialogHeader>
             <DialogTitle>予約詳細</DialogTitle>
             <DialogDescription>
@@ -1426,10 +1426,10 @@ export default function StoreAdminPage() {
                       <Label className="text-sm text-muted-foreground">ステータス</Label>
                       <div className="mt-1">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
-                          selectedReservation.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          selectedReservation.status === 'confirmed' ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20' :
                           selectedReservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                           selectedReservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
-                          'bg-green-50 text-green-700 border-green-200'
+                          'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20'
                         }`}>
                           {selectedReservation.status === 'pending' ? '保留中' :
                            selectedReservation.status === 'confirmed' ? '確認済み' :
@@ -1599,7 +1599,7 @@ export default function StoreAdminPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                      className="bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20 hover:bg-[rgb(55,114,58)] hover:text-white"
                       onClick={async () => {
                         if (!confirm('この予約を確認済みにしますか？')) return;
                         try {
@@ -1624,7 +1624,7 @@ export default function StoreAdminPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="text-red-600 border-red-200 hover:bg-red-50"
+                    className="bg-red-50 text-red-600 border-red-200 hover:bg-red-600 hover:text-white"
                     onClick={async () => {
                       if (!confirm('この予約をキャンセルしますか？')) return;
                       try {

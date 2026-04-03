@@ -13,6 +13,9 @@
 .store-admin-bg {
   --background: 220 20% 95%;
   --muted: 220 18% 91%;
+  --primary: 29 90% 57%;           /* Orange rgb(244,144,49) */
+  --primary-foreground: 0 0% 100%; /* White text on orange */
+  --ring: 29 90% 57%;
 }
 
 :root {

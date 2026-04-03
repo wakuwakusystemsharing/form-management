@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { Search, Eye, UserPlus } from 'lucide-react';
+import { Search, UserPlus } from 'lucide-react';
 import CustomerForm, { CustomerFormData } from '@/components/CustomerForm';
 
 interface CustomerListProps {
@@ -197,14 +197,17 @@ export default function CustomerList({ storeId, onCustomerClick }: CustomerListP
                     <TableHead className="text-right">来店回数</TableHead>
                     <TableHead className="text-right">総利用金額</TableHead>
                     <TableHead>最終来店日</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {customers.map((customer) => {
                     const segment = determineSegment(customer);
                     return (
-                      <TableRow key={customer.id}>
+                      <TableRow
+                        key={customer.id}
+                        className="cursor-pointer hover:bg-[rgb(244,144,49)]/10"
+                        onClick={() => onCustomerClick?.(customer)}
+                      >
                         <TableCell>
                           <Avatar className="h-8 w-8">
                             {customer.line_picture_url && (
@@ -225,16 +228,6 @@ export default function CustomerList({ storeId, onCustomerClick }: CustomerListP
                           {formatCurrency(customer.total_spent)}
                         </TableCell>
                         <TableCell>{formatDate(customer.last_visit_date)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`${customer.name}の詳細を表示`}
-                            onClick={() => onCustomerClick?.(customer)}
-                          >
-                            <Eye className="h-4 w-4" aria-hidden="true" />
-                          </Button>
-                        </TableCell>
                       </TableRow>
                     );
                   })}

@@ -52,13 +52,13 @@ const MenuContent = ({ onItemClick, storeName, userEmail, activeTab, onTabChange
         {isCollapsed ? (
           <div className="flex justify-center">
             <Avatar className="h-8 w-8">
-              <AvatarFallback className="text-xs">{storeName?.charAt(0) || 'S'}</AvatarFallback>
+              <AvatarFallback className="text-xs bg-[rgb(244,144,49)] text-white">{storeName?.charAt(0) || 'S'}</AvatarFallback>
             </Avatar>
           </div>
         ) : (
           <div className="flex items-center space-x-3">
             <Avatar className="h-10 w-10">
-              <AvatarFallback>{storeName?.charAt(0) || 'S'}</AvatarFallback>
+              <AvatarFallback className="bg-[rgb(244,144,49)] text-white">{storeName?.charAt(0) || 'S'}</AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate">{storeName || '店舗'}</p>
@@ -157,7 +157,7 @@ export default function StoreAdminLayout({
           variant="ghost"
           size="icon"
           className={cn(
-            "absolute rounded-full border bg-background shadow-sm hover:bg-accent z-10 transition-[right,width,height] duration-150",
+            "absolute rounded-full border border-[rgb(244,144,49)]/40 bg-[rgb(254,225,190)] text-[rgb(200,100,10)] shadow-sm hover:bg-[rgb(244,144,49)] hover:text-white hover:border-[rgb(244,144,49)] z-10 transition-all duration-150",
             sidebarCollapsed 
               ? "-right-3 top-4 h-6 w-6" 
               : "-right-3 top-4 h-6 w-6"

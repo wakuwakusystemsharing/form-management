@@ -98,13 +98,13 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
     return timeString ? `${dateStr} ${timeString}` : dateStr;
   };
 
-  const getStatusBadgeVariant = (status: string) => {
+  const getStatusBadgeClass = (status: string) => {
     switch (status) {
-      case 'confirmed': return 'default';
-      case 'pending': return 'secondary';
-      case 'cancelled': return 'destructive';
-      case 'completed': return 'outline';
-      default: return 'default';
+      case 'confirmed': return 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20';
+      case 'pending': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'cancelled': return 'bg-red-50 text-red-600 border-red-200';
+      case 'completed': return 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20';
+      default: return '';
     }
   };
 
@@ -126,7 +126,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto overscroll-contain">
+      <DialogContent className="store-admin-bg max-w-4xl max-h-[90vh] overflow-y-auto overscroll-contain bg-gray-50">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -135,26 +135,28 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                 {isEditing ? '顧客情報を編集しています' : '顧客情報、予約履歴、来店履歴を確認できます'}
               </DialogDescription>
             </div>
-            {!isEditing && !loading && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditing(true)}
-              >
-                <Pencil className="mr-2 h-4 w-4" aria-hidden="true" />
-                編集
-              </Button>
-            )}
-            {isEditing && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsEditing(false)}
-              >
-                <X className="mr-2 h-4 w-4" aria-hidden="true" />
-                編集を閉じる
-              </Button>
-            )}
+            <div className="mr-8">
+              {!isEditing && !loading && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditing(true)}
+                >
+                  <Pencil className="mr-2 h-4 w-4" aria-hidden="true" />
+                  編集
+                </Button>
+              )}
+              {isEditing && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsEditing(false)}
+                >
+                  <X className="mr-2 h-4 w-4" aria-hidden="true" />
+                  編集を閉じる
+                </Button>
+              )}
+            </div>
           </div>
         </DialogHeader>
 
@@ -298,7 +300,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                                   {reservation.menu_name}
                                 </p>
                               </div>
-                              <Badge variant={getStatusBadgeVariant(reservation.status)}>
+                              <Badge variant="outline" className={getStatusBadgeClass(reservation.status)}>
                                 {getStatusLabel(reservation.status)}
                               </Badge>
                             </div>
@@ -367,7 +369,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">友だち追加状態</p>
-                          <Badge variant={customer.line_friend_flag ? 'default' : 'outline'}>
+                          <Badge variant="outline" className={customer.line_friend_flag ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20' : ''}>
                             {customer.line_friend_flag ? '友だち' : '未追加'}
                           </Badge>
                         </div>
