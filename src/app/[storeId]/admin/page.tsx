@@ -259,16 +259,17 @@ export default function StoreAdminPage() {
       try {
         setLoading(true);
         
-        // アクセス権限チェック（サービス管理者はスキップ）
-        const ADMIN_EMAILS = [
-          'wakuwakusystemsharing@gmail.com',
-          'admin@wakuwakusystemsharing.com',
-          'manager@wakuwakusystemsharing.com'
-        ];
-        
-        const isServiceAdmin = ADMIN_EMAILS.includes(user.email || '');
-        
-        if (!isServiceAdmin) {
+        // アクセス権限チェック（マスター/システム管理者はスキップ）
+        let isUpperAdmin = false;
+        try {
+          const roleRes = await fetch('/api/auth/role', { credentials: 'include' });
+          if (roleRes.ok) {
+            const roleData = await roleRes.json();
+            isUpperAdmin = roleData.role === 'master' || roleData.role === 'system';
+          }
+        } catch {}
+
+        if (!isUpperAdmin) {
           // 店舗管理者の場合、アクセス権限をチェック
           const accessCheckResponse = await fetch(`/api/stores/${storeId}/admins`, {
             credentials: 'include',

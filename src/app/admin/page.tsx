@@ -15,11 +15,17 @@ import { useToast } from '@/components/ui/use-toast';
 import Image from 'next/image';
 import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock, Settings, Calendar, HelpCircle } from 'lucide-react';
 
-const ADMIN_EMAILS = [
-  'wakuwakusystemsharing@gmail.com',
-  // 'admin@wakuwakusystemsharing.com',
-  // 'manager@wakuwakusystemsharing.com'
-];
+// ロールチェック用ヘルパー
+async function checkAdminRole(): Promise<'master' | 'system' | null> {
+  try {
+    const res = await fetch('/api/auth/role', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.role === 'master' || data.role === 'system') return data.role;
+    }
+  } catch {}
+  return null;
+}
 
 export default function AdminPage() {
   const router = useRouter();
@@ -204,8 +210,9 @@ export default function AdminPage() {
           currentUser = session?.user ?? null;
         }
 
-        // サービス管理者でない場合、店舗管理者ページにリダイレクト（サインアウトしない）
-        if (currentUser && !ADMIN_EMAILS.includes(currentUser.email || '')) {
+        // システム管理者以上でない場合、店舗管理者ページにリダイレクト
+        const adminRole = currentUser ? await checkAdminRole() : null;
+        if (currentUser && !adminRole) {
           // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
           const supabaseClient = getSupabaseClient();
           if (supabaseClient) {
@@ -265,8 +272,9 @@ export default function AdminPage() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const nextUser = session?.user ?? null;
 
-      // サービス管理者でない場合、店舗管理者ページにリダイレクト（サインアウトしない）
-      if (nextUser && !ADMIN_EMAILS.includes(nextUser.email || '')) {
+      // システム管理者以上でない場合、店舗管理者ページにリダイレクト
+      const nextRole = nextUser ? await checkAdminRole() : null;
+      if (nextUser && !nextRole) {
         // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
         const { data: storeAdmins } = await (supabase as any)
           .from('store_admins')
@@ -320,12 +328,6 @@ export default function AdminPage() {
     setIsLoggingIn(true);
     setLoginError('');
 
-    if (!ADMIN_EMAILS.includes(loginForm.email)) {
-      setLoginError('このアカウントにはアクセス権限がありません');
-      setIsLoggingIn(false);
-      return;
-    }
-
     const supabase = getSupabaseClient();
     if (!supabase) {
       setLoginError('認証サービスに接続できません');
@@ -357,8 +359,17 @@ export default function AdminPage() {
       } catch (error) {
         console.error('Failed to set cookie:', error);
       }
+
+      // ログイン後のロールチェック
+      const role = await checkAdminRole();
+      if (!role) {
+        setLoginError('システム管理者権限がありません');
+        await supabase.auth.signOut();
+        setIsLoggingIn(false);
+        return;
+      }
     }
-    
+
     setIsLoggingIn(false);
   };
 

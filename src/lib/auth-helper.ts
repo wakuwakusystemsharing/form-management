@@ -8,7 +8,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { createAuthenticatedClient } from './supabase';
+import { createAuthenticatedClient, getUserRole } from './supabase';
 
 /**
  * リクエストからアクセストークンを取得
@@ -108,5 +108,26 @@ export async function getCurrentUser(request: NextRequest | Request): Promise<{ 
     console.error('[getCurrentUser] Error:', error);
     return null;
   }
+}
+
+/**
+ * リクエストから認証済みユーザーのロールを取得
+ * @param request NextRequestオブジェクト
+ * @returns ロール情報（認証されていない場合はnull）
+ */
+export async function getCurrentUserRole(request: NextRequest | Request): Promise<{
+  role: 'master' | 'system' | 'store' | null;
+  userId: string;
+  email: string | undefined;
+} | null> {
+  const user = await getCurrentUser(request);
+  if (!user) return null;
+
+  const role = await getUserRole(user.id);
+  return {
+    role,
+    userId: user.id,
+    email: user.email
+  };
 }
 
