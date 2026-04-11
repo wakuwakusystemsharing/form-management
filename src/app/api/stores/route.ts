@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAppEnvironment } from '../../../lib/env'
-import { getSupabaseClient, createAdminClient, isServiceAdmin } from '../../../lib/supabase'
+import { getSupabaseClient, createAdminClient, isServiceAdmin, isMasterAdmin, isSystemAdminById } from '../../../lib/supabase'
 import { generateStoreId } from '../../../lib/store-id-generator'
 import { createStoreCalendar } from '../../../lib/google-calendar'
 import { Store } from '../../../types/store'
@@ -43,7 +43,7 @@ async function saveStoresToJSON(stores: Store[]): Promise<void> {
 }
 
 // GET /api/stores - 店舗一覧取得
-export async function GET() {
+export async function GET(request: NextRequest) {
   const env = getAppEnvironment()
 
   // ローカル環境: JSON から読み込み
@@ -53,7 +53,6 @@ export async function GET() {
   }
 
   // staging/production: Supabase から取得
-  // Admin Client を使用してRLSをバイパス（サービス管理者が全店舗を閲覧）
   const adminClient = createAdminClient()
   if (!adminClient) {
     return NextResponse.json(
@@ -63,12 +62,44 @@ export async function GET() {
   }
 
   try {
-    // サービス管理者の場合は全店舗取得
-     
-    const { data: stores, error } = await (adminClient as any)
-      .from('stores')
-      .select('*')
-      .order('created_at', { ascending: false })
+    // 認証ユーザーを取得してロールに応じたフィルタリング
+    const authHeader = request.headers.get('authorization')
+    const token = authHeader?.replace('Bearer ', '')
+      || request.headers.get('cookie')
+        ?.split(';')
+        .find(c => c.trim().startsWith('sb-access-token='))
+        ?.split('=')[1]
+
+    let userId: string | null = null
+    if (token) {
+      const supabase = getSupabaseClient()
+      if (supabase) {
+        const { data: { user } } = await supabase.auth.getUser(token)
+        userId = user?.id || null
+      }
+    }
+
+    let query = (adminClient as any).from('stores').select('*').order('created_at', { ascending: false })
+
+    // システム管理者の場合は同テナントの店舗のみ
+    if (userId) {
+      const isMaster = await isMasterAdmin(userId)
+      if (!isMaster) {
+        const isSystem = await isSystemAdminById(userId)
+        if (isSystem) {
+          const { data: adminData } = await (adminClient as any)
+            .from('system_admins')
+            .select('org_id')
+            .eq('user_id', userId)
+            .maybeSingle()
+          if (adminData?.org_id) {
+            query = query.eq('org_id', adminData.org_id)
+          }
+        }
+      }
+    }
+
+    const { data: stores, error } = await query
 
     if (error) {
       console.error('[API] Stores fetch error:', error)
@@ -194,11 +225,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // サービス管理者チェック
-    const isAdmin = isServiceAdmin(user.email || '')
-    console.log('[API] Admin check:', { email: user.email, isAdmin })
-    
-    if (!isAdmin) {
+    // 権限チェック: マスター管理者またはシステム管理者のみ店舗作成可能
+    const isMaster = await isMasterAdmin(user.id)
+    const isSystem = await isSystemAdminById(user.id)
+    const isLegacyAdmin = isServiceAdmin(user.email || '')
+    console.log('[API] Admin check:', { email: user.email, isMaster, isSystem, isLegacyAdmin })
+
+    if (!isMaster && !isSystem && !isLegacyAdmin) {
       return NextResponse.json(
         { error: '店舗作成権限がありません' },
         { status: 403 }
@@ -261,12 +294,22 @@ export async function POST(request: NextRequest) {
       )
     }
     
+    // システム管理者の場合、所属テナントのorg_idを取得
+    let orgId: string | null = null
+    if (isSystem) {
+      const { data: adminData } = await (adminClient as any)
+        .from('system_admins')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      orgId = adminData?.org_id || null
+    }
+
     // 店舗を挿入
-     
     const { data, error } = await (adminClient as any)
       .from('stores')
       .insert([{
-        id: storeId, // 明示的に6文字のランダムIDを指定
+        id: storeId,
         name,
         owner_name,
         owner_email,
@@ -278,7 +321,8 @@ export async function POST(request: NextRequest) {
         line_channel_access_token: line_channel_access_token ?? '',
         status: 'active',
         created_by: user.id,
-        updated_by: user.id
+        updated_by: user.id,
+        org_id: orgId
       }])
       .select()
       .single()

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { getAppEnvironment, isLocal, shouldSkipAuth } from '@/lib/env';
@@ -15,13 +15,21 @@ import { useToast } from '@/components/ui/use-toast';
 import Image from 'next/image';
 import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock, Settings, Calendar, HelpCircle } from 'lucide-react';
 
-const ADMIN_EMAILS = [
-  'wakuwakusystemsharing@gmail.com',
-  // 'admin@wakuwakusystemsharing.com',
-  // 'manager@wakuwakusystemsharing.com'
-];
+// ロールチェック用ヘルパー
+async function checkAdminRole(): Promise<'master' | 'system' | null> {
+  try {
+    const res = await fetch('/api/auth/role', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.role === 'master' || data.role === 'system') return data.role;
+    }
+  } catch {}
+  return null;
+}
 
-export default function AdminPage() {
+export default function TenantAdminPage() {
+  const params = useParams();
+  const tenantSlug = params.tenantSlug as string;
   const router = useRouter();
   const { toast } = useToast();
   const [user, setUser] = useState<User | null>(null);
@@ -114,7 +122,7 @@ export default function AdminPage() {
          'パスワードリセットに失敗しました。')
       );
       // エラー表示後、ハッシュをクリア
-      window.history.replaceState(null, '', '/admin');
+      window.history.replaceState(null, '', `/tenant/${tenantSlug}/admin`);
     }
     
     // パスワードリセットトークンがある場合
@@ -122,7 +130,7 @@ export default function AdminPage() {
       setResetToken(accessToken);
       setShowPasswordReset(true);
       // トークンをクリア
-      window.history.replaceState(null, '', '/admin');
+      window.history.replaceState(null, '', `/tenant/${tenantSlug}/admin`);
     }
   }, []);
 
@@ -204,8 +212,9 @@ export default function AdminPage() {
           currentUser = session?.user ?? null;
         }
 
-        // サービス管理者でない場合、店舗管理者ページにリダイレクト（サインアウトしない）
-        if (currentUser && !ADMIN_EMAILS.includes(currentUser.email || '')) {
+        // システム管理者以上でない場合、店舗管理者ページにリダイレクト
+        const adminRole = currentUser ? await checkAdminRole() : null;
+        if (currentUser && !adminRole) {
           // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
           const supabaseClient = getSupabaseClient();
           if (supabaseClient) {
@@ -265,39 +274,41 @@ export default function AdminPage() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const nextUser = session?.user ?? null;
 
-      // サービス管理者でない場合、店舗管理者ページにリダイレクト（サインアウトしない）
-      if (nextUser && !ADMIN_EMAILS.includes(nextUser.email || '')) {
-        // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
-        const { data: storeAdmins } = await (supabase as any)
-          .from('store_admins')
-          .select('store_id')
-          .limit(1);
-
-        if (storeAdmins && storeAdmins.length > 0) {
-          const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
-          router.push(`/${firstStoreId}/admin`);
-          return;
+      if (nextUser && session) {
+        // まずクッキーを設定
+        try {
+          await fetch('/api/auth/set-cookie', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({ accessToken: session.access_token }),
+          });
+        } catch (error) {
+          console.error('Failed to set cookie:', error);
         }
 
-        // 店舗管理者として登録されていない場合のみサインアウト
-        supabase.auth.signOut();
-        setUser(null);
-        setLoginError('このアカウントにはアクセス権限がありません。');
-      } else {
-        setUser(nextUser);
-        if (nextUser && session) {
-          try {
-            await fetch('/api/auth/set-cookie', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              credentials: 'include',
-              body: JSON.stringify({ accessToken: session.access_token }),
-            });
-          } catch (error) {
-            console.error('Failed to set cookie:', error);
+        // クッキー設定後にロールチェック
+        const nextRole = await checkAdminRole();
+        if (!nextRole) {
+          // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
+          const { data: storeAdmins } = await (supabase as any)
+            .from('store_admins')
+            .select('store_id')
+            .limit(1);
+
+          if (storeAdmins && storeAdmins.length > 0) {
+            const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
+            router.push(`/${firstStoreId}/admin`);
+            return;
           }
+
+          supabase.auth.signOut();
+          setUser(null);
+          setLoginError('このアカウントにはアクセス権限がありません。');
+        } else {
+          setUser(nextUser);
           loadStores();
         }
       }
@@ -319,12 +330,6 @@ export default function AdminPage() {
     
     setIsLoggingIn(true);
     setLoginError('');
-
-    if (!ADMIN_EMAILS.includes(loginForm.email)) {
-      setLoginError('このアカウントにはアクセス権限がありません');
-      setIsLoggingIn(false);
-      return;
-    }
 
     const supabase = getSupabaseClient();
     if (!supabase) {
@@ -357,8 +362,17 @@ export default function AdminPage() {
       } catch (error) {
         console.error('Failed to set cookie:', error);
       }
+
+      // ログイン後のロールチェック
+      const role = await checkAdminRole();
+      if (!role) {
+        setLoginError('システム管理者権限がありません');
+        await supabase.auth.signOut();
+        setIsLoggingIn(false);
+        return;
+      }
     }
-    
+
     setIsLoggingIn(false);
   };
 
@@ -433,7 +447,7 @@ export default function AdminPage() {
       setResetToken(null);
       
       // ログイン画面に戻る
-      router.push('/admin');
+      router.push(`/tenant/${tenantSlug}/admin`);
     } catch (error) {
       console.error('Password reset error:', error);
       setPasswordResetError('パスワードの更新に失敗しました');
@@ -533,7 +547,7 @@ export default function AdminPage() {
   };
 
   const handleStoreClick = (storeId: string) => {
-    router.push(`/admin/${storeId}`);
+    router.push(`/tenant/${tenantSlug}/admin/${storeId}`);
   };
 
   // ローディング画面
@@ -697,7 +711,7 @@ export default function AdminPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => router.push('/admin/help')}
+              onClick={() => router.push(`/tenant/${tenantSlug}/admin/help`)}
               className="text-muted-foreground hover:text-foreground text-xs h-8"
               title="セットアップガイド"
             >
@@ -706,7 +720,7 @@ export default function AdminPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => router.push('/admin/reservations')}
+              onClick={() => router.push(`/tenant/${tenantSlug}/admin/reservations`)}
               className="text-muted-foreground hover:text-foreground text-xs h-8"
             >
               全予約一覧
@@ -919,7 +933,7 @@ export default function AdminPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={(e) => { e.stopPropagation(); router.push(`/admin/${store.id}`); }}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/tenant/${tenantSlug}/admin/${store.id}`); }}
                       className="flex-1 h-7 text-xs border-border hover:border-primary/50 hover:bg-primary hover:text-primary-foreground"
                     >
                       <Settings className="mr-1 h-3 w-3" />

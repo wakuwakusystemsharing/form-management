@@ -8,7 +8,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { createAuthenticatedClient } from './supabase';
+import { createAuthenticatedClient, getUserRole, type UserRoleInfo } from './supabase';
 
 /**
  * リクエストからアクセストークンを取得
@@ -23,7 +23,7 @@ function getAccessToken(request: NextRequest | Request): string | null {
     for (const cookie of cookies) {
       const trimmed = cookie.trim();
       if (trimmed.startsWith('sb-access-token=')) {
-        return trimmed.split('=')[1];
+        return trimmed.substring('sb-access-token='.length);
       }
     }
   }
@@ -77,10 +77,12 @@ export async function getCurrentUserId(request: NextRequest | Request): Promise<
 export async function getCurrentUser(request: NextRequest | Request): Promise<{ id: string; email: string | undefined } | null> {
   try {
     // クッキーからアクセストークンを取得
-    const accessToken = request.headers.get('cookie')
+    const cookieToken = request.headers.get('cookie')
       ?.split(';')
       .find(c => c.trim().startsWith('sb-access-token='))
-      ?.split('=')[1]
+      ?.trim()
+      .substring('sb-access-token='.length);
+    const accessToken = cookieToken
       || request.headers.get('authorization')?.replace('Bearer ', '');
 
     if (!accessToken) {
@@ -108,5 +110,30 @@ export async function getCurrentUser(request: NextRequest | Request): Promise<{ 
     console.error('[getCurrentUser] Error:', error);
     return null;
   }
+}
+
+/**
+ * リクエストから認証済みユーザーのロールを取得
+ * @param request NextRequestオブジェクト
+ * @returns ロール情報（認証されていない場合はnull）
+ */
+export async function getCurrentUserRole(request: NextRequest | Request): Promise<{
+  role: 'master' | 'system' | 'store' | null;
+  userId: string;
+  email: string | undefined;
+  orgId?: string;
+  orgSlug?: string;
+} | null> {
+  const user = await getCurrentUser(request);
+  if (!user) return null;
+
+  const roleInfo: UserRoleInfo = await getUserRole(user.id);
+  return {
+    role: roleInfo.role,
+    userId: user.id,
+    email: user.email,
+    orgId: roleInfo.orgId,
+    orgSlug: roleInfo.orgSlug,
+  };
 }
 

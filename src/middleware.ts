@@ -1,27 +1,23 @@
 /**
  * 認証ミドルウェア
  *
- * 保護対象ルート:
- * - /{storeId}/admin - 店舗管理者ダッシュボード
- * - /{storeId}/forms/* - フォーム編集画面
- * - /{storeId}/reservations - 予約一覧
- * - /api/* - API ルート (一部除外あり)
+ * ロール階層:
+ * - マスター管理者: /master-admin/* 全アクセス
+ * - システム管理者: /tenant/{slug}/admin/* 自テナントのみ
+ * - 店舗管理者: /{storeId}/admin, /{storeId}/forms/* のみ
  *
- * 認証フロー:
- * 1. 未認証ユーザーが保護されたルートにアクセス
- * 2. /login?redirect={元のURL} にリダイレクト
- * 3. ログイン成功後、元のURLに戻る
- * 4. store_id を確認してアクセス権限を検証
+ * 保護対象ルート:
+ * - /master-admin/* - マスター管理者専用
+ * - /tenant/{slug}/admin/* - システム管理者（同テナント）以上
+ * - /{storeId}/admin - 店舗管理者以上
+ * - /{storeId}/forms/* - 店舗管理者以上
+ * - /{storeId}/reservations - システム管理者以上
  */
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { shouldSkipAuth } from './lib/env';
-import { createAuthenticatedClient, checkStoreAccess } from './lib/supabase';
-
-const ADMIN_EMAILS = [
-  'wakuwakusystemsharing@gmail.com',
-];
+import { createAuthenticatedClient, checkStoreAccess, isMasterAdmin, isSystemAdminById, getUserRole } from './lib/supabase';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -36,34 +32,35 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // /admin パスの保護（サービス管理者）
-  const isServiceAdminRoute = pathname.startsWith('/admin');
-  
-  // 店舗管理画面のパターン
-  // - 6文字のランダム文字列: /[a-z0-9]{6}/(admin|forms|reservations)
-  // - 旧形式（後方互換性のため）: /st\d{4}/(admin|forms|reservations)
+  // ルート分類
+  const isMasterAdminRoute = pathname.startsWith('/master-admin');
+  const isTenantAdminRoute = pathname.startsWith('/tenant/');
   const storeAdminPattern = /^\/([a-z0-9]{6}|st\d{4})\/(admin|forms|reservations)/;
-  
-  // API 保護パターン (公開 API は除外)
-  // - GET /api/forms/{formId} は公開（顧客向け）
-  // - その他の /api/(forms|reservations) は保護されない（API ルート内で認証を行う）
-  // 注: API ルートの認証チェックは削除（API ルート内で行う）
-  
-  const isProtectedRoute = isServiceAdminRoute || storeAdminPattern.test(pathname);
-  
+  const isStoreRoute = storeAdminPattern.test(pathname);
+
+  // 旧 /admin ルートは廃止 → トップへリダイレクト
+  if (pathname.startsWith('/admin')) {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
+  const isProtectedRoute = isMasterAdminRoute || isTenantAdminRoute || isStoreRoute;
+
   if (!isProtectedRoute) {
     return NextResponse.next();
   }
 
-  // /admin ルート自体では認証チェックをスキップ（ページ内でログイン画面表示）
-  // /admin/[storeId] も許可（サービス管理者の店舗詳細ページ）
-  // 6文字のランダム文字列または旧形式（st0001）に対応
-  if (pathname === '/admin' || pathname === '/admin/help' || pathname.match(/^\/admin\/([a-z0-9]{6}|st\d{4})$/)) {
+  // /master-admin ルート自体は認証チェックスキップ（ページ内でログイン画面表示）
+  if (pathname === '/master-admin') {
+    return NextResponse.next();
+  }
+
+  // /tenant/{slug}/admin 自体は認証チェックスキップ（ページ内でログイン画面表示）
+  const tenantAdminPageMatch = pathname.match(/^\/tenant\/([a-z0-9-]+)\/admin$/);
+  if (tenantAdminPageMatch) {
     return NextResponse.next();
   }
 
   // 店舗管理者ページ（/{storeId}/admin）へのアクセス時は、未認証でもページを表示
-  // ページ内でログイン画面を表示するため
   const storeAdminPageMatch = pathname.match(/^\/([a-z0-9]{6}|st\d{4})\/admin$/);
   if (storeAdminPageMatch) {
     return NextResponse.next();
@@ -71,91 +68,95 @@ export async function middleware(request: NextRequest) {
 
   // アクセストークン取得
   const accessToken = request.cookies.get('sb-access-token')?.value;
-  
+
   if (!accessToken) {
-    // サービス管理者ルートの場合は /admin にリダイレクト
-    // 店舗管理者ルートの場合は既に上で許可されているので、ここには来ない
-    if (isServiceAdminRoute) {
-      return NextResponse.redirect(new URL('/admin', request.url));
+    if (isMasterAdminRoute) {
+      return NextResponse.redirect(new URL('/master-admin', request.url));
     }
-    // その他の保護されたルート（/{storeId}/forms, /{storeId}/reservations など）は認証必須
-    // 店舗管理者ページにリダイレクト（ログイン後、元のページに戻れるように）
+    if (isTenantAdminRoute) {
+      const slugMatch = pathname.match(/^\/tenant\/([a-z0-9-]+)\//);
+      const slug = slugMatch ? slugMatch[1] : '';
+      return NextResponse.redirect(new URL(`/tenant/${slug}/admin`, request.url));
+    }
     const storeIdMatch = pathname.match(/\/([a-z0-9]{6}|st\d{4})\//);
     if (storeIdMatch) {
-      const storeId = storeIdMatch[1];
-      return NextResponse.redirect(new URL(`/${storeId}/admin`, request.url));
+      return NextResponse.redirect(new URL(`/${storeIdMatch[1]}/admin`, request.url));
     }
-    // フォールバック: /admin にリダイレクト
-    return NextResponse.redirect(new URL('/admin', request.url));
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
   // 認証済みクライアント作成
   const supabase = createAuthenticatedClient(accessToken);
-  
   if (!supabase) {
-    // Supabase 接続エラー
-    return NextResponse.redirect(new URL('/admin', request.url));
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
   // ユーザー情報取得
   const { data: { user }, error: userError } = await supabase.auth.getUser();
-  
   if (userError || !user) {
-    // セッション無効 → /admin にリダイレクト
-    return NextResponse.redirect(new URL('/admin', request.url));
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
-  // サービス管理者ルートの場合は管理者アカウント確認
-  if (isServiceAdminRoute) {
-    // サービス管理者でない場合、店舗管理者ページにリダイレクト
-    if (!ADMIN_EMAILS.includes(user.email || '')) {
-      // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
-      // まず、ユーザーがアクセス権限を持つ店舗を取得
-      const { data: storeAdmins } = await (supabase as any)
-        .from('store_admins')
-        .select('store_id')
-        .limit(1);
-      
-      if (storeAdmins && storeAdmins.length > 0) {
-        const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
-        return NextResponse.redirect(new URL(`/${firstStoreId}/admin`, request.url));
-      }
-      
-      // 店舗管理者として登録されていない場合、403エラー
+  // マスター管理者ルートの場合
+  if (isMasterAdminRoute) {
+    const isMaster = await isMasterAdmin(user.id);
+    if (!isMaster) {
       return new NextResponse(
-        JSON.stringify({ error: 'アクセス権限がありません' }),
+        JSON.stringify({ error: 'マスター管理者権限が必要です' }),
         { status: 403, headers: { 'Content-Type': 'application/json' } }
       );
     }
+    return NextResponse.next();
   }
 
-  // 店舗 ID 抽出（パスから）
+  // テナント管理者ルートの場合（/tenant/{slug}/admin/*）
+  if (isTenantAdminRoute) {
+    const isMaster = await isMasterAdmin(user.id);
+    if (isMaster) {
+      return NextResponse.next(); // マスターは全テナントにアクセス可能
+    }
+
+    const roleInfo = await getUserRole(user.id);
+    if (roleInfo.role !== 'system') {
+      return new NextResponse(
+        JSON.stringify({ error: 'システム管理者権限が必要です' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // テナントスラッグの一致確認
+    const slugMatch = pathname.match(/^\/tenant\/([a-z0-9-]+)\//);
+    if (slugMatch && roleInfo.orgSlug !== slugMatch[1]) {
+      return new NextResponse(
+        JSON.stringify({ error: 'このテナントへのアクセス権限がありません' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    return NextResponse.next();
+  }
+
+  // 店舗ルートの場合
   const storeIdMatch = pathname.match(/\/([a-z0-9]{6}|st\d{4})\//);
   const storeId: string | null = storeIdMatch ? storeIdMatch[1] : null;
-  
-  // /{storeId}/reservations はサービス管理者のみアクセス可能
+
+  // /{storeId}/reservations はシステム管理者以上のみ
   const isReservationsRoute = pathname.match(/^\/([a-z0-9]{6}|st\d{4})\/reservations/);
-  
+
   if (storeId) {
-    // reservations ルートの場合はサービス管理者チェック
     if (isReservationsRoute) {
-      if (!ADMIN_EMAILS.includes(user.email || '')) {
-        return NextResponse.redirect(new URL('/admin', request.url));
+      const isMaster = await isMasterAdmin(user.id);
+      const isSystem = await isSystemAdminById(user.id);
+      if (!isMaster && !isSystem) {
+        return NextResponse.redirect(new URL(`/${storeId}/admin`, request.url));
       }
     } else {
-      // その他の店舗管理画面は店舗アクセス権限チェック
-      // サービス管理者の場合は既にチェック済みなので、通常ユーザーのみチェック
-      if (!ADMIN_EMAILS.includes(user.email || '')) {
-        // 認証済みクライアントを渡してRLSをバイパス
-        const hasAccess = await checkStoreAccess(user.id, storeId, user.email, supabase);
-        
-        if (!hasAccess) {
-          // アクセス権限なし → 403
-          return new NextResponse(
-            JSON.stringify({ error: 'この店舗へのアクセス権限がありません' }),
-            { status: 403, headers: { 'Content-Type': 'application/json' } }
-          );
-        }
+      const hasAccess = await checkStoreAccess(user.id, storeId, user.email, supabase);
+      if (!hasAccess) {
+        return new NextResponse(
+          JSON.stringify({ error: 'この店舗へのアクセス権限がありません' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        );
       }
     }
   }
@@ -165,7 +166,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // 静的ファイルとNext.js内部ファイルは除外
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ]
 };

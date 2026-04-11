@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { Store } from '@/types/store';
@@ -259,16 +260,17 @@ export default function StoreAdminPage() {
       try {
         setLoading(true);
         
-        // アクセス権限チェック（サービス管理者はスキップ）
-        const ADMIN_EMAILS = [
-          'wakuwakusystemsharing@gmail.com',
-          'admin@wakuwakusystemsharing.com',
-          'manager@wakuwakusystemsharing.com'
-        ];
-        
-        const isServiceAdmin = ADMIN_EMAILS.includes(user.email || '');
-        
-        if (!isServiceAdmin) {
+        // アクセス権限チェック（マスター/システム管理者はスキップ）
+        let isUpperAdmin = false;
+        try {
+          const roleRes = await fetch('/api/auth/role', { credentials: 'include' });
+          if (roleRes.ok) {
+            const roleData = await roleRes.json();
+            isUpperAdmin = roleData.role === 'master' || roleData.role === 'system';
+          }
+        } catch {}
+
+        if (!isUpperAdmin) {
           // 店舗管理者の場合、アクセス権限をチェック
           const accessCheckResponse = await fetch(`/api/stores/${storeId}/admins`, {
             credentials: 'include',
@@ -1196,7 +1198,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, toast]);
+  }, [activeTab, stats, filteredForms, filteredReservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView]);
 
   // 認証チェック中
   if (checkingAuth) {
@@ -1225,9 +1227,11 @@ export default function StoreAdminPage() {
           <CardHeader className="text-center">
             {store?.logo_url ? (
               <div className="w-20 h-20 mx-auto mb-4 flex items-center justify-center">
-                <img 
-                  src={store.logo_url} 
-                  alt={store.name || '店舗ロゴ'} 
+                <Image
+                  src={store.logo_url}
+                  alt={store.name || '店舗ロゴ'}
+                  width={80}
+                  height={80}
                   className="max-w-full max-h-full object-contain"
                 />
               </div>

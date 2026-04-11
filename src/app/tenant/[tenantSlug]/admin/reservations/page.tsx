@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,32 +37,32 @@ const SOURCE_MEDIUM_LABELS: Record<string, string> = {
   direct: '直接アクセス',
 };
 
-export default function AdminStoreReservationsPage() {
-  const params = useParams();
+export default function AllReservationsPage() {
   const router = useRouter();
-  const storeId = params.storeId as string;
-
+  const params = useParams();
+  const tenantSlug = params.tenantSlug as string;
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [store, setStore] = useState<{ id: string; name: string } | null>(null);
+  const [stores, setStores] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterStoreId, setFilterStoreId] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
 
   useEffect(() => {
-    fetchStore();
+    fetchStores();
     fetchReservations();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterStatus, storeId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterStatus, filterStoreId]);
 
-  const fetchStore = async () => {
+  const fetchStores = async () => {
     try {
-      const response = await fetch(`/api/stores/${storeId}`);
+      const response = await fetch('/api/stores');
       if (response.ok) {
         const data = await response.json();
-        setStore(data);
+        setStores(data.stores || []);
       }
     } catch (error) {
-      console.error('Failed to fetch store:', error);
+      console.error('Failed to fetch stores:', error);
     }
   };
 
@@ -74,8 +74,11 @@ export default function AdminStoreReservationsPage() {
       if (filterStatus !== 'all') {
         params.append('status', filterStatus);
       }
+      if (filterStoreId !== 'all') {
+        params.append('store_id', filterStoreId);
+      }
 
-      const response = await fetch(`/api/stores/${storeId}/reservations?${params.toString()}`);
+      const response = await fetch(`/api/reservations?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
         setReservations(data);
@@ -108,9 +111,7 @@ export default function AdminStoreReservationsPage() {
     return `${dateStr} ${time}`;
   };
 
-  const filteredReservations = filterStatus === 'all' 
-    ? reservations 
-    : reservations.filter(r => r.status === filterStatus);
+  const filteredReservations = reservations;
 
   return (
     <div className="admin-page min-h-screen bg-background p-4 lg:p-8">
@@ -124,16 +125,14 @@ export default function AdminStoreReservationsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => router.push(`/admin/${storeId}`)}
+                    onClick={() => router.push(`/tenant/${tenantSlug}/admin`)}
                   >
                     <ArrowLeft className="mr-2 h-4 w-4" />
-                    店舗詳細に戻る
+                    管理画面に戻る
                   </Button>
                 </div>
-                <CardTitle className="text-2xl">予約一覧</CardTitle>
-                <CardDescription className="mt-1">
-                  {store ? `${store.name} (店舗ID: ${storeId})` : `店舗ID: ${storeId}`}
-                </CardDescription>
+                <CardTitle className="text-2xl">全予約一覧</CardTitle>
+                <CardDescription className="mt-1">全店舗の予約データ（サービス管理者専用）</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -154,7 +153,32 @@ export default function AdminStoreReservationsPage() {
 
           {/* 分析タブ */}
           <TabsContent value="analytics" className="space-y-6">
-            <ReservationAnalytics storeId={storeId} />
+            {filterStoreId !== 'all' ? (
+              <ReservationAnalytics storeId={filterStoreId} />
+            ) : (
+              <Card>
+                <CardContent className="py-12">
+                  <div className="text-center text-muted-foreground">
+                    <p className="mb-4">分析機能を使用するには、店舗を選択してください</p>
+                    <div className="flex justify-center">
+                      <Select value={filterStoreId} onValueChange={setFilterStoreId}>
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="店舗を選択" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">全店舗</SelectItem>
+                          {stores.map((store) => (
+                            <SelectItem key={store.id} value={store.id}>
+                              {store.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* 予約一覧タブ */}
@@ -178,6 +202,22 @@ export default function AdminStoreReservationsPage() {
                         <SelectItem value="confirmed">確認済み</SelectItem>
                         <SelectItem value="cancelled">キャンセル</SelectItem>
                         <SelectItem value="completed">完了</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2 flex-1">
+                    <Label htmlFor="store-filter">店舗</Label>
+                    <Select value={filterStoreId} onValueChange={setFilterStoreId}>
+                      <SelectTrigger id="store-filter" className="w-full sm:w-[200px]">
+                        <SelectValue placeholder="店舗でフィルター" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">全店舗</SelectItem>
+                        {stores.map((store) => (
+                          <SelectItem key={store.id} value={store.id}>
+                            {store.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -213,9 +253,9 @@ export default function AdminStoreReservationsPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>予約日時</TableHead>
+                          <TableHead>店舗ID</TableHead>
                           <TableHead>顧客名</TableHead>
                           <TableHead>電話番号</TableHead>
-                          <TableHead>メールアドレス</TableHead>
                           <TableHead>経路</TableHead>
                           <TableHead>ステータス</TableHead>
                           <TableHead>作成日時</TableHead>
@@ -227,9 +267,13 @@ export default function AdminStoreReservationsPage() {
                             <TableCell className="font-medium">
                               {formatDate(reservation.reservation_date, reservation.reservation_time)}
                             </TableCell>
+                            <TableCell>
+                              <code className="text-xs bg-muted px-2 py-1 rounded">
+                                {reservation.store_id}
+                              </code>
+                            </TableCell>
                             <TableCell>{reservation.customer_name}</TableCell>
                             <TableCell>{reservation.customer_phone}</TableCell>
-                            <TableCell>{reservation.customer_email || '-'}</TableCell>
                             <TableCell className="text-muted-foreground">
                               {reservation.source_medium ? (SOURCE_MEDIUM_LABELS[reservation.source_medium] || reservation.source_medium) : '-'}
                             </TableCell>
@@ -253,4 +297,3 @@ export default function AdminStoreReservationsPage() {
     </div>
   );
 }
-

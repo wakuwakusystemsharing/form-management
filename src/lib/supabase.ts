@@ -224,7 +224,35 @@ export async function checkStoreAccess(
   userEmail: string | undefined,
   authenticatedClient: SupabaseClient<Database>
 ): Promise<boolean> {
-  // サービス管理者の場合は常にアクセス可能（RLSポリシー「admin_store_admins_all」により許可）
+  // マスター管理者は常にアクセス可能
+  if (await isMasterAdmin(userId)) {
+    return true;
+  }
+
+  // システム管理者は同テナントの店舗にアクセス可能
+  if (await isSystemAdminById(userId)) {
+    const adminClient = getSupabaseAdminClient();
+    if (adminClient) {
+      // ユーザーの所属テナントを取得
+      const { data: admin } = await (adminClient as any)
+        .from('system_admins')
+        .select('org_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+      // 店舗のテナントを取得
+      const { data: store } = await (adminClient as any)
+        .from('stores')
+        .select('org_id')
+        .eq('id', storeId)
+        .maybeSingle();
+      if (admin && store && admin.org_id && admin.org_id === store.org_id) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // 後方互換: isServiceAdmin もチェック（移行期間中）
   if (userEmail && isServiceAdmin(userEmail)) {
     return true;
   }
@@ -261,6 +289,7 @@ export function createAdminClient() {
 
 /**
  * ユーザーがサービス管理者かどうかを確認
+ * @deprecated isMasterAdmin() または isSystemAdminById() を使用してください
  * @param email ユーザーのメールアドレス
  * @returns サービス管理者の場合 true
  */
@@ -271,6 +300,105 @@ export function isServiceAdmin(email: string): boolean {
     'manager@wakuwakusystemsharing.com'
   ]
   return adminEmails.includes(email)
+}
+
+/**
+ * ユーザーがマスター管理者かどうかを確認（DB参照）
+ * @param userId Supabase Auth の user_id
+ * @returns マスター管理者の場合 true
+ */
+export async function isMasterAdmin(userId: string): Promise<boolean> {
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) return false;
+
+  const { data, error } = await (supabase as any)
+    .from('master_admins')
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[isMasterAdmin] Query error:', error.message);
+    return false;
+  }
+  return !!data;
+}
+
+/**
+ * ユーザーがシステム管理者かどうかを確認（DB参照）
+ * @param userId Supabase Auth の user_id
+ * @returns システム管理者の場合 true
+ */
+export async function isSystemAdminById(userId: string): Promise<boolean> {
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) return false;
+
+  const { data, error } = await (supabase as any)
+    .from('system_admins')
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[isSystemAdminById] Query error:', error.message);
+    return false;
+  }
+  return !!data;
+}
+
+export interface UserRoleInfo {
+  role: 'master' | 'system' | 'store' | null;
+  orgId?: string;
+  orgSlug?: string;
+}
+
+/**
+ * ユーザーのロールを判定（DB参照）
+ * 優先度: master > system > store > null
+ * システム管理者の場合は所属テナント情報も返す
+ * @param userId Supabase Auth の user_id
+ * @returns ロール情報
+ */
+export async function getUserRole(userId: string): Promise<UserRoleInfo> {
+  const supabase = getSupabaseAdminClient();
+  if (!supabase) return { role: null };
+
+  // マスター管理者チェック
+  const { data: masterData } = await (supabase as any)
+    .from('master_admins')
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (masterData) return { role: 'master' };
+
+  // システム管理者チェック（org情報も取得）
+  const { data: systemData } = await (supabase as any)
+    .from('system_admins')
+    .select('id, org_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (systemData) {
+    let orgSlug: string | undefined;
+    if (systemData.org_id) {
+      const { data: org } = await (supabase as any)
+        .from('organizations')
+        .select('slug')
+        .eq('id', systemData.org_id)
+        .maybeSingle();
+      orgSlug = org?.slug;
+    }
+    return { role: 'system', orgId: systemData.org_id, orgSlug };
+  }
+
+  // 店舗管理者チェック
+  const { data: storeData } = await (supabase as any)
+    .from('store_admins')
+    .select('id')
+    .eq('user_id', userId)
+    .limit(1);
+  if (storeData && storeData.length > 0) return { role: 'store' };
+
+  return { role: null };
 }
 
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## プロジェクト概要
 
-Next.js 16 (App Router) で構築された LINE LIFF ベースの予約フォーム管理システム。サービス管理者がテンプレートからフォームを作成し、店舗管理者が設定を行い、顧客が LINE 経由で予約を行います。フォームは静的 HTML として生成され、Supabase Storage にデプロイされます。
+Next.js 16 (App Router) で構築された LINE LIFF ベースの予約フォーム管理システム。マスター管理者がテナント（組織）を管理し、テナント内のシステム管理者が店舗を作成・管理し、店舗管理者がフォーム設定を行い、顧客が LINE 経由で予約を行います。フォームは静的 HTML として生成され、Supabase Storage にデプロイされます。
 
 ## 必須コマンド
 
@@ -90,11 +90,14 @@ GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=  # リフレッシュトークン暗号化
   - 予約フォーム: `reservations/{storeId}/{formId}/index.html`
   - アンケートフォーム: `surveys/{storeId}/{formId}/index.html`
 
-**認証アーキテクチャ:**
-- Middleware（`src/middleware.ts`）: UI ページアクセス制御のみ。サブドメイン検出は行わない
+**認証アーキテクチャ（3階層マルチテナント）:**
+- Middleware（`src/middleware.ts`）: UI ページアクセス制御。ロール別ルート保護
 - API ルート: Supabase クライアントから `getUser()` を使用した独立認証チェック
-- サービス管理者（ハードコードされたメール）: Admin Client 経由でフルアクセス（RLS バイパス）
-- 店舗管理者: RLS で自店舗のみアクセス制御
+- **マスター管理者**: `master_admins` テーブルで判定。全データにフルアクセス。URL: `/master-admin`
+- **システム管理者**: `system_admins` テーブルで判定（`org_id` でテナントに所属）。同テナント内の店舗のみアクセス。URL: `/tenant/{slug}/admin`
+- **店舗管理者**: `store_admins` テーブルで判定。RLS で自店舗のみアクセス制御。URL: `/{storeId}/admin`
+- テナント分離: `organizations` テーブル + `stores.org_id` + RLS ポリシーで完全分離
+- `src/lib/supabase.ts`: `isMasterAdmin()`, `isSystemAdminById()`, `getUserRole()`, `checkStoreAccess()`
 - Local 環境: すべての認証をスキップ
 
 **Google Calendar 統合:**
@@ -147,7 +150,7 @@ GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=  # リフレッシュトークン暗号化
 - `src/app/(public)/layout.tsx` - 公開ページ共通レイアウト（ヘッダー・フッター）
 
 **店舗セットアップヘルプ:**
-- `/admin/help` - 店舗セットアップガイドページ
+- `/tenant/{slug}/admin/help` - 店舗セットアップガイドページ
 - `src/lib/store-setup-status.ts` - `getStoreSetupStatus()` で店舗の設定完了状態を判定
 - フォームカードにセットアップ状態バッジを表示
 
@@ -359,19 +362,24 @@ export async function GET(req, { params }) {
 ## データベーススキーマ（Supabase）
 
 **主要テーブル:**
-- `stores` - 店舗マスタ（id: 6文字または UUID、name、owner_name、owner_email、phone、address、logo_url、theme_color、google_calendar_id、google_calendar_source、google_calendar_refresh_token、line_channel_access_token）
+- `organizations` - テナント（組織）マスタ（id: UUID、name、slug）
+- `master_admins` - マスター管理者（user_id → auth.users）
+- `system_admins` - システム管理者（user_id → auth.users、org_id → organizations）
+- `stores` - 店舗マスタ（id: 6文字、org_id → organizations、name、owner_name、owner_email 等）
+- `store_admins` - 店舗管理者マッピング（user_id → store_id）
 - `forms` - 予約フォーム（config: JSONB）
 - `survey_forms` - アンケートフォーム（config: JSONB）
 - `reservations` - 予約レコード（line_user_id、google_calendar_event_id カラム含む）
-- `store_admins` - アクセス制御マッピング（user_id → store_id）
 - `customers` - 顧客マスタ（CRM 機能、LINE 連携情報・統計情報含む）
 - `customer_visits` - 顧客来店履歴（visit_date、treatment_menus、amount 等）
 - `customer_interactions` - 顧客インタラクション履歴
 - `admin_settings` - サービス全体の設定（Google API 認証情報など）
 
 **RLS（Row Level Security）:**
-- 店舗管理者に対して有効（`store_admins` テーブル経由で `store_id` でフィルタ）
-- サービス管理者は Admin Client で RLS をバイパス
+- マスター管理者: `is_master_admin()` で全テーブルフルアクセス
+- システム管理者: `is_system_admin()` + `system_admin_store_ids()` で同テナント内のみ
+- 店舗管理者: `store_admins` テーブル経由で `store_id` でフィルタ
+- テナント分離: `stores.org_id` と `system_admins.org_id` で完全分離
 - 公開 API（フォーム取得、予約作成）は匿名アクセスを許可
 
 **主なマイグレーション（`supabase/migrations/`）:**
@@ -406,10 +414,10 @@ export async function GET(req, { params }) {
 # 1. 開発サーバー起動
 pnpm dev
 
-# 2. サービス管理者画面にアクセス
-http://localhost:3000/admin
+# 2. マスター管理者画面にアクセス
+http://localhost:3000/master-admin
 
-# 3. 店舗作成、フォーム作成
+# 3. テナント作成、店舗作成、フォーム作成
 # 4. フォーム編集、保存＆デプロイ
 # 5. public/static-forms/ で生成された HTML を確認
 ```

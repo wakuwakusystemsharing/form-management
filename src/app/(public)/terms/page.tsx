@@ -16,7 +16,7 @@ export default function TermsPage() {
         <section>
           <h2 className="text-xl font-semibold mb-3">第1条（総則）</h2>
           <p className="text-sm text-muted-foreground">
-            本利用規約（以下「本規約」）は、[運営者名]（以下「当社」）が提供する
+            本利用規約（以下「本規約」）は、合同会社わくわく（以下「当社」）が提供する
             予約フォーム管理サービス「NAS（Need Appointment System）」（以下「本サービス」）の
             利用に関する条件を定めるものです。本サービスを利用するすべてのユーザー（以下「ユーザー」）は、
             本規約に同意したものとみなします。
