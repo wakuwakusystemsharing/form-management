@@ -295,7 +295,19 @@ export default function MasterAdminPage() {
     return matchesSearch && matchesOrg;
   });
 
-  // ログイン画面
+  // 認証チェック中はローディング表示（ログインフォームのフラッシュ防止）
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
+          <p className="mt-2 text-muted-foreground">読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ログイン画面（認証チェック完了後、未ログインの場合のみ表示）
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -320,17 +332,6 @@ export default function MasterAdminPage() {
             </form>
           </CardContent>
         </Card>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent" />
-          <p className="mt-2 text-muted-foreground">読み込み中...</p>
-        </div>
       </div>
     );
   }
