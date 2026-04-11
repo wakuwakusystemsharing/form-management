@@ -383,7 +383,7 @@ export default function MasterAdminPage() {
               {filteredStores.map((store) => {
                 const org = organizations.find(o => o.id === (store as any).org_id);
                 return (
-                  <Card key={store.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => router.push(`/tenant/${org?.slug || 'default'}/${store.id}`)}>
+                  <Card key={store.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => router.push(`/tenant/${org?.slug || 'default'}/admin/${store.id}`)}>
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-base">{store.name}</CardTitle>
