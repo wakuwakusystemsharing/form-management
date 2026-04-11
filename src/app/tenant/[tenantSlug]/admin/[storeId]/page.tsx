@@ -692,7 +692,7 @@ export default function StoreDetailPage() {
       });
     }
     router.replace(`/admin/${storeId}`, { scroll: false });
-  }, [searchParams, storeId, router]);
+  }, [searchParams, storeId, router, toast]);
 
   const handleCreateForm = async () => {
     if (!newFormData.form_name.trim()) {

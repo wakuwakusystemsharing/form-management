@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Customer, CustomerVisit } from '@/types/form';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -34,14 +34,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (customerId && open) {
-      fetchCustomerDetail();
-      setIsEditing(false);
-    }
-  }, [customerId, open]);
-
-  const fetchCustomerDetail = async () => {
+  const fetchCustomerDetail = useCallback(async () => {
     if (!customerId) return;
 
     setLoading(true);
@@ -56,7 +49,14 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
     } finally {
       setLoading(false);
     }
-  };
+  }, [storeId, customerId]);
+
+  useEffect(() => {
+    if (customerId && open) {
+      fetchCustomerDetail();
+      setIsEditing(false);
+    }
+  }, [customerId, open, fetchCustomerDetail]);
 
   const handleUpdate = async (formData: CustomerFormData) => {
     if (!customerId) return;

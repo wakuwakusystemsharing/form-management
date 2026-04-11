@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { Store } from '@/types/store';
@@ -1197,7 +1198,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, toast]);
+  }, [activeTab, stats, filteredForms, filteredReservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView]);
 
   // 認証チェック中
   if (checkingAuth) {
@@ -1226,9 +1227,11 @@ export default function StoreAdminPage() {
           <CardHeader className="text-center">
             {store?.logo_url ? (
               <div className="w-20 h-20 mx-auto mb-4 flex items-center justify-center">
-                <img 
-                  src={store.logo_url} 
-                  alt={store.name || '店舗ロゴ'} 
+                <Image
+                  src={store.logo_url}
+                  alt={store.name || '店舗ロゴ'}
+                  width={80}
+                  height={80}
                   className="max-w-full max-h-full object-contain"
                 />
               </div>
