@@ -15,9 +15,9 @@ export default function PrivacyPage() {
         <section>
           <h2 className="text-xl font-semibold mb-3">1. 個人情報取扱事業者</h2>
           <div className="text-sm text-muted-foreground space-y-1">
-            <p>事業者名: [運営者名]</p>
-            <p>所在地: [所在地]</p>
-            <p>連絡先: [連絡先メールアドレス]</p>
+            <p>事業者名: 合同会社わくわく</p>
+            <p>所在地: 京都府京都市山科区川田土仏５−５</p>
+            <p>連絡先: info@wakuwaku-inc.com</p>
           </div>
         </section>
 

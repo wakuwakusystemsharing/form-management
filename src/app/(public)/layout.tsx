@@ -23,12 +23,18 @@ export default function PublicLayout({
             <Image src="/icon.png" alt="NAS" width={32} height={32} />
             <span className="text-xl font-bold tracking-tight">NAS</span>
           </Link>
-          <nav className="flex gap-4 text-sm">
-            <Link href="/privacy" className="text-muted-foreground hover:text-foreground transition-colors">
+          <nav className="flex items-center gap-4 text-sm">
+            <Link href="/privacy" className="text-muted-foreground hover:text-foreground transition-colors hidden sm:inline">
               プライバシーポリシー
             </Link>
-            <Link href="/terms" className="text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/terms" className="text-muted-foreground hover:text-foreground transition-colors hidden sm:inline">
               利用規約
+            </Link>
+            <Link
+              href="/home#login"
+              className="inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 transition-colors"
+            >
+              ログイン
             </Link>
           </nav>
         </div>
@@ -45,9 +51,9 @@ export default function PublicLayout({
           <div className="flex flex-col sm:flex-row justify-between gap-4">
             <div>
               <p className="font-semibold">NAS - Need Appointment System</p>
-              <p className="text-sm text-muted-foreground mt-1">[運営者名]</p>
-              <p className="text-sm text-muted-foreground">[所在地]</p>
-              <p className="text-sm text-muted-foreground">[連絡先メールアドレス]</p>
+              <p className="text-sm text-muted-foreground mt-1">合同会社わくわく</p>
+              <p className="text-sm text-muted-foreground">京都府京都市山科区川田土仏５−５</p>
+              <p className="text-sm text-muted-foreground">info@wakuwaku-inc.com</p>
             </div>
             <nav className="flex flex-col gap-1 text-sm">
               <Link href="/home" className="text-muted-foreground hover:text-foreground transition-colors">
@@ -62,7 +68,7 @@ export default function PublicLayout({
             </nav>
           </div>
           <p className="text-xs text-muted-foreground mt-6">
-            © 2026 [運営者名]. All rights reserved.
+            © 2026 合同会社わくわく. All rights reserved.
           </p>
         </div>
       </footer>
