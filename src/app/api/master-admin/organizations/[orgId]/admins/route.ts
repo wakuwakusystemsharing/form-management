@@ -84,6 +84,10 @@ export async function POST(
 
   if (existingUser) {
     authUserId = existingUser.id;
+    // 既存ユーザーのパスワードを更新（指定された場合）
+    if (password) {
+      await supabase.auth.admin.updateUserById(authUserId, { password });
+    }
   } else {
     const userPassword = password || Math.random().toString(36).slice(-12) + 'A1!';
     const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
