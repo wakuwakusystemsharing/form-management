@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { Search, Plus, LogOut, Store as StoreIcon, Building2, Trash2, Shield, Users, ChevronLeft } from 'lucide-react';
+import { Search, Plus, LogOut, Store as StoreIcon, Building2, Trash2, Shield, Users, ChevronLeft, Copy, ExternalLink } from 'lucide-react';
 
 interface Organization {
   id: string;
@@ -420,7 +420,20 @@ export default function MasterAdminPage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <CardTitle>{selectedOrg.name}</CardTitle>
-                        <CardDescription>slug: {selectedOrg.slug} / {selectedOrg.store_count}店舗</CardDescription>
+                        <CardDescription>{selectedOrg.store_count}店舗</CardDescription>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="text-xs text-muted-foreground">ログインURL:</span>
+                          <code className="text-xs bg-muted px-2 py-1 rounded">/tenant/{selectedOrg.slug}/admin</code>
+                          <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/tenant/${selectedOrg.slug}/admin`);
+                            toast({ title: 'URLをコピーしました' });
+                          }}>
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={() => window.open(`/tenant/${selectedOrg.slug}/admin`, '_blank')}>
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       </div>
                       <Button onClick={() => setShowAddAdmin(true)}>
                         <Plus className="h-4 w-4 mr-2" />管理者を追加
@@ -481,6 +494,22 @@ export default function MasterAdminPage() {
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{org.admin_count}名</span>
                           <span className="flex items-center gap-1"><StoreIcon className="h-3.5 w-3.5" />{org.store_count}店舗</span>
+                        </div>
+                        <div className="mt-3 flex items-center gap-2">
+                          <code className="text-xs bg-muted px-2 py-1 rounded flex-1 truncate">/tenant/{org.slug}/admin</code>
+                          <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(`${window.location.origin}/tenant/${org.slug}/admin`);
+                            toast({ title: 'URLをコピーしました' });
+                          }}>
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(`/tenant/${org.slug}/admin`, '_blank');
+                          }}>
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
                         <div className="flex justify-between items-center mt-2">
                           <span className="text-xs text-muted-foreground">{new Date(org.created_at).toLocaleDateString('ja-JP')}</span>
