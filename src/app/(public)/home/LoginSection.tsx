@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogIn } from "lucide-react";
 
@@ -8,12 +8,12 @@ const STORE_ID_KEY = "nas_last_store_id";
 
 export default function LoginSection() {
   const router = useRouter();
-  const [storeId, setStoreId] = useState("");
-
-  useEffect(() => {
-    const saved = localStorage.getItem(STORE_ID_KEY);
-    if (saved) setStoreId(saved);
-  }, []);
+  const [storeId, setStoreId] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(STORE_ID_KEY) || "";
+    }
+    return "";
+  });
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
