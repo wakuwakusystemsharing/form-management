@@ -23,7 +23,7 @@ function getAccessToken(request: NextRequest | Request): string | null {
     for (const cookie of cookies) {
       const trimmed = cookie.trim();
       if (trimmed.startsWith('sb-access-token=')) {
-        return trimmed.split('=')[1];
+        return trimmed.substring('sb-access-token='.length);
       }
     }
   }
@@ -77,10 +77,12 @@ export async function getCurrentUserId(request: NextRequest | Request): Promise<
 export async function getCurrentUser(request: NextRequest | Request): Promise<{ id: string; email: string | undefined } | null> {
   try {
     // クッキーからアクセストークンを取得
-    const accessToken = request.headers.get('cookie')
+    const cookieToken = request.headers.get('cookie')
       ?.split(';')
       .find(c => c.trim().startsWith('sb-access-token='))
-      ?.split('=')[1]
+      ?.trim()
+      .substring('sb-access-token='.length);
+    const accessToken = cookieToken
       || request.headers.get('authorization')?.replace('Bearer ', '');
 
     if (!accessToken) {
