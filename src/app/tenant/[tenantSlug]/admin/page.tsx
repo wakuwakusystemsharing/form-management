@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { getAppEnvironment, isLocal, shouldSkipAuth } from '@/lib/env';
@@ -27,7 +27,9 @@ async function checkAdminRole(): Promise<'master' | 'system' | null> {
   return null;
 }
 
-export default function AdminPage() {
+export default function TenantAdminPage() {
+  const params = useParams();
+  const tenantSlug = params.tenantSlug as string;
   const router = useRouter();
   const { toast } = useToast();
   const [user, setUser] = useState<User | null>(null);
@@ -444,7 +446,7 @@ export default function AdminPage() {
       setResetToken(null);
       
       // ログイン画面に戻る
-      router.push('/admin');
+      router.push(`/tenant/${tenantSlug}/admin`);
     } catch (error) {
       console.error('Password reset error:', error);
       setPasswordResetError('パスワードの更新に失敗しました');
@@ -544,7 +546,7 @@ export default function AdminPage() {
   };
 
   const handleStoreClick = (storeId: string) => {
-    router.push(`/admin/${storeId}`);
+    router.push(`/tenant/${tenantSlug}/admin/${storeId}`);
   };
 
   // ローディング画面
@@ -708,7 +710,7 @@ export default function AdminPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => router.push('/admin/help')}
+              onClick={() => router.push(`/tenant/${tenantSlug}/admin/help`)}
               className="text-muted-foreground hover:text-foreground text-xs h-8"
               title="セットアップガイド"
             >
@@ -717,7 +719,7 @@ export default function AdminPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => router.push('/admin/reservations')}
+              onClick={() => router.push(`/tenant/${tenantSlug}/admin/reservations`)}
               className="text-muted-foreground hover:text-foreground text-xs h-8"
             >
               全予約一覧
@@ -930,7 +932,7 @@ export default function AdminPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={(e) => { e.stopPropagation(); router.push(`/admin/${store.id}`); }}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/tenant/${tenantSlug}/admin/${store.id}`); }}
                       className="flex-1 h-7 text-xs border-border hover:border-primary/50 hover:bg-primary hover:text-primary-foreground"
                     >
                       <Settings className="mr-1 h-3 w-3" />

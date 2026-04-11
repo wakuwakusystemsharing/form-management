@@ -27,6 +27,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     role: userRole.role,
     userId: userRole.userId,
-    email: userRole.email
+    email: userRole.email,
+    orgId: userRole.orgId || null,
+    orgSlug: userRole.orgSlug || null,
   });
 }

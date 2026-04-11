@@ -8,7 +8,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { createAuthenticatedClient, getUserRole } from './supabase';
+import { createAuthenticatedClient, getUserRole, type UserRoleInfo } from './supabase';
 
 /**
  * リクエストからアクセストークンを取得
@@ -119,15 +119,19 @@ export async function getCurrentUserRole(request: NextRequest | Request): Promis
   role: 'master' | 'system' | 'store' | null;
   userId: string;
   email: string | undefined;
+  orgId?: string;
+  orgSlug?: string;
 } | null> {
   const user = await getCurrentUser(request);
   if (!user) return null;
 
-  const role = await getUserRole(user.id);
+  const roleInfo: UserRoleInfo = await getUserRole(user.id);
   return {
-    role,
+    role: roleInfo.role,
     userId: user.id,
-    email: user.email
+    email: user.email,
+    orgId: roleInfo.orgId,
+    orgSlug: roleInfo.orgSlug,
   };
 }
 

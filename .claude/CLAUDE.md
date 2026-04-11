@@ -12,7 +12,7 @@ Superpowersが効いているか確認：計画を書くときは自動でPLAN.m
 
 ## プロジェクト概要（簡略版）
 - Next.js 16 App Router + pnpm
-- LINE LIFF予約フォーム管理システム（サービス管理者 → 店舗管理者 → 顧客）
+- LINE LIFF予約フォーム管理システム（マスター管理者 → テナント/システム管理者 → 店舗管理者 → 顧客）
 - フォームは静的HTML生成 → Supabase Storageデプロイ
 - 環境: local (JSON) / staging / production (Supabase RLS)
 
@@ -28,7 +28,8 @@ Superpowersが効いているか確認：計画を書くときは自動でPLAN.m
 - フォーム正規化: normalizeForm() を必ず通す
 - 静的HTML生成: StaticReservationGenerator / StaticSurveyGenerator
 - デプロイ: SupabaseStorageDeployer → reservations/{storeId}/{formId}/index.html
-- 認証: Middleware + API独立チェック、localはスキップ
+- 認証: 3階層（マスター/システム/店舗）+ Middleware + API独立チェック、localはスキップ
+- マルチテナント: organizations テーブル + stores.org_id で完全分離
 - Google Calendar: service_account / store_oauth 2方式
 - CRM: customer-utils.ts で自動紐付け・セグメント
 - ID: 店舗=6文字ランダム or UUID、フォーム=12文字ランダム

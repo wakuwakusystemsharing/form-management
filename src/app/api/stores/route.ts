@@ -81,13 +81,20 @@ export async function GET(request: NextRequest) {
 
     let query = (adminClient as any).from('stores').select('*').order('created_at', { ascending: false })
 
-    // システム管理者の場合は自分が作成した店舗のみ
+    // システム管理者の場合は同テナントの店舗のみ
     if (userId) {
       const isMaster = await isMasterAdmin(userId)
       if (!isMaster) {
         const isSystem = await isSystemAdminById(userId)
         if (isSystem) {
-          query = query.eq('created_by', userId)
+          const { data: adminData } = await (adminClient as any)
+            .from('system_admins')
+            .select('org_id')
+            .eq('user_id', userId)
+            .maybeSingle()
+          if (adminData?.org_id) {
+            query = query.eq('org_id', adminData.org_id)
+          }
         }
       }
     }
@@ -287,12 +294,22 @@ export async function POST(request: NextRequest) {
       )
     }
     
+    // システム管理者の場合、所属テナントのorg_idを取得
+    let orgId: string | null = null
+    if (isSystem) {
+      const { data: adminData } = await (adminClient as any)
+        .from('system_admins')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      orgId = adminData?.org_id || null
+    }
+
     // 店舗を挿入
-     
     const { data, error } = await (adminClient as any)
       .from('stores')
       .insert([{
-        id: storeId, // 明示的に6文字のランダムIDを指定
+        id: storeId,
         name,
         owner_name,
         owner_email,
@@ -304,7 +321,8 @@ export async function POST(request: NextRequest) {
         line_channel_access_token: line_channel_access_token ?? '',
         status: 'active',
         created_by: user.id,
-        updated_by: user.id
+        updated_by: user.id,
+        org_id: orgId
       }])
       .select()
       .single()

@@ -229,16 +229,23 @@ export async function checkStoreAccess(
     return true;
   }
 
-  // システム管理者は自分が作成した店舗にアクセス可能
+  // システム管理者は同テナントの店舗にアクセス可能
   if (await isSystemAdminById(userId)) {
     const adminClient = getSupabaseAdminClient();
     if (adminClient) {
+      // ユーザーの所属テナントを取得
+      const { data: admin } = await (adminClient as any)
+        .from('system_admins')
+        .select('org_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+      // 店舗のテナントを取得
       const { data: store } = await (adminClient as any)
         .from('stores')
-        .select('created_by')
+        .select('org_id')
         .eq('id', storeId)
         .maybeSingle();
-      if (store && (store as any).created_by === userId) {
+      if (admin && store && admin.org_id && admin.org_id === store.org_id) {
         return true;
       }
     }
@@ -339,15 +346,22 @@ export async function isSystemAdminById(userId: string): Promise<boolean> {
   return !!data;
 }
 
+export interface UserRoleInfo {
+  role: 'master' | 'system' | 'store' | null;
+  orgId?: string;
+  orgSlug?: string;
+}
+
 /**
  * ユーザーのロールを判定（DB参照）
  * 優先度: master > system > store > null
+ * システム管理者の場合は所属テナント情報も返す
  * @param userId Supabase Auth の user_id
- * @returns ロール文字列
+ * @returns ロール情報
  */
-export async function getUserRole(userId: string): Promise<'master' | 'system' | 'store' | null> {
+export async function getUserRole(userId: string): Promise<UserRoleInfo> {
   const supabase = getSupabaseAdminClient();
-  if (!supabase) return null;
+  if (!supabase) return { role: null };
 
   // マスター管理者チェック
   const { data: masterData } = await (supabase as any)
@@ -355,15 +369,26 @@ export async function getUserRole(userId: string): Promise<'master' | 'system' |
     .select('id')
     .eq('user_id', userId)
     .maybeSingle();
-  if (masterData) return 'master';
+  if (masterData) return { role: 'master' };
 
-  // システム管理者チェック
+  // システム管理者チェック（org情報も取得）
   const { data: systemData } = await (supabase as any)
     .from('system_admins')
-    .select('id')
+    .select('id, org_id')
     .eq('user_id', userId)
     .maybeSingle();
-  if (systemData) return 'system';
+  if (systemData) {
+    let orgSlug: string | undefined;
+    if (systemData.org_id) {
+      const { data: org } = await (supabase as any)
+        .from('organizations')
+        .select('slug')
+        .eq('id', systemData.org_id)
+        .maybeSingle();
+      orgSlug = org?.slug;
+    }
+    return { role: 'system', orgId: systemData.org_id, orgSlug };
+  }
 
   // 店舗管理者チェック
   const { data: storeData } = await (supabase as any)
@@ -371,9 +396,9 @@ export async function getUserRole(userId: string): Promise<'master' | 'system' |
     .select('id')
     .eq('user_id', userId)
     .limit(1);
-  if (storeData && storeData.length > 0) return 'store';
+  if (storeData && storeData.length > 0) return { role: 'store' };
 
-  return null;
+  return { role: null };
 }
 
 
