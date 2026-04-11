@@ -274,40 +274,41 @@ export default function TenantAdminPage() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const nextUser = session?.user ?? null;
 
-      // システム管理者以上でない場合、店舗管理者ページにリダイレクト
-      const nextRole = nextUser ? await checkAdminRole() : null;
-      if (nextUser && !nextRole) {
-        // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
-        const { data: storeAdmins } = await (supabase as any)
-          .from('store_admins')
-          .select('store_id')
-          .limit(1);
-
-        if (storeAdmins && storeAdmins.length > 0) {
-          const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
-          router.push(`/${firstStoreId}/admin`);
-          return;
+      if (nextUser && session) {
+        // まずクッキーを設定
+        try {
+          await fetch('/api/auth/set-cookie', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({ accessToken: session.access_token }),
+          });
+        } catch (error) {
+          console.error('Failed to set cookie:', error);
         }
 
-        // 店舗管理者として登録されていない場合のみサインアウト
-        supabase.auth.signOut();
-        setUser(null);
-        setLoginError('このアカウントにはアクセス権限がありません。');
-      } else {
-        setUser(nextUser);
-        if (nextUser && session) {
-          try {
-            await fetch('/api/auth/set-cookie', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              credentials: 'include',
-              body: JSON.stringify({ accessToken: session.access_token }),
-            });
-          } catch (error) {
-            console.error('Failed to set cookie:', error);
+        // クッキー設定後にロールチェック
+        const nextRole = await checkAdminRole();
+        if (!nextRole) {
+          // 店舗管理者の場合、自分の店舗の管理者ページにリダイレクト
+          const { data: storeAdmins } = await (supabase as any)
+            .from('store_admins')
+            .select('store_id')
+            .limit(1);
+
+          if (storeAdmins && storeAdmins.length > 0) {
+            const firstStoreId = (storeAdmins[0] as { store_id: string }).store_id;
+            router.push(`/${firstStoreId}/admin`);
+            return;
           }
+
+          supabase.auth.signOut();
+          setUser(null);
+          setLoginError('このアカウントにはアクセス権限がありません。');
+        } else {
+          setUser(nextUser);
           loadStores();
         }
       }
