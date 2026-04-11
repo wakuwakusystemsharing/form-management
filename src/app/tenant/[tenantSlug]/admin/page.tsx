@@ -122,7 +122,7 @@ export default function TenantAdminPage() {
          'パスワードリセットに失敗しました。')
       );
       // エラー表示後、ハッシュをクリア
-      window.history.replaceState(null, '', '/admin');
+      window.history.replaceState(null, '', `/tenant/${tenantSlug}/admin`);
     }
     
     // パスワードリセットトークンがある場合
@@ -130,7 +130,7 @@ export default function TenantAdminPage() {
       setResetToken(accessToken);
       setShowPasswordReset(true);
       // トークンをクリア
-      window.history.replaceState(null, '', '/admin');
+      window.history.replaceState(null, '', `/tenant/${tenantSlug}/admin`);
     }
   }, []);
 

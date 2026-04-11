@@ -570,6 +570,7 @@ const FORM_TEMPLATES = {
 export default function StoreDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const tenantSlug = params.tenantSlug as string;
   const storeId = params.storeId as string;
   const { toast } = useToast();
   
@@ -691,7 +692,7 @@ export default function StoreDetailPage() {
         variant: 'destructive',
       });
     }
-    router.replace(`/admin/${storeId}`, { scroll: false });
+    router.replace(`/tenant/${tenantSlug}/admin/${storeId}`, { scroll: false });
   }, [searchParams, storeId, router, toast]);
 
   const handleCreateForm = async () => {
@@ -1098,7 +1099,7 @@ export default function StoreDetailPage() {
           title: '成功',
           description: '店舗を削除しました',
         });
-        router.push('/admin');
+        router.push(`/tenant/${tenantSlug}/admin`);
       } else {
         const error = await response.json();
         toast({
@@ -1165,7 +1166,7 @@ export default function StoreDetailPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => router.push('/admin')}
+              onClick={() => router.push(`/tenant/${tenantSlug}/admin`)}
               className="text-muted-foreground hover:text-foreground h-8 px-2 shrink-0"
             >
               <ArrowLeft className="h-4 w-4 mr-1" />
@@ -1186,7 +1187,7 @@ export default function StoreDetailPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => router.push(`/admin/help?storeId=${storeId}`)}
+              onClick={() => router.push(`/tenant/${tenantSlug}/admin/help?storeId=${storeId}`)}
               className="text-muted-foreground hover:text-foreground text-xs h-8"
               title="セットアップガイド"
             >
@@ -1195,7 +1196,7 @@ export default function StoreDetailPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => router.push(`/admin/${storeId}/reservations`)}
+              onClick={() => router.push(`/tenant/${tenantSlug}/admin/${storeId}/reservations`)}
               className="text-muted-foreground hover:text-foreground text-xs h-8"
             >
               <Calendar className="h-3.5 w-3.5 mr-1" />
@@ -1480,7 +1481,7 @@ export default function StoreDetailPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => router.push(`/admin/${storeId}/reservations`)}
+                    onClick={() => router.push(`/tenant/${tenantSlug}/admin/${storeId}/reservations`)}
                   >
                     すべて見る
                   </Button>
@@ -1743,7 +1744,7 @@ export default function StoreDetailPage() {
                                       {missing.map((item) => (
                                         <Link
                                           key={item.key}
-                                          href={`/admin/help?storeId=${storeId}#${item.helpAnchor}`}
+                                          href={`/tenant/${tenantSlug}/admin/help?storeId=${storeId}#${item.helpAnchor}`}
                                           className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded-full text-[11px] hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
                                         >
                                           <AlertTriangle className="h-3 w-3" />

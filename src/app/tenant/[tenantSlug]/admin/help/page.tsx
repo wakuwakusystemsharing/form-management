@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { getStoreSetupStatus } from '@/lib/store-setup-status';
 import type { Store } from '@/types/store';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,8 @@ export default function HelpPage() {
 
 function HelpPageContent() {
   const router = useRouter();
+  const params = useParams();
+  const tenantSlug = params.tenantSlug as string;
   const searchParams = useSearchParams();
   const storeId = searchParams.get('storeId');
   const [store, setStore] = useState<Store | null>(null);
@@ -82,7 +84,7 @@ function HelpPageContent() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => router.push(storeId ? `/admin/${storeId}` : '/admin')}
+            onClick={() => router.push(storeId ? `/tenant/${tenantSlug}/admin/${storeId}` : `/tenant/${tenantSlug}/admin`)}
             className="text-muted-foreground hover:text-foreground h-8 px-2"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />

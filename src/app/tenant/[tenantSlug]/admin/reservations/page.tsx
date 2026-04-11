@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,6 +39,8 @@ const SOURCE_MEDIUM_LABELS: Record<string, string> = {
 
 export default function AllReservationsPage() {
   const router = useRouter();
+  const params = useParams();
+  const tenantSlug = params.tenantSlug as string;
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [stores, setStores] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -123,7 +125,7 @@ export default function AllReservationsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => router.push('/admin')}
+                    onClick={() => router.push(`/tenant/${tenantSlug}/admin`)}
                   >
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     管理画面に戻る

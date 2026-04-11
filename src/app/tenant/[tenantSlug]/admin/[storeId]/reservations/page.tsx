@@ -40,6 +40,7 @@ const SOURCE_MEDIUM_LABELS: Record<string, string> = {
 export default function AdminStoreReservationsPage() {
   const params = useParams();
   const router = useRouter();
+  const tenantSlug = params.tenantSlug as string;
   const storeId = params.storeId as string;
 
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -124,7 +125,7 @@ export default function AdminStoreReservationsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => router.push(`/admin/${storeId}`)}
+                    onClick={() => router.push(`/tenant/${tenantSlug}/admin/${storeId}`)}
                   >
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     店舗詳細に戻る
