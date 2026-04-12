@@ -1465,6 +1465,15 @@ class BookingForm {
             }
             if (this.state.customFields && Object.keys(this.state.customFields).length > 0) {
                 customerInfo.custom_fields = this.state.customFields;
+                // ラベル付きのカスタムフィールド（Googleカレンダー説明文用）
+                const labeledFields = {};
+                if (this.config.custom_fields) {
+                    this.config.custom_fields.forEach(field => {
+                        const val = this.state.customFields[field.id];
+                        if (val) labeledFields[field.label] = val;
+                    });
+                }
+                customerInfo.custom_fields_labeled = labeledFields;
             }
             customerInfo.total_price = totalPrice;
             customerInfo.total_duration = totalDuration;

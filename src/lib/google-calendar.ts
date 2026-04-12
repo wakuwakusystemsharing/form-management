@@ -241,6 +241,9 @@ export async function createReservationEvent(
     preferredTime3?: string | null;
     selectedMenus?: Array<Record<string, any>>;
     selectedOptions?: Array<Record<string, any>>;
+    gender?: string | null;
+    coupon?: string | null;
+    customFields?: Record<string, string> | null;
   },
   storeId?: string
 ) {
@@ -265,7 +268,7 @@ export async function createReservationEvent(
     dateTimeLines.push(`≪第三希望≫ ${params.preferredDate3} ${params.preferredTime3}`);
   }
 
-  const description = [
+  const descriptionParts = [
     ...dateTimeLines,
     `≪LINEの名前≫ ${params.lineDisplayName || ''}`,
     `≪お名前≫ ${params.customerName}`,
@@ -275,9 +278,22 @@ export async function createReservationEvent(
     `≪メニュー≫ `,
     menuText,
     `≪ご来店回数≫ ${params.visitCount || ''}`,
-    `≪メッセージ≫ `,
-    params.message || ''
-  ].join('\n');
+  ];
+  if (params.gender) {
+    descriptionParts.push(`≪性別≫ ${params.gender}`);
+  }
+  if (params.coupon) {
+    descriptionParts.push(`≪クーポン≫ ${params.coupon}`);
+  }
+  descriptionParts.push(`≪メッセージ≫ `, params.message || '');
+  if (params.customFields && Object.keys(params.customFields).length > 0) {
+    Object.entries(params.customFields).forEach(([key, value]) => {
+      if (value) {
+        descriptionParts.push(`≪${key}≫ ${value}`);
+      }
+    });
+  }
+  const description = descriptionParts.join('\n');
 
   const response = await calendar.events.insert({
     calendarId: params.calendarId,

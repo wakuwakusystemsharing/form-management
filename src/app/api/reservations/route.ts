@@ -482,7 +482,10 @@ export async function POST(request: Request) {
             preferredDate3: body.reservation_date3 || customerInfo.preferred_date3 || null,
             preferredTime3: body.reservation_time3 || customerInfo.preferred_time3 || null,
             selectedMenus,
-            selectedOptions: body.selected_options || []
+            selectedOptions: body.selected_options || [],
+            gender: customerInfo.gender || null,
+            coupon: customerInfo.coupon || null,
+            customFields: customerInfo.custom_fields_labeled || null
           },
           body.store_id
         );
