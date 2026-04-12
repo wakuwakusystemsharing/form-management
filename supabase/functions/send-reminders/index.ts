@@ -175,10 +175,45 @@ async function sendLinePush(
   return { ok: res.ok, status: res.status, body };
 }
 
+function getCurrentHourJst(): string {
+  const now = new Date();
+  const jstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+  const hh = String(jstNow.getHours()).padStart(2, "0");
+  return `${hh}:00`;
+}
+
 Deno.serve(async () => {
   const targetDate = getTomorrowDateStringJst();
-  console.log(`リマインド対象日: ${targetDate}`);
+  const currentHour = getCurrentHourJst();
+  console.log(`リマインド対象日: ${targetDate}, 現在時刻(JST): ${currentHour}`);
 
+  // リマインダーが有効かつ送信時刻が一致する店舗のみ取得
+  const { data: eligibleStores, error: storeError } = await supabase
+    .from("stores")
+    .select("id,name,line_channel_access_token")
+    .eq("reminder_enabled", true)
+    .eq("reminder_time", currentHour)
+    .not("line_channel_access_token", "is", null);
+
+  if (storeError) {
+    console.error("店舗取得エラー:", storeError.message);
+    return new Response(JSON.stringify({ error: "店舗取得に失敗しました" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  if (!eligibleStores || eligibleStores.length === 0) {
+    console.log(`${currentHour} に送信対象の店舗がありません`);
+    return new Response(JSON.stringify({ sent: 0 }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const storeIds = eligibleStores.map((s) => s.id);
+  console.log(`対象店舗数: ${eligibleStores.length}件 (${storeIds.join(", ")})`);
+
+  // 対象店舗の翌日予約を取得
   const { data: reservations, error } = await supabase
     .from("reservations")
     .select(
@@ -186,7 +221,8 @@ Deno.serve(async () => {
     )
     .eq("reservation_date", targetDate)
     .neq("status", "cancelled")
-    .not("line_user_id", "is", null);
+    .not("line_user_id", "is", null)
+    .in("store_id", storeIds);
 
   if (error) {
     console.error("予約取得エラー:", error.message);
@@ -205,11 +241,7 @@ Deno.serve(async () => {
 
   console.log(`対象予約数: ${reservations.length}件`);
 
-  const storeIds = Array.from(new Set(reservations.map((r) => r.store_id)));
-  const { data: stores } = await supabase
-    .from("stores")
-    .select("id,name,line_channel_access_token")
-    .in("id", storeIds);
+  const { data: stores } = { data: eligibleStores };
 
   const DEFAULT_THEME_COLOR = "#877059";
   const storeMap = new Map<
