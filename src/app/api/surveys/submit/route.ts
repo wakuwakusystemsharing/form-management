@@ -68,7 +68,7 @@ export async function POST(request: Request) {
       .insert({
         survey_form_id,
         store_id,
-        responses: parsedResponses,
+        answers: parsedResponses,
         line_user_id: body.line_user_id || null,
         submitted_at: new Date().toISOString()
       })
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
     if (error) {
       console.error('[API] Survey submit error:', error);
       return NextResponse.json(
-        { error: 'アンケート回答の送信に失敗しました' },
+        { error: 'アンケート回答の送信に失敗しました', details: error.message, code: error.code },
         { status: 500 }
       );
     }

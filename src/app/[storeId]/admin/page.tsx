@@ -1069,9 +1069,10 @@ export default function StoreAdminPage() {
                           <div className="space-y-4">
                             {filteredResponses.map((response: any) => {
                               const surveyForm = surveyForms.find(f => f.id === response.survey_form_id);
-                              const responses = typeof response.responses === 'string' 
-                                ? JSON.parse(response.responses) 
-                                : response.responses;
+                              const rawAnswers = response.answers || response.responses;
+                              const responses = typeof rawAnswers === 'string'
+                                ? JSON.parse(rawAnswers)
+                                : rawAnswers;
 
                               return (
                                 <Card key={response.id} className="shadow-sm hover:shadow-md transition-shadow border-border/60">
