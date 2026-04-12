@@ -610,6 +610,7 @@ class BookingForm {
         let totalDuration = 0;
         const summaryLines = [];
         const messageParts = [];
+        const menusByCategory = [];
         const allowCross = this.config.menu_structure?.allow_cross_category_selection || false;
         const processMenu = (category, menu, submenu, menuId) => {
             const price = submenu ? (submenu.price || 0) : (menu.price || 0);
@@ -643,6 +644,7 @@ class BookingForm {
                 }
             });
             messageParts.push(optNames.length > 0 ? msgLine + ', ' + optNames.join(', ') : msgLine);
+            menusByCategory.push({ category: category?.name || '', menu: submenu ? menu.name + ' > ' + submenu.name : menu.name, options: optNames });
         };
         if (allowCross && this.state.selectedMenus && Object.keys(this.state.selectedMenus).length > 0) {
             Object.entries(this.state.selectedMenus).forEach(([categoryId, menuIds]) => {
@@ -677,8 +679,22 @@ class BookingForm {
             });
         }
         const menuTextForMessage = messageParts.length > 0 ? messageParts.join(' / ') : '';
+        // 希望日時式用: カテゴリーごとにグループ化した改行フォーマット
+        let menuTextGrouped = '';
+        if (menusByCategory.length > 0) {
+            const grouped = {};
+            menusByCategory.forEach(item => {
+                const cat = item.category || '未分類';
+                if (!grouped[cat]) grouped[cat] = [];
+                const line = item.options.length > 0 ? item.menu + '（' + item.options.join(', ') + '）' : item.menu;
+                grouped[cat].push(line);
+            });
+            menuTextGrouped = Object.entries(grouped).map(([cat, menus]) => {
+                return '-（' + cat + '）-\n' + menus.map(m => '・' + m).join('\n');
+            }).join('\n\n');
+        }
         const summaryHtml = summaryLines.map((line, i) => i === 0 ? \`<div style="margin-bottom:0.5rem;">\${line}</div>\` : \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">\${line}</div>\`).join('');
-        return { selectedMenus, selectedOptions, totalPrice, totalDuration, summaryHtml, menuTextForMessage };
+        return { selectedMenus, selectedOptions, totalPrice, totalDuration, summaryHtml, menuTextForMessage, menuTextGrouped };
     }
     
     showSubmenu(categoryId, menuId) {
@@ -1434,7 +1450,7 @@ class BookingForm {
         
         try {
             const payload = this.buildSelectionPayload();
-            const { selectedMenus, selectedOptions, totalPrice, totalDuration, menuTextForMessage } = payload;
+            const { selectedMenus, selectedOptions, totalPrice, totalDuration, menuTextForMessage, menuTextGrouped } = payload;
             
             // 顧客属性情報を構築
             const customerInfo = {};
@@ -1549,16 +1565,20 @@ class BookingForm {
             messageText += \`《お名前》\\n\${this.state.name || ''}\\n\`;
             messageText += \`《電話番号》\\n\${this.state.phone || ''}\\n\`;
 
-            // ご来店回数
-            let visitCountText = '';
+            // ご来店回数（有効時のみ表示）
             if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
                 const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
-                visitCountText = visitLabel || this.state.visitCount || '';
+                const visitCountText = visitLabel || this.state.visitCount || '';
+                messageText += \`《ご来店回数》\\n\${visitCountText}\\n\`;
             }
-            messageText += \`《ご来店回数》\\n\${visitCountText}\\n\`;
 
-            // メニュー
-            messageText += \`\\n《メニュー》\\n\${menuTextForMessage || ''}\\n\`;
+            // メニュー（希望日時式はカテゴリーごとに改行表示）
+            const bookingModeForMenu = this.config.calendar_settings?.booking_mode || 'calendar';
+            if (bookingModeForMenu === 'multiple_dates' && menuTextGrouped) {
+                messageText += \`\\n《メニュー》\\n\${menuTextGrouped}\\n\`;
+            } else {
+                messageText += \`\\n《メニュー》\\n\${menuTextForMessage || ''}\\n\`;
+            }
             if (totalPrice > 0 || totalDuration > 0) {
                 if (totalPrice > 0) messageText += \`\\n《合計金額》\\n¥\${totalPrice.toLocaleString()}\\n\`;
                 if (totalDuration > 0) messageText += \`\\n《合計時間》\\n\${totalDuration}分\\n\`;
@@ -1593,7 +1613,17 @@ class BookingForm {
                     messageText += \`\\n\\n《クーポン》\\n\${couponLabel}\`;
                 }
             }
-            
+
+            // カスタムフィールド
+            if (this.config.custom_fields && this.config.custom_fields.length > 0) {
+                this.config.custom_fields.forEach(field => {
+                    const value = this.state.customFields?.[field.id];
+                    if (value) {
+                        messageText += \`\\n\\n《\${field.label}》\\n\${value}\`;
+                    }
+                });
+            }
+
             // 予約完了後に選択内容をlocalStorageへ保存（前回と同じメニューで予約する機能用）
             try {
                 const bookingKey = \`booking_\${this.config.basic_info?.form_name || this.config.id || 'default'}\`;
