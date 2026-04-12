@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { getBaseUrl } from '@/lib/env';
 import {
@@ -2103,6 +2104,51 @@ export default function StoreDetailPage() {
                     Webhook・リマインドで使用します。
                   </p>
                 </div>
+
+                {/* リマインダー設定 */}
+                <div className="space-y-2">
+                  <Label>予約リマインダー</Label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={editingStore.reminder_enabled !== false}
+                      onClick={() => setEditingStore({...editingStore, reminder_enabled: editingStore.reminder_enabled === false ? true : false})}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editingStore.reminder_enabled !== false ? 'bg-primary' : 'bg-gray-300'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editingStore.reminder_enabled !== false ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                    <span className="text-sm text-muted-foreground">
+                      {editingStore.reminder_enabled !== false ? '有効' : '無効'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    予約前日にLINEリマインドメッセージを送信します（通数を1消費します）
+                  </p>
+                </div>
+                {editingStore.reminder_enabled !== false && (
+                  <div className="space-y-2">
+                    <Label>リマインダー送信時刻</Label>
+                    <Select
+                      value={editingStore.reminder_time || '19:00'}
+                      onValueChange={(value) => setEditingStore({...editingStore, reminder_time: value})}
+                    >
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 15 }, (_, i) => {
+                          const hour = i + 7;
+                          const value = `${String(hour).padStart(2, '0')}:00`;
+                          return <SelectItem key={value} value={value}>{value}</SelectItem>;
+                        })}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      翌日の予約がある顧客にリマインドが送信されます
+                    </p>
+                  </div>
+                )}
                 </div>
               </div>
           )}

@@ -15,6 +15,8 @@ export interface Store {
   /** 'system' = SA作成カレンダー, 'store_oauth' = 店舗連携のGoogleカレンダー */
   google_calendar_source?: 'system' | 'store_oauth';
   line_channel_access_token?: string; // LINEチャネルアクセストークン
+  reminder_enabled?: boolean;         // LINEリマインダー送信の有効/無効
+  reminder_time?: string;             // リマインダー送信時刻（HH:00形式、デフォルト19:00）
   created_at: string;
   updated_at: string;
   status: 'active' | 'inactive';
