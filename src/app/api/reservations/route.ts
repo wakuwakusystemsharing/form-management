@@ -454,8 +454,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. Googleカレンダーに予約イベントを作成し、イベントIDを予約に保存（キャンセル時に削除するため）
-    try {
+    // 4. Googleカレンダーに予約イベントを作成（希望日時式はスキップ — LINEチャットへの送信のみ）
+    const bookingMode = body.booking_mode || customerInfo.booking_mode || 'calendar';
+    if (bookingMode === 'multiple_dates') {
+      console.log('[API] 希望日時式のためカレンダーイベント作成をスキップ');
+    } else try {
       const { data: storeData, error: storeError } = await (adminClient as any)
         .from('stores')
         .select('google_calendar_id')

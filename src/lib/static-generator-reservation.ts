@@ -1528,7 +1528,8 @@ class BookingForm {
                 line_language: this.state.lineLanguage || null, // LINE言語設定
                 line_os: this.state.lineOs || null, // デバイスOS
                 line_friend_flag: this.state.lineFriendFlag || false, // 友だち追加状態
-                source_medium: sourceMedium
+                source_medium: sourceMedium,
+                booking_mode: this.config.calendar_settings?.booking_mode || 'calendar'
             };
             
             // /api/reservationsにPOSTリクエストを送信
