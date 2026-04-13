@@ -218,7 +218,26 @@ class BookingForm {
             }
             
             await this.initializeLIFF();
-            
+
+            // localStorageから名前・電話番号を復元
+            try {
+                const formId = this.config.basic_info?.form_name || this.config.id || 'default';
+                const saved = localStorage.getItem(\`booking_\${formId}\`);
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    if (data.customerPhone) {
+                        this.state.phone = data.customerPhone;
+                        const phoneEl = document.getElementById('customer-phone');
+                        if (phoneEl) phoneEl.value = data.customerPhone;
+                    }
+                    if (data.customerName && !this.state.name) {
+                        this.state.name = data.customerName;
+                        const nameEl = document.getElementById('customer-name');
+                        if (nameEl) nameEl.value = data.customerName;
+                    }
+                }
+            } catch (e) {}
+
             // カレンダーは初期表示しない（メニュー選択後に表示）
             // this.renderCalendar();
         } catch (error) {
@@ -690,8 +709,8 @@ class BookingForm {
                 grouped[cat].push(line);
             });
             menuTextGrouped = Object.entries(grouped).map(([cat, menus]) => {
-                return '-（' + cat + '）-\n' + menus.map(m => '・' + m).join('\n');
-            }).join('\n\n');
+                return '-（' + cat + '）-\\n' + menus.map(m => '・' + m).join('\\n');
+            }).join('\\n\\n');
         }
         const summaryHtml = summaryLines.map((line, i) => i === 0 ? \`<div style="margin-bottom:0.5rem;">\${line}</div>\` : \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">\${line}</div>\`).join('');
         return { selectedMenus, selectedOptions, totalPrice, totalDuration, summaryHtml, menuTextForMessage, menuTextGrouped };
@@ -1662,7 +1681,9 @@ class BookingForm {
                     selectedCategoryOptions: this.state.selectedCategoryOptions,
                     gender: this.state.gender,
                     visitCount: this.state.visitCount,
-                    couponUsage: this.state.coupon
+                    couponUsage: this.state.coupon,
+                    customerName: this.state.name,
+                    customerPhone: this.state.phone
                 }));
             } catch (e) {
                 // プライベートモードなどでlocalStorageが使えない場合も継続
