@@ -709,8 +709,8 @@ class BookingForm {
                 grouped[cat].push(line);
             });
             menuTextGrouped = Object.entries(grouped).map(([cat, menus]) => {
-                return '-（' + cat + '）-\n' + menus.map(m => '・' + m).join('\n');
-            }).join('\n\n');
+                return '-（' + cat + '）-\\n' + menus.map(m => '・' + m).join('\\n');
+            }).join('\\n\\n');
         }
         const summaryHtml = summaryLines.map((line, i) => i === 0 ? \`<div style="margin-bottom:0.5rem;">\${line}</div>\` : \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">\${line}</div>\`).join('');
         return { selectedMenus, selectedOptions, totalPrice, totalDuration, summaryHtml, menuTextForMessage, menuTextGrouped };
