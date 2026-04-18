@@ -1024,7 +1024,7 @@ class BookingForm {
 
             // 同時刻に何件イベントがあれば予約不可にするかの閾値（1以上、デフォルト1）
             const rawMax = this.config?.calendar_settings?.max_concurrent_events;
-            const maxConcurrent = (typeof rawMax === 'number' && rawMax >= 1) ? Math.floor(rawMax) : 1;
+            const maxConcurrent = (typeof rawMax === 'number' && Number.isFinite(rawMax) && rawMax >= 1) ? Math.floor(rawMax) : 1;
 
             // 空き状況の判定ロジック（count >= maxConcurrent で予約不可）
             if (isBusinessEventTime && count >= maxConcurrent) {
