@@ -101,7 +101,7 @@ async function getServiceAccountCalendarClient() {
  * Returns Calendar API client for the store. Uses store OAuth when store has google_calendar_source = 'store_oauth',
  * otherwise uses the service account client.
  */
-async function getCalendarClientForStore(storeId: string): Promise<ReturnType<typeof google.calendar> | null> {
+export async function getCalendarClientForStore(storeId: string): Promise<ReturnType<typeof google.calendar> | null> {
   const adminClient = createAdminClient();
   if (!adminClient) return null;
 
