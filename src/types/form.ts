@@ -155,6 +155,8 @@ export interface FormConfig {
       };
     };
     allow_exceed_business_hours?: boolean;  // 営業時間超過の予約を許可
+    // 同時刻に何件のイベントがあれば予約不可にするか（1以上）。デフォルト1（1件で埋まる）
+    max_concurrent_events?: number;
   };
 
   ui_settings: {

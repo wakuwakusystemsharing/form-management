@@ -479,15 +479,15 @@ export async function POST(request: Request) {
             lineDisplayName: body.line_display_name || null,
             message: body.message || null,
             course: customerInfo.course || null,
-            visitCount: customerInfo.visit_count || null,
+            visitCount: customerInfo.visit_count_label || customerInfo.visit_count || null,
             preferredDate2: body.reservation_date2 || customerInfo.preferred_date2 || null,
             preferredTime2: body.reservation_time2 || customerInfo.preferred_time2 || null,
             preferredDate3: body.reservation_date3 || customerInfo.preferred_date3 || null,
             preferredTime3: body.reservation_time3 || customerInfo.preferred_time3 || null,
             selectedMenus,
             selectedOptions: body.selected_options || [],
-            gender: customerInfo.gender || null,
-            coupon: customerInfo.coupon || null,
+            gender: customerInfo.gender_label || customerInfo.gender || null,
+            coupon: customerInfo.coupon_label || customerInfo.coupon || null,
             customFields: customerInfo.custom_fields_labeled || null
           },
           body.store_id

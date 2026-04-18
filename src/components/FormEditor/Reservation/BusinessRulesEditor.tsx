@@ -29,6 +29,10 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     form.config?.calendar_settings?.advance_booking_days || 30
   );
 
+  const [maxConcurrentEvents, setMaxConcurrentEvents] = useState(
+    form.config?.calendar_settings?.max_concurrent_events || 1
+  );
+
   const [bookingMode, setBookingMode] = useState<'calendar' | 'multiple_dates'>(
     form.config?.calendar_settings?.booking_mode || 'calendar'
   );
@@ -107,7 +111,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
 
   const handleAdvanceBookingDaysChange = (days: number) => {
     setAdvanceBookingDays(days);
-    
+
     const updatedForm = {
       ...form,
       config: {
@@ -115,6 +119,23 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         calendar_settings: {
           ...form.config?.calendar_settings,
           advance_booking_days: days
+        }
+      }
+    };
+    onUpdate(updatedForm);
+  };
+
+  const handleMaxConcurrentEventsChange = (value: number) => {
+    const safeValue = Number.isFinite(value) && value >= 1 ? Math.floor(value) : 1;
+    setMaxConcurrentEvents(safeValue);
+
+    const updatedForm = {
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          max_concurrent_events: safeValue
         }
       }
     };
@@ -507,7 +528,26 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               />
               <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>何日先まで予約を受け付けるか</p>
             </div>
-            
+
+            <div className="max-w-xs">
+              <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
+                同時刻に埋まるイベント数
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="99"
+                value={maxConcurrentEvents}
+                onChange={(e) => handleMaxConcurrentEventsChange(parseInt(e.target.value) || 1)}
+                className={themeClasses.input}
+              />
+              <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
+                Googleカレンダー上でこの件数以上のイベントが重なる時間帯は予約不可（✕）になります。
+                <br />
+                例: 「2」に設定 → 2件のイベントが重なる時間帯から✕。「1」は現状（1件で✕）。
+              </p>
+            </div>
+
             <div className="flex items-center justify-between">
               <div>
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
@@ -553,6 +593,9 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • 営業時間超過: {form.config?.calendar_settings?.allow_exceed_business_hours ? '許可' : '不可'}
+              </p>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                • 同時刻の予約不可閾値: {maxConcurrentEvents}件
               </p>
             </div>
           </div>

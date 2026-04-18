@@ -97,7 +97,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         saturday: { open: '09:00', close: '18:00', closed: false },
         sunday: { open: '09:00', close: '18:00', closed: true }
       },
-      advance_booking_days: 30
+      advance_booking_days: 30,
+      max_concurrent_events: 1
     },
     ui_settings: {
       theme_color: '#3B82F6',
@@ -203,7 +204,13 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           }
           return base;
         })() as Form['config']['calendar_settings']['multiple_dates_settings'],
-        allow_exceed_business_hours: existingConfig?.calendar_settings?.allow_exceed_business_hours ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.allow_exceed_business_hours ?? false
+        allow_exceed_business_hours: existingConfig?.calendar_settings?.allow_exceed_business_hours ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.allow_exceed_business_hours ?? false,
+        max_concurrent_events: (() => {
+          const v = existingConfig?.calendar_settings?.max_concurrent_events
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.max_concurrent_events;
+          const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 1;
+          return n >= 1 ? n : 1;
+        })()
       },
       ui_settings: {
         theme_color: (existingConfig?.ui_settings?.theme_color || (typedConfig?.basic_info as Form['config']['basic_info'])?.theme_color || (typedBasicInfo?.theme_color as string) || (typedConfig?.ui_settings as Form['config']['ui_settings'])?.theme_color || (typedUiSettings?.theme_color as string) || '#3B82F6') as string,

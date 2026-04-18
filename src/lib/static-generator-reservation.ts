@@ -1012,7 +1012,7 @@ class BookingForm {
                 return slotStart < event.end && event.start < slotEnd;
             });
             
-            // 予約済みイベントの数をカウント
+            // 予約済みイベントの数をカウント（営業日イベントは除外）
             const count = this.availabilityData.reduce((acc, slot) => {
                 const eventStart = new Date(slot.startTime);
                 const eventEnd = new Date(slot.endTime);
@@ -1021,13 +1021,17 @@ class BookingForm {
                 }
                 return acc;
             }, 0);
-            
-            // 空き状況の判定ロジック
-            if (isBusinessEventTime && count > 0) {
-                // 営業日のイベント時間内に他のイベントがある場合
+
+            // 同時刻に何件イベントがあれば予約不可にするかの閾値（1以上、デフォルト1）
+            const rawMax = this.config?.calendar_settings?.max_concurrent_events;
+            const maxConcurrent = (typeof rawMax === 'number' && Number.isFinite(rawMax) && rawMax >= 1) ? Math.floor(rawMax) : 1;
+
+            // 空き状況の判定ロジック（count >= maxConcurrent で予約不可）
+            if (isBusinessEventTime && count >= maxConcurrent) {
+                // 営業日のイベント時間内で同時刻に閾値以上のイベントがある場合
                 isAvailable = false;
             } else if (isBusinessEventTime) {
-                // 営業日のイベント時間（他のイベントがない場合）
+                // 営業日のイベント時間（閾値未満）
                 isAvailable = true;
             } else if (businessEventTimes.length > 0) {
                 // 営業日で、指定されている時間以外の時間は×
@@ -1035,11 +1039,11 @@ class BookingForm {
             } else if (slotStart.getDay() === 0 && !isBusinessDay && businessEventTimes.length === 0) {
                 // 日曜日で、営業日ではない場合
                 isAvailable = false;
-            } else if (isBusinessDay && count === 0) {
-                // 営業日でかつ他のイベントがない場合
+            } else if (isBusinessDay && count < maxConcurrent) {
+                // 営業日でかつ閾値未満
                 isAvailable = true;
-            } else if (count <= 0) {
-                // それ以外の条件
+            } else if (count < maxConcurrent) {
+                // それ以外で閾値未満
                 isAvailable = true;
             } else {
                 isAvailable = false;
@@ -1475,12 +1479,18 @@ class BookingForm {
             const customerInfo = {};
             if (this.config.gender_selection?.enabled && this.state.gender) {
                 customerInfo.gender = this.state.gender;
+                const label = this.config.gender_selection.options?.find(o => o.value === this.state.gender)?.label;
+                if (label) customerInfo.gender_label = label;
             }
             if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
                 customerInfo.visit_count = this.state.visitCount;
+                const label = this.config.visit_count_selection.options?.find(o => o.value === this.state.visitCount)?.label;
+                if (label) customerInfo.visit_count_label = label;
             }
             if (this.config.coupon_selection?.enabled && this.state.coupon) {
                 customerInfo.coupon = this.state.coupon;
+                const label = this.config.coupon_selection.options?.find(o => o.value === this.state.coupon)?.label;
+                if (label) customerInfo.coupon_label = label;
             }
             if (this.state.customFields && Object.keys(this.state.customFields).length > 0) {
                 customerInfo.custom_fields = this.state.customFields;
@@ -1489,7 +1499,7 @@ class BookingForm {
                 if (this.config.custom_fields) {
                     this.config.custom_fields.forEach(field => {
                         const val = this.state.customFields[field.id];
-                        if (val) labeledFields[field.label] = val;
+                        if (val) labeledFields[field.title] = val;
                     });
                 }
                 customerInfo.custom_fields_labeled = labeledFields;
@@ -1648,7 +1658,7 @@ class BookingForm {
                 this.config.custom_fields.forEach(field => {
                     const value = this.state.customFields?.[field.id];
                     if (value) {
-                        messageText += \`\\n\\n《\${field.label}》\\n\${value}\`;
+                        messageText += \`\\n\\n《\${field.title}》\\n\${value}\`;
                     }
                 });
             }

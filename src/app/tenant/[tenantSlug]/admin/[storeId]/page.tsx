@@ -611,6 +611,11 @@ export default function StoreDetailPage() {
   const [showReservationDetail, setShowReservationDetail] = useState(false);
   const [creatingCalendar, setCreatingCalendar] = useState(false);
   const [disconnectingCalendar, setDisconnectingCalendar] = useState(false);
+  const [calendarPickerOpen, setCalendarPickerOpen] = useState(false);
+  const [calendarList, setCalendarList] = useState<Array<{ id: string; summary: string; primary: boolean; accessRole: string; backgroundColor: string | null }>>([]);
+  const [loadingCalendarList, setLoadingCalendarList] = useState(false);
+  const [selectedCalendarId, setSelectedCalendarId] = useState<string>('');
+  const [savingCalendarId, setSavingCalendarId] = useState(false);
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -1053,6 +1058,78 @@ export default function StoreDetailPage() {
     }
   };
 
+  const openCalendarPicker = async () => {
+    if (!storeId) return;
+    setCalendarPickerOpen(true);
+    setLoadingCalendarList(true);
+    setCalendarList([]);
+    try {
+      const response = await fetch(`/api/stores/${storeId}/calendar/list`, {
+        credentials: 'include',
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        setCalendarList(data.calendars || []);
+        setSelectedCalendarId(data.current_calendar_id || '');
+      } else {
+        toast({
+          title: 'エラー',
+          description: data.error || 'カレンダー一覧の取得に失敗しました',
+          variant: 'destructive',
+        });
+        setCalendarPickerOpen(false);
+      }
+    } catch (error) {
+      console.error('Fetch calendar list error:', error);
+      toast({
+        title: 'エラー',
+        description: 'カレンダー一覧の取得に失敗しました',
+        variant: 'destructive',
+      });
+      setCalendarPickerOpen(false);
+    } finally {
+      setLoadingCalendarList(false);
+    }
+  };
+
+  const handleSaveCalendarSelection = async () => {
+    if (!storeId || !store || !selectedCalendarId) return;
+    if (selectedCalendarId === store.google_calendar_id) {
+      setCalendarPickerOpen(false);
+      return;
+    }
+    setSavingCalendarId(true);
+    try {
+      const response = await fetch(`/api/stores/${storeId}/calendar`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ google_calendar_id: selectedCalendarId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        setStore({ ...store, google_calendar_id: data.google_calendar_id });
+        toast({ title: 'カレンダーを変更しました' });
+        setCalendarPickerOpen(false);
+      } else {
+        toast({
+          title: 'エラー',
+          description: data.error || 'カレンダーの変更に失敗しました',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Save calendar selection error:', error);
+      toast({
+        title: 'エラー',
+        description: 'カレンダーの変更に失敗しました',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingCalendarId(false);
+    }
+  };
+
   const handleDeleteForm = (formId: string) => {
     setDeletingFormId(formId);
     setShowDeleteConfirm(true);
@@ -1253,12 +1330,21 @@ export default function StoreDetailPage() {
                       カレンダーを開く
                     </Button>
                     {store.google_calendar_source === 'store_oauth' ? (
-                      <Button variant="outline" size="sm" disabled={disconnectingCalendar}
-                        onClick={handleDisconnectCalendar}
-                        className="border-border h-8 text-xs"
-                      >
-                        {disconnectingCalendar ? '解除中...' : '連携を解除'}
-                      </Button>
+                      <>
+                        <Button variant="outline" size="sm"
+                          onClick={openCalendarPicker}
+                          className="border-border h-8 text-xs"
+                        >
+                          <Calendar className="mr-1 h-3.5 w-3.5" />
+                          カレンダーを変更
+                        </Button>
+                        <Button variant="outline" size="sm" disabled={disconnectingCalendar}
+                          onClick={handleDisconnectCalendar}
+                          className="border-border h-8 text-xs"
+                        >
+                          {disconnectingCalendar ? '解除中...' : '連携を解除'}
+                        </Button>
+                      </>
                     ) : (
                       <div className="flex items-center gap-1">
                         <Button variant="outline" size="sm"
@@ -2640,6 +2726,76 @@ Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === de
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Googleカレンダー選択ダイアログ */}
+      <Dialog open={calendarPickerOpen} onOpenChange={setCalendarPickerOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>連携するカレンダーを選択</DialogTitle>
+            <DialogDescription>
+              予約イベントを登録するカレンダーを選んでください。書き込み可能なカレンダーのみ表示しています。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            {loadingCalendarList ? (
+              <p className="text-sm text-muted-foreground text-center py-6">読み込み中...</p>
+            ) : calendarList.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                書き込み可能なカレンダーが見つかりませんでした
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1.5 max-h-80 overflow-y-auto">
+                {calendarList.map((cal) => {
+                  const selected = cal.id === selectedCalendarId;
+                  return (
+                    <button
+                      key={cal.id}
+                      type="button"
+                      onClick={() => setSelectedCalendarId(cal.id)}
+                      className={`flex items-center gap-3 text-left px-3 py-2.5 rounded-md border transition-colors ${
+                        selected ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent/30'
+                      }`}
+                    >
+                      <span
+                        className="inline-block w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: cal.backgroundColor || '#9ca3af' }}
+                      />
+                      <span className="flex-1 min-w-0">
+                        <span className="flex items-center gap-2">
+                          <span className="text-sm font-medium truncate">{cal.summary || cal.id}</span>
+                          {cal.primary && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">メイン</Badge>
+                          )}
+                        </span>
+                        <span className="block text-xs text-muted-foreground truncate">{cal.id}</span>
+                      </span>
+                      {selected && (
+                        <span className="text-primary text-sm flex-shrink-0">✓</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCalendarPickerOpen(false)} disabled={savingCalendarId}>
+              キャンセル
+            </Button>
+            <Button
+              onClick={handleSaveCalendarSelection}
+              disabled={
+                savingCalendarId ||
+                loadingCalendarList ||
+                !selectedCalendarId ||
+                selectedCalendarId === store?.google_calendar_id
+              }
+            >
+              {savingCalendarId ? '保存中...' : '保存'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
