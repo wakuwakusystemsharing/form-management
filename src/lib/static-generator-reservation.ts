@@ -1475,12 +1475,18 @@ class BookingForm {
             const customerInfo = {};
             if (this.config.gender_selection?.enabled && this.state.gender) {
                 customerInfo.gender = this.state.gender;
+                const label = this.config.gender_selection.options?.find(o => o.value === this.state.gender)?.label;
+                if (label) customerInfo.gender_label = label;
             }
             if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
                 customerInfo.visit_count = this.state.visitCount;
+                const label = this.config.visit_count_selection.options?.find(o => o.value === this.state.visitCount)?.label;
+                if (label) customerInfo.visit_count_label = label;
             }
             if (this.config.coupon_selection?.enabled && this.state.coupon) {
                 customerInfo.coupon = this.state.coupon;
+                const label = this.config.coupon_selection.options?.find(o => o.value === this.state.coupon)?.label;
+                if (label) customerInfo.coupon_label = label;
             }
             if (this.state.customFields && Object.keys(this.state.customFields).length > 0) {
                 customerInfo.custom_fields = this.state.customFields;
