@@ -1495,7 +1495,7 @@ class BookingForm {
                 if (this.config.custom_fields) {
                     this.config.custom_fields.forEach(field => {
                         const val = this.state.customFields[field.id];
-                        if (val) labeledFields[field.label] = val;
+                        if (val) labeledFields[field.title] = val;
                     });
                 }
                 customerInfo.custom_fields_labeled = labeledFields;
@@ -1654,7 +1654,7 @@ class BookingForm {
                 this.config.custom_fields.forEach(field => {
                     const value = this.state.customFields?.[field.id];
                     if (value) {
-                        messageText += \`\\n\\n《\${field.label}》\\n\${value}\`;
+                        messageText += \`\\n\\n《\${field.title}》\\n\${value}\`;
                     }
                 });
             }
