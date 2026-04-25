@@ -157,6 +157,8 @@ export interface FormConfig {
     allow_exceed_business_hours?: boolean;  // 営業時間超過の予約を許可
     // 同時刻に何件のイベントがあれば予約不可にするか（1以上）。デフォルト1（1件で埋まる）
     max_concurrent_events?: number;
+    // 同一ユーザーが同時に持てる未来予約の最大数（0以下/未設定 = 制限なし）
+    max_concurrent_reservations_per_user?: number;
   };
 
   ui_settings: {

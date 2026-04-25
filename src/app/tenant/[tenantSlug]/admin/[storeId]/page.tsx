@@ -2754,7 +2754,7 @@ Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === de
                       key={cal.id}
                       type="button"
                       onClick={() => setSelectedCalendarId(cal.id)}
-                      className={`flex items-center gap-3 text-left px-3 py-2.5 rounded-md border transition-colors ${
+                      className={`w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-md border transition-colors ${
                         selected ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent/30'
                       }`}
                     >
@@ -2763,10 +2763,10 @@ Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === de
                         style={{ backgroundColor: cal.backgroundColor || '#9ca3af' }}
                       />
                       <span className="flex-1 min-w-0">
-                        <span className="flex items-center gap-2">
+                        <span className="flex items-center gap-2 min-w-0">
                           <span className="text-sm font-medium truncate">{cal.summary || cal.id}</span>
                           {cal.primary && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">メイン</Badge>
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 flex-shrink-0">メイン</Badge>
                           )}
                         </span>
                         <span className="block text-xs text-muted-foreground truncate">{cal.id}</span>

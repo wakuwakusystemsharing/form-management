@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
 import { createReservationEvent, deleteCalendarEvent, listCalendarEvents } from '@/lib/google-calendar';
+import { normalizeForm } from '@/lib/form-normalizer';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -201,6 +202,71 @@ function makeSimpleBubble(title: string, body: string, storeName?: string, theme
       paddingAll: '20px'
     }
   };
+}
+
+/**
+ * 店舗内の全フォームの max_concurrent_reservations_per_user の最大値を返す。
+ * どのフォームも 0 または未設定なら 0。
+ */
+async function getMaxReservationLimitForStore(
+  adminClient: any,
+  storeId: string
+): Promise<number> {
+  if (!adminClient) return 0;
+  const { data, error } = await adminClient
+    .from('forms')
+    .select('id, config, draft_config')
+    .eq('store_id', storeId);
+  if (error || !Array.isArray(data) || data.length === 0) return 0;
+  let max = 0;
+  for (const row of data) {
+    try {
+      const normalized = normalizeForm(row);
+      const v = normalized?.config?.calendar_settings?.max_concurrent_reservations_per_user;
+      if (typeof v === 'number' && v > max) max = Math.floor(v);
+    } catch {
+      /* ignore single-form errors */
+    }
+  }
+  return max;
+}
+
+/**
+ * 指定ユーザーの「未来かつ未キャンセル」の予約数を返す（webhook 用）。
+ */
+async function countActiveReservationsForUserInWebhook(
+  adminClient: any,
+  storeId: string,
+  lineUserId: string | null | undefined,
+  customerPhone: string | null | undefined
+): Promise<number> {
+  if (!adminClient) return 0;
+  if (!lineUserId && !customerPhone) return 0;
+
+  const now = new Date();
+  const jstParts = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const todayStr = `${jstParts.getFullYear()}-${String(jstParts.getMonth() + 1).padStart(2, '0')}-${String(jstParts.getDate()).padStart(2, '0')}`;
+  const nowMs = now.getTime();
+
+  const orParts: string[] = [];
+  if (lineUserId) orParts.push(`line_user_id.eq.${lineUserId}`);
+  if (customerPhone) orParts.push(`customer_phone.eq.${customerPhone}`);
+
+  const { data, error } = await adminClient
+    .from('reservations')
+    .select('reservation_date, reservation_time, status, line_user_id, customer_phone')
+    .eq('store_id', storeId)
+    .neq('status', 'cancelled')
+    .gte('reservation_date', todayStr)
+    .or(orParts.join(','));
+
+  if (error || !Array.isArray(data)) return 0;
+
+  return data.filter((r: any) => {
+    if (!r?.reservation_date || !r?.reservation_time) return false;
+    const dt = new Date(`${r.reservation_date}T${r.reservation_time}+09:00`).getTime();
+    return Number.isFinite(dt) && dt > nowMs;
+  }).length;
 }
 
 export async function POST(req: NextRequest) {
@@ -477,6 +543,44 @@ export async function POST(req: NextRequest) {
     // 予約はフォームのAPI直接呼び出し（/api/reservations）で既に作成済み。
     // Webhookでは確認メッセージの返信のみ行う（二重予約防止）。
     const details = parseReservationForm(messageText);
+
+    // 防御的チェック: API 側で同時予約数上限が超過したのを取りこぼした場合の保険。
+    // 通常 API 側で 409 になり LIFF 送信もスキップされるため、このブランチに来るのは異常ケース。
+    try {
+      const maxLimit = await getMaxReservationLimitForStore(adminClient, storeId);
+      if (maxLimit > 0) {
+        const activeCount = await countActiveReservationsForUserInWebhook(
+          adminClient,
+          storeId,
+          userId,
+          details.phone || null
+        );
+        if (activeCount > maxLimit) {
+          await replyFlexMessage(replyToken, accessToken, '予約通知', [{
+            type: 'bubble',
+            size: 'mega',
+            header: makeHeaderBox('【予約通知】', store.name, themeColor),
+            body: {
+              type: 'box',
+              layout: 'vertical',
+              contents: [{
+                type: 'text',
+                text: '既に予約があります。\n予約が過ぎるまで新しい予約はできません。',
+                size: 'sm',
+                wrap: true,
+                margin: 'md',
+                align: 'center',
+              }],
+              paddingAll: '20px',
+            },
+          }]);
+          return NextResponse.json({ success: true });
+        }
+      }
+    } catch (limitErr) {
+      console.error('[LINE Webhook] 同時予約数チェックエラー:', limitErr);
+      // チェック失敗は無視して通常の確認返信を続行
+    }
 
     const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
     const fmtDt = (dt: Date) => `${dt.getFullYear()}年${String(dt.getMonth() + 1).padStart(2, '0')}月${String(dt.getDate()).padStart(2, '0')}日（${weekdays[dt.getDay()]}）${dt.getHours()}時${String(dt.getMinutes()).padStart(2, '0')}分`;

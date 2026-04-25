@@ -33,6 +33,10 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     form.config?.calendar_settings?.max_concurrent_events || 1
   );
 
+  const [maxConcurrentReservationsPerUser, setMaxConcurrentReservationsPerUser] = useState(
+    form.config?.calendar_settings?.max_concurrent_reservations_per_user ?? 0
+  );
+
   const [bookingMode, setBookingMode] = useState<'calendar' | 'multiple_dates'>(
     form.config?.calendar_settings?.booking_mode || 'calendar'
   );
@@ -136,6 +140,23 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         calendar_settings: {
           ...form.config?.calendar_settings,
           max_concurrent_events: safeValue
+        }
+      }
+    };
+    onUpdate(updatedForm);
+  };
+
+  const handleMaxConcurrentReservationsPerUserChange = (value: number) => {
+    const safeValue = Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+    setMaxConcurrentReservationsPerUser(safeValue);
+
+    const updatedForm = {
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          max_concurrent_reservations_per_user: safeValue
         }
       }
     };
@@ -548,6 +569,27 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </p>
             </div>
 
+            <div className="max-w-xs">
+              <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
+                同一ユーザーの同時予約数の上限
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="99"
+                value={maxConcurrentReservationsPerUser}
+                onChange={(e) => handleMaxConcurrentReservationsPerUserChange(parseInt(e.target.value) || 0)}
+                className={themeClasses.input}
+              />
+              <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
+                同一ユーザー（LINE ID または電話番号で判定）が同時に持てる未来予約の最大数。
+                <br />
+                「0」=制限なし。「1」=既に1件予約があると2件目はブロックされ、フォーム上にエラーメッセージが表示されます。
+                <br />
+                予約日時が過ぎるか、予約をキャンセルするとカウントが減ります。
+              </p>
+            </div>
+
             <div className="flex items-center justify-between">
               <div>
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
@@ -596,6 +638,9 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • 同時刻の予約不可閾値: {maxConcurrentEvents}件
+              </p>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                • 同一ユーザー同時予約上限: {maxConcurrentReservationsPerUser === 0 ? '制限なし' : `${maxConcurrentReservationsPerUser}件まで`}
               </p>
             </div>
           </div>

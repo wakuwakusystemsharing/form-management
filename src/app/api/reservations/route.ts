@@ -4,6 +4,7 @@ import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { createReservationEvent } from '@/lib/google-calendar';
+import { normalizeForm } from '@/lib/form-normalizer';
 import {
   findCustomerByLineOrPhone,
   createCustomer,
@@ -73,6 +74,121 @@ function readReservations(): Reservation[] {
 function writeReservations(reservations: Reservation[]) {
   initializeDataFile();
   fs.writeFileSync(RESERVATIONS_FILE, JSON.stringify(reservations, null, 2));
+}
+
+/**
+ * フォーム ID から calendar_settings.max_concurrent_reservations_per_user を取得。
+ * normalizeForm を通すことでデフォルト 0 が必ず入る。フォームが見つからなければ 0。
+ */
+async function getReservationLimitForForm(formId: string): Promise<number> {
+  if (!formId) return 0;
+  const env = getAppEnvironment();
+
+  if (env === 'local') {
+    // ローカル: data/forms.json と data/forms_*.json から検索
+    try {
+      if (!fs.existsSync(DATA_DIR)) return 0;
+      const files = fs.readdirSync(DATA_DIR).filter((f) => f.startsWith('forms') && f.endsWith('.json'));
+      for (const file of files) {
+        try {
+          const data = fs.readFileSync(path.join(DATA_DIR, file), 'utf-8');
+          const arr = JSON.parse(data);
+          if (Array.isArray(arr)) {
+            const found = arr.find((f: any) => f?.id === formId);
+            if (found) {
+              const normalized = normalizeForm(found);
+              const v = normalized?.config?.calendar_settings?.max_concurrent_reservations_per_user;
+              return typeof v === 'number' && v > 0 ? Math.floor(v) : 0;
+            }
+          }
+        } catch {
+          /* ignore single-file parse errors */
+        }
+      }
+    } catch (err) {
+      console.error('[reservations] getReservationLimitForForm local error:', err);
+    }
+    return 0;
+  }
+
+  // staging/production: Supabase
+  const adminClient = createAdminClient();
+  if (!adminClient) return 0;
+  const { data, error } = await (adminClient as any)
+    .from('forms')
+    .select('id, config, draft_config')
+    .eq('id', formId)
+    .single();
+  if (error || !data) return 0;
+  const normalized = normalizeForm(data);
+  const v = normalized?.config?.calendar_settings?.max_concurrent_reservations_per_user;
+  return typeof v === 'number' && v > 0 ? Math.floor(v) : 0;
+}
+
+/**
+ * 指定ユーザーの「未来かつ未キャンセル」の予約数を返す。
+ * 判定: line_user_id がマッチする OR customer_phone がマッチする（OR 条件）。
+ * 未来判定: reservation_date + reservation_time（JST）> NOW()。
+ */
+async function countActiveReservationsForUser(
+  storeId: string,
+  lineUserId: string | null | undefined,
+  customerPhone: string | null | undefined
+): Promise<number> {
+  if (!lineUserId && !customerPhone) return 0;
+  const env = getAppEnvironment();
+
+  // JST の今（new Date は UTC ベースで保持されるが、+09:00 でフォーマットすれば良い）
+  const now = new Date();
+  // 日付絞り込み用の JST 日付文字列
+  const jstParts = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const todayStr = `${jstParts.getFullYear()}-${String(jstParts.getMonth() + 1).padStart(2, '0')}-${String(jstParts.getDate()).padStart(2, '0')}`;
+  const nowMs = now.getTime();
+
+  const isFutureAndMatchUser = (r: {
+    reservation_date?: string | null;
+    reservation_time?: string | null;
+    status?: string | null;
+    line_user_id?: string | null;
+    customer_phone?: string | null;
+    store_id?: string | null;
+  }): boolean => {
+    if (!r) return false;
+    if (r.store_id !== storeId) return false;
+    if (r.status === 'cancelled') return false;
+    const matchUser =
+      (lineUserId && r.line_user_id && r.line_user_id === lineUserId) ||
+      (customerPhone && r.customer_phone && r.customer_phone === customerPhone);
+    if (!matchUser) return false;
+    if (!r.reservation_date || !r.reservation_time) return false;
+    const dt = new Date(`${r.reservation_date}T${r.reservation_time}+09:00`).getTime();
+    return Number.isFinite(dt) && dt > nowMs;
+  };
+
+  if (env === 'local') {
+    try {
+      const all = readReservations();
+      return all.filter(isFutureAndMatchUser).length;
+    } catch (err) {
+      console.error('[reservations] countActiveReservationsForUser local error:', err);
+      return 0;
+    }
+  }
+
+  const adminClient = createAdminClient();
+  if (!adminClient) return 0;
+  const orParts: string[] = [];
+  if (lineUserId) orParts.push(`line_user_id.eq.${lineUserId}`);
+  if (customerPhone) orParts.push(`customer_phone.eq.${customerPhone}`);
+  const { data, error } = await (adminClient as any)
+    .from('reservations')
+    .select('reservation_date, reservation_time, status, line_user_id, customer_phone, store_id')
+    .eq('store_id', storeId)
+    .neq('status', 'cancelled')
+    .gte('reservation_date', todayStr)
+    .or(orParts.join(','));
+  if (error || !data) return 0;
+  return (data as any[]).filter(isFutureAndMatchUser).length;
 }
 
 /**
@@ -207,6 +323,30 @@ export async function POST(request: Request) {
         { error: '予約日時は必須です' },
         { status: 400 }
       );
+    }
+
+    // 同一ユーザーの同時予約数制限チェック（form 設定で >0 の場合のみ）
+    try {
+      const limit = await getReservationLimitForForm(body.form_id);
+      if (limit > 0) {
+        const activeCount = await countActiveReservationsForUser(
+          body.store_id,
+          body.line_user_id || null,
+          body.customer_phone || null
+        );
+        if (activeCount >= limit) {
+          return NextResponse.json(
+            {
+              error: '既に予約があります。予約が過ぎるまで新しい予約はできません。',
+              code: 'concurrent_reservation_limit',
+            },
+            { status: 409 }
+          );
+        }
+      }
+    } catch (err) {
+      // 上限チェック自体の失敗で予約を止めるのは過剰なのでログのみ
+      console.error('[reservations] concurrent reservation check error:', err);
     }
 
     const env = getAppEnvironment();
