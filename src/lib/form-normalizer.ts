@@ -98,7 +98,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         sunday: { open: '09:00', close: '18:00', closed: true }
       },
       advance_booking_days: 30,
-      max_concurrent_events: 1
+      max_concurrent_events: 1,
+      max_concurrent_reservations_per_user: 0
     },
     ui_settings: {
       theme_color: '#3B82F6',
@@ -210,6 +211,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.max_concurrent_events;
           const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 1;
           return n >= 1 ? n : 1;
+        })(),
+        max_concurrent_reservations_per_user: (() => {
+          const v = existingConfig?.calendar_settings?.max_concurrent_reservations_per_user
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.max_concurrent_reservations_per_user;
+          const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 0;
+          return n >= 0 ? n : 0;
         })()
       },
       ui_settings: {
