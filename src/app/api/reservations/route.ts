@@ -325,6 +325,30 @@ export async function POST(request: Request) {
       );
     }
 
+    // 同一ユーザーの同時予約数制限チェック（form 設定で >0 の場合のみ）
+    try {
+      const limit = await getReservationLimitForForm(body.form_id);
+      if (limit > 0) {
+        const activeCount = await countActiveReservationsForUser(
+          body.store_id,
+          body.line_user_id || null,
+          body.customer_phone || null
+        );
+        if (activeCount >= limit) {
+          return NextResponse.json(
+            {
+              error: '既に予約があります。予約が過ぎるまで新しい予約はできません。',
+              code: 'concurrent_reservation_limit',
+            },
+            { status: 409 }
+          );
+        }
+      }
+    } catch (err) {
+      // 上限チェック自体の失敗で予約を止めるのは過剰なのでログのみ
+      console.error('[reservations] concurrent reservation check error:', err);
+    }
+
     const env = getAppEnvironment();
 
     // ローカル環境: JSON に保存
