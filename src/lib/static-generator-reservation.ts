@@ -1563,6 +1563,7 @@ class BookingForm {
             
             // /api/reservationsにPOSTリクエストを送信
             let apiSuccess = false;
+            let blockReason = null;
             try {
                 const apiUrl = window.location.origin + '/api/reservations';
                 const response = await fetch(apiUrl, {
@@ -1572,18 +1573,36 @@ class BookingForm {
                     },
                     body: JSON.stringify(reservationData)
                 });
-                
+
                 if (response.ok) {
                     apiSuccess = true;
                     console.log('予約データをデータベースに保存しました');
                 } else {
                     const errorData = await response.json().catch(() => ({}));
+                    if (response.status === 409 && errorData && errorData.code === 'concurrent_reservation_limit') {
+                        blockReason = errorData.error || '既に予約があります。予約が過ぎるまで新しい予約はできません。';
+                    }
                     console.error('予約データの保存に失敗しました:', errorData);
-                    // API送信失敗でもLINEメッセージは送信する（既存の動作を維持）
+                    // 409 (concurrent_reservation_limit) 以外は LINE メッセージ送信を継続（既存挙動）
                 }
             } catch (apiError) {
                 console.error('API送信エラー:', apiError);
                 // API送信失敗でもLINEメッセージは送信する（既存の動作を維持）
+            }
+
+            // 同時予約数上限に達していた場合: 画面にエラーを表示し、成功画面・LIFF 送信をスキップ
+            if (blockReason) {
+                const formContent = document.querySelector('.form-content');
+                if (formContent) {
+                    const banner = document.createElement('div');
+                    banner.className = 'concurrent-reservation-error';
+                    banner.style.cssText = 'background:#fee;border:1px solid #f99;color:#c00;padding:1rem;margin-bottom:1rem;border-radius:0.375rem;font-size:0.875rem;line-height:1.6;';
+                    banner.textContent = blockReason;
+                    formContent.insertBefore(banner, formContent.firstChild);
+                    banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                resetSubmitState();
+                return;
             }
             
             // 日時を日本語形式に変換（LINEメッセージ用）
