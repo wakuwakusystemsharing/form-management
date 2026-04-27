@@ -99,7 +99,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       },
       advance_booking_days: 30,
       max_concurrent_events: 1,
-      max_concurrent_reservations_per_user: 0
+      max_concurrent_reservations_per_user: 0,
+      time_interval: 30
     },
     ui_settings: {
       theme_color: '#3B82F6',
@@ -217,7 +218,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.max_concurrent_reservations_per_user;
           const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 0;
           return n >= 0 ? n : 0;
-        })()
+        })(),
+        time_interval: (() => {
+          const v = existingConfig?.calendar_settings?.time_interval
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.time_interval;
+          return v === 10 || v === 15 || v === 30 || v === 60 ? v : 30;
+        })() as 10 | 15 | 30 | 60
       },
       ui_settings: {
         theme_color: (existingConfig?.ui_settings?.theme_color || (typedConfig?.basic_info as Form['config']['basic_info'])?.theme_color || (typedBasicInfo?.theme_color as string) || (typedConfig?.ui_settings as Form['config']['ui_settings'])?.theme_color || (typedUiSettings?.theme_color as string) || '#3B82F6') as string,

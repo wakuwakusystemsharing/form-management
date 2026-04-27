@@ -41,6 +41,10 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     form.config?.calendar_settings?.booking_mode || 'calendar'
   );
 
+  const [calendarTimeInterval, setCalendarTimeInterval] = useState<10 | 15 | 30 | 60>(
+    (form.config?.calendar_settings?.time_interval as 10 | 15 | 30 | 60) || 30
+  );
+
   const defaultWeekdayHours: { [key: string]: { open: string; close: string; closed: boolean } } = {
     '0': { open: '09:00', close: '18:00', closed: true },
     '1': { open: '09:00', close: '18:00', closed: false },
@@ -52,7 +56,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
   };
 
   const [multipleDatesSettings, setMultipleDatesSettings] = useState<{
-    time_interval: 15 | 30 | 60;
+    time_interval: 10 | 15 | 30 | 60;
     date_range_days: number;
     exclude_weekdays: number[];
     start_time: string;
@@ -123,6 +127,22 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         calendar_settings: {
           ...form.config?.calendar_settings,
           advance_booking_days: days
+        }
+      }
+    };
+    onUpdate(updatedForm);
+  };
+
+  const handleCalendarTimeIntervalChange = (value: 10 | 15 | 30 | 60) => {
+    setCalendarTimeInterval(value);
+
+    const updatedForm = {
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          time_interval: value
         }
       }
     };
@@ -399,6 +419,32 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </div>
             </div>
 
+            {/* Google カレンダー連携モード設定 */}
+            {bookingMode === 'calendar' && (
+              <div className={`rounded-lg p-4 ${theme === 'light' ? 'bg-blue-50 border border-blue-200' : 'bg-blue-900/20 border border-blue-700'}`}>
+                <h4 className={`text-sm font-medium mb-4 ${theme === 'light' ? 'text-blue-700' : 'text-blue-300'}`}>Googleカレンダー連携モード設定</h4>
+
+                <div className="max-w-xs">
+                  <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
+                    時間間隔
+                  </label>
+                  <select
+                    value={calendarTimeInterval}
+                    onChange={(e) => handleCalendarTimeIntervalChange(parseInt(e.target.value) as 10 | 15 | 30 | 60)}
+                    className={themeClasses.input}
+                  >
+                    <option value={10}>10分間隔</option>
+                    <option value={15}>15分間隔</option>
+                    <option value={30}>30分間隔</option>
+                    <option value={60}>60分間隔</option>
+                  </select>
+                  <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
+                    予約フォームのカレンダーに表示する時間スロットの間隔
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* 第三希望日時モード用設定 */}
             {bookingMode === 'multiple_dates' && (
               <div className={`rounded-lg p-4 ${theme === 'light' ? 'bg-blue-50 border border-blue-200' : 'bg-blue-900/20 border border-blue-700'}`}>
@@ -412,9 +458,10 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     </label>
                     <select
                       value={multipleDatesSettings.time_interval}
-                      onChange={(e) => handleMultipleDatesSettingsChange('time_interval', parseInt(e.target.value) as 15 | 30 | 60)}
+                      onChange={(e) => handleMultipleDatesSettingsChange('time_interval', parseInt(e.target.value) as 10 | 15 | 30 | 60)}
                       className={themeClasses.input}
                     >
+                      <option value={10}>10分間隔</option>
                       <option value={15}>15分間隔</option>
                       <option value={30}>30分間隔</option>
                       <option value={60}>60分間隔</option>

@@ -139,9 +139,11 @@ export interface FormConfig {
     google_calendar_url?: string;
     // 日時選択モード
     booking_mode?: 'calendar' | 'multiple_dates';  // カレンダー表示 or 第三希望日時選択
+    // カレンダー表示モードの時間間隔（分）。デフォルト 30
+    time_interval?: 10 | 15 | 30 | 60;
     // 第三希望日時モード用設定
     multiple_dates_settings?: {
-      time_interval: 15 | 30 | 60;        // 時間間隔（分）
+      time_interval: 10 | 15 | 30 | 60;   // 時間間隔（分）
       date_range_days: number;            // 選択可能日数（本日から何日後まで）
       exclude_weekdays: number[];         // 除外曜日 (0:日曜, 1:月曜, ...) - レガシー互換
       start_time: string;                 // 開始時間 "09:00" - レガシー互換
