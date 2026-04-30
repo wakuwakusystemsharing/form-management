@@ -151,7 +151,7 @@ export class StaticReservationGenerator {
             ${safeConfig.visit_count_selection.enabled ? this.renderVisitCountField(safeConfig) : ''}
             ${safeConfig.coupon_selection.enabled ? this.renderCouponField(safeConfig) : ''}
             ${safeConfig.custom_fields?.length ? this.renderCustomFields(safeConfig) : ''}
-            ${this.renderMenuField(safeConfig)}
+            ${safeConfig.calendar_settings?.show_menu_field === false ? '' : this.renderMenuField(safeConfig)}
             ${this.renderDateTimeFields(safeConfig)}
             ${this.renderMessageField()}
             ${this.renderSummary()}
@@ -292,6 +292,17 @@ class BookingForm {
                 this.state.currentWeekStart = this.getWeekStart(today);
                 this.state.selectedDate = '';
                 this.state.selectedTime = '';
+            }
+
+            // メニュー欄が非表示設定の場合は、メニュー選択を待たずに日時欄を表示
+            if (this.config.calendar_settings?.show_menu_field === false) {
+                // DOM が組み終わった次フレームで実行（datetime-field 等の要素が必要）
+                setTimeout(() => {
+                    this.toggleCalendarVisibility();
+                    // 「※メニューを選択すると...」のヒント文も不要なので隠す
+                    const hint = document.getElementById('datetime-hint');
+                    if (hint) hint.style.display = 'none';
+                }, 0);
             }
             
             await this.initializeLIFF();
@@ -440,8 +451,14 @@ class BookingForm {
             const self = this;
             this.config.custom_fields.forEach(function(field) {
                 const el = document.getElementById('custom-field-' + field.id);
-                if (el && (field.type === 'text' || field.type === 'textarea')) {
+                if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime')) {
                     el.addEventListener('input', function() {
+                        self.state.customFields[field.id] = el.value;
+                        self.updateSummary();
+                    });
+                }
+                if (el && field.type === 'select') {
+                    el.addEventListener('change', function() {
                         self.state.customFields[field.id] = el.value;
                         self.updateSummary();
                     });
@@ -2035,13 +2052,15 @@ class BookingForm {
     
     toggleCalendarVisibility() {
         const bookingMode = this.config.calendar_settings?.booking_mode || 'calendar';
-        
+        // メニュー欄が非表示設定の場合は、メニュー選択に関係なく常に日時欄を表示
+        const menuHidden = this.config.calendar_settings?.show_menu_field === false;
+
         if (bookingMode === 'multiple_dates') {
             // 第三希望日時モード
             const fields = ['datetime-field-1', 'datetime-field-2', 'datetime-field-3'];
-            const hasSel = this.config.menu_structure?.allow_cross_category_selection 
+            const hasSel = menuHidden ? true : (this.config.menu_structure?.allow_cross_category_selection
                 ? (this.state.selectedMenus && Object.values(this.state.selectedMenus).flat().length > 0)
-                : (this.state.selectedMenu || this.state.selectedSubmenu);
+                : (this.state.selectedMenu || this.state.selectedSubmenu));
             fields.forEach(fieldId => {
                 const field = document.getElementById(fieldId);
                 if (field) {
@@ -2049,9 +2068,9 @@ class BookingForm {
                 }
             });
         } else {
-            const hasSel = this.config.menu_structure?.allow_cross_category_selection 
+            const hasSel = menuHidden ? true : (this.config.menu_structure?.allow_cross_category_selection
                 ? (this.state.selectedMenus && Object.values(this.state.selectedMenus).flat().length > 0)
-                : (this.state.selectedMenu || this.state.selectedSubmenu);
+                : (this.state.selectedMenu || this.state.selectedSubmenu));
             const datetimeField = document.getElementById('datetime-field');
             if (datetimeField) {
                 if (hasSel) {
@@ -2168,6 +2187,30 @@ if (document.readyState === 'loading') {
             <div class="field" id="custom-field-wrap-${field.id}">
                 <label class="field-label">${label}</label>
                 <div class="custom-field-checkboxes">${optionsHtml}</div>
+            </div>`;
+      }
+      if (field.type === 'date') {
+        return `
+            <div class="field" id="custom-field-wrap-${field.id}">
+                <label class="field-label" for="${id}">${label}</label>
+                <input type="date" id="${id}" class="input" data-field-id="${field.id}">
+            </div>`;
+      }
+      if (field.type === 'datetime') {
+        return `
+            <div class="field" id="custom-field-wrap-${field.id}">
+                <label class="field-label" for="${id}">${label}</label>
+                <input type="datetime-local" id="${id}" class="input" data-field-id="${field.id}">
+            </div>`;
+      }
+      if (field.type === 'select' && field.options?.length) {
+        const optionsHtml = field.options.map(opt =>
+          `<option value="${this.escapeHtml(opt.value)}">${this.escapeHtml(opt.label)}</option>`
+        ).join('');
+        return `
+            <div class="field" id="custom-field-wrap-${field.id}">
+                <label class="field-label" for="${id}">${label}</label>
+                <select id="${id}" class="input" data-field-id="${field.id}"><option value="">選択してください</option>${optionsHtml}</select>
             </div>`;
       }
       return '';
@@ -2287,7 +2330,7 @@ if (document.readyState === 'loading') {
             <!-- 日時選択 -->
             <div class="field" id="datetime-field" style="display:none;">
                 <label class="field-label">希望日時 <span class="required">*</span></label>
-                <div style="font-size:0.875rem;color:#6b7280;margin-bottom:1rem;">
+                <div id="datetime-hint" style="font-size:0.875rem;color:#6b7280;margin-bottom:1rem;">
                     ※メニューを選択すると空き状況のカレンダーが表示されます
                 </div>
                 

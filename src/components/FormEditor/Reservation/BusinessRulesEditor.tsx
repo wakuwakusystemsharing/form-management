@@ -922,6 +922,46 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </button>
             </div>
 
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  「メニュー」フィールドを表示
+                </label>
+                <InfoTooltip
+                  theme={theme}
+                  text={'OFF にするとメニュー選択欄を非表示にし、希望日時/カレンダーをデフォルトで表示します。\nメニューをカスタムフィールドやメッセージ欄に手入力する運用向け'}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const current = form.config?.calendar_settings?.show_menu_field !== false;
+                  const newValue = !current;
+                  onUpdate({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      calendar_settings: {
+                        ...form.config?.calendar_settings,
+                        show_menu_field: newValue
+                      }
+                    }
+                  });
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                  form.config?.calendar_settings?.show_menu_field !== false
+                    ? 'bg-green-500'
+                    : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    form.config?.calendar_settings?.show_menu_field !== false ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
             <div className={`${themeClasses.highlight} rounded-lg p-4`}>
               <h4 className={`text-sm font-medium mb-2 ${theme === 'light' ? 'text-[rgb(244,144,49)]' : 'text-cyan-300'}`}>現在の設定:</h4>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
@@ -941,6 +981,9 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • 電話番号フィールド: {form.config?.calendar_settings?.show_customer_phone !== false ? '表示' : '非表示'}
+              </p>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                • メニューフィールド: {form.config?.calendar_settings?.show_menu_field !== false ? '表示' : '非表示（希望日時/カレンダーをデフォルト表示）'}
               </p>
             </div>
           </div>

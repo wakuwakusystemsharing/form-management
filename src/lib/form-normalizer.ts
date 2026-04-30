@@ -104,6 +104,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       time_interval: 30,
       show_customer_name: true,
       show_customer_phone: true,
+      show_menu_field: true,
       holidays_as_closed: false,
       excluded_holiday_types: []
     },
@@ -239,6 +240,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         })() as 10 | 15 | 30 | 60,
         show_customer_name: existingConfig?.calendar_settings?.show_customer_name ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_name ?? true,
         show_customer_phone: existingConfig?.calendar_settings?.show_customer_phone ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_phone ?? true,
+        show_menu_field: existingConfig?.calendar_settings?.show_menu_field ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_menu_field ?? true,
         holidays_as_closed: existingConfig?.calendar_settings?.holidays_as_closed
           ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.holidays_as_closed
           ?? false,

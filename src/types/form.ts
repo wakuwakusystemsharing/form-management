@@ -115,7 +115,7 @@ export interface FormConfig {
   
   custom_fields?: Array<{
     id: string;
-    type: 'text' | 'textarea' | 'radio' | 'checkbox';
+    type: 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select';
     title: string;
     required: boolean;
     options?: Array<{
@@ -174,6 +174,8 @@ export interface FormConfig {
     show_customer_name?: boolean;
     // 「電話番号」フィールドの表示（未設定 = true）。false の場合: 「未記入」を自動セット
     show_customer_phone?: boolean;
+    // 「メニュー」フィールドの表示（未設定 = true）。false の場合: メニュー欄を非表示にし、希望日時/カレンダーをデフォルトで表示
+    show_menu_field?: boolean;
   };
 
   ui_settings: {
