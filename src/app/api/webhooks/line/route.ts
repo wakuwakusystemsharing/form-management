@@ -74,16 +74,18 @@ function parseReservationForm(text: string) {
         pendingLabel = '';
       } else if (pendingLabel) {
         switch (pendingLabel) {
-          case 'name': details.name = line; break;
-          case 'phone': details.phone = line; break;
-          case 'menu': details.menus = line ? line.split(',').map(s => s.trim()).filter(Boolean) : []; break;
-          case 'visitCount': details.visitCount = line; break;
-          case 'message': details.message = line; break;
-          case 'date1': { const dt = parseDateTimeString(line); if (dt) details.dateTime = dt; break; }
-          case 'date2': { const dt = parseDateTimeString(line); if (dt) details.dateTime2 = dt; break; }
-          case 'date3': { const dt = parseDateTimeString(line); if (dt) details.dateTime3 = dt; break; }
+          case 'name': details.name = line; pendingLabel = ''; break;
+          case 'phone': details.phone = line; pendingLabel = ''; break;
+          case 'menu':
+            // 次の《...》ラベル or 空行までの全行を累積（カンマ分割しないので ¥7,800 のような価格も壊れない）
+            details.menus.push(line);
+            break;
+          case 'visitCount': details.visitCount = line; pendingLabel = ''; break;
+          case 'message': details.message = line; pendingLabel = ''; break;
+          case 'date1': { const dt = parseDateTimeString(line); if (dt) details.dateTime = dt; pendingLabel = ''; break; }
+          case 'date2': { const dt = parseDateTimeString(line); if (dt) details.dateTime2 = dt; pendingLabel = ''; break; }
+          case 'date3': { const dt = parseDateTimeString(line); if (dt) details.dateTime3 = dt; pendingLabel = ''; break; }
         }
-        pendingLabel = '';
       }
     }
   } else {
@@ -98,7 +100,8 @@ function parseReservationForm(text: string) {
         inDateSection = false;
       } else if (line.startsWith('メニュー：')) {
         const menuText = line.replace('メニュー：', '').trim();
-        details.menus = menuText ? menuText.split(',').map(item => item.trim()).filter(Boolean) : [];
+        // カンマ分割しない（価格 ¥7,800 等で壊れるため）。1 行を 1 メニューとして扱う
+        details.menus = menuText ? [menuText] : [];
         inDateSection = false;
       } else if (line.startsWith('ご来店回数：')) {
         details.visitCount = line.replace('ご来店回数：', '').trim();
