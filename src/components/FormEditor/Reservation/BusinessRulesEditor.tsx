@@ -10,6 +10,31 @@ interface BusinessRulesEditorProps {
   theme?: ThemeType;
 }
 
+// ホバーで説明文を表示する ? アイコン
+function InfoTooltip({ text, theme = 'light' }: { text: string; theme?: ThemeType }) {
+  return (
+    <span className="relative group inline-flex items-center align-middle">
+      <svg
+        className={`w-3.5 h-3.5 cursor-help ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span
+        className={`pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 w-64 -translate-x-1/2 rounded-md border px-3 py-2 text-xs shadow-md opacity-0 transition-opacity group-hover:opacity-100 whitespace-pre-line text-left ${
+          theme === 'dark'
+            ? 'bg-gray-800 border-gray-600 text-gray-100'
+            : 'bg-white border-gray-200 text-gray-700'
+        }`}
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
 const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdate, theme = 'dark' }) => {
   const themeClasses = getThemeClasses(theme);
   
@@ -490,9 +515,15 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 <h4 className={`text-sm font-medium mb-4 ${theme === 'light' ? 'text-[rgb(244,144,49)]' : 'text-cyan-300'}`}>Googleカレンダー連携モード設定</h4>
 
                 <div className="max-w-xs">
-                  <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
-                    時間間隔
-                  </label>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                      時間間隔
+                    </label>
+                    <InfoTooltip
+                      theme={theme}
+                      text="予約フォームのカレンダーに表示する時間スロットの間隔"
+                    />
+                  </div>
                   <select
                     value={calendarTimeInterval}
                     onChange={(e) => handleCalendarTimeIntervalChange(parseInt(e.target.value) as 10 | 15 | 30 | 60)}
@@ -503,9 +534,6 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     <option value={30}>30分間隔</option>
                     <option value={60}>60分間隔</option>
                   </select>
-                  <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
-                    予約フォームのカレンダーに表示する時間スロットの間隔
-                  </p>
                 </div>
               </div>
             )}
@@ -648,9 +676,12 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         </button>        {expandedSections.bookingRules && (
           <div className={`p-4 border-t ${themeClasses.divider} space-y-4`}>
             <div className="max-w-xs">
-              <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
-                事前予約可能日数
-              </label>
+              <div className="flex items-center gap-1.5 mb-2">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  事前予約可能日数
+                </label>
+                <InfoTooltip theme={theme} text="何日先まで予約を受け付けるかを設定します" />
+              </div>
               <input
                 type="number"
                 min="1"
@@ -659,13 +690,18 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 onChange={(e) => handleAdvanceBookingDaysChange(parseInt(e.target.value) || 30)}
                 className={themeClasses.input}
               />
-              <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>何日先まで予約を受け付けるか</p>
             </div>
 
             <div className="max-w-xs">
-              <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
-                同時刻に埋まるイベント数
-              </label>
+              <div className="flex items-center gap-1.5 mb-2">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  同時刻に埋まるイベント数
+                </label>
+                <InfoTooltip
+                  theme={theme}
+                  text={'Googleカレンダー上でこの件数以上のイベントが重なる時間帯は予約不可（✕）になります。\n\n例: 「2」に設定 → 2件のイベントが重なる時間帯から✕。「1」は現状（1件で✕）。'}
+                />
+              </div>
               <input
                 type="number"
                 min="1"
@@ -674,17 +710,18 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 onChange={(e) => handleMaxConcurrentEventsChange(parseInt(e.target.value) || 1)}
                 className={themeClasses.input}
               />
-              <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
-                Googleカレンダー上でこの件数以上のイベントが重なる時間帯は予約不可（✕）になります。
-                <br />
-                例: 「2」に設定 → 2件のイベントが重なる時間帯から✕。「1」は現状（1件で✕）。
-              </p>
             </div>
 
             <div className="max-w-xs">
-              <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
-                同一ユーザーの同時予約数の上限
-              </label>
+              <div className="flex items-center gap-1.5 mb-2">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  同一ユーザーの同時予約数の上限
+                </label>
+                <InfoTooltip
+                  theme={theme}
+                  text={'同一ユーザー（LINE ID または電話番号で判定）が同時に持てる未来予約の最大数。\n\n「0」=制限なし。\n「1」=既に1件予約があると2件目はブロックされ、フォーム上にエラーメッセージが表示されます。\n\n予約日時が過ぎるか、予約をキャンセルするとカウントが減ります。'}
+                />
+              </div>
               <input
                 type="number"
                 min="0"
@@ -693,25 +730,19 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 onChange={(e) => handleMaxConcurrentReservationsPerUserChange(parseInt(e.target.value) || 0)}
                 className={themeClasses.input}
               />
-              <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
-                同一ユーザー（LINE ID または電話番号で判定）が同時に持てる未来予約の最大数。
-                <br />
-                「0」=制限なし。「1」=既に1件予約があると2件目はブロックされ、フォーム上にエラーメッセージが表示されます。
-                <br />
-                予約日時が過ぎるか、予約をキャンセルするとカウントが減ります。
-              </p>
             </div>
 
             {/* 祝日設定 */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="flex items-center gap-1.5">
                   <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
                     祝日を予約不可にする
                   </label>
-                  <p className={`text-xs ${themeClasses.text.secondary} mt-0.5`}>
-                    ONにすると日本の祝日（1980〜2099年対応）はカレンダーで✕表示になります
-                  </p>
+                  <InfoTooltip
+                    theme={theme}
+                    text="ONにすると日本の祝日（1980〜2099年対応）はカレンダーで✕表示になります"
+                  />
                 </div>
                 <button
                   type="button"
@@ -773,13 +804,14 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
             </div>
 
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex items-center gap-1.5">
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
                   営業時間を超える予約を許可
                 </label>
-                <p className={`text-xs ${themeClasses.text.secondary} mt-0.5`}>
-                  ONにすると、施術終了時間が閉店時間を超えても予約可能になります
-                </p>
+                <InfoTooltip
+                  theme={theme}
+                  text="ONにすると、施術終了時間が閉店時間を超えても予約可能になります"
+                />
               </div>
               <button
                 type="button"
@@ -811,13 +843,14 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
             </div>
 
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex items-center gap-1.5">
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
                   「お名前」フィールドを表示
                 </label>
-                <p className={`text-xs ${themeClasses.text.secondary} mt-0.5`}>
-                  OFF にすると入力欄を非表示。LINE 表示名を自動で記録（Web フォームの場合は「未記入」）
-                </p>
+                <InfoTooltip
+                  theme={theme}
+                  text="OFF にすると入力欄を非表示。LINE 表示名を自動で記録（Web フォームの場合は「未記入」）"
+                />
               </div>
               <button
                 type="button"
@@ -850,13 +883,14 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
             </div>
 
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex items-center gap-1.5">
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
                   「電話番号」フィールドを表示
                 </label>
-                <p className={`text-xs ${themeClasses.text.secondary} mt-0.5`}>
-                  OFF にすると入力欄を非表示。電話番号は「未記入」として保存されます
-                </p>
+                <InfoTooltip
+                  theme={theme}
+                  text="OFF にすると入力欄を非表示。電話番号は「未記入」として保存されます"
+                />
               </div>
               <button
                 type="button"
