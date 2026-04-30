@@ -486,8 +486,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
 
             {/* Google カレンダー連携モード設定 */}
             {bookingMode === 'calendar' && (
-              <div className={`rounded-lg p-4 ${theme === 'light' ? 'bg-blue-50 border border-blue-200' : 'bg-blue-900/20 border border-blue-700'}`}>
-                <h4 className={`text-sm font-medium mb-4 ${theme === 'light' ? 'text-blue-700' : 'text-blue-300'}`}>Googleカレンダー連携モード設定</h4>
+              <div className={`${themeClasses.highlight} rounded-lg p-4`}>
+                <h4 className={`text-sm font-medium mb-4 ${theme === 'light' ? 'text-[rgb(244,144,49)]' : 'text-cyan-300'}`}>Googleカレンダー連携モード設定</h4>
 
                 <div className="max-w-xs">
                   <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
@@ -512,8 +512,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
 
             {/* 第三希望日時モード用設定 */}
             {bookingMode === 'multiple_dates' && (
-              <div className={`rounded-lg p-4 ${theme === 'light' ? 'bg-blue-50 border border-blue-200' : 'bg-blue-900/20 border border-blue-700'}`}>
-                <h4 className={`text-sm font-medium mb-4 ${theme === 'light' ? 'text-blue-700' : 'text-blue-300'}`}>第三希望日時モード設定</h4>
+              <div className={`${themeClasses.highlight} rounded-lg p-4`}>
+                <h4 className={`text-sm font-medium mb-4 ${theme === 'light' ? 'text-[rgb(244,144,49)]' : 'text-cyan-300'}`}>第三希望日時モード設定</h4>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   {/* 時間間隔 */}
@@ -727,7 +727,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </div>
 
               {holidaysAsClosed && (
-                <div className={`rounded-lg p-4 ${theme === 'light' ? 'bg-blue-50 border border-blue-200' : 'bg-blue-900/20 border border-blue-700'}`}>
+                <div className={`${themeClasses.highlight} rounded-lg p-4`}>
                   <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                     <p className={`text-xs ${themeClasses.text.secondary}`}>
                       ✕ にする祝日を選択（チェックを外すと営業可）
