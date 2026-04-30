@@ -183,10 +183,12 @@ export class StaticSurveyGenerator {
                 return;
             }
 
-            liff.sendMessages([{
-                type: 'text',
-                text: messageText.trim()
-            }]).then(() => {
+            const surveyMessages = [{ type: 'text', text: messageText.trim() }];${
+              safeConfig.basic_info?.second_message?.enabled && typeof safeConfig.basic_info?.second_message?.text === 'string' && safeConfig.basic_info.second_message.text.trim()
+                ? `\n            surveyMessages.push({ type: 'text', text: ${JSON.stringify(safeConfig.basic_info.second_message.text.trim())} });`
+                : ''
+            }
+            liff.sendMessages(surveyMessages).then(() => {
                 alert('ご記入ありがとうございます。');
                 liff.closeWindow();
             }).catch((err) => {

@@ -24,6 +24,11 @@ export interface SurveyConfig {
     liff_id: string;
     theme_color: string;
     logo_url?: string;
+    // フォーム送信時に LIFF が 2 通目に流すテキスト（公式 LINE の完全一致応答メッセージ用）
+    second_message?: {
+      enabled: boolean;
+      text: string;
+    };
   };
   questions: SurveyQuestion[];
   ui_settings: {

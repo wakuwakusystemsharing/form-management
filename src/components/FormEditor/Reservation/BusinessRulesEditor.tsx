@@ -37,6 +37,15 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     form.config?.calendar_settings?.max_concurrent_reservations_per_user ?? 0
   );
 
+  const [holidaysAsClosed, setHolidaysAsClosed] = useState<boolean>(
+    !!form.config?.calendar_settings?.holidays_as_closed
+  );
+  const [excludedHolidayTypes, setExcludedHolidayTypes] = useState<string[]>(
+    Array.isArray(form.config?.calendar_settings?.excluded_holiday_types)
+      ? (form.config!.calendar_settings!.excluded_holiday_types as string[])
+      : []
+  );
+
   const [bookingMode, setBookingMode] = useState<'calendar' | 'multiple_dates'>(
     form.config?.calendar_settings?.booking_mode || 'calendar'
   );
@@ -182,6 +191,62 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     };
     onUpdate(updatedForm);
   };
+
+  const handleHolidaysAsClosedChange = (value: boolean) => {
+    setHolidaysAsClosed(value);
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          holidays_as_closed: value
+        }
+      }
+    });
+  };
+
+  const updateExcludedHolidayTypes = (next: string[]) => {
+    setExcludedHolidayTypes(next);
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          excluded_holiday_types: next
+        }
+      }
+    });
+  };
+
+  const toggleExcludedHolidayType = (typeId: string) => {
+    const next = excludedHolidayTypes.includes(typeId)
+      ? excludedHolidayTypes.filter((t) => t !== typeId)
+      : [...excludedHolidayTypes, typeId];
+    updateExcludedHolidayTypes(next);
+  };
+
+  const HOLIDAY_TYPES: { id: string; label: string; rule: string }[] = [
+    { id: 'new_year', label: '元日', rule: '1/1' },
+    { id: 'coming_of_age', label: '成人の日', rule: '1月第2月曜' },
+    { id: 'national_foundation', label: '建国記念の日', rule: '2/11' },
+    { id: 'emperor_birthday', label: '天皇誕生日', rule: '2/23' },
+    { id: 'vernal_equinox', label: '春分の日', rule: '3/20 or 3/21' },
+    { id: 'showa', label: '昭和の日', rule: '4/29' },
+    { id: 'constitution', label: '憲法記念日', rule: '5/3' },
+    { id: 'greenery', label: 'みどりの日', rule: '5/4' },
+    { id: 'childrens', label: 'こどもの日', rule: '5/5' },
+    { id: 'marine', label: '海の日', rule: '7月第3月曜' },
+    { id: 'mountain', label: '山の日', rule: '8/11' },
+    { id: 'respect_for_aged', label: '敬老の日', rule: '9月第3月曜' },
+    { id: 'autumnal_equinox', label: '秋分の日', rule: '9/22 or 9/23' },
+    { id: 'sports', label: 'スポーツの日', rule: '10月第2月曜' },
+    { id: 'culture', label: '文化の日', rule: '11/3' },
+    { id: 'labor_thanksgiving', label: '勤労感謝の日', rule: '11/23' },
+    { id: 'substitute', label: '振替休日', rule: '祝日が日曜の場合の翌平日' },
+    { id: 'national_day', label: '国民の休日', rule: '祝日に挟まれた平日' },
+  ];
 
   const handleBookingModeChange = (mode: 'calendar' | 'multiple_dates') => {
     setBookingMode(mode);
@@ -635,6 +700,76 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 <br />
                 予約日時が過ぎるか、予約をキャンセルするとカウントが減ります。
               </p>
+            </div>
+
+            {/* 祝日設定 */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                    祝日を予約不可にする
+                  </label>
+                  <p className={`text-xs ${themeClasses.text.secondary} mt-0.5`}>
+                    ONにすると日本の祝日（1980〜2099年対応）はカレンダーで✕表示になります
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleHolidaysAsClosedChange(!holidaysAsClosed)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                    holidaysAsClosed ? 'bg-green-500' : (theme === 'light' ? 'bg-gray-300' : 'bg-gray-600')
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    holidaysAsClosed ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+
+              {holidaysAsClosed && (
+                <div className={`rounded-lg p-4 ${theme === 'light' ? 'bg-blue-50 border border-blue-200' : 'bg-blue-900/20 border border-blue-700'}`}>
+                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <p className={`text-xs ${themeClasses.text.secondary}`}>
+                      ✕ にする祝日を選択（チェックを外すと営業可）
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateExcludedHolidayTypes([])}
+                        className={`text-xs px-2 py-0.5 rounded border ${theme === 'light' ? 'border-gray-300 text-gray-700 hover:bg-gray-100' : 'border-gray-600 text-gray-300 hover:bg-gray-700'}`}
+                      >
+                        すべて選択
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateExcludedHolidayTypes(HOLIDAY_TYPES.map((h) => h.id))}
+                        className={`text-xs px-2 py-0.5 rounded border ${theme === 'light' ? 'border-gray-300 text-gray-700 hover:bg-gray-100' : 'border-gray-600 text-gray-300 hover:bg-gray-700'}`}
+                      >
+                        すべて解除
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {HOLIDAY_TYPES.map((h) => {
+                      const checked = !excludedHolidayTypes.includes(h.id);
+                      return (
+                        <label key={h.id} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleExcludedHolidayType(h.id)}
+                            className="cursor-pointer"
+                          />
+                          <span className={`text-sm ${themeClasses.text.primary}`}>
+                            {h.label}
+                            <span className={`ml-1 text-xs ${themeClasses.text.secondary}`}>({h.rule})</span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between">
