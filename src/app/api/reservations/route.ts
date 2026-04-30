@@ -115,7 +115,7 @@ async function getFormCalendarSettings(formId: string): Promise<any | null> {
   const adminClient = createAdminClient();
   if (!adminClient) return null;
   const { data, error } = await (adminClient as any)
-    .from('forms')
+    .from('reservation_forms')
     .select('id, config, draft_config')
     .eq('id', formId)
     .single();
@@ -160,7 +160,7 @@ async function getFormConfig(formId: string): Promise<any | null> {
   const adminClient = createAdminClient();
   if (!adminClient) return null;
   const { data, error } = await (adminClient as any)
-    .from('forms')
+    .from('reservation_forms')
     .select('id, config, draft_config')
     .eq('id', formId)
     .single();
