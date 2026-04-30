@@ -118,8 +118,7 @@ export default function SurveyFormEditor({ form, onUpdate, userRole = 'service_a
                 <div>
                   <Label htmlFor="survey_second_message_enabled">送信時に 2 通目のメッセージを送る</Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    ON にすると、フォーム送信時にこの短いテキストが LINE トークに追加で送信されます。<br />
-                    公式 LINE の「完全一致応答メッセージ」と組み合わせて自動応答（クーポン配布など）に利用できます。
+                    ON にすると、フォーム送信時にこの短いテキストが LINE トークに追加で送信されます。
                   </p>
                 </div>
                 <button
