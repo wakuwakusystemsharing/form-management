@@ -2746,14 +2746,14 @@ Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === de
 
       {/* Googleカレンダー選択ダイアログ */}
       <Dialog open={calendarPickerOpen} onOpenChange={setCalendarPickerOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md overflow-hidden">
           <DialogHeader>
             <DialogTitle>連携するカレンダーを選択</DialogTitle>
             <DialogDescription>
               予約イベントを登録するカレンダーを選んでください。書き込み可能なカレンダーのみ表示しています。
             </DialogDescription>
           </DialogHeader>
-          <div className="py-2">
+          <div className="py-2 min-w-0">
             {loadingCalendarList ? (
               <p className="text-sm text-muted-foreground text-center py-6">読み込み中...</p>
             ) : calendarList.length === 0 ? (
@@ -2761,7 +2761,7 @@ Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === de
                 書き込み可能なカレンダーが見つかりませんでした
               </p>
             ) : (
-              <div className="flex flex-col gap-1.5 max-h-80 overflow-y-auto">
+              <div className="flex flex-col gap-1.5 max-h-80 overflow-y-auto overflow-x-hidden min-w-0">
                 {calendarList.map((cal) => {
                   const selected = cal.id === selectedCalendarId;
                   return (
@@ -2769,7 +2769,7 @@ Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === de
                       key={cal.id}
                       type="button"
                       onClick={() => setSelectedCalendarId(cal.id)}
-                      className={`w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-md border transition-colors ${
+                      className={`w-full min-w-0 flex items-center gap-3 text-left px-3 py-2.5 rounded-md border transition-colors ${
                         selected ? 'border-primary bg-primary/5' : 'border-border hover:bg-accent/30'
                       }`}
                     >
@@ -2777,14 +2777,14 @@ Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === de
                         className="inline-block w-3 h-3 rounded-full flex-shrink-0"
                         style={{ backgroundColor: cal.backgroundColor || '#9ca3af' }}
                       />
-                      <span className="flex-1 min-w-0">
+                      <span className="flex-1 min-w-0 overflow-hidden">
                         <span className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm font-medium truncate">{cal.summary || cal.id}</span>
+                          <span className="text-sm font-medium truncate min-w-0">{cal.summary || cal.id}</span>
                           {cal.primary && (
                             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 flex-shrink-0">メイン</Badge>
                           )}
                         </span>
-                        <span className="block text-xs text-muted-foreground truncate">{cal.id}</span>
+                        <span className="block text-xs text-muted-foreground truncate w-full">{cal.id}</span>
                       </span>
                       {selected && (
                         <span className="text-primary text-sm flex-shrink-0">✓</span>
