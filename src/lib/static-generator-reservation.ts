@@ -165,6 +165,80 @@ const FORM_CONFIG = ${JSON.stringify(safeConfig, null, 2)};
 const FORM_ID = ${JSON.stringify(formId)};
 const STORE_ID = ${JSON.stringify(storeId)};
 
+// ========== 祝日判定ロジック（1980-2099年対応）==========
+function calcVernalEquinox(year) {
+    return Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+}
+function calcAutumnalEquinox(year) {
+    return Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+}
+function nthWeekday(year, month, n, dayOfWeek) {
+    const first = new Date(year, month - 1, 1);
+    const offset = (dayOfWeek - first.getDay() + 7) % 7;
+    return 1 + offset + (n - 1) * 7;
+}
+// 当日が「主祝日」かどうかを判定し type id を返す（祝日でなければ null）
+function getHolidayType(date) {
+    const y = date.getFullYear(), m = date.getMonth() + 1, d = date.getDate();
+    if (m === 1 && d === 1) return 'new_year';
+    if (m === 1 && d === nthWeekday(y, 1, 2, 1)) return 'coming_of_age';
+    if (m === 2 && d === 11) return 'national_foundation';
+    if (m === 2 && d === 23) return 'emperor_birthday';
+    if (m === 3 && d === calcVernalEquinox(y)) return 'vernal_equinox';
+    if (m === 4 && d === 29) return 'showa';
+    if (m === 5 && d === 3) return 'constitution';
+    if (m === 5 && d === 4) return 'greenery';
+    if (m === 5 && d === 5) return 'childrens';
+    if (m === 7 && d === nthWeekday(y, 7, 3, 1)) return 'marine';
+    if (m === 8 && d === 11) return 'mountain';
+    if (m === 9 && d === nthWeekday(y, 9, 3, 1)) return 'respect_for_aged';
+    if (m === 9 && d === calcAutumnalEquinox(y)) return 'autumnal_equinox';
+    if (m === 10 && d === nthWeekday(y, 10, 2, 1)) return 'sports';
+    if (m === 11 && d === 3) return 'culture';
+    if (m === 11 && d === 23) return 'labor_thanksgiving';
+    return null;
+}
+// 振替休日: 当日は祝日ではないが、前を遡って最初の日曜が主祝日であれば true
+// 当日と最初の日曜の間が「日曜でなく祝日でもない」と途中で false（連続でないとダメ）
+function isSubstituteHoliday(date) {
+    if (getHolidayType(date)) return false;
+    const cur = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    let safety = 0;
+    while (safety++ < 10) {
+        cur.setDate(cur.getDate() - 1);
+        if (cur.getDay() === 0) {
+            return !!getHolidayType(cur);
+        }
+        if (!getHolidayType(cur)) return false;
+    }
+    return false;
+}
+// 国民の休日: 当日が祝日でも日曜でもなく、前後とも「主祝日 or 振替」
+function isNationalDay(date) {
+    if (getHolidayType(date)) return false;
+    if (date.getDay() === 0) return false;
+    const yesterday = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
+    const tomorrow = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+    const yIsHoliday = !!getHolidayType(yesterday) || isSubstituteHoliday(yesterday);
+    const tIsHoliday = !!getHolidayType(tomorrow) || isSubstituteHoliday(tomorrow);
+    return yIsHoliday && tIsHoliday;
+}
+function getEffectiveHolidayType(date) {
+    const t = getHolidayType(date);
+    if (t) return t;
+    if (isSubstituteHoliday(date)) return 'substitute';
+    if (isNationalDay(date)) return 'national_day';
+    return null;
+}
+function shouldBlockAsHoliday(date) {
+    if (!FORM_CONFIG.calendar_settings || !FORM_CONFIG.calendar_settings.holidays_as_closed) return false;
+    const type = getEffectiveHolidayType(date);
+    if (!type) return false;
+    const excluded = FORM_CONFIG.calendar_settings.excluded_holiday_types || [];
+    return !excluded.includes(type);
+}
+// ========== 祝日判定ロジックここまで ==========
+
 class BookingForm {
     constructor(config) {
         this.config = config;
@@ -1064,7 +1138,12 @@ class BookingForm {
             // カレンダーAPIから取得したデータがない場合、営業時間のみで判定
             isAvailable = true;
         }
-        
+
+        // 祝日チェック（マスタートグル ON かつ除外リストに含まれていない祝日は ✕）
+        if (isAvailable && shouldBlockAsHoliday(slotStart)) {
+            isAvailable = false;
+        }
+
         const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
                 const bgColor = isSelected ? '#10b981' : (isAvailable && !isPast ? '#fff' : '#f3f4f6');
                 const textColor = isSelected ? '#fff' : (isAvailable && !isPast ? '#111827' : '#9ca3af');
@@ -1761,10 +1840,12 @@ class BookingForm {
             // LIFF メッセージ送信（Web予約フォームやLIFF未初期化の場合はスキップ）
             try {
                 if (this.state.lineUserId && typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
-                    liff.sendMessages([{
-                        type: 'text',
-                        text: messageText
-                    }]).then(() => {
+                    const messages = [{ type: 'text', text: messageText }];
+                    const sm = this.config.basic_info?.second_message;
+                    if (sm && sm.enabled === true && typeof sm.text === 'string' && sm.text.trim()) {
+                        messages.push({ type: 'text', text: sm.text.trim() });
+                    }
+                    liff.sendMessages(messages).then(() => {
                         // メッセージ送信成功後にウィンドウを閉じる
                         alert('当日キャンセルは無いようにお願いいたします。');
                         liff.closeWindow();
@@ -1844,6 +1925,11 @@ class BookingForm {
             // 曜日別の定休日チェック
             const hours = this.getWeekdayHours(settings, date.getDay());
             if (hours.closed) {
+                continue;
+            }
+
+            // 祝日チェック（マスタートグル ON かつ除外リストに含まれていない祝日は選択肢から除外）
+            if (typeof shouldBlockAsHoliday === 'function' && shouldBlockAsHoliday(date)) {
                 continue;
             }
 
