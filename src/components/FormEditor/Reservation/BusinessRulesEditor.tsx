@@ -404,9 +404,9 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                         type="checkbox"
                         checked={!businessHours[day]?.closed}
                         onChange={(e) => handleBusinessHoursChange(day, 'closed', !e.target.checked)}
-                        className={`rounded text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)] ${
-                          theme === 'light' 
-                            ? 'border-gray-300 bg-gray-100' 
+                        className={`rounded accent-green-500 focus:ring-green-500 ${
+                          theme === 'light'
+                            ? 'border-gray-300 bg-gray-100'
                             : 'border-gray-600 bg-gray-700'
                         }`}
                       />
@@ -486,7 +486,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     value="calendar"
                     checked={bookingMode === 'calendar'}
                     onChange={(e) => handleBookingModeChange(e.target.value as 'calendar')}
-                    className="text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)]"
+                    className="accent-green-500 focus:ring-green-500"
                   />
                   <div>
                     <div className={`font-medium ${themeClasses.text.primary}`}>カレンダー表示</div>
@@ -499,7 +499,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     value="multiple_dates"
                     checked={bookingMode === 'multiple_dates'}
                     onChange={(e) => handleBookingModeChange(e.target.value as 'multiple_dates')}
-                    className="text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)]"
+                    className="accent-green-500 focus:ring-green-500"
                   />
                   <div>
                     <div className={`font-medium ${themeClasses.text.primary}`}>第三希望日時選択</div>
@@ -603,7 +603,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                                 type="checkbox"
                                 checked={!hours.closed}
                                 onChange={(e) => handleWeekdayHoursChange(dayKey, 'closed', !e.target.checked)}
-                                className={`rounded text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)] ${
+                                className={`rounded accent-green-500 focus:ring-green-500 ${
                                   theme === 'light'
                                     ? 'border-gray-300 bg-gray-100'
                                     : 'border-gray-600 bg-gray-700'
@@ -789,7 +789,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                             type="checkbox"
                             checked={checked}
                             onChange={() => toggleExcludedHolidayType(h.id)}
-                            className="cursor-pointer"
+                            className="cursor-pointer accent-green-500 focus:ring-green-500"
                           />
                           <span className={`text-sm ${themeClasses.text.primary}`}>
                             {h.label}
