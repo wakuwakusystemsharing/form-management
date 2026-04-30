@@ -76,6 +76,11 @@ export interface FormConfig {
     theme_color: string;
     logo_url?: string;
     notice?: string;   // フォーム上部に表示する注意書き（任意）
+    // フォーム送信時に LIFF が 2 通目に流すテキスト（公式 LINE の完全一致応答メッセージ用）
+    second_message?: {
+      enabled: boolean;
+      text: string;
+    };
   };
   
   visit_options: VisitOption[];
@@ -141,6 +146,10 @@ export interface FormConfig {
     booking_mode?: 'calendar' | 'multiple_dates';  // カレンダー表示 or 第三希望日時選択
     // カレンダー表示モードの時間間隔（分）。デフォルト 30
     time_interval?: 10 | 15 | 30 | 60;
+    // 祝日を予約不可（✕）にする（false / 未設定 = OFF、既存挙動）
+    holidays_as_closed?: boolean;
+    // マスタートグル ON 時に ✕ にしない祝日タイプの ID 配列（空配列 = 全祝日 ✕）
+    excluded_holiday_types?: string[];
     // 第三希望日時モード用設定
     multiple_dates_settings?: {
       time_interval: 10 | 15 | 30 | 60;   // 時間間隔（分）
