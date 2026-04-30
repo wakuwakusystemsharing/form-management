@@ -49,7 +49,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       store_name: '',
       liff_id: '',
       theme_color: '#3B82F6',
-      logo_url: undefined
+      logo_url: undefined,
+      second_message: { enabled: false, text: '' }
     },
     visit_options: [],
     gender_selection: {
@@ -102,7 +103,9 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       max_concurrent_reservations_per_user: 0,
       time_interval: 30,
       show_customer_name: true,
-      show_customer_phone: true
+      show_customer_phone: true,
+      holidays_as_closed: false,
+      excluded_holiday_types: []
     },
     ui_settings: {
       theme_color: '#3B82F6',
@@ -140,7 +143,15 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         liff_id: (existingConfig?.basic_info?.liff_id as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.liff_id || (typedBasicInfo?.liff_id as string) || (typedLineSettings?.liff_id as string) || '',
         theme_color: (existingConfig?.basic_info?.theme_color as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.theme_color || (typedBasicInfo?.theme_color as string) || '#3B82F6',
         logo_url: (existingConfig?.basic_info?.logo_url as string | undefined) || (typedConfig?.basic_info as Form['config']['basic_info'])?.logo_url || (typedBasicInfo?.logo_url as string | undefined),
-        notice: (existingConfig?.basic_info?.notice as string | undefined) || (typedConfig?.basic_info as Form['config']['basic_info'])?.notice || (typedBasicInfo?.notice as string | undefined)
+        notice: (existingConfig?.basic_info?.notice as string | undefined) || (typedConfig?.basic_info as Form['config']['basic_info'])?.notice || (typedBasicInfo?.notice as string | undefined),
+        second_message: (() => {
+          const raw = existingConfig?.basic_info?.second_message
+            ?? (typedConfig?.basic_info as Form['config']['basic_info'])?.second_message;
+          const enabled = !!(raw && typeof raw === 'object' && (raw as { enabled?: unknown }).enabled === true);
+          const rawText = (raw as { text?: unknown } | undefined)?.text;
+          const text = typeof rawText === 'string' ? rawText : '';
+          return { enabled, text };
+        })()
       },
       visit_options: (existingConfig?.visit_options || typedConfig?.visit_options || []) as Form['config']['visit_options'],
       gender_selection: {
@@ -227,7 +238,15 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           return v === 10 || v === 15 || v === 30 || v === 60 ? v : 30;
         })() as 10 | 15 | 30 | 60,
         show_customer_name: existingConfig?.calendar_settings?.show_customer_name ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_name ?? true,
-        show_customer_phone: existingConfig?.calendar_settings?.show_customer_phone ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_phone ?? true
+        show_customer_phone: existingConfig?.calendar_settings?.show_customer_phone ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_phone ?? true,
+        holidays_as_closed: existingConfig?.calendar_settings?.holidays_as_closed
+          ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.holidays_as_closed
+          ?? false,
+        excluded_holiday_types: (() => {
+          const v = existingConfig?.calendar_settings?.excluded_holiday_types
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.excluded_holiday_types;
+          return Array.isArray(v) ? v.filter((s) => typeof s === 'string') : [];
+        })()
       },
       ui_settings: {
         theme_color: (existingConfig?.ui_settings?.theme_color || (typedConfig?.basic_info as Form['config']['basic_info'])?.theme_color || (typedBasicInfo?.theme_color as string) || (typedConfig?.ui_settings as Form['config']['ui_settings'])?.theme_color || (typedUiSettings?.theme_color as string) || '#3B82F6') as string,
