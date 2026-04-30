@@ -279,6 +279,15 @@ export async function createReservationEvent(
     menuText,
     `≪ご来店回数≫ ${params.visitCount || ''}`,
   ];
+  if (params.selectedOptions && params.selectedOptions.length > 0) {
+    const optionLines = params.selectedOptions.map((opt: any) => {
+      const name = opt.option_name || '';
+      const priceText = (opt.price || 0) > 0 ? ` ¥${Number(opt.price).toLocaleString()}` : '';
+      const durationText = (opt.duration || 0) > 0 ? ` (${opt.duration}分)` : '';
+      return `・${name}${priceText}${durationText}`;
+    }).join('\n');
+    descriptionParts.push('≪オプション≫', optionLines);
+  }
   if (params.gender) {
     descriptionParts.push(`≪性別≫ ${params.gender}`);
   }
