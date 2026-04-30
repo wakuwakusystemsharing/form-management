@@ -161,6 +161,10 @@ export interface FormConfig {
     max_concurrent_events?: number;
     // 同一ユーザーが同時に持てる未来予約の最大数（0以下/未設定 = 制限なし）
     max_concurrent_reservations_per_user?: number;
+    // 「お名前」フィールドの表示（未設定 = true）。false の場合: LIFF 表示名 or「未記入」を自動セット
+    show_customer_name?: boolean;
+    // 「電話番号」フィールドの表示（未設定 = true）。false の場合: 「未記入」を自動セット
+    show_customer_phone?: boolean;
   };
 
   ui_settings: {

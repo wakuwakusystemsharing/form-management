@@ -77,17 +77,17 @@ function writeReservations(reservations: Reservation[]) {
 }
 
 /**
- * フォーム ID から calendar_settings.max_concurrent_reservations_per_user を取得。
- * normalizeForm を通すことでデフォルト 0 が必ず入る。フォームが見つからなければ 0。
+ * フォーム ID から正規化済み calendar_settings を取得。
+ * フォームが見つからなければ null。
  */
-async function getReservationLimitForForm(formId: string): Promise<number> {
-  if (!formId) return 0;
+async function getFormCalendarSettings(formId: string): Promise<any | null> {
+  if (!formId) return null;
   const env = getAppEnvironment();
 
   if (env === 'local') {
     // ローカル: data/forms.json と data/forms_*.json から検索
     try {
-      if (!fs.existsSync(DATA_DIR)) return 0;
+      if (!fs.existsSync(DATA_DIR)) return null;
       const files = fs.readdirSync(DATA_DIR).filter((f) => f.startsWith('forms') && f.endsWith('.json'));
       for (const file of files) {
         try {
@@ -97,8 +97,7 @@ async function getReservationLimitForForm(formId: string): Promise<number> {
             const found = arr.find((f: any) => f?.id === formId);
             if (found) {
               const normalized = normalizeForm(found);
-              const v = normalized?.config?.calendar_settings?.max_concurrent_reservations_per_user;
-              return typeof v === 'number' && v > 0 ? Math.floor(v) : 0;
+              return normalized?.config?.calendar_settings || null;
             }
           }
         } catch {
@@ -106,22 +105,31 @@ async function getReservationLimitForForm(formId: string): Promise<number> {
         }
       }
     } catch (err) {
-      console.error('[reservations] getReservationLimitForForm local error:', err);
+      console.error('[reservations] getFormCalendarSettings local error:', err);
     }
-    return 0;
+    return null;
   }
 
   // staging/production: Supabase
   const adminClient = createAdminClient();
-  if (!adminClient) return 0;
+  if (!adminClient) return null;
   const { data, error } = await (adminClient as any)
     .from('forms')
     .select('id, config, draft_config')
     .eq('id', formId)
     .single();
-  if (error || !data) return 0;
+  if (error || !data) return null;
   const normalized = normalizeForm(data);
-  const v = normalized?.config?.calendar_settings?.max_concurrent_reservations_per_user;
+  return normalized?.config?.calendar_settings || null;
+}
+
+/**
+ * フォーム ID から calendar_settings.max_concurrent_reservations_per_user を取得。
+ * 互換性のため既存呼び出しを維持。
+ */
+async function getReservationLimitForForm(formId: string): Promise<number> {
+  const settings = await getFormCalendarSettings(formId);
+  const v = settings?.max_concurrent_reservations_per_user;
   return typeof v === 'number' && v > 0 ? Math.floor(v) : 0;
 }
 
@@ -311,13 +319,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!body.customer_name || !body.customer_phone) {
-      return NextResponse.json(
-        { error: '顧客名と電話番号は必須です' },
-        { status: 400 }
-      );
-    }
-
     if (!body.reservation_date || !body.reservation_time) {
       return NextResponse.json(
         { error: '予約日時は必須です' },
@@ -325,9 +326,34 @@ export async function POST(request: Request) {
       );
     }
 
+    // フォーム設定を取得（同時予約数チェック + 名前/電話の表示設定で共用）
+    let formCalendarSettings: any = null;
+    try {
+      formCalendarSettings = await getFormCalendarSettings(body.form_id);
+    } catch (err) {
+      console.error('[reservations] getFormCalendarSettings error:', err);
+    }
+
+    // 名前/電話の表示設定が false ならフォールバック値を埋め、必須バリデーションをスキップ
+    const showName = formCalendarSettings?.show_customer_name !== false;
+    const showPhone = formCalendarSettings?.show_customer_phone !== false;
+    if (!showName && !body.customer_name) {
+      body.customer_name = body.line_display_name || '未記入';
+    }
+    if (!showPhone && !body.customer_phone) {
+      body.customer_phone = '未記入';
+    }
+    if (!body.customer_name || !body.customer_phone) {
+      return NextResponse.json(
+        { error: '顧客名と電話番号は必須です' },
+        { status: 400 }
+      );
+    }
+
     // 同一ユーザーの同時予約数制限チェック（form 設定で >0 の場合のみ）
     try {
-      const limit = await getReservationLimitForForm(body.form_id);
+      const v = formCalendarSettings?.max_concurrent_reservations_per_user;
+      const limit = typeof v === 'number' && v > 0 ? Math.floor(v) : 0;
       if (limit > 0) {
         const activeCount = await countActiveReservationsForUser(
           body.store_id,

@@ -132,17 +132,20 @@ export class StaticReservationGenerator {
 
             ${safeConfig.ui_settings?.show_repeat_booking ? this.renderRepeatBookingButton(safeConfig) : ''}
             
+            ${safeConfig.calendar_settings?.show_customer_name === false ? '' : `
             <!-- お客様名 -->
             <div class="field" id="name-field">
                 <label class="field-label">お名前 <span class="required">*</span></label>
                 <input type="text" id="customer-name" class="input" placeholder="山田太郎">
             </div>
-            
+            `}
+            ${safeConfig.calendar_settings?.show_customer_phone === false ? '' : `
             <!-- 電話番号 -->
             <div class="field" id="phone-field">
                 <label class="field-label">電話番号 <span class="required">*</span></label>
                 <input type="tel" id="customer-phone" class="input" placeholder="090-1234-5678">
             </div>
+            `}
             
             ${safeConfig.gender_selection.enabled ? this.renderGenderField(safeConfig) : ''}
             ${safeConfig.visit_count_selection.enabled ? this.renderVisitCountField(safeConfig) : ''}
@@ -257,7 +260,8 @@ class BookingForm {
             if (liff.isLoggedIn()) {
                 const profile = await liff.getProfile();
                 this.state.name = profile.displayName || '';
-                document.getElementById('customer-name').value = this.state.name;
+                const nameInputEl = document.getElementById('customer-name');
+                if (nameInputEl) nameInputEl.value = this.state.name;
 
                 // LINEプロフィール情報を取得
                 this.state.lineDisplayName = profile.displayName || null;
@@ -310,16 +314,22 @@ class BookingForm {
     }
     
     attachEventListeners() {
-        // 名前・電話番号
-        document.getElementById('customer-name').addEventListener('input', (e) => {
-            this.state.name = e.target.value;
-            this.updateSummary();
-        });
-        
-        document.getElementById('customer-phone').addEventListener('input', (e) => {
-            this.state.phone = e.target.value;
-            this.updateSummary();
-        });
+        // 名前・電話番号（非表示設定時は要素が存在しないのでガード）
+        const nameInput = document.getElementById('customer-name');
+        if (nameInput) {
+            nameInput.addEventListener('input', (e) => {
+                this.state.name = e.target.value;
+                this.updateSummary();
+            });
+        }
+
+        const phoneInput = document.getElementById('customer-phone');
+        if (phoneInput) {
+            phoneInput.addEventListener('input', (e) => {
+                this.state.phone = e.target.value;
+                this.updateSummary();
+            });
+        }
         
         // 性別選択
         document.querySelectorAll('.gender-button').forEach(btn => {
@@ -1355,10 +1365,12 @@ class BookingForm {
     updateSummary() {
         const items = [];
         
-        if (this.state.name) {
+        const summaryShowName = this.config.calendar_settings?.show_customer_name !== false;
+        const summaryShowPhone = this.config.calendar_settings?.show_customer_phone !== false;
+        if (summaryShowName && this.state.name) {
             items.push(\`<div class="summary-item"><span><strong>お名前:</strong> \${this.state.name}</span><button class="summary-edit-button" data-field="name-field">修正</button></div>\`);
         }
-        if (this.state.phone) {
+        if (summaryShowPhone && this.state.phone) {
             items.push(\`<div class="summary-item"><span><strong>電話番号:</strong> \${this.state.phone}</span><button class="summary-edit-button" data-field="phone-field">修正</button></div>\`);
         }
         if (this.state.gender) {
@@ -1437,11 +1449,25 @@ class BookingForm {
             }
         };
 
-        // バリデーション
-        if (!this.state.name || !this.state.phone) {
-            alert('お名前と電話番号を入力してください');
+        // バリデーション（非表示の項目はスキップし、空ならフォールバック値で埋める）
+        const showNameField = this.config.calendar_settings?.show_customer_name !== false;
+        const showPhoneField = this.config.calendar_settings?.show_customer_phone !== false;
+        if (showNameField && !this.state.name) {
+            alert('お名前を入力してください');
             resetSubmitState();
             return;
+        }
+        if (showPhoneField && !this.state.phone) {
+            alert('電話番号を入力してください');
+            resetSubmitState();
+            return;
+        }
+        // 非表示フィールドのフォールバック: 名前は LINE 表示名 → 「未記入」、電話は「未記入」
+        if (!showNameField && !this.state.name) {
+            this.state.name = this.state.lineDisplayName || '未記入';
+        }
+        if (!showPhoneField && !this.state.phone) {
+            this.state.phone = '未記入';
         }
         const allowCross = this.config.menu_structure?.allow_cross_category_selection || false;
         const hasSelection = allowCross
@@ -1621,9 +1647,13 @@ class BookingForm {
             const formName = this.config.basic_info?.form_name || '予約フォーム';
             let messageText = '【' + formName + '】\\n';
 
-            // 常に表示：お名前、電話番号
-            messageText += \`《お名前》\\n\${this.state.name || ''}\\n\`;
-            messageText += \`《電話番号》\\n\${this.state.phone || ''}\\n\`;
+            // お名前 / 電話番号（表示設定が有効な場合のみ LINE メッセージに含める）
+            if (showNameField) {
+                messageText += \`《お名前》\\n\${this.state.name || ''}\\n\`;
+            }
+            if (showPhoneField) {
+                messageText += \`《電話番号》\\n\${this.state.phone || ''}\\n\`;
+            }
 
             // ご来店回数（有効時のみ表示）
             if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
