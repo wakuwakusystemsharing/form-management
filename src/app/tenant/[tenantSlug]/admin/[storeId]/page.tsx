@@ -37,6 +37,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { getStoreSetupStatus } from '@/lib/store-setup-status';
+import { formatDateTimeForDisplay } from '@/lib/format-utils';
 import Link from 'next/link';
 
 function InfoTooltip({ text }: { text: string }) {
@@ -2649,7 +2650,10 @@ Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === de
                   Object.entries(info.custom_fields as Record<string, any>).forEach(([fieldId, fieldValue]) => {
                     const fieldDef = formConfig?.custom_fields?.find(f => f.id === fieldId);
                     const label = fieldDef?.title || fieldId;
-                    const val = Array.isArray(fieldValue) ? fieldValue.join(', ') : String(fieldValue ?? '');
+                    const raw = Array.isArray(fieldValue) ? fieldValue.join(', ') : String(fieldValue ?? '');
+                    const val = (fieldDef?.type === 'date' || fieldDef?.type === 'datetime')
+                      ? formatDateTimeForDisplay(raw)
+                      : raw;
                     if (val) rows.push({ label, value: val });
                   });
                 }

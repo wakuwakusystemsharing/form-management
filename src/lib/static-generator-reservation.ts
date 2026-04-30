@@ -243,6 +243,16 @@ function getEffectiveHolidayType(date) {
     if (isNationalDay(date)) return 'national_day';
     return null;
 }
+function formatDateTimeForDisplay(value) {
+    // "2026-04-30T15:08[:00]" → "2026年04月30日 15:08"
+    // "2026-04-30"            → "2026年04月30日"
+    if (!value || typeof value !== 'string') return value;
+    const dt = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (dt) return dt[1] + '年' + dt[2] + '月' + dt[3] + '日 ' + dt[4] + ':' + dt[5];
+    const date = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (date) return date[1] + '年' + date[2] + '月' + date[3] + '日';
+    return value;
+}
 function shouldBlockAsHoliday(date) {
     if (!FORM_CONFIG.calendar_settings || !FORM_CONFIG.calendar_settings.holidays_as_closed) return false;
     const type = getEffectiveHolidayType(date);
@@ -1689,7 +1699,10 @@ class BookingForm {
                 if (this.config.custom_fields) {
                     this.config.custom_fields.forEach(field => {
                         const val = this.state.customFields[field.id];
-                        if (val) labeledFields[field.title] = val;
+                        if (val) {
+                            const display = (field.type === 'date' || field.type === 'datetime') ? formatDateTimeForDisplay(val) : val;
+                            labeledFields[field.title] = display;
+                        }
                     });
                 }
                 customerInfo.custom_fields_labeled = labeledFields;
@@ -1883,7 +1896,8 @@ class BookingForm {
                 this.config.custom_fields.forEach(field => {
                     const value = this.state.customFields?.[field.id];
                     if (value) {
-                        messageText += \`\\n\\n《\${field.title}》\\n\${value}\`;
+                        const display = (field.type === 'date' || field.type === 'datetime') ? formatDateTimeForDisplay(value) : value;
+                        messageText += \`\\n\\n《\${field.title}》\\n\${display}\`;
                     }
                 });
             }
