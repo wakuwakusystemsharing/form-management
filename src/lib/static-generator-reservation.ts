@@ -146,8 +146,8 @@ export class StaticReservationGenerator {
                 <input type="tel" id="customer-phone" class="input" placeholder="090-1234-5678">
             </div>
             `}
-            ${safeConfig.calendar_settings?.show_customer_email === true ? `
-            <!-- メールアドレス（Web 予約フォーム用） -->
+            ${(safeConfig.calendar_settings?.show_customer_email === true || safeConfig.form_type === 'web') ? `
+            <!-- メールアドレス（Web 予約フォームでは必須、それ以外は show_customer_email に従う） -->
             <div class="field" id="email-field">
                 <label class="field-label">メールアドレス <span class="required">*</span></label>
                 <input type="email" id="customer-email" class="input" placeholder="example@domain.com" autocomplete="email" inputmode="email">
@@ -1608,8 +1608,9 @@ class BookingForm {
             resetSubmitState();
             return;
         }
-        // メールアドレス（show_customer_email === true のときのみ必須・形式・一致をチェック）
-        const showEmailField = this.config.calendar_settings?.show_customer_email === true;
+        // メールアドレス（show_customer_email === true もしくは form_type === 'web' のとき必須・形式・一致をチェック）
+        const showEmailField = this.config.calendar_settings?.show_customer_email === true
+            || this.config.form_type === 'web';
         if (showEmailField) {
             const email = (this.state.email || '').trim();
             const emailConfirm = (this.state.emailConfirm || '').trim();
