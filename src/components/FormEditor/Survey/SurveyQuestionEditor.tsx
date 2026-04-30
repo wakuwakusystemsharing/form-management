@@ -140,6 +140,8 @@ export default function SurveyQuestionEditor({ questions, onChange }: SurveyQues
                         <SelectItem value="text">テキスト入力 (1行)</SelectItem>
                         <SelectItem value="textarea">テキスト入力 (複数行)</SelectItem>
                         <SelectItem value="date">日付選択</SelectItem>
+                        <SelectItem value="datetime">日時選択</SelectItem>
+                        <SelectItem value="select">ドロップダウン選択</SelectItem>
                         <SelectItem value="radio">単一選択 (ボタン)</SelectItem>
                         <SelectItem value="checkbox">複数選択 (ボタン)</SelectItem>
                       </SelectContent>
@@ -168,8 +170,8 @@ export default function SurveyQuestionEditor({ questions, onChange }: SurveyQues
                   />
                 </div>
 
-                {/* 選択肢設定 (radio/checkboxのみ) */}
-                {(q.type === 'radio' || q.type === 'checkbox') && (
+                {/* 選択肢設定 (radio/checkbox/select) */}
+                {(q.type === 'radio' || q.type === 'checkbox' || q.type === 'select') && (
                   <Card className="bg-muted">
                     <CardHeader>
                       <CardTitle className="text-sm">選択肢</CardTitle>

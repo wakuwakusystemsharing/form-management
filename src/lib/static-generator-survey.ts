@@ -116,7 +116,7 @@ export class StaticSurveyGenerator {
             for (const q of questions) {
                 let value = '';
                 
-                if (q.type === 'text' || q.type === 'textarea' || q.type === 'date') {
+                if (q.type === 'text' || q.type === 'textarea' || q.type === 'date' || q.type === 'datetime' || q.type === 'select') {
                     const input = document.getElementById(q.id);
                     if (input) value = input.value;
                 } else if (q.type === 'radio') {
@@ -214,6 +214,16 @@ export class StaticSurveyGenerator {
       case 'date':
         fieldHtml = `<div class="date-inputs"><input type="date" id="${q.id}" class="input"></div>`;
         break;
+      case 'datetime':
+        fieldHtml = `<div class="date-inputs"><input type="datetime-local" id="${q.id}" class="input"></div>`;
+        break;
+      case 'select': {
+        const opts = (q.options || []).map(opt =>
+          `<option value="${this.escapeHtml(opt.value || opt.label)}">${this.escapeHtml(opt.label)}</option>`
+        ).join('\n');
+        fieldHtml = `<select id="${q.id}" class="input"><option value="">選択してください</option>${opts}</select>`;
+        break;
+      }
       case 'radio':
       case 'checkbox':
         const buttons = q.options?.map(opt => 

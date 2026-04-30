@@ -1831,11 +1831,12 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     value={field.type}
                     onChange={(e) => {
                       const currentFields = [...(form.config?.custom_fields || [])];
-                      const newType = e.target.value as 'text' | 'textarea' | 'radio' | 'checkbox';
+                      const newType = e.target.value as 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select';
+                      const needsOptions = newType === 'radio' || newType === 'checkbox' || newType === 'select';
                       currentFields[index] = {
                         ...currentFields[index],
                         type: newType,
-                        options: (newType === 'radio' || newType === 'checkbox') ? (currentFields[index].options || [{ label: '', value: '' }]) : undefined
+                        options: needsOptions ? (currentFields[index].options || [{ label: '', value: '' }]) : undefined
                       };
                       const updatedForm = {
                         ...form,
@@ -1850,6 +1851,9 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                   >
                     <option value="text">テキスト入力 (1行)</option>
                     <option value="textarea">テキスト入力 (複数行)</option>
+                    <option value="date">日付選択</option>
+                    <option value="datetime">日時選択</option>
+                    <option value="select">ドロップダウン選択</option>
                     <option value="radio">単一選択 (ボタン)</option>
                     <option value="checkbox">複数選択 (ボタン)</option>
                   </select>
@@ -1906,7 +1910,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                 </div>
               )}
 
-              {(field.type === 'radio' || field.type === 'checkbox') && (
+              {(field.type === 'radio' || field.type === 'checkbox' || field.type === 'select') && (
                 <div className={`${theme === 'light' ? 'bg-gray-50' : 'bg-gray-900/50'} p-3 rounded border ${theme === 'light' ? 'border-gray-200' : 'border-gray-700'}`}>
                   <label className={`block text-xs ${themeClasses.text.secondary} mb-2`}>選択肢</label>
                   <div className="space-y-2">
