@@ -158,6 +158,76 @@ const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({
         </div>
       </div>
 
+      {/* LIFF 2 通目メッセージ */}
+      <div className="space-y-2 pt-2 border-t">
+        <div className="flex items-center justify-between">
+          <div>
+            <Label htmlFor="second_message_enabled">送信時に 2 通目のメッセージを送る</Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              ON にすると、フォーム送信時にこの短いテキストが LINE トークに追加で送信されます。<br />
+              公式 LINE の「完全一致応答メッセージ」と組み合わせて自動応答（クーポン配布など）に利用できます。
+            </p>
+          </div>
+          <button
+            id="second_message_enabled"
+            type="button"
+            role="switch"
+            aria-checked={form.config?.basic_info?.second_message?.enabled === true}
+            onClick={() => {
+              const current = form.config?.basic_info?.second_message;
+              const enabled = !(current?.enabled === true);
+              onUpdate({
+                ...form,
+                config: {
+                  ...form.config,
+                  basic_info: {
+                    ...form.config?.basic_info,
+                    second_message: {
+                      enabled,
+                      text: typeof current?.text === 'string' ? current.text : '',
+                    },
+                  },
+                },
+              });
+            }}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+              form.config?.basic_info?.second_message?.enabled === true
+                ? 'bg-green-500'
+                : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                form.config?.basic_info?.second_message?.enabled === true ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+        <Input
+          id="second_message_text"
+          type="text"
+          value={form.config?.basic_info?.second_message?.text || ''}
+          disabled={!(form.config?.basic_info?.second_message?.enabled === true)}
+          onChange={(e) => {
+            const current = form.config?.basic_info?.second_message;
+            onUpdate({
+              ...form,
+              config: {
+                ...form.config,
+                basic_info: {
+                  ...form.config?.basic_info,
+                  second_message: {
+                    enabled: current?.enabled === true,
+                    text: e.target.value,
+                  },
+                },
+              },
+            });
+          }}
+          placeholder="例: 予約送信"
+        />
+      </div>
+
       {/* システム管理者のみ表示 */}
       {userRole === 'service_admin' && (
         <div className="space-y-2">
