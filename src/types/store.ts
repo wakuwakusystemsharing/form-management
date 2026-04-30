@@ -7,6 +7,7 @@ export interface Store {
   owner_name: string;
   owner_email: string;
   phone?: string;
+  postal_code?: string;       // 郵便番号（例: 150-0021）。Web 予約のお客様確認メール本文に差し込み
   address?: string;
   website_url?: string;
   logo_url?: string;          // ロゴ画像URL

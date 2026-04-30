@@ -146,7 +146,20 @@ export class StaticReservationGenerator {
                 <input type="tel" id="customer-phone" class="input" placeholder="090-1234-5678">
             </div>
             `}
-            
+            ${safeConfig.calendar_settings?.show_customer_email === true ? `
+            <!-- メールアドレス（Web 予約フォーム用） -->
+            <div class="field" id="email-field">
+                <label class="field-label">メールアドレス <span class="required">*</span></label>
+                <input type="email" id="customer-email" class="input" placeholder="example@domain.com" autocomplete="email" inputmode="email">
+                <p style="font-size:0.75rem;color:#6b7280;margin-top:0.25rem;">予約確認メールをお送りします</p>
+            </div>
+            <div class="field" id="email-confirm-field">
+                <label class="field-label">メールアドレス（確認） <span class="required">*</span></label>
+                <input type="email" id="customer-email-confirm" class="input" placeholder="もう一度入力してください" autocomplete="off" inputmode="email">
+                <p id="email-mismatch-hint" style="font-size:0.75rem;color:#dc2626;margin-top:0.25rem;display:none;">メールアドレスが一致しません</p>
+            </div>
+            ` : ''}
+
             ${safeConfig.gender_selection.enabled ? this.renderGenderField(safeConfig) : ''}
             ${safeConfig.visit_count_selection.enabled ? this.renderVisitCountField(safeConfig) : ''}
             ${safeConfig.coupon_selection.enabled ? this.renderCouponField(safeConfig) : ''}
@@ -307,7 +320,7 @@ class BookingForm {
             
             await this.initializeLIFF();
 
-            // localStorageから名前・電話番号を復元
+            // localStorageから名前・電話番号・メールアドレスを復元
             try {
                 const formId = this.config.basic_info?.form_name || this.config.id || 'default';
                 const saved = localStorage.getItem(\`booking_\${formId}\`);
@@ -322,6 +335,13 @@ class BookingForm {
                         this.state.name = data.customerName;
                         const nameEl = document.getElementById('customer-name');
                         if (nameEl) nameEl.value = data.customerName;
+                    }
+                    if (data.customerEmail) {
+                        this.state.email = data.customerEmail;
+                        const emailEl = document.getElementById('customer-email');
+                        const emailConfirmEl = document.getElementById('customer-email-confirm');
+                        if (emailEl) emailEl.value = data.customerEmail;
+                        if (emailConfirmEl) emailConfirmEl.value = data.customerEmail;
                     }
                 }
             } catch (e) {}
@@ -415,7 +435,32 @@ class BookingForm {
                 this.updateSummary();
             });
         }
-        
+
+        // メールアドレス（show_customer_email === true のときのみ要素が存在）
+        const emailInput = document.getElementById('customer-email');
+        const emailConfirmInput = document.getElementById('customer-email-confirm');
+        const emailMismatchHint = document.getElementById('email-mismatch-hint');
+        const checkEmailMatch = () => {
+            const a = (emailInput && emailInput.value || '').trim();
+            const b = (emailConfirmInput && emailConfirmInput.value || '').trim();
+            const mismatch = !!a && !!b && a !== b;
+            if (emailMismatchHint) emailMismatchHint.style.display = mismatch ? 'block' : 'none';
+            this.state.emailMismatch = mismatch;
+        };
+        if (emailInput) {
+            emailInput.addEventListener('input', (e) => {
+                this.state.email = e.target.value;
+                checkEmailMatch();
+                this.updateSummary();
+            });
+        }
+        if (emailConfirmInput) {
+            emailConfirmInput.addEventListener('input', (e) => {
+                this.state.emailConfirm = e.target.value;
+                checkEmailMatch();
+            });
+        }
+
         // 性別選択
         document.querySelectorAll('.gender-button').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -1558,6 +1603,27 @@ class BookingForm {
             resetSubmitState();
             return;
         }
+        // メールアドレス（show_customer_email === true のときのみ必須・形式・一致をチェック）
+        const showEmailField = this.config.calendar_settings?.show_customer_email === true;
+        if (showEmailField) {
+            const email = (this.state.email || '').trim();
+            const emailConfirm = (this.state.emailConfirm || '').trim();
+            if (!email) {
+                alert('メールアドレスを入力してください');
+                resetSubmitState();
+                return;
+            }
+            if (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email)) {
+                alert('メールアドレスの形式が正しくありません');
+                resetSubmitState();
+                return;
+            }
+            if (email !== emailConfirm) {
+                alert('メールアドレス（確認）が一致していません');
+                resetSubmitState();
+                return;
+            }
+        }
         // 非表示フィールドのフォールバック: 名前は LINE 表示名 → 「未記入」、電話は「未記入」
         if (!showNameField && !this.state.name) {
             this.state.name = this.state.lineDisplayName || '未記入';
@@ -1662,7 +1728,7 @@ class BookingForm {
                 store_id: STORE_ID,
                 customer_name: this.state.name,
                 customer_phone: this.state.phone,
-                customer_email: this.state.lineEmail || null,
+                customer_email: (this.state.email || '').trim() || this.state.lineEmail || null,
                 selected_menus: selectedMenus,
                 selected_options: selectedOptions,
                 total_price: totalPrice,
@@ -1852,7 +1918,8 @@ class BookingForm {
                     visitCount: this.state.visitCount,
                     couponUsage: this.state.coupon,
                     customerName: this.state.name,
-                    customerPhone: this.state.phone
+                    customerPhone: this.state.phone,
+                    customerEmail: (this.state.email || '').trim()
                 }));
             } catch (e) {
                 // プライベートモードなどでlocalStorageが使えない場合も継続

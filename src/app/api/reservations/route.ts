@@ -5,6 +5,7 @@ import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { createReservationEvent } from '@/lib/google-calendar';
 import { normalizeForm } from '@/lib/form-normalizer';
+import { sendReservationEmails } from '@/lib/reservation-email';
 import {
   findCustomerByLineOrPhone,
   createCustomer,
@@ -121,6 +122,95 @@ async function getFormCalendarSettings(formId: string): Promise<any | null> {
   if (error || !data) return null;
   const normalized = normalizeForm(data);
   return normalized?.config?.calendar_settings || null;
+}
+
+/**
+ * フォーム ID から正規化済み form.config 全体を取得（form_type 等含む）。
+ * フォームが見つからなければ null。
+ */
+async function getFormConfig(formId: string): Promise<any | null> {
+  if (!formId) return null;
+  const env = getAppEnvironment();
+
+  if (env === 'local') {
+    try {
+      if (!fs.existsSync(DATA_DIR)) return null;
+      const files = fs.readdirSync(DATA_DIR).filter((f) => f.startsWith('forms') && f.endsWith('.json'));
+      for (const file of files) {
+        try {
+          const data = fs.readFileSync(path.join(DATA_DIR, file), 'utf-8');
+          const arr = JSON.parse(data);
+          if (Array.isArray(arr)) {
+            const found = arr.find((f: any) => f?.id === formId);
+            if (found) {
+              const normalized = normalizeForm(found);
+              return normalized?.config || null;
+            }
+          }
+        } catch {
+          /* ignore single-file parse errors */
+        }
+      }
+    } catch (err) {
+      console.error('[reservations] getFormConfig local error:', err);
+    }
+    return null;
+  }
+
+  const adminClient = createAdminClient();
+  if (!adminClient) return null;
+  const { data, error } = await (adminClient as any)
+    .from('forms')
+    .select('id, config, draft_config')
+    .eq('id', formId)
+    .single();
+  if (error || !data) return null;
+  const normalized = normalizeForm(data);
+  return normalized?.config || null;
+}
+
+/**
+ * 店舗 ID から、メールテンプレ差し込みに必要な店舗情報を取得（local / supabase 両対応）。
+ */
+async function getStoreForEmail(storeId: string): Promise<{
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+  postal_code?: string | null;
+  owner_email?: string | null;
+} | null> {
+  if (!storeId) return null;
+  const env = getAppEnvironment();
+
+  if (env === 'local') {
+    try {
+      const file = path.join(DATA_DIR, 'stores.json');
+      if (!fs.existsSync(file)) return null;
+      const arr = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      const found = Array.isArray(arr) ? arr.find((s: any) => s?.id === storeId) : null;
+      if (!found) return null;
+      return {
+        name: found.name || '',
+        address: found.address || null,
+        phone: found.phone || null,
+        postal_code: found.postal_code || null,
+        owner_email: found.owner_email || null,
+      };
+    } catch (err) {
+      console.error('[reservations] getStoreForEmail local error:', err);
+      return null;
+    }
+  }
+
+  const adminClient = createAdminClient();
+  if (!adminClient) return null;
+  const { data, error } = await (adminClient as any)
+    .from('stores')
+    .select('name, address, phone, postal_code, owner_email')
+    .eq('id', storeId)
+    .single();
+  if (error || !data) return null;
+  return data;
 }
 
 /**
@@ -477,6 +567,33 @@ export async function POST(request: Request) {
         }
       }
 
+      // 4. Web 予約フォームの場合、お客様 / 店舗にメール送信（fire-and-forget）
+      try {
+        const formConfig = await getFormConfig(body.form_id);
+        if (formConfig?.form_type === 'web') {
+          const storeInfo = await getStoreForEmail(body.store_id);
+          if (storeInfo) {
+            void sendReservationEmails({
+              reservation: {
+                id: newReservation.id,
+                customer_name: newReservation.customer_name,
+                customer_phone: newReservation.customer_phone,
+                customer_email: newReservation.customer_email,
+                reservation_date: newReservation.reservation_date,
+                reservation_time: newReservation.reservation_time,
+                selected_menus: newReservation.selected_menus,
+                selected_options: newReservation.selected_options || null,
+                message: body.message || null,
+              },
+              store: storeInfo as any,
+              form: { config: formConfig },
+            }).catch((e) => console.error('[API] reservation email error:', e));
+          }
+        }
+      } catch (emailError) {
+        console.error('[API] reservation email orchestration error:', emailError);
+      }
+
       return NextResponse.json(newReservation, { status: 201 });
     }
 
@@ -668,6 +785,33 @@ export async function POST(request: Request) {
     } catch (calendarError) {
       console.error('[API] Calendar event creation error:', calendarError);
       // 予約自体は成功しているため、ここではエラーにしない
+    }
+
+    // 5. Web 予約フォームの場合、お客様 / 店舗にメール送信（fire-and-forget）
+    try {
+      const formConfig = await getFormConfig(body.form_id);
+      if (formConfig?.form_type === 'web') {
+        const storeInfo = await getStoreForEmail(body.store_id);
+        if (storeInfo) {
+          void sendReservationEmails({
+            reservation: {
+              id: reservation.id,
+              customer_name: reservation.customer_name,
+              customer_phone: reservation.customer_phone,
+              customer_email: reservation.customer_email,
+              reservation_date: reservation.reservation_date,
+              reservation_time: reservation.reservation_time,
+              selected_menus: reservation.selected_menus,
+              selected_options: reservation.selected_options,
+              message: body.message || null,
+            },
+            store: storeInfo as any,
+            form: { config: formConfig },
+          }).catch((e) => console.error('[API] reservation email error:', e));
+        }
+      }
+    } catch (emailError) {
+      console.error('[API] reservation email orchestration error:', emailError);
     }
 
     return NextResponse.json(reservation, { status: 201 });
