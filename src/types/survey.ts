@@ -1,6 +1,6 @@
 import { StaticDeploy } from './form';
 
-export type SurveyQuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date';
+export type SurveyQuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select';
 
 export interface SurveyQuestionOption {
   label: string;
