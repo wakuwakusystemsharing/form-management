@@ -962,6 +962,76 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </button>
             </div>
 
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  「メールアドレス」フィールドを表示（Web 予約用）
+                </label>
+                <InfoTooltip
+                  theme={theme}
+                  text={'ON にすると予約フォームに「メールアドレス」と「確認用」の 2 欄を表示します。\nWeb 予約フォーム送信時に予約確認メールを自動送信します（LINE 予約には影響なし）。'}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const current = form.config?.calendar_settings?.show_customer_email === true;
+                  const newValue = !current;
+                  onUpdate({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      calendar_settings: {
+                        ...form.config?.calendar_settings,
+                        show_customer_email: newValue
+                      }
+                    }
+                  });
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                  form.config?.calendar_settings?.show_customer_email === true
+                    ? 'bg-green-500'
+                    : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    form.config?.calendar_settings?.show_customer_email === true ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  店舗側通知メール（Web 予約用）
+                </label>
+                <InfoTooltip
+                  theme={theme}
+                  text={'Web 予約が入った際の店舗側通知メールの送信先。\n空のときは店舗オーナーのメールアドレス（基本情報）に送信されます。'}
+                />
+              </div>
+              <input
+                type="email"
+                placeholder="未設定時は店舗オーナーのメール宛"
+                value={form.config?.calendar_settings?.notification_email || ''}
+                onChange={(e) => {
+                  onUpdate({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      calendar_settings: {
+                        ...form.config?.calendar_settings,
+                        notification_email: e.target.value
+                      }
+                    }
+                  });
+                }}
+                className={themeClasses.input}
+              />
+            </div>
+
             <div className={`${themeClasses.highlight} rounded-lg p-4`}>
               <h4 className={`text-sm font-medium mb-2 ${theme === 'light' ? 'text-[rgb(244,144,49)]' : 'text-cyan-300'}`}>現在の設定:</h4>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
@@ -985,6 +1055,14 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • メニューフィールド: {form.config?.calendar_settings?.show_menu_field !== false ? '表示' : '非表示（希望日時/カレンダーをデフォルト表示）'}
               </p>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                • メールアドレスフィールド (Web 予約): {form.config?.calendar_settings?.show_customer_email === true ? '表示（送信時に確認メール自動送信）' : '非表示'}
+              </p>
+              {form.config?.calendar_settings?.notification_email && (
+                <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                  • 店舗側通知メール: {form.config.calendar_settings.notification_email}
+                </p>
+              )}
             </div>
           </div>
         )}

@@ -41,6 +41,7 @@
 		"react": "19.2.3",
 		"react-dom": "19.2.3",
 		"react-easy-crop": "^5.5.5",
+		"resend": "^4.8.0",
 		"tailwind-merge": "^3.4.0",
 		"vaul": "^1.1.2"
 	},

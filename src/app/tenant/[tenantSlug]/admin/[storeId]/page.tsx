@@ -1557,7 +1557,9 @@ export default function StoreDetailPage() {
                     </div>
                     <div className="col-span-2">
                       <Label className="text-xs text-muted-foreground">住所</Label>
-                      <p className="text-sm font-medium mt-0.5">{store.address || '未設定'}</p>
+                      <p className="text-sm font-medium mt-0.5">
+                        {store.postal_code ? `〒${store.postal_code} ` : ''}{store.address || '未設定'}
+                      </p>
                     </div>
                     {store.description && (
                       <div className="col-span-2">
@@ -2250,6 +2252,15 @@ export default function StoreDetailPage() {
                     onChange={(e) => setEditingStore({...editingStore, phone: e.target.value})}
                     />
                   </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit_postal_code">郵便番号</Label>
+                  <Input
+                    id="edit_postal_code"
+                    placeholder="150-0021"
+                    value={editingStore.postal_code || ''}
+                    onChange={(e) => setEditingStore({...editingStore, postal_code: e.target.value})}
+                  />
+                </div>
                 <div className="md:col-span-2 space-y-2">
                   <Label htmlFor="edit_address">住所</Label>
                   <Input

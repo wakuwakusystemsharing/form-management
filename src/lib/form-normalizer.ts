@@ -105,6 +105,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       show_customer_name: true,
       show_customer_phone: true,
       show_menu_field: true,
+      show_customer_email: false,
+      notification_email: '',
       holidays_as_closed: false,
       excluded_holiday_types: []
     },
@@ -241,6 +243,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         show_customer_name: existingConfig?.calendar_settings?.show_customer_name ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_name ?? true,
         show_customer_phone: existingConfig?.calendar_settings?.show_customer_phone ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_phone ?? true,
         show_menu_field: existingConfig?.calendar_settings?.show_menu_field ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_menu_field ?? true,
+        show_customer_email: existingConfig?.calendar_settings?.show_customer_email ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_email ?? false,
+        notification_email: (() => {
+          const v = existingConfig?.calendar_settings?.notification_email
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.notification_email;
+          return typeof v === 'string' ? v : '';
+        })(),
         holidays_as_closed: existingConfig?.calendar_settings?.holidays_as_closed
           ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.holidays_as_closed
           ?? false,
