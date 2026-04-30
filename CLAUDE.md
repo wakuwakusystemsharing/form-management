@@ -48,6 +48,10 @@ LINE_CHANNEL_SECRET=
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=  # リフレッシュトークン暗号化用
+
+# Resend（Web 予約フォームの自動メール通知用、オプション）
+RESEND_API_KEY=                         # 未設定時はスキップ（local 開発で安全）
+EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-domain.com>
 ```
 
 ## アーキテクチャ概要
@@ -102,13 +106,16 @@ GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=  # リフレッシュトークン暗号化
 
 **Google Calendar 統合:**
 - サービスアカウント方式と店舗 OAuth 方式の2パターンをサポート
-- `src/lib/google-calendar.ts` - カレンダー作成、イベント CRUD
+- `src/lib/google-calendar.ts` - カレンダー作成、イベント CRUD、`getCalendarClientForStore()` で OAuth 自動切替
 - `src/lib/google-calendar-token.ts` - OAuth リフレッシュトークンの暗号化/復号化
 - `/api/integrations/google-calendar/connect` - OAuth 認証開始
-- `/api/integrations/google-calendar/callback` - OAuth コールバック処理
-- `/api/stores/{storeId}/calendar` - カレンダー連携状態の取得・設定
+- `/api/integrations/google-calendar/callback` - OAuth コールバック処理（primary カレンダーを初期紐付け）
+- `/api/stores/{storeId}/calendar` - POST: カレンダー作成 / PUT: カレンダー ID 切替（書き込み権限を再検証）
+- `/api/stores/{storeId}/calendar/list` - 連携中アカウントの書き込み可能カレンダー一覧（store_oauth 専用）
 - `/api/stores/{storeId}/calendar/disconnect` - カレンダー連携解除
+- `/api/stores/{storeId}/calendar/availability` - カレンダー空き状況取得
 - 店舗の `google_calendar_source` カラム: `'system'`（SA 作成）| `'store_oauth'`（店舗連携）で方式を区別
+- 店舗管理画面で「カレンダーを変更」ボタン → ダイアログでサブカレンダーへ切替可能
 - `admin_settings` テーブル: `google_oauth_client_id`、`google_oauth_client_secret`、`google_service_account_json` を保存
 
 **CRM（顧客管理）機能:**
@@ -127,6 +134,29 @@ GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=  # リフレッシュトークン暗号化
 - `POST /api/webhooks/line` - LINE Messaging API からのイベントを受信
 - LINE チャネルシークレット（`LINE_CHANNEL_SECRET`）で署名検証
 - 受信イベントに基づき予約確認メッセージ等を送信
+- 同一ユーザー同時予約数上限（`max_concurrent_reservations_per_user`）を防御的に再チェック
+
+**LIFF 2 通目メッセージ機能:**
+- フォーム送信時に LINE トークへ任意の **2 通目固定テキスト**を送信できる（公式 LINE の「完全一致応答メッセージ」と組み合わせて自動応答に活用）
+- 設定: `FormConfig.basic_info.second_message: { enabled: boolean; text: string }` / `SurveyConfig.basic_info.second_message`
+- BasicInfoEditor / SurveyFormEditor の基本情報タブで ON/OFF + 文言編集
+- 静的ジェネレータが `liff.sendMessages([msg1, msg2])` で配列送信
+
+**Web 予約フォーム自動メール通知:**
+- `form_type === 'web'` のフォーム送信時、お客様 / 店舗の両方に予約確認メールを自動送信
+- 送信エンジン: Resend（`src/lib/email-sender.ts`）。`RESEND_API_KEY` 未設定時はログ出力のみでスキップ
+- お客様メール: `customer_email` 宛、From 表示名は店舗名、Reply-To は店舗オーナーのメアド
+- 店舗メール: `form.config.calendar_settings.notification_email` > `store.owner_email` の優先順位で決定
+- テンプレート: `src/lib/email-templates.ts`（`buildCustomerConfirmationEmail` / `buildStoreNotificationEmail`）
+- オーケストレーション: `src/lib/reservation-email.ts` の `sendReservationEmails`
+- 予約フォームに `show_customer_email` フィールド ON で確認用 2 欄入力 + 一致検証 + localStorage 保存
+- メール本文に `〒{postal_code} {address}` を差し込むため `stores.postal_code` カラム追加
+
+**LINE リマインダー機能:**
+- 翌日の予約に対して LINE Flex メッセージで自動リマインド
+- Supabase Edge Function `send-reminders` が pg_cron（毎時実行）でトリガー
+- 店舗ごとに ON/OFF + 送信時刻指定が可能（`stores.reminder_enabled` / `stores.reminder_time`、デフォルト 19:00）
+- マイグレーション: `20260411100000_add_reminder_settings.sql` / `20260411100001_update_cron_hourly.sql`
 
 **プレビュー機能:**
 - `POST /api/preview/generate` - 保存前のフォーム編集状態からプレビュー HTML を生成
@@ -173,18 +203,21 @@ GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=  # リフレッシュトークン暗号化
 - `src/types/store.ts` - 店舗型（`Store`、`StoreWithForms`）
 
 **コアユーティリティ:**
-- `src/lib/form-normalizer.ts` - 後方互換性正規化
+- `src/lib/form-normalizer.ts` - 後方互換性正規化（全フォーム読み取りで必ず通す）
 - `src/lib/env.ts` - 環境検出（`getAppEnvironment()`、`shouldSkipAuth()`、`shouldUseMockBlob()`）
 - `src/lib/supabase.ts` - Supabase クライアントファクトリ（認証 vs 管理者）
 - `src/lib/supabase-storage-deployer.ts` - Storage アップロード/デプロイ
-- `src/lib/static-generator-reservation.ts` - 予約 HTML 生成
+- `src/lib/static-generator-reservation.ts` - 予約 HTML 生成（祝日計算 / 営業時間 / 時間間隔等）
 - `src/lib/static-generator-survey.ts` - アンケート HTML 生成
 - `src/lib/store-id-generator.ts` - ID 生成ロジック
-- `src/lib/google-calendar.ts` - Google Calendar API 操作
+- `src/lib/google-calendar.ts` - Google Calendar API 操作（`getCalendarClientForStore()` で OAuth/SA 自動切替）
 - `src/lib/google-calendar-token.ts` - OAuth トークン暗号化
 - `src/lib/customer-utils.ts` - CRM 顧客管理ユーティリティ
 - `src/lib/auth-helper.ts` - 認証ヘルパー（`getCurrentUser()` など）
 - `src/lib/store-setup-status.ts` - 店舗セットアップ状態判定
+- `src/lib/email-sender.ts` - Resend ラッパ（fromName / replyTo 対応、API キー無しで安全スキップ）
+- `src/lib/email-templates.ts` - お客様確認 / 店舗通知の 2 種類のメールテンプレ
+- `src/lib/reservation-email.ts` - Web 予約完了時のメール送信オーケストレーション
 
 **Middleware & 認証:**
 - `src/middleware.ts` - ルート保護（UI ページアクセス制御のみ）、RLS バイパスルーティング
@@ -304,10 +337,11 @@ export async function GET(req, { params }) {
 ### Google Calendar 連携 API:
 - `GET /api/integrations/google-calendar/connect?store_id=xxx` - OAuth 認証開始（リダイレクト）
 - `GET /api/integrations/google-calendar/callback` - OAuth コールバック
-- `GET /api/stores/{storeId}/calendar` - カレンダー連携状態取得
-- `PUT /api/stores/{storeId}/calendar` - カレンダー ID 設定
+- `POST /api/stores/{storeId}/calendar` - 店舗用カレンダーを SA で新規作成（system モード）
+- `PUT /api/stores/{storeId}/calendar` - カレンダー ID 切替（書き込み権限を再検証、store_oauth 専用）
+- `GET /api/stores/{storeId}/calendar/list` - 連携アカウントの書き込み可能カレンダー一覧（store_oauth 専用）
 - `POST /api/stores/{storeId}/calendar/disconnect` - カレンダー連携解除
-- `GET /api/stores/{storeId}/calendar/availability` - カレンダー空き状況
+- `GET /api/stores/{storeId}/calendar/availability` - カレンダー空き状況（時刻ごとのイベント情報）
 
 ### 店舗管理者 API:
 - `GET /api/stores/{storeId}/admins` - 管理者一覧
@@ -383,10 +417,17 @@ export async function GET(req, { params }) {
 - 公開 API（フォーム取得、予約作成）は匿名アクセスを許可
 
 **主なマイグレーション（`supabase/migrations/`）:**
+- `20250101000000_initial_schema.sql` - 全テーブルの初期スキーマ
+- `20250103000000_add_source_medium.sql` - 流入経路（source_medium）カラム追加
 - `20250204000000_add_crm_tables.sql` - customers・customer_visits テーブル追加
 - `20250211000000_add_google_calendar_oauth_columns.sql` - Google Calendar OAuth カラム追加
 - `20250212000000_add_reservations_google_calendar_event_id.sql` - 予約への Calendar イベント ID カラム追加
-- `20260308000000_remove_subdomain_columns.sql` - subdomain・custom_domain カラム削除（削除済み）
+- `20260308000000_remove_subdomain_columns.sql` - subdomain・custom_domain カラム削除
+- `20260407000000_add_multi_tenant_admin.sql` - master_admins・system_admins テーブル追加（マルチテナント）
+- `20260411000000_add_organizations.sql` - organizations テーブル追加
+- `20260411100000_add_reminder_settings.sql` - stores.reminder_enabled / reminder_time 追加
+- `20260411100001_update_cron_hourly.sql` - send-reminders Edge Function を毎時実行に変更
+- `20260429000000_add_store_postal_code.sql` - stores.postal_code 追加（Web 予約メール用）
 
 ## テンプレートシステム
 
@@ -401,11 +442,40 @@ export async function GET(req, { params }) {
 
 ### FormConfig の主要フィールド
 
-- `config.basic_info.notice` - フォーム上部に表示する注意書き（任意）
-- `config.basic_info.form_name` - フォーム名
-- `MenuItem.hide_price` / `SubMenuItem.hide_price` / `MenuOption.hide_price` - 料金を非表示にするフラグ（任意）
-- `config.calendar_settings.booking_mode` - 予約モード（`'calendar'` | `'multiple_dates'`）
-- `config.form_type` - フォームの種類（`'line'` | `'web'`）
+**基本情報 (`config.basic_info`):**
+- `form_name` / `store_name` / `liff_id` / `theme_color` / `logo_url` / `notice`
+- `second_message: { enabled, text }` - LIFF 2 通目固定テキスト送信（公式 LINE 完全一致応答用）
+
+**メニュー (`MenuItem` / `SubMenuItem` / `MenuOption`):**
+- `hide_price` / `hide_duration` - 料金・所要時間を非表示にするフラグ（任意）
+
+**カスタムフィールド (`config.custom_fields[]`):**
+- `type`: `'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select'`
+
+**カレンダー設定 (`config.calendar_settings`):**
+- `booking_mode`: `'calendar'`（Google カレンダー連携式）| `'multiple_dates'`（第一〜第三希望日時選択）
+- `time_interval`: `10 | 15 | 30 | 60` - カレンダー表示モードの時間スロット間隔（デフォルト 30）
+- `business_hours` - 曜日別営業時間
+- `advance_booking_days` - 何日先まで予約可能か（デフォルト 30）
+- `max_concurrent_events` - 同時刻にこの件数以上のカレンダーイベントが重なる時間帯は ✕（デフォルト 1）
+- `max_concurrent_reservations_per_user` - 同一ユーザーの未来予約最大件数（0 = 制限なし）
+- `holidays_as_closed` + `excluded_holiday_types` - 日本の祝日を予約不可にする（1980-2099 年計算）。除外配列で個別の祝日を ✕ 対象から外せる
+- `allow_exceed_business_hours` - 営業時間超過の予約を許可
+- `show_customer_name` / `show_customer_phone` - 入力欄の表示制御（false 時は LIFF 表示名/「未記入」を自動補完）
+- `show_menu_field` - メニュー欄の表示制御（false 時は希望日時/カレンダーをデフォルト表示）
+- `show_customer_email` - メールアドレス入力 2 欄（メイン+確認）の表示。Web 予約での自動メール送信に必須
+- `notification_email` - Web 予約の店舗側通知メール宛先（空時は `store.owner_email`）
+- `multiple_dates_settings` - 希望日時モードの時間間隔・選択日数・曜日別時間設定
+
+**フォームタイプ (`config.form_type`):**
+- `'line'` - LIFF 経由（LINE トーク内で開く、メッセージ送信あり）
+- `'web'` - 通常の Web フォーム（メール通知あり、LIFF 不使用）
+
+**店舗テーブル (`stores`):**
+- `name` / `owner_name` / `owner_email` / `phone` / `postal_code` / `address` - メール本文差し込みに使用
+- `reminder_enabled` / `reminder_time` - LINE リマインダーの有効性と送信時刻（デフォルト 19:00）
+- `google_calendar_id` / `google_calendar_source` / `google_calendar_refresh_token` - Calendar 連携情報
+- `line_channel_access_token` - LINE Messaging API 用
 
 ## テストアプローチ
 

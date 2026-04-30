@@ -66,6 +66,11 @@ LINE_CHANNEL_SECRET=
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=
+
+# Resend（Web 予約フォームの自動メール通知、オプション）
+# 未設定時はメール送信のみスキップされ、予約自体は正常完了する
+RESEND_API_KEY=                         # https://resend.com → API Keys
+EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-domain.com>（verified domain 必須）
 ```
 
 ### 4. 開発サーバー起動
@@ -130,6 +135,11 @@ LINE_CHANNEL_SECRET=
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=
+
+# Resend（Web 予約フォームの自動メール通知、オプション）
+# 未設定時はメール送信のみスキップされ、予約自体は正常完了する
+RESEND_API_KEY=                         # https://resend.com → API Keys
+EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-domain.com>（verified domain 必須）
 ```
 
 **重要**: 
@@ -218,6 +228,11 @@ LINE_CHANNEL_SECRET=
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=
+
+# Resend（Web 予約フォームの自動メール通知、オプション）
+# 未設定時はメール送信のみスキップされ、予約自体は正常完了する
+RESEND_API_KEY=                         # https://resend.com → API Keys
+EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-domain.com>（verified domain 必須）
 ```
 
 **重要**: 
@@ -257,6 +272,47 @@ git push origin main
 - 静的HTML は Supabase Storage (`reservations/{storeId}/{formId}/index.html` または `surveys/{storeId}/{formId}/index.html`) に出力
 - RLS で本番データが保護される
 - staging 環境のデータと production 環境のデータは完全に分離されていることを確認
+
+---
+
+## 📧 Resend セットアップ（Web 予約メール通知用、オプション）
+
+Web 予約フォーム（`form_type === 'web'`）から予約された際に、お客様 / 店舗の両方に自動メール送信する機能を有効にするには、Resend のセットアップが必要。`RESEND_API_KEY` 未設定時は機能スキップ（予約自体は正常完了）。
+
+### 1. Resend ドメイン認証
+
+1. https://resend.com でアカウント作成 → Domains → Add Domain
+2. **送信用ドメイン**を入力（例: `your-domain.com`、サブドメイン推奨: `send.your-domain.com`）
+3. 表示される DNS レコード（MX × 1、TXT × 3）を **DNS 管理サービス**に登録
+   - Vercel が DNS を管理している場合: Vercel Domains → ドメイン → DNS Records から追加
+   - 他社（お名前.com / Cloudflare 等）の場合: それぞれのコントロールパネルで追加
+4. Resend 画面で **Verify** → 全項目 ✓ になれば認証完了（通常 30 分以内）
+
+### 2. API Key 発行
+
+1. Resend → API Keys → Create API Key
+2. Permission: **Sending access**、Domain: 上記の verified domain を選択
+3. `re_xxxxxxxx` を即コピー（**1 度しか表示されない**）
+4. staging / production で **別々のキー**を発行することを推奨
+
+### 3. Vercel 環境変数
+
+```
+RESEND_API_KEY=re_xxxxxxxx                           # Preview / Production 別々に設定
+EMAIL_FROM_ADDRESS=予約通知 <noreply@send.your-domain.com>  # verified domain と一致必須
+```
+
+### 4. 動作確認
+
+- staging で店舗作成 → 郵便番号入力 → Web 予約フォーム作成
+- BusinessRulesEditor で「メールアドレス」フィールドを表示 ON → 保存＆デプロイ
+- 公開フォームから自分の Gmail で予約送信 → 受信トレイで以下を確認:
+  - From: 店舗名 <noreply@send.your-domain.com>
+  - Reply-To: 店舗オーナーのメール
+  - Subject: 【ご予約確定】...
+- Resend ダッシュボード Logs で 2 通とも Delivered を確認
+
+詳細: [Resend Documentation](https://resend.com/docs)
 
 ---
 

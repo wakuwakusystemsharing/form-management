@@ -404,9 +404,9 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                         type="checkbox"
                         checked={!businessHours[day]?.closed}
                         onChange={(e) => handleBusinessHoursChange(day, 'closed', !e.target.checked)}
-                        className={`rounded text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)] ${
-                          theme === 'light' 
-                            ? 'border-gray-300 bg-gray-100' 
+                        className={`rounded accent-green-500 focus:ring-green-500 ${
+                          theme === 'light'
+                            ? 'border-gray-300 bg-gray-100'
                             : 'border-gray-600 bg-gray-700'
                         }`}
                       />
@@ -486,7 +486,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     value="calendar"
                     checked={bookingMode === 'calendar'}
                     onChange={(e) => handleBookingModeChange(e.target.value as 'calendar')}
-                    className="text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)]"
+                    className="accent-green-500 focus:ring-green-500"
                   />
                   <div>
                     <div className={`font-medium ${themeClasses.text.primary}`}>カレンダー表示</div>
@@ -499,7 +499,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     value="multiple_dates"
                     checked={bookingMode === 'multiple_dates'}
                     onChange={(e) => handleBookingModeChange(e.target.value as 'multiple_dates')}
-                    className="text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)]"
+                    className="accent-green-500 focus:ring-green-500"
                   />
                   <div>
                     <div className={`font-medium ${themeClasses.text.primary}`}>第三希望日時選択</div>
@@ -603,7 +603,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                                 type="checkbox"
                                 checked={!hours.closed}
                                 onChange={(e) => handleWeekdayHoursChange(dayKey, 'closed', !e.target.checked)}
-                                className={`rounded text-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)] ${
+                                className={`rounded accent-green-500 focus:ring-green-500 ${
                                   theme === 'light'
                                     ? 'border-gray-300 bg-gray-100'
                                     : 'border-gray-600 bg-gray-700'
@@ -789,7 +789,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                             type="checkbox"
                             checked={checked}
                             onChange={() => toggleExcludedHolidayType(h.id)}
-                            className="cursor-pointer"
+                            className="cursor-pointer accent-green-500 focus:ring-green-500"
                           />
                           <span className={`text-sm ${themeClasses.text.primary}`}>
                             {h.label}
@@ -922,59 +922,27 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </button>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
-                  「メニュー」フィールドを表示
-                </label>
-                <InfoTooltip
-                  theme={theme}
-                  text={'OFF にするとメニュー選択欄を非表示にし、希望日時/カレンダーをデフォルトで表示します。\nメニューをカスタムフィールドやメッセージ欄に手入力する運用向け'}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const current = form.config?.calendar_settings?.show_menu_field !== false;
-                  const newValue = !current;
-                  onUpdate({
-                    ...form,
-                    config: {
-                      ...form.config,
-                      calendar_settings: {
-                        ...form.config?.calendar_settings,
-                        show_menu_field: newValue
-                      }
-                    }
-                  });
-                }}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
-                  form.config?.calendar_settings?.show_menu_field !== false
-                    ? 'bg-green-500'
-                    : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    form.config?.calendar_settings?.show_menu_field !== false ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
                   「メールアドレス」フィールドを表示（Web 予約用）
+                  {form.config?.form_type === 'web' && (
+                    <span className="ml-2 text-xs text-green-600 dark:text-green-400">必須</span>
+                  )}
                 </label>
                 <InfoTooltip
                   theme={theme}
-                  text={'ON にすると予約フォームに「メールアドレス」と「確認用」の 2 欄を表示します。\nWeb 予約フォーム送信時に予約確認メールを自動送信します（LINE 予約には影響なし）。'}
+                  text={form.config?.form_type === 'web'
+                    ? 'Web 予約フォームでは予約確認メールが唯一の通知手段のため、メールアドレス欄は常に必須で表示されます。\n（このトグルは LINE 予約フォーム用です）'
+                    : 'ON にすると予約フォームに「メールアドレス」と「確認用」の 2 欄を表示します。\nWeb 予約フォーム送信時に予約確認メールを自動送信します（LINE 予約には影響なし）。'}
                 />
               </div>
               <button
                 type="button"
+                disabled={form.config?.form_type === 'web'}
                 onClick={() => {
+                  if (form.config?.form_type === 'web') return;
                   const current = form.config?.calendar_settings?.show_customer_email === true;
                   const newValue = !current;
                   onUpdate({
@@ -989,14 +957,14 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   });
                 }}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
-                  form.config?.calendar_settings?.show_customer_email === true
+                  form.config?.calendar_settings?.show_customer_email === true || form.config?.form_type === 'web'
                     ? 'bg-green-500'
                     : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
-                }`}
+                } ${form.config?.form_type === 'web' ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    form.config?.calendar_settings?.show_customer_email === true ? 'translate-x-6' : 'translate-x-1'
+                    form.config?.calendar_settings?.show_customer_email === true || form.config?.form_type === 'web' ? 'translate-x-6' : 'translate-x-1'
                   }`}
                 />
               </button>
@@ -1053,10 +1021,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 • 電話番号フィールド: {form.config?.calendar_settings?.show_customer_phone !== false ? '表示' : '非表示'}
               </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
-                • メニューフィールド: {form.config?.calendar_settings?.show_menu_field !== false ? '表示' : '非表示（希望日時/カレンダーをデフォルト表示）'}
-              </p>
-              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
-                • メールアドレスフィールド (Web 予約): {form.config?.calendar_settings?.show_customer_email === true ? '表示（送信時に確認メール自動送信）' : '非表示'}
+                • メールアドレスフィールド: {(form.config?.calendar_settings?.show_customer_email === true || form.config?.form_type === 'web') ? `表示（送信時に確認メール自動送信）${form.config?.form_type === 'web' ? '・Web予約は必須' : ''}` : '非表示'}
               </p>
               {form.config?.calendar_settings?.notification_email && (
                 <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>

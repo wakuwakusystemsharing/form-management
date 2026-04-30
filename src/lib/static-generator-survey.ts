@@ -108,14 +108,24 @@ export class StaticSurveyGenerator {
             }
         }
 
+        function formatDateTimeForDisplay(value) {
+            if (!value || typeof value !== 'string') return value;
+            const dt = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+            if (dt) return dt[1] + '年' + dt[2] + '月' + dt[3] + '日 ' + dt[4] + ':' + dt[5];
+            const date = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (date) return date[1] + '年' + date[2] + '月' + date[3] + '日';
+            return value;
+        }
+
         function submitForm() {
             const formData = {};
+            const formDataDisplay = {};
             const questions = ${JSON.stringify(safeConfig.questions)};
             let hasError = false;
 
             for (const q of questions) {
                 let value = '';
-                
+
                 if (q.type === 'text' || q.type === 'textarea' || q.type === 'date' || q.type === 'datetime' || q.type === 'select') {
                     const input = document.getElementById(q.id);
                     if (input) value = input.value;
@@ -143,13 +153,15 @@ export class StaticSurveyGenerator {
                 }
                 
                 formData[q.title] = value;
+                // メッセージ表示用は date/datetime のみ日本語整形
+                formDataDisplay[q.title] = (q.type === 'date' || q.type === 'datetime') ? formatDateTimeForDisplay(value) : value;
             }
 
             if (hasError) return;
 
-            // メッセージ作成
+            // メッセージ作成（date/datetime は日本語表示）
             let messageText = \`≪\${document.title}≫\\n\`;
-            for (const [key, val] of Object.entries(formData)) {
+            for (const [key, val] of Object.entries(formDataDisplay)) {
                 messageText += \`【\${key}】\\n・\${val}\\n\\n\`;
             }
 

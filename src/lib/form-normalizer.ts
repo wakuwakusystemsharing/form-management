@@ -104,7 +104,6 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       time_interval: 30,
       show_customer_name: true,
       show_customer_phone: true,
-      show_menu_field: true,
       show_customer_email: false,
       notification_email: '',
       holidays_as_closed: false,
@@ -242,7 +241,6 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         })() as 10 | 15 | 30 | 60,
         show_customer_name: existingConfig?.calendar_settings?.show_customer_name ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_name ?? true,
         show_customer_phone: existingConfig?.calendar_settings?.show_customer_phone ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_phone ?? true,
-        show_menu_field: existingConfig?.calendar_settings?.show_menu_field ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_menu_field ?? true,
         show_customer_email: existingConfig?.calendar_settings?.show_customer_email ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_email ?? false,
         notification_email: (() => {
           const v = existingConfig?.calendar_settings?.notification_email

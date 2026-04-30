@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { getSupabaseClient } from '@/lib/supabase';
+import { formatDateTimeForDisplay } from '@/lib/format-utils';
 import { User } from '@supabase/supabase-js';
 import { Store } from '@/types/store';
 import { Form } from '@/types/form';
@@ -1566,7 +1567,10 @@ export default function StoreAdminPage() {
                   Object.entries(info.custom_fields as Record<string, any>).forEach(([fieldId, fieldValue]) => {
                     const fieldDef = formConfig?.custom_fields?.find((f: any) => f.id === fieldId);
                     const label = fieldDef?.title || fieldId;
-                    const val = Array.isArray(fieldValue) ? fieldValue.join(', ') : String(fieldValue ?? '');
+                    const raw = Array.isArray(fieldValue) ? fieldValue.join(', ') : String(fieldValue ?? '');
+                    const val = (fieldDef?.type === 'date' || fieldDef?.type === 'datetime')
+                      ? formatDateTimeForDisplay(raw)
+                      : raw;
                     if (val) rows.push({ label, value: val });
                   });
                 }
