@@ -1765,6 +1765,18 @@ class BookingForm {
             } else {
                 messageText += \`\\n《メニュー》\\n\${menuTextForMessage || ''}\\n\`;
             }
+
+            // オプション（メニュー個別 / カテゴリー共通の両方を統合表示）
+            if (selectedOptions && selectedOptions.length > 0) {
+                const optionLines = selectedOptions.map(opt => {
+                    const name = opt.option_name || '';
+                    const priceText = (opt.price || 0) > 0 ? \` ¥\${Number(opt.price).toLocaleString()}\` : '';
+                    const durationText = (opt.duration || 0) > 0 ? \` (\${opt.duration}分)\` : '';
+                    return \`・\${name}\${priceText}\${durationText}\`;
+                }).join('\\n');
+                messageText += \`\\n《オプション》\\n\${optionLines}\\n\`;
+            }
+
             if (totalPrice > 0 || totalDuration > 0) {
                 if (totalPrice > 0) messageText += \`\\n《合計金額》\\n¥\${totalPrice.toLocaleString()}\\n\`;
                 if (totalDuration > 0) messageText += \`\\n《合計時間》\\n\${totalDuration}分\\n\`;
