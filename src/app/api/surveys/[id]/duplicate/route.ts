@@ -125,11 +125,14 @@ export async function POST(
       config.basic_info.liff_id = '';
     }
 
+    const newName = (sourceForm.name || config?.basic_info?.title || 'アンケート') + '（コピー）';
+
     const { data: newForm, error: insertError } = await (adminClient as any)
       .from('survey_forms')
       .insert({
         id: newId,
         store_id: sourceForm.store_id,
+        name: newName,
         config,
         status: 'inactive',
         draft_status: 'none',
