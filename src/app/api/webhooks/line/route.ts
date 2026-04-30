@@ -217,7 +217,7 @@ async function getMaxReservationLimitForStore(
 ): Promise<number> {
   if (!adminClient) return 0;
   const { data, error } = await adminClient
-    .from('forms')
+    .from('reservation_forms')
     .select('id, config, draft_config')
     .eq('store_id', storeId);
   if (error || !Array.isArray(data) || data.length === 0) return 0;
