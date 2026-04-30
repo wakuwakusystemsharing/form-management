@@ -675,6 +675,84 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </button>
             </div>
 
+            <div className="flex items-center justify-between">
+              <div>
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  「お名前」フィールドを表示
+                </label>
+                <p className={`text-xs ${themeClasses.text.secondary} mt-0.5`}>
+                  OFF にすると入力欄を非表示。LINE 表示名を自動で記録（Web フォームの場合は「未記入」）
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const current = form.config?.calendar_settings?.show_customer_name !== false;
+                  const newValue = !current;
+                  onUpdate({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      calendar_settings: {
+                        ...form.config?.calendar_settings,
+                        show_customer_name: newValue
+                      }
+                    }
+                  });
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                  form.config?.calendar_settings?.show_customer_name !== false
+                    ? 'bg-green-500'
+                    : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    form.config?.calendar_settings?.show_customer_name !== false ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  「電話番号」フィールドを表示
+                </label>
+                <p className={`text-xs ${themeClasses.text.secondary} mt-0.5`}>
+                  OFF にすると入力欄を非表示。電話番号は「未記入」として保存されます
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const current = form.config?.calendar_settings?.show_customer_phone !== false;
+                  const newValue = !current;
+                  onUpdate({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      calendar_settings: {
+                        ...form.config?.calendar_settings,
+                        show_customer_phone: newValue
+                      }
+                    }
+                  });
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                  form.config?.calendar_settings?.show_customer_phone !== false
+                    ? 'bg-green-500'
+                    : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    form.config?.calendar_settings?.show_customer_phone !== false ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
             <div className={`${themeClasses.highlight} rounded-lg p-4`}>
               <h4 className={`text-sm font-medium mb-2 ${theme === 'light' ? 'text-[rgb(244,144,49)]' : 'text-cyan-300'}`}>現在の設定:</h4>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
@@ -688,6 +766,12 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • 同一ユーザー同時予約上限: {maxConcurrentReservationsPerUser === 0 ? '制限なし' : `${maxConcurrentReservationsPerUser}件まで`}
+              </p>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                • お名前フィールド: {form.config?.calendar_settings?.show_customer_name !== false ? '表示' : '非表示'}
+              </p>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                • 電話番号フィールド: {form.config?.calendar_settings?.show_customer_phone !== false ? '表示' : '非表示'}
               </p>
             </div>
           </div>
