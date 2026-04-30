@@ -174,8 +174,6 @@ export interface FormConfig {
     show_customer_name?: boolean;
     // 「電話番号」フィールドの表示（未設定 = true）。false の場合: 「未記入」を自動セット
     show_customer_phone?: boolean;
-    // 「メニュー」フィールドの表示（未設定 = true）。false の場合: メニュー欄を非表示にし、希望日時/カレンダーをデフォルトで表示
-    show_menu_field?: boolean;
     // 「メールアドレス」フィールドの表示（Web 予約フォーム向け、デフォルト false）。true で確認用 2 欄 + 一致検証 + localStorage 保存
     show_customer_email?: boolean;
     // 店舗側通知メールの宛先（空 / 未設定時は store.owner_email にフォールバック）
