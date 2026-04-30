@@ -256,25 +256,43 @@
 ```
 
 ### `POST /api/reservations`
-新規予約を作成（顧客向け）
+新規予約を作成（顧客向け、認証不要）
 
 **リクエストボディ**:
 ```json
 {
-  "form_id": "uuid-here",
-  "store_id": "uuid-here",
+  "form_id": "12-char-id",
+  "store_id": "6-char-id",
   "customer_name": "山田太郎",
   "customer_phone": "090-1234-5678",
   "customer_email": "customer@example.com",
   "selected_menus": [ ... ],
   "selected_options": [ ... ],
-  "reservation_date": "2025-01-20",
+  "reservation_date": "2026-04-30",
   "reservation_time": "14:00",
-  "customer_info": { ... }
+  "customer_info": { ... },
+  "line_user_id": "U...",
+  "line_display_name": "山田太郎",
+  "source_medium": "line",
+  "booking_mode": "calendar"
 }
 ```
 
 **レスポンス**: 作成された予約オブジェクト（201 Created）
+
+**エラー: 409 Conflict（同時予約数制限）**:
+```json
+{
+  "error": "既にご予約があります。予約日時が過ぎてから再度ご予約ください。",
+  "code": "concurrent_reservation_limit"
+}
+```
+`form.config.calendar_settings.max_concurrent_reservations_per_user` が 1 以上のときに発火。`line_user_id` または `customer_phone` で同一ユーザー判定。
+
+**サーバー側の付加処理**（fire-and-forget、失敗してもレスポンスには影響しない）:
+- CRM 顧客テーブルへの自動紐付け / 来店履歴作成
+- Google Calendar イベント作成（`booking_mode === 'calendar'` のときのみ）
+- メール送信（`form_type === 'web'` のときのみ、Resend 経由）
 
 ### `GET /api/stores/{storeId}/reservations`
 店舗の予約一覧を取得（店舗管理者用）
@@ -695,14 +713,46 @@ Google Calendar 連携を解除（OAuth トークンを削除）
 
 ---
 
+### `GET /api/stores/{storeId}/calendar/list`
+店舗 OAuth 連携中のアカウントから、書き込み可能なカレンダー一覧を取得（ダイアログでカレンダー切替に使用）
+
+**前提**: `google_calendar_source === 'store_oauth'` の店舗のみ。SA モードの店舗では 400 エラー。
+
+**レスポンス**:
+```json
+{
+  "current_calendar_id": "user@gmail.com",
+  "calendars": [
+    {
+      "id": "user@gmail.com",
+      "summary": "メインカレンダー",
+      "primary": true,
+      "accessRole": "owner",
+      "backgroundColor": "#4285F4"
+    },
+    {
+      "id": "abc@group.calendar.google.com",
+      "summary": "予約用",
+      "primary": false,
+      "accessRole": "owner",
+      "backgroundColor": "#0B8043"
+    }
+  ]
+}
+```
+
+`accessRole` が `writer` または `owner` のカレンダーのみ返却。
+
+---
+
 ### `GET /api/stores/{storeId}/calendar/availability`
-カレンダーの空き状況を取得
+カレンダーの空き状況を取得（予約フォームの静的 HTML から呼ばれる）
 
 **クエリパラメータ**:
-- `date` (YYYY-MM-DD): 対象日付
-- `duration` (number): 予約時間（分）
+- `start` (ISO 8601 datetime): 取得開始時刻
+- `end` (ISO 8601 datetime): 取得終了時刻
 
-**レスポンス**: 空き時間スロットの配列
+**レスポンス**: イベント一覧（タイトル / 開始時刻 / 終了時刻 / location / description / isBusinessDay フラグ）
 
 ---
 
