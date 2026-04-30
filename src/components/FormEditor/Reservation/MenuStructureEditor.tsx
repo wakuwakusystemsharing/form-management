@@ -1130,6 +1130,11 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
   const [editingCatOpt, setEditingCatOpt] = useState<MenuItem | undefined>();
   const [activeCatOptCategoryId, setActiveCatOptCategoryId] = useState<string>('');
 
+  // カテゴリー共通オプションを別カテゴリーへコピーするモーダル
+  const [copyOptsModalOpen, setCopyOptsModalOpen] = useState(false);
+  const [copyOptsSourceCategoryId, setCopyOptsSourceCategoryId] = useState<string>('');
+  const [copyOptsTargetIds, setCopyOptsTargetIds] = useState<Set<string>>(new Set());
+
   const updateCategories = (updated: MenuCategory[]) => {
     setCategories(updated);
     onUpdate({
@@ -1235,6 +1240,38 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     if (window.confirm('このオプションを削除しますか？')) {
       updateCategories(categories.map(c => c.id === categoryId ? { ...c, options: (c.options || []).filter(o => o.id !== optId) } : c));
     }
+  };
+
+  // カテゴリー共通オプションを別カテゴリーへコピー
+  const handleOpenCopyOpts = (sourceCategoryId: string) => {
+    setCopyOptsSourceCategoryId(sourceCategoryId);
+    setCopyOptsTargetIds(new Set());
+    setCopyOptsModalOpen(true);
+  };
+  const handleToggleCopyOptsTarget = (catId: string) => {
+    setCopyOptsTargetIds(prev => {
+      const next = new Set(prev);
+      if (next.has(catId)) next.delete(catId); else next.add(catId);
+      return next;
+    });
+  };
+  const handlePerformCopyOpts = () => {
+    const sourceCat = categories.find(c => c.id === copyOptsSourceCategoryId);
+    const sourceOptions = sourceCat?.options || [];
+    if (sourceOptions.length === 0 || copyOptsTargetIds.size === 0) {
+      setCopyOptsModalOpen(false);
+      return;
+    }
+    const baseTs = Date.now();
+    const cloneOptions = (): MenuItem[] => sourceOptions.map((o, idx) => ({
+      ...(JSON.parse(JSON.stringify(o)) as MenuItem),
+      id: `option_${baseTs}_${idx}_${Math.random().toString(36).slice(2, 7)}`,
+    }));
+    updateCategories(categories.map(c => {
+      if (!copyOptsTargetIds.has(c.id)) return c;
+      return { ...c, options: [...(c.options || []), ...cloneOptions()] };
+    }));
+    setCopyOptsModalOpen(false);
   };
 
   // トグルUI共通ヘルパー
@@ -2079,15 +2116,34 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                         <h5 className={`text-sm font-medium ${themeClasses.text.primary}`}>カテゴリー共通オプション</h5>
                         <p className={`text-xs ${themeClasses.text.secondary}`}>このカテゴリー全体で選択できるオプション（眉カット、保湿パックなど）</p>
                       </div>
-                      <button
-                        onClick={() => handleAddCatOpt(category.id)}
-                        className={`px-2 py-1 text-xs rounded-md flex items-center space-x-1 ${themeClasses.button.primary}`}
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        <span>オプション追加</span>
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleOpenCopyOpts(category.id)}
+                          disabled={categories.length <= 1 || (category.options || []).length === 0}
+                          title={
+                            categories.length <= 1
+                              ? '他にカテゴリーがありません'
+                              : (category.options || []).length === 0
+                                ? 'コピーするオプションがありません'
+                                : '他のカテゴリーへオプションをコピー'
+                          }
+                          className={`px-2 py-1 text-xs rounded-md flex items-center space-x-1 ${themeClasses.button.secondary} disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          <span>別のカテゴリーにコピー</span>
+                        </button>
+                        <button
+                          onClick={() => handleAddCatOpt(category.id)}
+                          className={`px-2 py-1 text-xs rounded-md flex items-center space-x-1 ${themeClasses.button.primary}`}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          <span>オプション追加</span>
+                        </button>
+                      </div>
                     </div>
                     {(category.options || []).length === 0 ? (
                       <p className={`text-xs text-center py-3 rounded ${themeClasses.emptyState}`}>カテゴリー共通オプションなし</p>
@@ -2188,6 +2244,81 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
         theme={theme}
         form={form}
       />
+
+      {/* カテゴリー共通オプションを別カテゴリーへコピーするモーダル */}
+      {copyOptsModalOpen && (() => {
+        const sourceCat = categories.find(c => c.id === copyOptsSourceCategoryId);
+        const sourceOptions = sourceCat?.options || [];
+        const otherCategories = categories.filter(c => c.id !== copyOptsSourceCategoryId);
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className={`w-full max-w-md mx-4 p-6 rounded-lg shadow-xl ${theme === 'light' ? 'bg-white' : 'bg-gray-800'}`}>
+              <h3 className={`text-lg font-semibold mb-1 ${themeClasses.text.primary}`}>
+                カテゴリー共通オプションをコピー
+              </h3>
+              <p className={`text-xs mb-4 ${themeClasses.text.secondary}`}>
+                コピー元: <span className={themeClasses.text.primary}>{sourceCat?.name || '-'}</span>
+                （{sourceOptions.length}件のオプション）
+              </p>
+              <p className={`text-sm mb-2 ${themeClasses.label}`}>
+                コピー先カテゴリーを選択（複数選択可）:
+              </p>
+              <div className="space-y-2 max-h-64 overflow-y-auto mb-6 pr-1">
+                {otherCategories.length === 0 ? (
+                  <p className={`text-xs text-center py-3 rounded ${themeClasses.emptyState}`}>
+                    他にカテゴリーがありません
+                  </p>
+                ) : (
+                  otherCategories.map(c => {
+                    const checked = copyOptsTargetIds.has(c.id);
+                    const existing = (c.options || []).length;
+                    return (
+                      <label
+                        key={c.id}
+                        className={`flex items-center justify-between p-2 rounded-md cursor-pointer ${themeClasses.highlight}`}
+                      >
+                        <span className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => handleToggleCopyOptsTarget(c.id)}
+                            className="w-4 h-4"
+                          />
+                          <span className={`text-sm ${themeClasses.text.primary}`}>{c.name}</span>
+                        </span>
+                        <span className={`text-xs ${themeClasses.text.secondary}`}>
+                          現在 {existing}件
+                          {existing > 0 && checked ? ` → +${sourceOptions.length}件追加` : ''}
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+              <p className={`text-xs mb-4 ${themeClasses.text.secondary}`}>
+                ※ 既存のオプションには追加（追記）されます。同名のオプションがあっても重複したまま並びます（後で個別に削除できます）。
+              </p>
+              <div className="flex space-x-3 justify-end">
+                <button
+                  onClick={() => setCopyOptsModalOpen(false)}
+                  className={`px-4 py-2 rounded-md text-sm ${themeClasses.button.secondary}`}
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={handlePerformCopyOpts}
+                  disabled={copyOptsTargetIds.size === 0}
+                  className={`px-4 py-2 rounded-md text-sm ${themeClasses.button.primary} disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {copyOptsTargetIds.size > 0
+                    ? `${copyOptsTargetIds.size}カテゴリーにコピー`
+                    : 'コピー'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
