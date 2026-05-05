@@ -38,6 +38,20 @@ function sanitizeDisplayName(name: string): string {
 }
 
 /**
+ * RFC 2047 MIME encoded-word 形式で表示名をエンコードする。
+ * 日本語など非 ASCII を含む値を ASCII セーフにし、Resend SDK が値を HTTP ヘッダーに
+ * 渡しても "ByteString conversion" エラーで落ちないようにする。
+ * 受信者側のメーラーは自動でデコードして元の文字列を表示する。
+ */
+function encodeDisplayNameForHeader(name: string): string {
+  if (!name) return '';
+  // ASCII のみなら encode 不要（受信者の表示が崩れる可能性を抑える）
+  if (/^[\x20-\x7E]*$/.test(name)) return name;
+  const base64 = Buffer.from(name, 'utf-8').toString('base64');
+  return `=?UTF-8?B?${base64}?=`;
+}
+
+/**
  * メールアドレスの簡易フォーマット検証。
  * Resend は不正な reply_to を 422 で弾くため、事前に弾いて Resend へのリクエスト自体をスキップする。
  */
@@ -77,7 +91,8 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 
   const { address, defaultName } = parseFromAddress(fromRaw);
   const displayName = sanitizeDisplayName(fromName || defaultName);
-  const from = displayName ? `${displayName} <${address}>` : address;
+  const encodedDisplayName = encodeDisplayNameForHeader(displayName);
+  const from = encodedDisplayName ? `${encodedDisplayName} <${address}>` : address;
 
   const trimmedReplyTo = (replyTo || '').trim();
   if (trimmedReplyTo && !isValidEmailAddress(trimmedReplyTo)) {
@@ -108,7 +123,10 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     }
     return { ok: true, id: result.data?.id };
   } catch (err: any) {
-    console.error('[email-sender] send failed:', err);
+    console.error(
+      `[email-sender] send failed: from="${from}" to="${trimmedTo}" replyTo="${safeReplyTo || '-'}" subjectLen=${subject.length}`,
+      err
+    );
     return { ok: false, error: err?.message || 'unexpected error' };
   }
 }
