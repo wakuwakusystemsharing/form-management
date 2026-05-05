@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
@@ -567,27 +567,35 @@ export async function POST(request: Request) {
         }
       }
 
-      // 4. Web 予約フォームの場合、お客様 / 店舗にメール送信（fire-and-forget）
+      // 4. Web 予約フォームの場合、お客様 / 店舗にメール送信
+      //    Vercel サーバーレスでは return 後に fire-and-forget 処理が打ち切られるため、
+      //    after() でレスポンス送信後の実行を保証する
       try {
         const formConfig = await getFormConfig(body.form_id);
         if (formConfig?.form_type === 'web') {
           const storeInfo = await getStoreForEmail(body.store_id);
           if (storeInfo) {
-            void sendReservationEmails({
-              reservation: {
-                id: newReservation.id,
-                customer_name: newReservation.customer_name,
-                customer_phone: newReservation.customer_phone,
-                customer_email: newReservation.customer_email,
-                reservation_date: newReservation.reservation_date,
-                reservation_time: newReservation.reservation_time,
-                selected_menus: newReservation.selected_menus,
-                selected_options: newReservation.selected_options || null,
-                message: body.message || null,
-              },
-              store: storeInfo as any,
-              form: { config: formConfig },
-            }).catch((e) => console.error('[API] reservation email error:', e));
+            after(async () => {
+              try {
+                await sendReservationEmails({
+                  reservation: {
+                    id: newReservation.id,
+                    customer_name: newReservation.customer_name,
+                    customer_phone: newReservation.customer_phone,
+                    customer_email: newReservation.customer_email,
+                    reservation_date: newReservation.reservation_date,
+                    reservation_time: newReservation.reservation_time,
+                    selected_menus: newReservation.selected_menus,
+                    selected_options: newReservation.selected_options || null,
+                    message: body.message || null,
+                  },
+                  store: storeInfo as any,
+                  form: { config: formConfig },
+                });
+              } catch (e) {
+                console.error('[API] reservation email error (local):', e);
+              }
+            });
           }
         }
       } catch (emailError) {
@@ -787,27 +795,35 @@ export async function POST(request: Request) {
       // 予約自体は成功しているため、ここではエラーにしない
     }
 
-    // 5. Web 予約フォームの場合、お客様 / 店舗にメール送信（fire-and-forget）
+    // 5. Web 予約フォームの場合、お客様 / 店舗にメール送信
+    //    Vercel サーバーレスでは return 後に fire-and-forget 処理が打ち切られるため、
+    //    after() でレスポンス送信後の実行を保証する
     try {
       const formConfig = await getFormConfig(body.form_id);
       if (formConfig?.form_type === 'web') {
         const storeInfo = await getStoreForEmail(body.store_id);
         if (storeInfo) {
-          void sendReservationEmails({
-            reservation: {
-              id: reservation.id,
-              customer_name: reservation.customer_name,
-              customer_phone: reservation.customer_phone,
-              customer_email: reservation.customer_email,
-              reservation_date: reservation.reservation_date,
-              reservation_time: reservation.reservation_time,
-              selected_menus: reservation.selected_menus,
-              selected_options: reservation.selected_options,
-              message: body.message || null,
-            },
-            store: storeInfo as any,
-            form: { config: formConfig },
-          }).catch((e) => console.error('[API] reservation email error:', e));
+          after(async () => {
+            try {
+              await sendReservationEmails({
+                reservation: {
+                  id: reservation.id,
+                  customer_name: reservation.customer_name,
+                  customer_phone: reservation.customer_phone,
+                  customer_email: reservation.customer_email,
+                  reservation_date: reservation.reservation_date,
+                  reservation_time: reservation.reservation_time,
+                  selected_menus: reservation.selected_menus,
+                  selected_options: reservation.selected_options,
+                  message: body.message || null,
+                },
+                store: storeInfo as any,
+                form: { config: formConfig },
+              });
+            } catch (e) {
+              console.error('[API] reservation email error:', e);
+            }
+          });
         }
       }
     } catch (emailError) {

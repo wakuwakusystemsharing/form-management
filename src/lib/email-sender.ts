@@ -37,6 +37,15 @@ function sanitizeDisplayName(name: string): string {
   return name.replace(/[<>",;]/g, '').trim();
 }
 
+/**
+ * メールアドレスの簡易フォーマット検証。
+ * Resend は不正な reply_to を 422 で弾くため、事前に弾いて Resend へのリクエスト自体をスキップする。
+ */
+function isValidEmailAddress(value: string): boolean {
+  if (!value) return false;
+  return /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/.test(value);
+}
+
 export interface SendEmailParams {
   to: string;
   subject: string;
@@ -71,11 +80,15 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   const from = displayName ? `${displayName} <${address}>` : address;
 
   const trimmedReplyTo = (replyTo || '').trim();
+  if (trimmedReplyTo && !isValidEmailAddress(trimmedReplyTo)) {
+    console.warn(`[email-sender] dropping invalid replyTo "${trimmedReplyTo}" (will send without Reply-To)`);
+  }
+  const safeReplyTo = trimmedReplyTo && isValidEmailAddress(trimmedReplyTo) ? trimmedReplyTo : '';
 
   const resend = getResend();
   if (!resend) {
     console.warn(
-      `[email-sender] RESEND_API_KEY not set, skipping (would send from "${from}" to "${trimmedTo}", reply-to "${trimmedReplyTo || '-'}", subject "${subject}")`
+      `[email-sender] RESEND_API_KEY not set, skipping (would send from "${from}" to "${trimmedTo}", reply-to "${safeReplyTo || '-'}", subject "${subject}")`
     );
     return { ok: false, error: 'RESEND_API_KEY not set' };
   }
@@ -87,7 +100,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
       subject,
       text: body,
     };
-    if (trimmedReplyTo) sendArgs.replyTo = trimmedReplyTo;
+    if (safeReplyTo) sendArgs.replyTo = safeReplyTo;
     const result = await resend.emails.send(sendArgs);
     if (result.error) {
       console.error('[email-sender] Resend API error:', result.error);

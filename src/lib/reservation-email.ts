@@ -35,6 +35,11 @@ export async function sendReservationEmails({
 }): Promise<void> {
   // お客様向けメール
   const customerEmail = (reservation.customer_email || '').trim();
+  const overrideEmailPreview = (form.config?.calendar_settings?.notification_email || '').trim();
+  const storeRecipientPreview = overrideEmailPreview || (store.owner_email || '').trim();
+  console.log(
+    `[reservation-email] start reservation=${reservation.id} customer="${customerEmail || '-'}" store="${storeRecipientPreview || '-'}" replyTo="${(store.owner_email || '').trim() || '-'}"`
+  );
   if (customerEmail) {
     try {
       const built = buildCustomerConfirmationEmail({ store, reservation });
@@ -47,10 +52,14 @@ export async function sendReservationEmails({
       });
       if (!result.ok) {
         console.warn(`[reservation-email] customer mail skipped/failed: ${result.error}`);
+      } else {
+        console.log(`[reservation-email] customer mail sent id=${result.id || '-'}`);
       }
     } catch (err) {
       console.error('[reservation-email] customer mail error:', err);
     }
+  } else {
+    console.log('[reservation-email] customer mail skipped (customer_email empty)');
   }
 
   // 店舗向けメール
@@ -68,6 +77,8 @@ export async function sendReservationEmails({
       });
       if (!result.ok) {
         console.warn(`[reservation-email] store mail skipped/failed: ${result.error}`);
+      } else {
+        console.log(`[reservation-email] store mail sent id=${result.id || '-'}`);
       }
     } catch (err) {
       console.error('[reservation-email] store mail error:', err);
