@@ -11,6 +11,7 @@ import {
   createCustomer,
   updateCustomer,
   createCustomerVisit,
+  recalculateCustomerStats,
   calculateTotalAmount,
 } from '@/lib/customer-utils';
 
@@ -470,7 +471,9 @@ export async function POST(request: Request) {
     // ローカル環境: JSON に保存
     if (env === 'local') {
       // === CRM顧客自動統合ロジック ===
-      // 1. LINEユーザーIDまたは電話番号で既存顧客を検索
+      // 統計値（total_visits / total_spent / first_visit_date / last_visit_date）は
+      // customer_visits を真実の源として、後段で recalculateCustomerStats() により導出する。
+      // ここでは「LINE 情報や名前など顧客プロフィール側のデータ」だけを更新する。
       let customerId: string | null = null;
       try {
         const existingCustomer = await findCustomerByLineOrPhone(
@@ -480,22 +483,20 @@ export async function POST(request: Request) {
         );
 
         if (existingCustomer) {
-          // 2-a. 既存顧客の情報を更新
-          const totalAmount = calculateTotalAmount(body.selected_menus, body.selected_options);
           await updateCustomer(existingCustomer.id, {
-            last_visit_date: body.reservation_date,
-            total_visits: existingCustomer.total_visits + 1,
-            total_spent: existingCustomer.total_spent + totalAmount,
-            // LINE情報があれば更新
+            // LINE情報があれば更新（既存値を保持）
             line_display_name: body.line_display_name || existingCustomer.line_display_name,
             line_picture_url: body.line_picture_url || existingCustomer.line_picture_url,
             line_status_message: body.line_status_message || existingCustomer.line_status_message,
             line_os: body.line_os || existingCustomer.line_os,
-            line_friend_flag: body.line_friend_flag || existingCustomer.line_friend_flag,
+            // null/undefined = LIFF で取得失敗 = 不明、既存値を保持。boolean なら上書き。
+            line_friend_flag:
+              typeof body.line_friend_flag === 'boolean'
+                ? body.line_friend_flag
+                : existingCustomer.line_friend_flag,
           });
           customerId = existingCustomer.id;
         } else {
-          // 2-b. 新規顧客を作成
           const newCustomer = await createCustomer({
             store_id: body.store_id,
             line_user_id: body.line_user_id,
@@ -509,12 +510,14 @@ export async function POST(request: Request) {
             line_email: body.line_email,
             line_language: body.line_language,
             line_os: body.line_os,
-            line_friend_flag: body.line_friend_flag || false,
+            // 不明（null/undefined）時は false 初期値。webhook の follow で後から true に更新される想定。
+            line_friend_flag: body.line_friend_flag === true,
             customer_type: 'new',
-            first_visit_date: body.reservation_date,
-            last_visit_date: body.reservation_date,
-            total_visits: 1,
-            total_spent: calculateTotalAmount(body.selected_menus, body.selected_options),
+            // 統計値は customer_visit 作成後に recalc するので、ここでは初期値のみ
+            first_visit_date: null,
+            last_visit_date: null,
+            total_visits: 0,
+            total_spent: 0,
           });
           customerId = newCustomer.id;
         }
@@ -549,7 +552,7 @@ export async function POST(request: Request) {
       reservations.push(newReservation);
       writeReservations(reservations);
 
-      // 3. 来店履歴を作成
+      // 3. 来店履歴を作成 → 統計を再計算
       if (customerId) {
         try {
           await createCustomerVisit({
@@ -562,6 +565,7 @@ export async function POST(request: Request) {
             treatment_menus: body.selected_menus,
             amount: calculateTotalAmount(body.selected_menus, body.selected_options),
           });
+          await recalculateCustomerStats(customerId);
         } catch (error) {
           console.error('[CRM] Customer visit creation error:', error);
         }
@@ -615,7 +619,8 @@ export async function POST(request: Request) {
     }
 
     // === CRM顧客自動統合ロジック ===
-    // 1. LINEユーザーIDまたは電話番号で既存顧客を検索
+    // 統計値は customer_visits を真実の源として後段で recalc する。
+    // ここでは顧客プロフィール（名前・LINE 情報）だけ整備する。
     let customerId: string | null = null;
     try {
       const existingCustomer = await findCustomerByLineOrPhone(
@@ -625,13 +630,7 @@ export async function POST(request: Request) {
       );
 
       if (existingCustomer) {
-        // 2-a. 既存顧客の情報を更新
-        const totalAmount = calculateTotalAmount(body.selected_menus, body.selected_options);
         await updateCustomer(existingCustomer.id, {
-          last_visit_date: body.reservation_date,
-          total_visits: existingCustomer.total_visits + 1,
-          total_spent: existingCustomer.total_spent + totalAmount,
-          // LINE情報があれば更新
           line_display_name: body.line_display_name || existingCustomer.line_display_name,
           line_picture_url: body.line_picture_url || existingCustomer.line_picture_url,
           line_status_message: body.line_status_message || existingCustomer.line_status_message,
@@ -640,28 +639,45 @@ export async function POST(request: Request) {
         });
         customerId = existingCustomer.id;
       } else {
-        // 2-b. 新規顧客を作成
-        const newCustomer = await createCustomer({
-          store_id: body.store_id,
-          line_user_id: body.line_user_id,
-          name: body.customer_name,
-          phone: body.customer_phone,
-          email: body.customer_email,
-          gender: body.customer_info?.gender,
-          line_display_name: body.line_display_name,
-          line_picture_url: body.line_picture_url,
-          line_status_message: body.line_status_message,
-          line_email: body.line_email,
-          line_language: body.line_language,
-          line_os: body.line_os,
-          line_friend_flag: body.line_friend_flag || false,
-          customer_type: 'new',
-          first_visit_date: body.reservation_date,
-          last_visit_date: body.reservation_date,
-          total_visits: 1,
-          total_spent: calculateTotalAmount(body.selected_menus, body.selected_options),
-        });
-        customerId = newCustomer.id;
+        // 新規顧客を作成。同一 LINE ID で同時に検索→作成が走った場合の競合は
+        // unique_customers_store_line_user 違反として createCustomer 内で例外になる。
+        // フォールバックとしてもう一度 findCustomerByLineOrPhone を試して救済する。
+        try {
+          const newCustomer = await createCustomer({
+            store_id: body.store_id,
+            line_user_id: body.line_user_id,
+            name: body.customer_name,
+            phone: body.customer_phone,
+            email: body.customer_email,
+            gender: body.customer_info?.gender,
+            line_display_name: body.line_display_name,
+            line_picture_url: body.line_picture_url,
+            line_status_message: body.line_status_message,
+            line_email: body.line_email,
+            line_language: body.line_language,
+            line_os: body.line_os,
+            // 不明（null/undefined）時は false 初期値。webhook の follow で後から true に更新される想定。
+            line_friend_flag: body.line_friend_flag === true,
+            customer_type: 'new',
+            first_visit_date: null,
+            last_visit_date: null,
+            total_visits: 0,
+            total_spent: 0,
+          });
+          customerId = newCustomer.id;
+        } catch (createError) {
+          console.warn('[CRM] createCustomer failed (likely race), retry lookup:', createError);
+          const retryCustomer = await findCustomerByLineOrPhone(
+            body.store_id,
+            body.line_user_id,
+            body.customer_phone
+          );
+          if (retryCustomer) {
+            customerId = retryCustomer.id;
+          } else {
+            throw createError;
+          }
+        }
       }
     } catch (error) {
       console.error('[CRM] Customer integration error:', error);
@@ -726,7 +742,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. 来店履歴を作成
+    // 3. 来店履歴を作成 → 統計を再計算
     if (customerId) {
       try {
         await createCustomerVisit({
@@ -739,6 +755,7 @@ export async function POST(request: Request) {
           treatment_menus: body.selected_menus,
           amount: calculateTotalAmount(body.selected_menus, body.selected_options),
         });
+        await recalculateCustomerStats(customerId);
       } catch (error) {
         console.error('[CRM] Customer visit creation error:', error);
         // エラーが発生しても予約のレスポンスは返す

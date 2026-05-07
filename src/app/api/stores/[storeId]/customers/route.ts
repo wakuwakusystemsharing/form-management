@@ -2,13 +2,63 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
-import { createAdminClient } from '@/lib/supabase';
+import { createAdminClient, createAuthenticatedClient, checkStoreAccess } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/auth-helper';
 import { Customer, CustomerInsert } from '@/types/form';
 import { createCustomer, determineCustomerSegment } from '@/lib/customer-utils';
 
 // ローカル環境用のデータファイル
 const DATA_DIR = path.join(process.cwd(), 'data');
 const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
+
+/**
+ * 顧客 API 共通の認可チェック。
+ * - local 環境: 認証スキップ
+ * - それ以外: getCurrentUser → checkStoreAccess
+ *
+ * 失敗時はそのまま返せる NextResponse を返し、成功時は null。
+ */
+async function authorizeStoreAccess(
+  request: Request,
+  storeId: string
+): Promise<NextResponse | null> {
+  const env = getAppEnvironment();
+  if (env === 'local') return null;
+
+  const user = await getCurrentUser(request);
+  if (!user) {
+    return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
+  }
+
+  const token =
+    request.headers.get('cookie')
+      ?.split(';')
+      .find((c) => c.trim().startsWith('sb-access-token='))
+      ?.trim()
+      .substring('sb-access-token='.length) ||
+    request.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) {
+    return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
+  }
+
+  const authClient = createAuthenticatedClient(token);
+  if (!authClient) {
+    return NextResponse.json({ error: '認証に失敗しました' }, { status: 401 });
+  }
+
+  const hasAccess = await checkStoreAccess(user.id, storeId, user.email, authClient);
+  if (!hasAccess) {
+    return NextResponse.json({ error: 'この店舗へのアクセス権限がありません' }, { status: 403 });
+  }
+
+  return null;
+}
+
+// PostgREST の or() フィルタ構文で意味を持つ文字をエスケープ。
+// 検索クエリにユーザーが「,」「(」「)」「.」を含む場合、フィルタ文字列が壊れて 500 になるため。
+function escapeForOrFilter(value: string): string {
+  return value.replace(/[(),\\]/g, ' ').trim();
+}
 
 /**
  * GET /api/stores/[storeId]/customers
@@ -27,6 +77,10 @@ export async function GET(
 ) {
   try {
     const { storeId } = await params;
+
+    const authError = await authorizeStoreAccess(request, storeId);
+    if (authError) return authError;
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
     const customerType = searchParams.get('customer_type');
@@ -100,11 +154,14 @@ export async function GET(
       .select('*', { count: 'exact' })
       .eq('store_id', storeId);
 
-    // 検索クエリ
+    // 検索クエリ（フィルタ構文文字を除去してから埋め込む）
     if (search) {
-      query = query.or(
-        `name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`
-      );
+      const safe = escapeForOrFilter(search);
+      if (safe) {
+        query = query.or(
+          `name.ilike.%${safe}%,phone.ilike.%${safe}%,email.ilike.%${safe}%`
+        );
+      }
     }
 
     // 顧客タイプフィルタ
@@ -148,6 +205,13 @@ export async function GET(
   }
 }
 
+// 電話番号の正規化（重複検出用）。ハイフン・スペースを除去。
+function normalizePhone(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const stripped = phone.replace(/[\s\-－ー]/g, '');
+  return stripped || null;
+}
+
 /**
  * POST /api/stores/[storeId]/customers
  * 新規顧客を手動作成
@@ -158,6 +222,10 @@ export async function POST(
 ) {
   try {
     const { storeId } = await params;
+
+    const authError = await authorizeStoreAccess(request, storeId);
+    if (authError) return authError;
+
     const body = await request.json();
 
     // バリデーション
@@ -168,25 +236,66 @@ export async function POST(
       );
     }
 
+    // 電話番号の重複チェック（ハイフン無視で正規化）
+    const normalizedPhone = normalizePhone(body.phone);
+    if (normalizedPhone) {
+      const env = getAppEnvironment();
+      if (env === 'local') {
+        if (fs.existsSync(CUSTOMERS_FILE)) {
+          const data = fs.readFileSync(CUSTOMERS_FILE, 'utf-8');
+          const all: Customer[] = JSON.parse(data);
+          const dup = all.find(
+            (c) =>
+              c.store_id === storeId &&
+              normalizePhone(c.phone) === normalizedPhone
+          );
+          if (dup) {
+            return NextResponse.json(
+              { error: 'この電話番号の顧客は既に登録されています', existing_customer_id: dup.id },
+              { status: 409 }
+            );
+          }
+        }
+      } else {
+        const adminClient = createAdminClient();
+        if (adminClient) {
+          // ハイフン入りでも一致するよう、両方の表記を OR で問い合わせる
+          const { data } = await (adminClient as any)
+            .from('customers')
+            .select('id, phone')
+            .eq('store_id', storeId);
+          const dup = (data || []).find(
+            (c: any) => normalizePhone(c.phone) === normalizedPhone
+          );
+          if (dup) {
+            return NextResponse.json(
+              { error: 'この電話番号の顧客は既に登録されています', existing_customer_id: dup.id },
+              { status: 409 }
+            );
+          }
+        }
+      }
+    }
+
     const customerData: CustomerInsert = {
       store_id: storeId,
       name: body.name,
-      name_kana: body.name_kana,
-      phone: body.phone,
-      email: body.email,
-      birthday: body.birthday,
-      gender: body.gender,
-      line_user_id: body.line_user_id,
-      line_display_name: body.line_display_name,
-      line_picture_url: body.line_picture_url,
-      line_status_message: body.line_status_message,
-      line_email: body.line_email,
+      name_kana: body.name_kana || null,
+      phone: body.phone || null,
+      email: body.email || null,
+      birthday: body.birthday || null,
+      gender: body.gender || null,
+      line_user_id: body.line_user_id || null,
+      line_display_name: body.line_display_name || null,
+      line_picture_url: body.line_picture_url || null,
+      line_status_message: body.line_status_message || null,
+      line_email: body.line_email || null,
       customer_type: body.customer_type || 'regular',
-      preferred_contact_method: body.preferred_contact_method,
-      allergies: body.allergies,
-      medical_history: body.medical_history,
-      notes: body.notes,
-      tags: body.tags,
+      preferred_contact_method: body.preferred_contact_method || null,
+      allergies: body.allergies || null,
+      medical_history: body.medical_history || null,
+      notes: body.notes || null,
+      tags: body.tags || null,
     };
 
     const newCustomer = await createCustomer(customerData);
@@ -194,9 +303,7 @@ export async function POST(
     return NextResponse.json(newCustomer, { status: 201 });
   } catch (error) {
     console.error('Customer creation error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    const message = error instanceof Error ? error.message : '顧客の作成に失敗しました';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

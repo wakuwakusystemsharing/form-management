@@ -41,7 +41,8 @@ export async function POST(request: Request) {
         store_id,
         responses: parsedResponses,
         line_user_id: body.line_user_id || null,
-        line_friend_flag: body.line_friend_flag || false,
+        // null = LIFF で取得失敗（不明）→ false 扱いで記録（webhook 側で後から true に更新される想定）
+        line_friend_flag: body.line_friend_flag === true,
         submitted_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

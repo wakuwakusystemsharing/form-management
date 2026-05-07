@@ -100,6 +100,7 @@ export default function StoreAdminPage() {
   // 顧客管理関連
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [showCustomerDetail, setShowCustomerDetail] = useState(false);
+  const [customersRefreshKey, setCustomersRefreshKey] = useState(0);
   const customersView = searchParams.get('customersView') || 'list';
 
   // 認証チェック
@@ -1207,6 +1208,7 @@ export default function StoreAdminPage() {
 
                   <TabsContent value="list" className="space-y-6">
                     <CustomerList
+                      key={customersRefreshKey}
                       storeId={storeId}
                       onCustomerClick={(customer) => {
                         setSelectedCustomerId(customer.id);
@@ -1259,7 +1261,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView]);
+  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView, customersRefreshKey]);
 
   // 認証チェック中
   if (checkingAuth) {
@@ -1730,7 +1732,11 @@ export default function StoreAdminPage() {
           setSelectedCustomerId(null);
         }}
         onUpdated={() => {
-          // 顧客一覧を再取得するためにタブを維持したまま再描画
+          // 顧客一覧を強制再描画して更新を反映
+          setCustomersRefreshKey((k) => k + 1);
+        }}
+        onDeleted={() => {
+          setCustomersRefreshKey((k) => k + 1);
         }}
       />
     </StoreAdminLayout>
