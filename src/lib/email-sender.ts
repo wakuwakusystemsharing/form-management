@@ -1,8 +1,13 @@
 /**
- * メール送信ユーティリティ（Resend ラッパ）
+ * メール送信ユーティリティ（Resend REST API を fetch で直接呼び出し）
  *
  * RESEND_API_KEY が未設定のときはログ出力のみでスキップする（local 開発用）。
  * エラーは throw せず { ok: false } を返す（呼び出し元の本処理を止めない）。
+ *
+ * Resend SDK は使わない:
+ *   v4/v6 ともに非 ASCII 文字を扱うとき内部で Headers コンストラクタに
+ *   生の文字列を渡してしまい "Cannot convert argument to a ByteString" で落ちる
+ *   バグがあったため、API を直接叩く形にしてある。
  *
  * From の表示名: 呼び出し元から `fromName`（例: 店舗名）を渡すと、
  * EMAIL_FROM_ADDRESS のメアド部分はそのままに表示名のみ動的に差し替える。
@@ -10,15 +15,7 @@
  * 受信者が「返信」したときにそのアドレスへ届くようになる。
  */
 
-import { Resend } from 'resend';
-
-let resendClient: Resend | null = null;
-function getResend(): Resend | null {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return null;
-  if (!resendClient) resendClient = new Resend(apiKey);
-  return resendClient;
-}
+const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
 /**
  * "予約システム <noreply@example.com>" → { address: 'noreply@example.com', defaultName: '予約システム' }
@@ -78,58 +75,73 @@ export interface SendEmailResult {
 
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
   const { to, subject, body, fromName, replyTo } = params;
-  const trimmedTo = (to || '').trim();
-  if (!trimmedTo) {
-    return { ok: false, error: '送信先メールアドレスが空です' };
-  }
-
-  const fromRaw = (process.env.EMAIL_FROM_ADDRESS || '').trim();
-  if (!fromRaw) {
-    console.warn('[email-sender] EMAIL_FROM_ADDRESS not set, skipping');
-    return { ok: false, error: 'EMAIL_FROM_ADDRESS not set' };
-  }
-
-  const { address, defaultName } = parseFromAddress(fromRaw);
-  const displayName = sanitizeDisplayName(fromName || defaultName);
-  const encodedDisplayName = encodeDisplayNameForHeader(displayName);
-  const from = encodedDisplayName ? `${encodedDisplayName} <${address}>` : address;
-
-  const trimmedReplyTo = (replyTo || '').trim();
-  if (trimmedReplyTo && !isValidEmailAddress(trimmedReplyTo)) {
-    console.warn(`[email-sender] dropping invalid replyTo "${trimmedReplyTo}" (will send without Reply-To)`);
-  }
-  const safeReplyTo = trimmedReplyTo && isValidEmailAddress(trimmedReplyTo) ? trimmedReplyTo : '';
-
-  const resend = getResend();
-  if (!resend) {
-    console.warn(
-      `[email-sender] RESEND_API_KEY not set, skipping (would send from "${from}" to "${trimmedTo}", reply-to "${safeReplyTo || '-'}", subject "${subject}")`
-    );
-    return { ok: false, error: 'RESEND_API_KEY not set' };
-  }
-
   try {
-    const sendArgs: any = {
+    const trimmedTo = (to || '').trim();
+    if (!trimmedTo) {
+      return { ok: false, error: '送信先メールアドレスが空です' };
+    }
+
+    const apiKey = process.env.RESEND_API_KEY;
+    const fromRaw = (process.env.EMAIL_FROM_ADDRESS || '').trim();
+    if (!fromRaw) {
+      console.warn('[email-sender] EMAIL_FROM_ADDRESS not set, skipping');
+      return { ok: false, error: 'EMAIL_FROM_ADDRESS not set' };
+    }
+
+    const { address, defaultName } = parseFromAddress(fromRaw);
+    const displayName = sanitizeDisplayName(fromName || defaultName);
+    const encodedDisplayName = encodeDisplayNameForHeader(displayName);
+    const from = encodedDisplayName ? `${encodedDisplayName} <${address}>` : address;
+
+    const trimmedReplyTo = (replyTo || '').trim();
+    if (trimmedReplyTo && !isValidEmailAddress(trimmedReplyTo)) {
+      console.warn(`[email-sender] dropping invalid replyTo "${trimmedReplyTo}" (will send without Reply-To)`);
+    }
+    const safeReplyTo = trimmedReplyTo && isValidEmailAddress(trimmedReplyTo) ? trimmedReplyTo : '';
+
+    if (!apiKey) {
+      console.warn(
+        `[email-sender] RESEND_API_KEY not set, skipping (would send from "${from}" to "${trimmedTo}", reply-to "${safeReplyTo || '-'}", subject length ${subject.length})`
+      );
+      return { ok: false, error: 'RESEND_API_KEY not set' };
+    }
+
+    // Resend REST API リクエストボディ。snake_case (reply_to) なことに注意。
+    const payload: Record<string, unknown> = {
       from,
       to: trimmedTo,
       subject,
       text: body,
     };
-    if (safeReplyTo) sendArgs.replyTo = safeReplyTo;
+    if (safeReplyTo) payload.reply_to = safeReplyTo;
+
     console.log(
       `[email-sender] sending from="${from}" to="${trimmedTo}" replyTo="${safeReplyTo || '-'}" subjectLen=${subject.length}`
     );
-    const result = await resend.emails.send(sendArgs);
-    if (result.error) {
-      console.error('[email-sender] Resend API error:', result.error);
-      return { ok: false, error: result.error.message || 'send failed' };
+
+    // ヘッダー値はすべて ASCII のみ（Bearer トークンと固定値）。
+    // Body は JSON.stringify で UTF-8 エンコードされ fetch がバイト列に変換する。
+    const response = await fetch(RESEND_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.error(
+        `[email-sender] Resend API error status=${response.status} body=${errorText.slice(0, 500)}`
+      );
+      return { ok: false, error: `Resend ${response.status}` };
     }
-    return { ok: true, id: result.data?.id };
+
+    const data = (await response.json().catch(() => ({}))) as { id?: string };
+    return { ok: true, id: data.id };
   } catch (err: any) {
-    console.error(
-      `[email-sender] send failed: from="${from}" to="${trimmedTo}" replyTo="${safeReplyTo || '-'}" subjectLen=${subject.length}`,
-      err
-    );
+    console.error('[email-sender] send failed:', err);
     return { ok: false, error: err?.message || 'unexpected error' };
   }
 }
