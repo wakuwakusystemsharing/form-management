@@ -52,6 +52,7 @@ function readReservations(): Reservation[] {
  * - status: ステータスでフィルタ
  * - date_from: 開始日（YYYY-MM-DD）
  * - date_to: 終了日（YYYY-MM-DD）
+ * - search: 顧客名 / メール / 電話番号の部分一致検索
  */
 export async function GET(
   request: Request,
@@ -63,6 +64,7 @@ export async function GET(
     const status = searchParams.get('status');
     const dateFrom = searchParams.get('date_from');
     const dateTo = searchParams.get('date_to');
+    const search = searchParams.get('search')?.trim() || null;
     const env = getAppEnvironment();
 
     // ローカル環境: JSON から読み込み
@@ -75,6 +77,15 @@ export async function GET(
       // 追加フィルタ
       if (status) {
         reservations = reservations.filter(r => r.status === status);
+      }
+
+      if (search) {
+        const q = search.toLowerCase();
+        reservations = reservations.filter((r) =>
+          r.customer_name?.toLowerCase().includes(q) ||
+          r.customer_email?.toLowerCase().includes(q) ||
+          r.customer_phone?.toLowerCase().includes(q)
+        );
       }
 
       if (dateFrom) {
@@ -121,6 +132,14 @@ export async function GET(
 
     if (dateTo) {
       query = query.lte('reservation_date', dateTo);
+    }
+
+    if (search) {
+      // ILIKE のメタ文字 % _ \ をエスケープ
+      const escaped = search.replace(/[%_\\]/g, '\\$&');
+      query = query.or(
+        `customer_name.ilike.%${escaped}%,customer_email.ilike.%${escaped}%,customer_phone.ilike.%${escaped}%`
+      );
     }
 
     query = query.order('reservation_date', { ascending: false })
