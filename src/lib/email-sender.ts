@@ -116,6 +116,9 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
       text: body,
     };
     if (safeReplyTo) sendArgs.replyTo = safeReplyTo;
+    console.log(
+      `[email-sender] sending from="${from}" to="${trimmedTo}" replyTo="${safeReplyTo || '-'}" subjectLen=${subject.length}`
+    );
     const result = await resend.emails.send(sendArgs);
     if (result.error) {
       console.error('[email-sender] Resend API error:', result.error);
