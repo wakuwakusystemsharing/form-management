@@ -170,7 +170,6 @@ export function buildStoreNotificationEmail({ store, reservation }: BuildArgs): 
   if ((reservation.message || '').trim()) {
     lines.push(`■ メッセージ：${(reservation.message || '').trim()}`);
   }
-  lines.push(`■ 予約番号：${reservation.id}`);
   lines.push('──────────────────────');
 
   return {
