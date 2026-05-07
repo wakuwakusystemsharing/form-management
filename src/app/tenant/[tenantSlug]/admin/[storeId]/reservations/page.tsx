@@ -10,6 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { SearchBar } from '@/components/ui/search-bar';
+import { useDebounce } from '@/hooks/use-debounce';
 import { ArrowLeft, Calendar, BarChart3 } from 'lucide-react';
 
 interface Reservation {
@@ -48,12 +50,14 @@ export default function AdminStoreReservationsPage() {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
   useEffect(() => {
     fetchStore();
     fetchReservations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterStatus, storeId]);
+  }, [filterStatus, storeId, debouncedSearch]);
 
   const fetchStore = async () => {
     try {
@@ -74,6 +78,9 @@ export default function AdminStoreReservationsPage() {
       const params = new URLSearchParams();
       if (filterStatus !== 'all') {
         params.append('status', filterStatus);
+      }
+      if (debouncedSearch) {
+        params.append('search', debouncedSearch);
       }
 
       const response = await fetch(`/api/stores/${storeId}/reservations?${params.toString()}`);
@@ -168,6 +175,15 @@ export default function AdminStoreReservationsPage() {
               <CardContent>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <div className="space-y-2 flex-1">
+                    <Label htmlFor="reservation-search">検索</Label>
+                    <SearchBar
+                      value={searchQuery}
+                      onChange={setSearchQuery}
+                      placeholder="顧客名 / メール / 電話番号で検索…"
+                      ariaLabel="予約を検索"
+                    />
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="status-filter">ステータス</Label>
                     <Select value={filterStatus} onValueChange={setFilterStatus}>
                       <SelectTrigger id="status-filter" className="w-full sm:w-[200px]">
@@ -206,7 +222,9 @@ export default function AdminStoreReservationsPage() {
                   </div>
                 ) : filteredReservations.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
-                    予約データがありません
+                    {debouncedSearch
+                      ? `「${debouncedSearch}」に一致する予約が見つかりませんでした`
+                      : '予約データがありません'}
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
