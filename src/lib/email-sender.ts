@@ -81,7 +81,16 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
       return { ok: false, error: '送信先メールアドレスが空です' };
     }
 
-    const apiKey = process.env.RESEND_API_KEY;
+    const apiKeyRaw = process.env.RESEND_API_KEY;
+    const apiKey = (apiKeyRaw || '').trim();
+    // RESEND_API_KEY は ASCII のみであるべき。日本語混入で
+    // Authorization ヘッダー組み立て時に "ByteString conversion" 例外が出るのを防ぐ。
+    if (apiKey && !/^[\x20-\x7E]+$/.test(apiKey)) {
+      console.error(
+        `[email-sender] RESEND_API_KEY contains non-ASCII characters (length=${apiKey.length}, first8="${apiKey.slice(0, 8)}"); skipping send`
+      );
+      return { ok: false, error: 'RESEND_API_KEY contains non-ASCII' };
+    }
     const fromRaw = (process.env.EMAIL_FROM_ADDRESS || '').trim();
     if (!fromRaw) {
       console.warn('[email-sender] EMAIL_FROM_ADDRESS not set, skipping');
@@ -104,6 +113,14 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         `[email-sender] RESEND_API_KEY not set, skipping (would send from "${from}" to "${trimmedTo}", reply-to "${safeReplyTo || '-'}", subject length ${subject.length})`
       );
       return { ok: false, error: 'RESEND_API_KEY not set' };
+    }
+
+    // EMAIL_FROM_ADDRESS のメアド本体（display name は除く）も ASCII であるべき
+    if (address && !/^[\x20-\x7E]+$/.test(address)) {
+      console.error(
+        `[email-sender] EMAIL_FROM_ADDRESS local-domain part contains non-ASCII (address="${address}"); skipping send`
+      );
+      return { ok: false, error: 'EMAIL_FROM_ADDRESS contains non-ASCII' };
     }
 
     // Resend REST API リクエストボディ。snake_case (reply_to) なことに注意。
