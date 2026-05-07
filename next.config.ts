@@ -16,6 +16,15 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'www.dropbox.com',
       },
+      // LINE プロフィール画像（顧客アバター表示で使用）
+      {
+        protocol: 'https',
+        hostname: 'profile.line-scdn.net',
+      },
+      {
+        protocol: 'https',
+        hostname: 'obs.line-scdn.net',
+      },
     ],
   },
   

@@ -758,13 +758,17 @@ Google Calendar 連携を解除（OAuth トークンを削除）
 
 ## 👤 CRM API（顧客管理）
 
+**認証**: 全エンドポイントで店舗管理者以上の権限が必須（`getCurrentUser` + `checkStoreAccess`）。`local` 環境のみスキップ。`{customerId}` を取る操作では URL の `storeId` と顧客の `store_id` 整合性も確認し、不一致は 404 を返す（情報漏洩防止）。
+
 ### `GET /api/stores/{storeId}/customers`
 顧客一覧を取得（ページネーション・検索対応）
 
 **クエリパラメータ**:
-- `page` (number, default 1): ページ番号
-- `limit` (number, default 20): 1ページあたりの件数
-- `search` (string): 名前・電話番号・メールでの検索
+- `search` (string): 名前・電話番号・メールでの部分一致検索（PostgREST or() フィルタ構文文字 `,` `(` `)` `\` は自動的にスペース化）
+- `customer_type` (string): `new` / `regular` / `vip` / `inactive` のいずれかでフィルタ
+- `segment` (string): `new` / `repeat` / `vip` / `dormant` のいずれかでフィルタ（自動算出セグメント）
+- `limit` (number, default 50): 取得件数
+- `offset` (number, default 0): オフセット
 
 **レスポンス**:
 ```json
@@ -778,18 +782,21 @@ Google Calendar 連携を解除（OAuth トークンを削除）
       "email": "customer@example.com",
       "customer_type": "regular",
       "total_visits": 5,
+      "total_spent": 25000,
+      "first_visit_date": "2025-06-01",
       "last_visit_date": "2026-02-01",
+      "average_visit_interval_days": 45,
+      "line_user_id": "Uxxxxxxx",
+      "line_friend_flag": true,
       "created_at": "2025-06-01T00:00:00Z"
     }
   ],
-  "total": 100,
-  "page": 1,
-  "limit": 20
+  "total": 100
 }
 ```
 
 ### `POST /api/stores/{storeId}/customers`
-顧客を作成
+顧客を作成（手動登録）
 
 **リクエストボディ**:
 ```json
@@ -797,23 +804,66 @@ Google Calendar 連携を解除（OAuth トークンを削除）
   "name": "山田太郎",
   "phone": "090-1234-5678",
   "email": "customer@example.com",
-  "line_user_id": "Uxxxxxxx"
+  "birthday": "1990-05-20",
+  "gender": "male",
+  "customer_type": "regular",
+  "line_user_id": "Uxxxxxxx",
+  "notes": "..."
 }
 ```
 
+**バリデーション**:
+- `name` 必須
+- `phone` の重複検出はハイフン・スペース無視で正規化（`090-1234-5678` と `09012345678` は同一扱い）
+- 重複時は **409 Conflict + `{ error, existing_customer_id }`**
+
 ### `GET /api/stores/{storeId}/customers/{customerId}`
-顧客詳細を取得（来店履歴含む）
+顧客詳細を取得
 
-**レスポンス**: 顧客オブジェクト + `visits` 配列
+**レスポンス**: `{ customer, reservations, visits }`（予約履歴・来店履歴は最大 50 件、日付降順）
 
-### `PUT /api/stores/{storeId}/customers/{customerId}`
+### `PATCH /api/stores/{storeId}/customers/{customerId}`
 顧客情報を更新
+
+**更新可能フィールド**: `name` / `name_kana` / `phone` / `email` / `birthday` / `gender` / `customer_type` / `preferred_contact_method` / `allergies` / `medical_history` / `notes` / `tags`
+
+**動作**:
+- 空文字（`""`）は nullable フィールドで自動的に `null` に正規化される（`birthday` の DATE 型や `gender` の CHECK 制約違反による 500 を防止）
+- 統計値（`total_visits` / `total_spent` 等）はここでは変更不可。`customer_visits` から自動再計算される
 
 ### `DELETE /api/stores/{storeId}/customers/{customerId}`
 顧客を削除
 
+**動作**:
+- `customer_visits` / `customer_interactions` は **CASCADE 削除**
+- `reservations.customer_id` / `surveys.customer_id` は **SET NULL**（予約レコード自体は残る）
+
 ### `GET /api/stores/{storeId}/customers/analytics`
-顧客分析データを取得（セグメント別件数・来店推移等）
+顧客統計・分析データを取得
+
+**レスポンス**:
+```json
+{
+  "total_customers": 120,
+  "segment_distribution": { "new": 30, "repeat": 50, "vip": 10, "dormant": 30 },
+  "type_distribution": { "new": 30, "regular": 60, "vip": 10, "inactive": 20 },
+  "monthly_new_customers": [{ "month": "2025-06", "count": 12 }],
+  "gender_distribution": { "male": 40, "female": 70, "other": 5, "unknown": 5 },
+  "age_distribution": [{ "age_group": "30代", "count": 40 }],
+  "line_friend_rate": 75.0,
+  "line_friend_connected": 60,
+  "line_linked_customers": 80,
+  "avg_visit_interval_days": 45,
+  "repeat_rate": 41.7,
+  "top_customers_by_revenue": [...],
+  "segment_avg_spending": [...]
+}
+```
+
+**注意**:
+- `line_friend_rate` の分母は `line_user_id` を持つ顧客に限定（電話番号のみで登録された顧客は除外。`line_linked_customers` で分母値、`line_friend_connected` で分子値を確認できる）
+- `avg_visit_interval_days` は来店 2 回以上の顧客のみで平均（来店 0〜1 回の顧客は除外）
+- 年齢は誕生日未到来を考慮した実年齢で算出
 
 ---
 

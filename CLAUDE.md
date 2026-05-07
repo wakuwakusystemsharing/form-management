@@ -119,16 +119,24 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - `admin_settings` テーブル: `google_oauth_client_id`、`google_oauth_client_secret`、`google_service_account_json` を保存
 
 **CRM（顧客管理）機能:**
-- `src/lib/customer-utils.ts` - 顧客検索、作成、更新、セグメント分類
+- `src/lib/customer-utils.ts` - 顧客検索、作成、更新、削除、来店履歴、セグメント分類、統計再計算
 - LINE ユーザー ID または電話番号で顧客を自動紐付け
-- 来店履歴（`customer_visits`）を自動記録
+- 来店履歴（`customer_visits`）を予約成立時に作成、キャンセル時に削除
+- **統計値は `customer_visits` を真実の源として導出**: `recalculateCustomerStats(customerId)` が `total_visits` / `total_spent` / `first_visit_date` / `last_visit_date` / `average_visit_interval_days` を visits から再計算する
+- 予約ステータスが `cancelled` ↔ 非キャンセル に遷移するたびに `customer_visit` を増減 → `recalculateCustomerStats` を実行（API/Webhook/LIFF どの経路からのキャンセルでも同期）
 - セグメント分類（`CustomerSegment` 型）: `new`（新規）、`repeat`（リピーター）、`vip`（VIP）、`dormant`（休眠）
   - 判定ロジック: 最終来店 90 日以上 → `dormant`、総利用 5 万円以上または 10 回以上 → `vip`、初回来店 30 日以内 → `new`、2 回以上 → `repeat`
-  - `CustomerType`（DB カラム値）は `'new' | 'regular' | 'vip' | 'inactive'` で `CustomerSegment` とは別物
-- `/api/stores/{storeId}/customers` - 顧客一覧・作成
-- `/api/stores/{storeId}/customers/{customerId}` - 顧客詳細・更新・削除
+  - `CustomerType`（DB カラム値）は `'new' | 'regular' | 'vip' | 'inactive'` で `CustomerSegment` とは別物（手動タグとして編集可能。一覧バッジには影響しない）
+- `/api/stores/{storeId}/customers` - 顧客一覧・作成（重複電話番号は 409 + `existing_customer_id` を返す）
+- `/api/stores/{storeId}/customers/{customerId}` - 顧客詳細・更新（PATCH）・削除（DELETE）
 - `/api/stores/{storeId}/customers/analytics` - 顧客分析データ
-- `CustomerList.tsx`、`CustomerDetail.tsx`、`CustomerAnalytics.tsx` - UI コンポーネント
+- **すべての顧客 API に `getCurrentUser` + `checkStoreAccess` 認証必須**（local 環境はスキップ）。`{customerId}` 操作時は `verifyCustomerBelongsToStore` で店舗境界も確認
+- `CustomerList.tsx`、`CustomerDetail.tsx`、`CustomerAnalytics.tsx`、`CustomerForm.tsx` - UI コンポーネント
+
+**LINE 友だち追加状態の取り扱い:**
+- LIFF `getFriendship()` 失敗時は `null`（不明）を送信。サーバ側で `typeof === 'boolean'` のときだけ既存値を上書きし、不明時は保持
+- Webhook の `follow` / `unfollow` イベントで `customers.line_friend_flag` と `line_friend_added_at` を更新（複数イベント一括対応）
+- 友だち追加率の分母は **`line_user_id` を持つ顧客に限定**（電話番号のみで登録された顧客は分母外）。analytics レスポンスに `line_friend_connected` / `line_linked_customers` を含む
 
 **LINE Webhook:**
 - `POST /api/webhooks/line` - LINE Messaging API からのイベントを受信
@@ -324,12 +332,13 @@ export async function GET(req, { params }) {
 - `PATCH /api/reservations/{reservationId}` - 予約ステータス更新（pending/confirmed/cancelled/completed）
 
 ### 顧客管理 API:
-- `GET /api/stores/{storeId}/customers` - 顧客一覧（ページネーション、検索対応）
-- `POST /api/stores/{storeId}/customers` - 顧客作成
-- `GET /api/stores/{storeId}/customers/{customerId}` - 顧客詳細（来店履歴含む）
-- `PUT /api/stores/{storeId}/customers/{customerId}` - 顧客更新
-- `DELETE /api/stores/{storeId}/customers/{customerId}` - 顧客削除
-- `GET /api/stores/{storeId}/customers/analytics` - 顧客分析データ
+- 全エンドポイントで認証必須（`getCurrentUser` + `checkStoreAccess`、local 環境はスキップ）
+- `GET /api/stores/{storeId}/customers` - 顧客一覧（`search` / `customer_type` / `segment` / `limit` / `offset`）
+- `POST /api/stores/{storeId}/customers` - 顧客作成（電話番号重複時は 409 + `existing_customer_id`）
+- `GET /api/stores/{storeId}/customers/{customerId}` - 顧客詳細（予約履歴・来店履歴含む）
+- `PATCH /api/stores/{storeId}/customers/{customerId}` - 顧客情報更新（空文字は nullable フィールドで自動的に null に正規化）
+- `DELETE /api/stores/{storeId}/customers/{customerId}` - 顧客削除（`customer_visits` は CASCADE、`reservations.customer_id` は SET NULL）
+- `GET /api/stores/{storeId}/customers/analytics` - 顧客分析データ（セグメント分布、月別新規、性別/年齢、`line_friend_rate` + `line_friend_connected` + `line_linked_customers`、平均来店間隔、リピート率、売上ランキング）
 
 ### 予約分析 API:
 - `GET /api/stores/{storeId}/reservations/analytics` - 予約統計
