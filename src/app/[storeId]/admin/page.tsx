@@ -25,6 +25,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
+import { SearchBar } from '@/components/ui/search-bar';
+import { useDebounce } from '@/hooks/use-debounce';
 import {
   Search,
   Edit,
@@ -86,6 +88,12 @@ export default function StoreAdminPage() {
   const activeTab = searchParams.get('tab') || 'dashboard';
   const [formSearchQuery, setFormSearchQuery] = useState('');
   const [reservationFilterStatus, setReservationFilterStatus] = useState<string>('all');
+  const [reservationSearchQuery, setReservationSearchQuery] = useState<string>('');
+  const debouncedReservationSearch = useDebounce(reservationSearchQuery, 300);
+  const [surveyResponseSearchQuery, setSurveyResponseSearchQuery] = useState<string>('');
+  const debouncedSurveyResponseSearch = useDebounce(surveyResponseSearchQuery, 300);
+  const [dashboardReservationSearch, setDashboardReservationSearch] = useState<string>('');
+  const debouncedDashboardReservationSearch = useDebounce(dashboardReservationSearch, 300);
   const router = useRouter();
   const reservationView = searchParams.get('view') || 'list';
 
@@ -315,21 +323,6 @@ export default function StoreAdminPage() {
           setSurveyForms(surveysData);
         }
         
-        const reservationsResponse = await fetch(`/api/stores/${storeId}/reservations`);
-        if (reservationsResponse.ok) {
-          const reservationsData = await reservationsResponse.json();
-          setReservations(reservationsData);
-        }
-
-        // アンケート回答を取得
-        const surveyResponsesResponse = await fetch(`/api/stores/${storeId}/surveys/responses`, {
-          credentials: 'include',
-        });
-        if (surveyResponsesResponse.ok) {
-          const surveyResponsesData = await surveyResponsesResponse.json();
-          setSurveyResponses(surveyResponsesData);
-        }
-        
       } catch (err) {
         console.error('Data fetch error:', err);
         setError('データの取得に失敗しました');
@@ -342,6 +335,32 @@ export default function StoreAdminPage() {
       fetchData();
     }
   }, [storeId, user]);
+
+  // 予約一覧 fetch（検索クエリ変化時に再フェッチ）
+  // ダッシュボードと予約タブで検索ボックスが独立しているため、現在の active タブのクエリを使う。
+  useEffect(() => {
+    if (!storeId || !user) return;
+    const activeSearch = activeTab === 'dashboard'
+      ? debouncedDashboardReservationSearch
+      : debouncedReservationSearch;
+    const params = new URLSearchParams();
+    if (activeSearch) params.append('search', activeSearch);
+    fetch(`/api/stores/${storeId}/reservations?${params.toString()}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setReservations(data))
+      .catch((err) => console.error('Reservations fetch error:', err));
+  }, [storeId, user, activeTab, debouncedReservationSearch, debouncedDashboardReservationSearch]);
+
+  // アンケート回答 fetch（検索クエリ変化時に再フェッチ）
+  useEffect(() => {
+    if (!storeId || !user) return;
+    const params = new URLSearchParams();
+    if (debouncedSurveyResponseSearch) params.append('search', debouncedSurveyResponseSearch);
+    fetch(`/api/stores/${storeId}/surveys/responses?${params.toString()}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => setSurveyResponses(data))
+      .catch((err) => console.error('Survey responses fetch error:', err));
+  }, [storeId, user, debouncedSurveyResponseSearch]);
 
   const getFormStatusColor = (status: string) => {
     switch (status) {
@@ -404,7 +423,10 @@ export default function StoreAdminPage() {
   // タブコンテンツ（早期リターンの前に定義）
   const renderTabContent = useMemo(() => {
     switch (activeTab) {
-      case 'dashboard':
+      case 'dashboard': {
+    const dashboardReservations = debouncedDashboardReservationSearch
+      ? reservations.slice(0, 50)
+      : stats.recentReservations;
     return (
           <div className="space-y-5 p-4 lg:p-6">
             {/* 統計カード */}
@@ -448,13 +470,23 @@ export default function StoreAdminPage() {
         </div>
               </CardHeader>
               <CardContent>
-                {stats.recentReservations.length === 0 ? (
+                <div className="mb-3">
+                  <SearchBar
+                    value={dashboardReservationSearch}
+                    onChange={setDashboardReservationSearch}
+                    placeholder="顧客名 / メール / 電話番号で検索…"
+                    ariaLabel="ダッシュボードから予約を検索"
+                  />
+                </div>
+                {dashboardReservations.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">
-                    まだ予約がありません
+                    {debouncedDashboardReservationSearch
+                      ? `「${debouncedDashboardReservationSearch}」に一致する予約が見つかりませんでした`
+                      : 'まだ予約がありません'}
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {stats.recentReservations.map((reservation) => (
+                    {dashboardReservations.map((reservation) => (
                       <button
                         key={reservation.id}
                         type="button"
@@ -488,6 +520,7 @@ export default function StoreAdminPage() {
             </Card>
           </div>
         );
+      }
 
       case 'forms':
   return (
@@ -779,9 +812,19 @@ export default function StoreAdminPage() {
                     </TabsContent>
 
                     <TabsContent value="list" className="space-y-6">
+                      <div className="mb-2">
+                        <SearchBar
+                          value={reservationSearchQuery}
+                          onChange={setReservationSearchQuery}
+                          placeholder="顧客名 / メール / 電話番号で検索…"
+                          ariaLabel="予約を検索"
+                        />
+                      </div>
                       {filteredReservations.length === 0 ? (
                         <div className="text-center text-muted-foreground py-8">
-                          予約がありません
+                          {debouncedReservationSearch
+                            ? `「${debouncedReservationSearch}」に一致する予約が見つかりませんでした`
+                            : '予約がありません'}
                         </div>
                       ) : (
                         <>
@@ -1051,6 +1094,14 @@ export default function StoreAdminPage() {
                       </div>
                     </CardHeader>
                     <CardContent>
+                      <div className="mb-4">
+                        <SearchBar
+                          value={surveyResponseSearchQuery}
+                          onChange={setSurveyResponseSearchQuery}
+                          placeholder="回答内容 / 回答者で検索…"
+                          ariaLabel="アンケート回答を検索"
+                        />
+                      </div>
                       {(() => {
                         const filteredResponses = selectedSurveyFormId
                           ? surveyResponses.filter((r: any) => r.survey_form_id === selectedSurveyFormId)
@@ -1060,8 +1111,16 @@ export default function StoreAdminPage() {
                           return (
                       <div className="text-center py-12 text-muted-foreground">
                         <ClipboardList className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p className="text-lg font-medium mb-2">まだ回答がありません</p>
-                        <p className="text-sm">アンケートフォームを公開すると、回答がここに表示されます</p>
+                        <p className="text-lg font-medium mb-2">
+                          {debouncedSurveyResponseSearch
+                            ? `「${debouncedSurveyResponseSearch}」に一致する回答が見つかりませんでした`
+                            : 'まだ回答がありません'}
+                        </p>
+                        <p className="text-sm">
+                          {debouncedSurveyResponseSearch
+                            ? '別のキーワードでお試しください'
+                            : 'アンケートフォームを公開すると、回答がここに表示されます'}
+                        </p>
                             </div>
                           );
                         }
@@ -1200,7 +1259,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView]);
+  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView]);
 
   // 認証チェック中
   if (checkingAuth) {

@@ -98,7 +98,7 @@ export function buildCustomerConfirmationEmail({ store, reservation }: BuildArgs
   const address = store.address || '';
   const phone = store.phone || '';
 
-  const subject = `【ご予約確定】${dateTimeText}｜${menuText}（予約番号：${reservation.id}）`;
+  const subject = `【ご予約確定】${dateTimeText}｜${menuText}`;
 
   const lines: string[] = [];
   lines.push(`${reservation.customer_name} 様`);
@@ -170,7 +170,6 @@ export function buildStoreNotificationEmail({ store, reservation }: BuildArgs): 
   if ((reservation.message || '').trim()) {
     lines.push(`■ メッセージ：${(reservation.message || '').trim()}`);
   }
-  lines.push(`■ 予約番号：${reservation.id}`);
   lines.push('──────────────────────');
 
   return {
