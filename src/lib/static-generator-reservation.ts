@@ -343,6 +343,10 @@ class BookingForm {
                     }
                     if (data.customerEmail) {
                         this.state.email = data.customerEmail;
+                        // 確認欄も state を埋めないとバリデーションで不一致扱いになる
+                        // （DOM の .value だけ書いても input イベントは発火しない）
+                        this.state.emailConfirm = data.customerEmail;
+                        this.state.emailMismatch = false;
                         const emailEl = document.getElementById('customer-email');
                         const emailConfirmEl = document.getElementById('customer-email-confirm');
                         if (emailEl) emailEl.value = data.customerEmail;
