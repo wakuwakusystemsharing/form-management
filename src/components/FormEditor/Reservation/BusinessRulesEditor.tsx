@@ -37,7 +37,10 @@ function InfoTooltip({ text, theme = 'light' }: { text: string; theme?: ThemeTyp
 
 const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdate, theme = 'dark' }) => {
   const themeClasses = getThemeClasses(theme);
-  
+  const accentClasses = theme === 'light'
+    ? 'accent-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)]'
+    : 'accent-cyan-500 focus:ring-cyan-500';
+
   const [businessHours, setBusinessHours] = useState<BusinessHours>(
     form.config?.calendar_settings?.business_hours || {
       monday: { open: '09:00', close: '18:00', closed: false },
@@ -404,7 +407,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                         type="checkbox"
                         checked={!businessHours[day]?.closed}
                         onChange={(e) => handleBusinessHoursChange(day, 'closed', !e.target.checked)}
-                        className={`rounded accent-green-500 focus:ring-green-500 ${
+                        className={`rounded ${accentClasses} ${
                           theme === 'light'
                             ? 'border-gray-300 bg-gray-100'
                             : 'border-gray-600 bg-gray-700'
@@ -486,7 +489,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     value="calendar"
                     checked={bookingMode === 'calendar'}
                     onChange={(e) => handleBookingModeChange(e.target.value as 'calendar')}
-                    className="accent-green-500 focus:ring-green-500"
+                    className={accentClasses}
                   />
                   <div>
                     <div className={`font-medium ${themeClasses.text.primary}`}>カレンダー表示</div>
@@ -499,7 +502,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     value="multiple_dates"
                     checked={bookingMode === 'multiple_dates'}
                     onChange={(e) => handleBookingModeChange(e.target.value as 'multiple_dates')}
-                    className="accent-green-500 focus:ring-green-500"
+                    className={accentClasses}
                   />
                   <div>
                     <div className={`font-medium ${themeClasses.text.primary}`}>第三希望日時選択</div>
@@ -603,7 +606,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                                 type="checkbox"
                                 checked={!hours.closed}
                                 onChange={(e) => handleWeekdayHoursChange(dayKey, 'closed', !e.target.checked)}
-                                className={`rounded accent-green-500 focus:ring-green-500 ${
+                                className={`rounded ${accentClasses} ${
                                   theme === 'light'
                                     ? 'border-gray-300 bg-gray-100'
                                     : 'border-gray-600 bg-gray-700'
@@ -748,7 +751,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   type="button"
                   onClick={() => handleHolidaysAsClosedChange(!holidaysAsClosed)}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
-                    holidaysAsClosed ? 'bg-green-500' : (theme === 'light' ? 'bg-gray-300' : 'bg-gray-600')
+                    holidaysAsClosed ? themeClasses.toggle.enabled : themeClasses.toggle.disabled
                   }`}
                 >
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -789,7 +792,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                             type="checkbox"
                             checked={checked}
                             onChange={() => toggleExcludedHolidayType(h.id)}
-                            className="cursor-pointer accent-green-500 focus:ring-green-500"
+                            className={`cursor-pointer ${accentClasses}`}
                           />
                           <span className={`text-sm ${themeClasses.text.primary}`}>
                             {h.label}
@@ -830,8 +833,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 }}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
                   form.config?.calendar_settings?.allow_exceed_business_hours
-                    ? 'bg-green-500'
-                    : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
+                    ? themeClasses.toggle.enabled
+                    : themeClasses.toggle.disabled
                 }`}
               >
                 <span
@@ -870,8 +873,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 }}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
                   form.config?.calendar_settings?.show_customer_name !== false
-                    ? 'bg-green-500'
-                    : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
+                    ? themeClasses.toggle.enabled
+                    : themeClasses.toggle.disabled
                 }`}
               >
                 <span
@@ -910,8 +913,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 }}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
                   form.config?.calendar_settings?.show_customer_phone !== false
-                    ? 'bg-green-500'
-                    : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
+                    ? themeClasses.toggle.enabled
+                    : themeClasses.toggle.disabled
                 }`}
               >
                 <span
@@ -958,8 +961,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 }}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
                   form.config?.calendar_settings?.show_customer_email === true || form.config?.form_type === 'web'
-                    ? 'bg-green-500'
-                    : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
+                    ? themeClasses.toggle.enabled
+                    : themeClasses.toggle.disabled
                 } ${form.config?.form_type === 'web' ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
                 <span
