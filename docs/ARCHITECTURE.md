@@ -202,12 +202,12 @@ GET  /api/stores/[storeId]/admins - 店舗管理者一覧取得
 POST /api/stores/[storeId]/admins - 店舗管理者追加
 DELETE /api/stores/[storeId]/admins/[userId] - 店舗管理者削除
 
-GET  /api/stores/[storeId]/customers - 顧客一覧（CRM）
-POST /api/stores/[storeId]/customers - 顧客作成
-GET  /api/stores/[storeId]/customers/[customerId] - 顧客詳細（来店履歴含む）
-PUT  /api/stores/[storeId]/customers/[customerId] - 顧客更新
-DELETE /api/stores/[storeId]/customers/[customerId] - 顧客削除
-GET  /api/stores/[storeId]/customers/analytics - 顧客分析データ
+GET    /api/stores/[storeId]/customers - 顧客一覧（CRM、認証必須）
+POST   /api/stores/[storeId]/customers - 顧客作成（電話重複は 409）
+GET    /api/stores/[storeId]/customers/[customerId] - 顧客詳細（予約・来店履歴含む）
+PATCH  /api/stores/[storeId]/customers/[customerId] - 顧客更新
+DELETE /api/stores/[storeId]/customers/[customerId] - 顧客削除（visits は CASCADE、reservations は SET NULL）
+GET    /api/stores/[storeId]/customers/analytics - 顧客分析データ
 
 GET  /api/integrations/google-calendar/connect - Google OAuth 認証開始（リダイレクト）
 GET  /api/integrations/google-calendar/callback - Google OAuth コールバック
@@ -538,12 +538,23 @@ API: POST /api/preview/generate
   ↓
 API: PATCH /api/reservations/{reservationId}
   ↓ body: { status: 'pending' | 'confirmed' | 'cancelled' | 'completed' }
-  ↓
+  ↓ 1. 旧 status を取得
+  ↓ 2. reservations を更新
   ├─ Local: reservations.json を更新
   └─ Staging/Prod: Supabase reservations テーブルを更新
-  ↓ status='cancelled' の場合
+  ↓ 3. CRM 統計の同期（syncCustomerVisitForStatusChange）
+  ├─ 非キャンセル → 'cancelled':
+  │   - customer_visits を削除
+  │   - recalculateCustomerStats(customerId) で total_visits / total_spent / 来店日 / 平均間隔を再計算
+  ├─ 'cancelled' → 非キャンセル:
+  │   - customer_visit が無ければ予約データから再作成
+  │   - recalculateCustomerStats を再計算
+  └─ それ以外（pending↔confirmed 等）: visit はそのまま
+  ↓ 4. Google Calendar 連動（status='cancelled' の場合のみ）
   └─ Google Calendar イベントを自動削除（設定済みの場合）
 ```
+
+**LINE Webhook 経由のキャンセル**: `/api/webhooks/line` でユーザーがキャンセルした場合も、同等の `customer_visit` 削除 + `recalculateCustomerStats` を実行。
 
 ### 6. 予約作成フロー（顧客視点）
 
@@ -556,8 +567,12 @@ POST /api/reservations
   ├─ 1. 同一ユーザー同時予約数チェック（max_concurrent_reservations_per_user）
   │     超過時 → 409 concurrent_reservation_limit を返却
   ├─ 2. CRM 顧客検索/作成（line_user_id 優先 → customer_phone）
+  │     - 統計値（total_visits / total_spent 等）は手動増減せず、後段の recalc で導出
+  │     - LINE 情報（display_name / picture_url / friend_flag）はプロフィール側のみ更新
+  │     - line_friend_flag は body が boolean のときのみ上書き、null/undefined（不明）なら既存値保持
+  │     - 同一 LINE ID で create が UNIQUE 違反したら、もう一度 lookup して救済
   ├─ 3. reservations テーブルに INSERT
-  ├─ 4. customer_visits（来店履歴）作成
+  ├─ 4. customer_visits（来店履歴）作成 → recalculateCustomerStats(customerId) で集計値を更新
   ├─ 5. Google Calendar イベント作成（calendar モードのみ、希望日時式はスキップ）
   └─ 6. Web 予約のときメール送信（form_type === 'web'、fire-and-forget）
         ├─ お客様向け: customer_email 宛、From=店舗名、Reply-To=owner_email
@@ -581,6 +596,50 @@ Supabase Edge Function: send-reminders
   └─ 3. 各 reservation について LINE Messaging API で Flex リマインダー送信
         → store の line_channel_access_token を使用
 ```
+
+### 8. LINE 友だち追加状態の同期フロー
+
+```
+[A] 予約フォーム送信時（LIFF 内）
+  ↓ liff.getFriendship() を呼ぶ
+  ├─ 成功 → friendFlag (boolean)
+  └─ 失敗（スコープ不足・API 一時失敗等）→ null（不明）
+  ↓
+POST /api/reservations
+  ├─ body.line_friend_flag が boolean のときのみ既存値を上書き
+  ├─ null/undefined（不明）のときは既存値を保持（false 強制しない）
+  └─ 新規顧客作成時の line_friend_flag 初期値:
+        body が true → true、それ以外（false/null/undefined）→ false
+
+[B] LINE Webhook（信頼できる正典）
+  ↓ ユーザーがオフィシャルアカウントを「友だち追加」or「ブロック」
+POST /api/webhooks/line
+  ├─ events を全件巡回（最初のメッセージ以外も処理）
+  ├─ 'follow'   → customers.line_friend_flag=true
+  │                line_friend_added_at（未設定時のみ）に timestamp
+  └─ 'unfollow' → customers.line_friend_flag=false
+        ※ store_id と line_user_id でスコープ
+        ※ 同一 LINE ID の顧客が複数ある場合は全件更新
+
+→ 結果: LIFF が取れない／古い情報でも、Webhook が真値で上書きする
+```
+
+### 9. 顧客統計の再計算フロー
+
+`recalculateCustomerStats(customerId)` は `customer_visits` を真実の源として以下を再計算する:
+
+| 集計値 | 計算式 |
+|--------|--------|
+| `total_visits` | visits の件数 |
+| `total_spent` | visits の `amount` 合計（Number 強制） |
+| `first_visit_date` | visits の `visit_date` 最小 |
+| `last_visit_date` | visits の `visit_date` 最大 |
+| `average_visit_interval_days` | 連続する visit_date の差分の平均（日数、四捨五入）。来店 1 回以下なら null |
+
+呼び出し契機:
+- 予約作成時（`customer_visit` 作成後）
+- 予約 PATCH で status カテゴリが変わったとき（cancelled ↔ 非cancelled）
+- LINE Webhook 経由のキャンセル時
 
 ## 🛡️ エラーハンドリング
 
