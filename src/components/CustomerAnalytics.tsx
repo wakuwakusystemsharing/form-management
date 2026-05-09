@@ -31,6 +31,8 @@ interface AnalyticsData {
   };
   age_distribution: Array<{ age_group: string; count: number }>;
   line_friend_rate: number;
+  line_friend_connected?: number;
+  line_linked_customers?: number;
   avg_visit_interval_days: number;
   repeat_rate: number;
   top_customers_by_revenue: Array<{
@@ -254,13 +256,23 @@ export default function CustomerAnalytics({ storeId }: CustomerAnalyticsProps) {
           <Card>
             <CardHeader>
               <CardTitle>LINE連携状況</CardTitle>
-              <CardDescription>友だち追加率</CardDescription>
+              <CardDescription>LINE 連携済み顧客のうち友だち追加済みの割合</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-center">
                 <div className="text-4xl font-bold">{analytics.line_friend_rate}%</div>
-                <p className="text-sm text-muted-foreground mt-2">
-                  顧客の{analytics.line_friend_rate}%がLINE友だち追加済み
+                {typeof analytics.line_friend_connected === 'number' &&
+                typeof analytics.line_linked_customers === 'number' ? (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {analytics.line_friend_connected}人 / {analytics.line_linked_customers}人（LINE 連携済み顧客）
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    顧客の{analytics.line_friend_rate}%がLINE友だち追加済み
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  ※ 電話番号のみで登録された顧客は分母に含まれません
                 </p>
               </div>
             </CardContent>

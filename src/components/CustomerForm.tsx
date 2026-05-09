@@ -183,7 +183,7 @@ export default function CustomerForm({
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="customer-type">顧客タイプ</Label>
+          <Label htmlFor="customer-type">顧客タイプ（手動）</Label>
           <Select value={form.customer_type} onValueChange={(v) => updateField('customer_type', v)}>
             <SelectTrigger id="customer-type">
               <SelectValue />
@@ -195,6 +195,9 @@ export default function CustomerForm({
               <SelectItem value="inactive">休止</SelectItem>
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            ※ 一覧のセグメントバッジ（新規 / リピーター / VIP / 休眠）は来店履歴から自動判定されます。
+          </p>
         </div>
       </div>
 

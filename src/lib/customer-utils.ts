@@ -250,6 +250,220 @@ export async function updateCustomer(
 }
 
 /**
+ * 指定顧客の `customer_visits` から統計値を再計算し、`customers` に反映する。
+ *
+ * - total_visits: visit 件数
+ * - total_spent: amount の合計
+ * - first_visit_date: visit_date の最小
+ * - last_visit_date: visit_date の最大
+ * - average_visit_interval_days: 連続する visit_date の差分の平均（日数、四捨五入）
+ *
+ * customer_visits は予約キャンセル時に削除する運用なので、この関数は
+ * 「アクティブな予約・実来店のみが集計される」ことを前提としている。
+ */
+export async function recalculateCustomerStats(customerId: string): Promise<void> {
+  const env = getAppEnvironment();
+
+  // 集計
+  let visits: Array<{ visit_date: string; amount: number | string | null }> = [];
+
+  if (env === 'local') {
+    initializeDataFiles();
+    if (fs.existsSync(VISITS_FILE)) {
+      const data = fs.readFileSync(VISITS_FILE, 'utf-8');
+      const all: CustomerVisit[] = JSON.parse(data);
+      visits = all
+        .filter((v) => v.customer_id === customerId)
+        .map((v) => ({ visit_date: v.visit_date, amount: v.amount as any }));
+    }
+  } else {
+    const adminClient = createAdminClient();
+    if (!adminClient) {
+      throw new Error('Supabase connection error');
+    }
+    const { data, error } = await (adminClient as any)
+      .from('customer_visits')
+      .select('visit_date, amount')
+      .eq('customer_id', customerId)
+      .order('visit_date', { ascending: true });
+    if (error) {
+      throw new Error(`Failed to fetch customer_visits: ${error.message}`);
+    }
+    visits = data || [];
+  }
+
+  // 集計値の算出
+  const totalVisits = visits.length;
+  const totalSpent = visits.reduce((sum, v) => sum + Number(v.amount || 0), 0);
+
+  const sortedDates = visits
+    .map((v) => v.visit_date)
+    .filter(Boolean)
+    .sort();
+  const firstVisitDate = sortedDates[0] || null;
+  const lastVisitDate = sortedDates[sortedDates.length - 1] || null;
+
+  let averageIntervalDays: number | null = null;
+  if (sortedDates.length >= 2) {
+    let totalGap = 0;
+    for (let i = 1; i < sortedDates.length; i++) {
+      const prev = new Date(sortedDates[i - 1]).getTime();
+      const curr = new Date(sortedDates[i]).getTime();
+      totalGap += (curr - prev) / (1000 * 60 * 60 * 24);
+    }
+    averageIntervalDays = Math.round(totalGap / (sortedDates.length - 1));
+  }
+
+  const update: CustomerUpdate = {
+    total_visits: totalVisits,
+    total_spent: totalSpent,
+    first_visit_date: firstVisitDate,
+    last_visit_date: lastVisitDate,
+    average_visit_interval_days: averageIntervalDays,
+  };
+
+  // 反映
+  await updateCustomer(customerId, update);
+}
+
+/**
+ * customer_visits を削除（reservation_id で特定して 1 件だけ）。
+ * 見つからなければ何もしない。
+ *
+ * @returns 削除された visit の customer_id（再計算が必要な対象）
+ */
+export async function deleteCustomerVisitByReservation(
+  reservationId: string
+): Promise<string | null> {
+  const env = getAppEnvironment();
+
+  if (env === 'local') {
+    initializeDataFiles();
+    if (!fs.existsSync(VISITS_FILE)) return null;
+    const data = fs.readFileSync(VISITS_FILE, 'utf-8');
+    const visits: CustomerVisit[] = JSON.parse(data);
+    const target = visits.find((v) => v.reservation_id === reservationId);
+    if (!target) return null;
+    const filtered = visits.filter((v) => v.reservation_id !== reservationId);
+    fs.writeFileSync(VISITS_FILE, JSON.stringify(filtered, null, 2));
+    return target.customer_id;
+  }
+
+  const adminClient = createAdminClient();
+  if (!adminClient) {
+    throw new Error('Supabase connection error');
+  }
+  // 先に customer_id を取得してから削除
+  const { data: existing, error: selectError } = await (adminClient as any)
+    .from('customer_visits')
+    .select('customer_id')
+    .eq('reservation_id', reservationId)
+    .maybeSingle();
+  if (selectError) {
+    throw new Error(`Failed to lookup customer_visit: ${selectError.message}`);
+  }
+  if (!existing) return null;
+
+  const { error: deleteError } = await (adminClient as any)
+    .from('customer_visits')
+    .delete()
+    .eq('reservation_id', reservationId);
+  if (deleteError) {
+    throw new Error(`Failed to delete customer_visit: ${deleteError.message}`);
+  }
+  return existing.customer_id as string;
+}
+
+/**
+ * 既存の予約 ID に対応する customer_visits を取得（存在チェック用）。
+ */
+export async function findCustomerVisitByReservation(
+  reservationId: string
+): Promise<CustomerVisit | null> {
+  const env = getAppEnvironment();
+
+  if (env === 'local') {
+    initializeDataFiles();
+    if (!fs.existsSync(VISITS_FILE)) return null;
+    const data = fs.readFileSync(VISITS_FILE, 'utf-8');
+    const visits: CustomerVisit[] = JSON.parse(data);
+    return visits.find((v) => v.reservation_id === reservationId) || null;
+  }
+
+  const adminClient = createAdminClient();
+  if (!adminClient) return null;
+  const { data, error } = await (adminClient as any)
+    .from('customer_visits')
+    .select('*')
+    .eq('reservation_id', reservationId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as CustomerVisit;
+}
+
+/**
+ * 顧客を削除
+ *
+ * 関連テーブルの挙動（DB スキーマ）:
+ * - reservations.customer_id → ON DELETE SET NULL
+ * - surveys.customer_id → ON DELETE SET NULL
+ * - customer_visits → ON DELETE CASCADE
+ * - customer_interactions → ON DELETE CASCADE
+ *
+ * @param customerId - 顧客ID
+ */
+export async function deleteCustomer(customerId: string): Promise<void> {
+  const env = getAppEnvironment();
+
+  if (env === 'local') {
+    initializeDataFiles();
+
+    // customer_visits を削除
+    if (fs.existsSync(VISITS_FILE)) {
+      const visitsData = fs.readFileSync(VISITS_FILE, 'utf-8');
+      const visits: CustomerVisit[] = JSON.parse(visitsData);
+      const filteredVisits = visits.filter((v) => v.customer_id !== customerId);
+      fs.writeFileSync(VISITS_FILE, JSON.stringify(filteredVisits, null, 2));
+    }
+
+    // reservations.customer_id を NULL に
+    const reservationsFile = path.join(DATA_DIR, 'reservations.json');
+    if (fs.existsSync(reservationsFile)) {
+      const reservationsData = fs.readFileSync(reservationsFile, 'utf-8');
+      const reservations = JSON.parse(reservationsData);
+      const updated = reservations.map((r: any) =>
+        r.customer_id === customerId ? { ...r, customer_id: null } : r
+      );
+      fs.writeFileSync(reservationsFile, JSON.stringify(updated, null, 2));
+    }
+
+    // 顧客本体を削除
+    const customersData = fs.readFileSync(CUSTOMERS_FILE, 'utf-8');
+    const customers: Customer[] = JSON.parse(customersData);
+    const filtered = customers.filter((c) => c.id !== customerId);
+    fs.writeFileSync(CUSTOMERS_FILE, JSON.stringify(filtered, null, 2));
+    return;
+  }
+
+  // Staging/Production: Supabase
+  // FK の ON DELETE 設定（SET NULL / CASCADE）が DB 側で適切に効くため、
+  // 顧客本体を 1 文で削除すれば関連レコードも自動処理される。
+  const adminClient = createAdminClient();
+  if (!adminClient) {
+    throw new Error('Supabase connection error');
+  }
+
+  const { error } = await (adminClient as any)
+    .from('customers')
+    .delete()
+    .eq('id', customerId);
+
+  if (error) {
+    throw new Error(`Failed to delete customer: ${error.message}`);
+  }
+}
+
+/**
  * 来店履歴を作成
  *
  * @param data - 来店履歴データ

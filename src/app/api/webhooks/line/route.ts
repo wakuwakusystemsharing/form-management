@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
 import { createReservationEvent, deleteCalendarEvent, listCalendarEvents } from '@/lib/google-calendar';
 import { normalizeForm } from '@/lib/form-normalizer';
+import { deleteCustomerVisitByReservation, recalculateCustomerStats } from '@/lib/customer-utils';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,9 +10,52 @@ export const dynamic = 'force-dynamic';
 type LineEvent = {
   replyToken?: string;
   type?: string;
+  timestamp?: number;
   message?: { type?: string; text?: string };
   source?: { userId?: string };
 };
+
+/**
+ * follow / unfollow イベントを反映:
+ *   follow   → line_friend_flag=true, line_friend_added_at をセット（未設定時のみ）
+ *   unfollow → line_friend_flag=false
+ *
+ * 同一 LINE ユーザーが複数の予約で複数の customers レコードを持っている可能性は
+ * unique_customers_store_line_user により低いが、安全のため update で複数件対応する。
+ */
+async function applyFriendshipChange(
+  adminClient: any,
+  storeId: string,
+  lineUserId: string,
+  isFollow: boolean,
+  timestampMs?: number
+): Promise<void> {
+  const update: Record<string, any> = { line_friend_flag: isFollow };
+  if (isFollow) {
+    update.line_friend_added_at = timestampMs
+      ? new Date(timestampMs).toISOString()
+      : new Date().toISOString();
+  }
+
+  // line_friend_added_at は未設定時のみ更新したいので、まず既存値を見て分岐
+  const { data: existing } = await adminClient
+    .from('customers')
+    .select('id, line_friend_added_at')
+    .eq('store_id', storeId)
+    .eq('line_user_id', lineUserId);
+
+  if (!existing || existing.length === 0) {
+    return; // この store でまだ顧客レコード未作成 → 予約時に新規作成される
+  }
+
+  for (const row of existing) {
+    const perRowUpdate: Record<string, any> = { line_friend_flag: isFollow };
+    if (isFollow && !row.line_friend_added_at) {
+      perRowUpdate.line_friend_added_at = update.line_friend_added_at;
+    }
+    await adminClient.from('customers').update(perRowUpdate).eq('id', row.id);
+  }
+}
 
 function formatDate(dateStr: string): string {
   const [year, month, day] = dateStr.split('-');
@@ -306,12 +350,34 @@ export async function POST(req: NextRequest) {
   const themeColor = DEFAULT_HEADER_COLOR;
 
   const body = await req.json().catch(() => null);
-  const event = (body?.events?.[0] || {}) as LineEvent;
+  const events: LineEvent[] = Array.isArray(body?.events) ? body.events : [];
+
+  // follow / unfollow を全イベントについて先に反映（reply トークンに依存しない処理）。
+  for (const ev of events) {
+    const evUserId = ev.source?.userId;
+    if (!evUserId) continue;
+    if (ev.type === 'follow') {
+      try {
+        await applyFriendshipChange(adminClient, storeId, evUserId, true, ev.timestamp);
+      } catch (e) {
+        console.error('[LINE Webhook] follow apply error:', e);
+      }
+    } else if (ev.type === 'unfollow') {
+      try {
+        await applyFriendshipChange(adminClient, storeId, evUserId, false, ev.timestamp);
+      } catch (e) {
+        console.error('[LINE Webhook] unfollow apply error:', e);
+      }
+    }
+  }
+
+  // 以下の reply 系処理は最初のメッセージ系イベントに対して実施
+  const event = (events.find((e) => e.replyToken) || ({} as LineEvent));
   const replyToken = event.replyToken;
   const userId = event.source?.userId;
   const messageText = event.message?.text || '';
 
-  console.log(`[LINE Webhook] storeId=${storeId} type=${event.type || 'unknown'} userId=${userId ? 'yes' : 'no'} message=${messageText ? messageText.substring(0, 30) : '(empty)'}`);
+  console.log(`[LINE Webhook] storeId=${storeId} eventCount=${events.length} type=${event.type || 'unknown'} userId=${userId ? 'yes' : 'no'} message=${messageText ? messageText.substring(0, 30) : '(empty)'}`);
 
   if (!replyToken || !userId) {
     return NextResponse.json({ success: true });
@@ -473,6 +539,16 @@ export async function POST(req: NextRequest) {
       .from('reservations')
       .update({ status: 'cancelled' })
       .eq('id', target.id);
+
+    // CRM 統計補正: visit を削除して再計算
+    if (target.customer_id && target.status !== 'cancelled') {
+      try {
+        await deleteCustomerVisitByReservation(target.id);
+        await recalculateCustomerStats(target.customer_id);
+      } catch (e) {
+        console.error('[LINE Webhook] CRM visit sync error:', e);
+      }
+    }
 
     if (store.google_calendar_id) {
       try {

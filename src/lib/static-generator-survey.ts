@@ -56,7 +56,8 @@ export class StaticSurveyGenerator {
     <script>
         // LINEユーザーIDを保持する変数
         let lineUserId = null;
-        let lineFriendFlag = false;
+        // null = 取得失敗（不明）。サーバ側で既存値を上書きしない。
+        let lineFriendFlag = null;
 
         // LIFF初期化
         document.addEventListener('DOMContentLoaded', async function () {

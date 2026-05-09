@@ -2,13 +2,46 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
-import { createAdminClient } from '@/lib/supabase';
+import { createAdminClient, createAuthenticatedClient, checkStoreAccess } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/auth-helper';
 import { Customer } from '@/types/form';
 import { determineCustomerSegment } from '@/lib/customer-utils';
 
 // ローカル環境用のデータファイル
 const DATA_DIR = path.join(process.cwd(), 'data');
 const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
+
+async function authorizeStoreAccess(
+  request: Request,
+  storeId: string
+): Promise<NextResponse | null> {
+  const env = getAppEnvironment();
+  if (env === 'local') return null;
+
+  const user = await getCurrentUser(request);
+  if (!user) {
+    return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
+  }
+  const token =
+    request.headers.get('cookie')
+      ?.split(';')
+      .find((c) => c.trim().startsWith('sb-access-token='))
+      ?.trim()
+      .substring('sb-access-token='.length) ||
+    request.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) {
+    return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
+  }
+  const authClient = createAuthenticatedClient(token);
+  if (!authClient) {
+    return NextResponse.json({ error: '認証に失敗しました' }, { status: 401 });
+  }
+  const hasAccess = await checkStoreAccess(user.id, storeId, user.email, authClient);
+  if (!hasAccess) {
+    return NextResponse.json({ error: 'この店舗へのアクセス権限がありません' }, { status: 403 });
+  }
+  return null;
+}
 
 /**
  * GET /api/stores/[storeId]/customers/analytics
@@ -20,6 +53,10 @@ export async function GET(
 ) {
   try {
     const { storeId } = await params;
+
+    const authError = await authorizeStoreAccess(request, storeId);
+    if (authError) return authError;
+
     const env = getAppEnvironment();
 
     let customers: Customer[] = [];
@@ -79,7 +116,10 @@ export async function GET(
     };
 
     customers.forEach((customer) => {
-      typeCounts[customer.customer_type]++;
+      const t = customer.customer_type as keyof typeof typeCounts;
+      if (t in typeCounts) {
+        typeCounts[t]++;
+      }
     });
 
     // 月別新規顧客数（過去12ヶ月）
@@ -94,36 +134,46 @@ export async function GET(
     };
 
     customers.forEach((customer) => {
-      const gender = customer.gender || 'unknown';
-      genderDistribution[gender]++;
+      const gender = (customer.gender || 'unknown') as keyof typeof genderDistribution;
+      if (gender in genderDistribution) {
+        genderDistribution[gender]++;
+      } else {
+        genderDistribution.unknown++;
+      }
     });
 
     // LINE友だち追加率
-    const lineConnectedCount = customers.filter((c) => c.line_friend_flag).length;
+    // 分母は LINE 連携済み顧客（line_user_id があるもの）に限定する。
+    // line_user_id が無い手動登録顧客を分母に入れると率が不当に低く出るため。
+    const lineLinkedCustomers = customers.filter((c) => !!c.line_user_id);
+    const lineConnectedCount = lineLinkedCustomers.filter((c) => c.line_friend_flag).length;
     const lineFriendRate =
-      customers.length > 0 ? (lineConnectedCount / customers.length) * 100 : 0;
+      lineLinkedCustomers.length > 0
+        ? (lineConnectedCount / lineLinkedCustomers.length) * 100
+        : 0;
 
-    // 平均来店間隔
-    const totalInterval = customers.reduce(
-      (sum, c) => sum + (c.average_visit_interval_days || 0),
-      0
-    );
+    // 平均来店間隔: average_visit_interval_days が null（来店 0〜1 回）の顧客は除外
+    const intervalsWithData = customers
+      .map((c) => c.average_visit_interval_days)
+      .filter((v): v is number => typeof v === 'number' && v > 0);
     const avgVisitInterval =
-      customers.length > 0 ? totalInterval / customers.length : 0;
+      intervalsWithData.length > 0
+        ? intervalsWithData.reduce((sum, v) => sum + v, 0) / intervalsWithData.length
+        : 0;
 
     // リピート率（2回以上来店した顧客の割合）
     const repeatCustomers = customers.filter((c) => c.total_visits >= 2).length;
     const repeatRate =
       customers.length > 0 ? (repeatCustomers / customers.length) * 100 : 0;
 
-    // 顧客別売上ランキング（トップ10）
-    const topCustomersByRevenue = customers
-      .sort((a, b) => b.total_spent - a.total_spent)
+    // 顧客別売上ランキング（トップ10）— 元配列を破壊しないよう [...customers]
+    const topCustomersByRevenue = [...customers]
+      .sort((a, b) => Number(b.total_spent) - Number(a.total_spent))
       .slice(0, 10)
       .map((c) => ({
         customer_id: c.id,
         name: c.name,
-        total_spent: c.total_spent,
+        total_spent: Number(c.total_spent),
         total_visits: c.total_visits,
       }));
 
@@ -146,6 +196,8 @@ export async function GET(
       gender_distribution: genderDistribution,
       age_distribution: ageDistribution,
       line_friend_rate: Math.round(lineFriendRate * 10) / 10, // 小数点1桁
+      line_friend_connected: lineConnectedCount,
+      line_linked_customers: lineLinkedCustomers.length,
 
       // 来店パターン
       avg_visit_interval_days: Math.round(avgVisitInterval),
@@ -208,7 +260,7 @@ function calculateSegmentAvgSpending(customers: Customer[]) {
 
   customers.forEach((customer) => {
     const segment = determineCustomerSegment(customer);
-    segmentTotals[segment].total += customer.total_spent;
+    segmentTotals[segment].total += Number(customer.total_spent);
     segmentTotals[segment].count++;
   });
 
@@ -242,7 +294,20 @@ function calculateAgeDistribution(customers: Customer[]) {
     }
 
     const birthDate = new Date(customer.birthday);
-    const age = now.getFullYear() - birthDate.getFullYear();
+    if (Number.isNaN(birthDate.getTime())) {
+      ageGroups['不明']++;
+      return;
+    }
+    // 誕生日が今年まだ来ていなければ -1（実年齢）
+    let age = now.getFullYear() - birthDate.getFullYear();
+    const m = now.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < birthDate.getDate())) {
+      age -= 1;
+    }
+    if (age < 0) {
+      ageGroups['不明']++;
+      return;
+    }
 
     if (age < 20) {
       ageGroups['10代']++;

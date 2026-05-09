@@ -10,7 +10,17 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/components/ui/use-toast';
-import { Phone, Mail, Pencil, X } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Phone, Mail, Pencil, X, Trash2 } from 'lucide-react';
 import CustomerForm, { CustomerFormData, customerToFormData } from '@/components/CustomerForm';
 
 interface CustomerDetailProps {
@@ -19,6 +29,7 @@ interface CustomerDetailProps {
   open: boolean;
   onClose: () => void;
   onUpdated?: () => void;
+  onDeleted?: () => void;
 }
 
 interface CustomerDetailData {
@@ -27,11 +38,13 @@ interface CustomerDetailData {
   visits: CustomerVisit[];
 }
 
-export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated }: CustomerDetailProps) {
+export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated, onDeleted }: CustomerDetailProps) {
   const [data, setData] = useState<CustomerDetailData | null>(null);
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
 
   const fetchCustomerDetail = useCallback(async () => {
@@ -85,6 +98,33 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
     }
   };
 
+  const handleDelete = async () => {
+    if (!customerId) return;
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/stores/${storeId}/customers/${customerId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || '顧客の削除に失敗しました');
+      }
+      toast({ title: '顧客を削除しました' });
+      setShowDeleteConfirm(false);
+      onDeleted?.();
+      onClose();
+    } catch (error) {
+      toast({
+        title: '削除に失敗しました',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const dateFormatter = new Intl.DateTimeFormat('ja-JP');
   const currencyFormatter = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' });
 
@@ -118,11 +158,13 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
     }
   };
 
-  if (!data || !open) {
+  if (!open) {
     return null;
   }
 
-  const { customer, reservations, visits } = data;
+  const customer = data?.customer;
+  const reservations = data?.reservations || [];
+  const visits = data?.visits || [];
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -135,16 +177,27 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                 {isEditing ? '顧客情報を編集しています' : '顧客情報、予約履歴、来店履歴を確認できます'}
               </DialogDescription>
             </div>
-            <div className="mr-8">
-              {!isEditing && !loading && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsEditing(true)}
-                >
-                  <Pencil className="mr-2 h-4 w-4" aria-hidden="true" />
-                  編集
-                </Button>
+            <div className="mr-8 flex items-center gap-2">
+              {!isEditing && !loading && data && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsEditing(true)}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" aria-hidden="true" />
+                    編集
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => setShowDeleteConfirm(true)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                    削除
+                  </Button>
+                </>
               )}
               {isEditing && (
                 <Button
@@ -160,7 +213,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
           </div>
         </DialogHeader>
 
-        {loading ? (
+        {loading || !customer ? (
           <div className="text-center py-8">
             <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
             <p className="mt-2 text-sm text-muted-foreground">読み込み中…</p>
@@ -416,6 +469,32 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
           </div>
         )}
       </DialogContent>
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>顧客を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              {customer ? `「${customer.name}」さんのデータを削除します。` : ''}
+              この操作は取り消せません。来店履歴も併せて削除されます。
+              なお、過去の予約レコードは残りますが、顧客とのひも付けは外れます。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isDeleting ? '削除中…' : '削除する'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

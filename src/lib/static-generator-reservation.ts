@@ -292,7 +292,7 @@ class BookingForm {
             lineEmail: null, // LINEメールアドレス
             lineLanguage: null, // LINE言語設定
             lineOs: null, // デバイスOS
-            lineFriendFlag: false // 友だち追加状態
+            lineFriendFlag: null // 友だち追加状態 (true/false/null=不明)
         };
         this.currentDate = new Date();
         this.availabilityCache = {}; // カレンダー空き状況のキャッシュ
@@ -414,12 +414,14 @@ class BookingForm {
                 }
 
                 // 友だち追加状態を取得
+                // 失敗時は false にせず null のまま（サーバ側で「不明」として扱い、既存値を上書きしない）。
+                // LIFF チャネルのスコープ不足や API 一時失敗で false 上書きされるのを防ぐため。
                 try {
                     const friendship = await liff.getFriendship();
                     this.state.lineFriendFlag = friendship.friendFlag;
                 } catch (friendError) {
                     console.warn('友だち追加状態の取得に失敗しました:', friendError);
-                    this.state.lineFriendFlag = false;
+                    this.state.lineFriendFlag = null;
                 }
             }
         } catch (error) {
@@ -1759,7 +1761,8 @@ class BookingForm {
                 line_status_message: this.state.lineStatusMessage || null, // LINEステータスメッセージ
                 line_language: this.state.lineLanguage || null, // LINE言語設定
                 line_os: this.state.lineOs || null, // デバイスOS
-                line_friend_flag: this.state.lineFriendFlag || false, // 友だち追加状態
+                // null = 不明（サーバ側で既存値を上書きしない）
+                line_friend_flag: this.state.lineFriendFlag, // 友だち追加状態 (true/false/null)
                 source_medium: sourceMedium,
                 booking_mode: this.config.calendar_settings?.booking_mode || 'calendar'
             };

@@ -11,6 +11,12 @@
 import dotenv from 'dotenv';
 import { createAdminClient } from '../src/lib/supabase';
 import { FormConfig } from '../src/types/form';
+import {
+  createCustomer,
+  createCustomerVisit,
+  recalculateCustomerStats,
+  calculateTotalAmount,
+} from '../src/lib/customer-utils';
 
 // .env.local を明示的に読み込む
 dotenv.config({ path: '.env.local' });
@@ -224,18 +230,41 @@ function createFormConfig(formName: string): FormConfig {
   };
 }
 
+// 顧客プールから 1 名を選んで予約を生成（リピート率を表現するために少数の顧客で多数の予約を作る）
+interface CustomerProfile {
+  id: string;        // customers.id（事前に作成済み）
+  name: string;
+  phone: string;
+  email: string;
+  gender: 'male' | 'female';
+}
+
+function generateCustomerPool(size: number): Omit<CustomerProfile, 'id'>[] {
+  const pool: Omit<CustomerProfile, 'id'>[] = [];
+  for (let i = 0; i < size; i++) {
+    const firstName = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
+    const lastName = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
+    pool.push({
+      name: `${lastName} ${firstName}`,
+      phone: generatePhoneNumber(),
+      email: generateEmail(firstName, lastName),
+      gender: Math.random() > 0.5 ? 'female' : 'male',
+    });
+  }
+  return pool;
+}
+
 // 予約データの生成
 function generateReservation(
   storeId: string,
   formId: string,
   menuStructure: FormConfig['menu_structure'],
-  daysAgo: number
+  daysAgo: number,
+  customer: CustomerProfile
 ): any {
-  const firstName = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
-  const lastName = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
-  const customerName = `${lastName} ${firstName}`;
-  const phone = generatePhoneNumber();
-  const email = generateEmail(firstName, lastName);
+  const customerName = customer.name;
+  const phone = customer.phone;
+  const email = customer.email;
 
   // ランダムにカテゴリーとメニューを選択
   const category = menuStructure.categories[
@@ -283,7 +312,7 @@ function generateReservation(
   }];
 
   // 顧客属性情報
-  const gender = Math.random() > 0.5 ? 'female' : 'male';
+  const gender = customer.gender;
   const visitCount = Math.random() > 0.6 ? 'repeat' : 'first';
   const coupon = Math.random() > 0.7 ? 'use' : 'not_use';
 
@@ -323,6 +352,7 @@ function generateReservation(
   return {
     form_id: formId,
     store_id: storeId,
+    customer_id: customer.id, // CRM 連携: 事前作成した customers のレコードを参照
     customer_name: customerName,
     customer_phone: phone,
     customer_email: email,
@@ -472,12 +502,72 @@ async function main() {
     const TARGET_RESERVATIONS = 1000;
     const RESERVATIONS_TO_CREATE = Math.max(0, TARGET_RESERVATIONS - existingReservations);
 
+    // 顧客プールサイズ（200 名で 1000 件 ≒ 平均 5 回来店、リピート率を表現）
+    const CUSTOMER_POOL_SIZE = 200;
+    let customerPool: CustomerProfile[] = [];
+
     if (RESERVATIONS_TO_CREATE === 0) {
       console.log('✅ 既に1000件の予約データが存在します\n');
     } else {
+      // 4-a. 既存顧客を取得（再実行時の重複作成防止）
+      const { data: existingCustomers } = await (adminClient as any)
+        .from('customers')
+        .select('id, name, phone, email, gender')
+        .eq('store_id', storeId);
+
+      if (existingCustomers && existingCustomers.length >= CUSTOMER_POOL_SIZE) {
+        customerPool = existingCustomers.slice(0, CUSTOMER_POOL_SIZE).map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          phone: c.phone || generatePhoneNumber(),
+          email: c.email || '',
+          gender: (c.gender === 'female' || c.gender === 'male') ? c.gender : 'female',
+        }));
+        console.log(`✅ 既存顧客 ${customerPool.length}名を再利用します`);
+      } else {
+        // 4-b. 不足分の顧客を新規作成
+        const needToCreate = CUSTOMER_POOL_SIZE - (existingCustomers?.length || 0);
+        const profiles = generateCustomerPool(needToCreate);
+        if (existingCustomers) {
+          customerPool = existingCustomers.map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            phone: c.phone || generatePhoneNumber(),
+            email: c.email || '',
+            gender: (c.gender === 'female' || c.gender === 'male') ? c.gender : 'female',
+          }));
+        }
+
+        console.log(`👥 ${needToCreate}名の顧客を作成中...`);
+        for (const p of profiles) {
+          const newCustomer = await createCustomer({
+            store_id: storeId,
+            name: p.name,
+            phone: p.phone,
+            email: p.email,
+            gender: p.gender,
+            customer_type: 'new',
+            first_visit_date: null,
+            last_visit_date: null,
+            total_visits: 0,
+            total_spent: 0,
+          });
+          customerPool.push({
+            id: newCustomer.id,
+            name: p.name,
+            phone: p.phone,
+            email: p.email,
+            gender: p.gender,
+          });
+        }
+        console.log(`✅ 顧客プール: 計 ${customerPool.length}名`);
+      }
+
+      // 4-c. 予約を生成・挿入し、新規 visit を蓄積
       console.log(`📅 ${RESERVATIONS_TO_CREATE}件の予約データを生成中...`);
       const BATCH_SIZE = 100;
       const menuStructure = createMenuStructure();
+      const customersWithVisits = new Set<string>();
 
       for (let i = 0; i < RESERVATIONS_TO_CREATE; i += BATCH_SIZE) {
         const batch: any[] = [];
@@ -486,26 +576,67 @@ async function main() {
         for (let j = 0; j < batchSize; j++) {
           const formId = formIds[Math.floor(Math.random() * formIds.length)];
           const daysAgo = Math.floor(Math.random() * 180); // 過去180日間
-          const reservation = generateReservation(storeId, formId, menuStructure, daysAgo);
+          const customer = customerPool[Math.floor(Math.random() * customerPool.length)];
+          const reservation = generateReservation(storeId, formId, menuStructure, daysAgo, customer);
           batch.push(reservation);
         }
 
-        const { error: reservationError } = await (adminClient as any)
+        const { data: insertedReservations, error: reservationError } = await (adminClient as any)
           .from('reservations')
-          .insert(batch);
+          .insert(batch)
+          .select('id, customer_id, store_id, reservation_date, reservation_time, selected_menus, selected_options, status');
 
         if (reservationError) {
           console.error(`❌ 予約データ挿入エラー (バッチ ${Math.floor(i / BATCH_SIZE) + 1}):`, reservationError);
           continue;
         }
 
+        // 4-d. 非キャンセル予約に customer_visits を作成
+        if (insertedReservations && Array.isArray(insertedReservations)) {
+          for (const r of insertedReservations) {
+            if (r.status === 'cancelled' || !r.customer_id) continue;
+            try {
+              await createCustomerVisit({
+                customer_id: r.customer_id,
+                store_id: r.store_id,
+                reservation_id: r.id,
+                visit_date: r.reservation_date,
+                visit_time: r.reservation_time,
+                visit_type: 'reservation',
+                treatment_menus: r.selected_menus,
+                amount: calculateTotalAmount(r.selected_menus, r.selected_options),
+              });
+              customersWithVisits.add(r.customer_id);
+            } catch (visitError) {
+              console.error(`⚠️  visit 作成エラー (reservation=${r.id}):`, visitError);
+            }
+          }
+        }
+
         console.log(`✅ ${i + batchSize}/${RESERVATIONS_TO_CREATE} 件の予約データを生成しました`);
       }
+
+      // 4-e. 顧客統計を再計算（total_visits / total_spent / 来店日 / 平均間隔）
+      console.log(`📊 ${customersWithVisits.size}名の顧客統計を再計算中...`);
+      let recalculated = 0;
+      for (const cid of customersWithVisits) {
+        try {
+          await recalculateCustomerStats(cid);
+          recalculated++;
+        } catch (recalcError) {
+          console.error(`⚠️  統計再計算エラー (customer=${cid}):`, recalcError);
+        }
+      }
+      console.log(`✅ ${recalculated}名の統計を更新しました`);
     }
 
     // 最終的な予約数を確認
     const { count: finalCount } = await (adminClient as any)
       .from('reservations')
+      .select('*', { count: 'exact', head: true })
+      .eq('store_id', storeId);
+    const { count: finalCustomerCount } = await (adminClient as any)
+      .from('customers')
       .select('*', { count: 'exact', head: true })
       .eq('store_id', storeId);
 
@@ -514,6 +645,7 @@ async function main() {
     console.log(`  - 店舗: ${store.name} (ID: ${storeId})`);
     console.log(`  - フォーム: ${formIds.length}個`);
     console.log(`  - 予約データ: ${finalCount || 0}件`);
+    console.log(`  - 顧客データ: ${finalCustomerCount || 0}件`);
     console.log(`\n🔗 管理画面: /admin/${storeId}`);
 
   } catch (error) {
