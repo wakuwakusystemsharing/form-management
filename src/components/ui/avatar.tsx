@@ -21,19 +21,21 @@ Avatar.displayName = "Avatar"
 const AvatarImage = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<typeof Image>
->(({ className, alt = '', src, ...props }, ref) => (
-  <div ref={ref} className="relative size-full">
-    {src ? (
+>(({ className, alt = '', src, ...props }, ref) => {
+  if (!src) return null;
+  return (
+    <div ref={ref} className="absolute inset-0 z-10">
       <Image
         src={src}
         alt={alt}
         fill
-        className={cn("aspect-square object-cover", className)}
+        sizes="80px"
+        className={cn("object-cover", className)}
         {...props}
       />
-    ) : null}
-  </div>
-))
+    </div>
+  );
+})
 AvatarImage.displayName = "AvatarImage"
 
 const AvatarFallback = React.forwardRef<
@@ -43,7 +45,7 @@ const AvatarFallback = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "flex h-full w-full items-center justify-center rounded-full bg-muted",
+      "absolute inset-0 flex items-center justify-center bg-muted",
       className
     )}
     {...props}
