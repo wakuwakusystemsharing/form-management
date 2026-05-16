@@ -139,9 +139,10 @@ function buildMenuLines(selectedMenus: Array<Record<string, any>> | undefined) {
   const menus = selectedMenus || [];
   return menus
     .map(menu => {
-      const name = menu.menu_name || '';
-      const submenu = menu.submenu_name ? ` > ${menu.submenu_name}` : '';
-      return `${name}${submenu}`.trim();
+      const parts = [menu.category_name, menu.menu_name, menu.submenu_name]
+        .map(v => (typeof v === 'string' ? v.trim() : ''))
+        .filter(Boolean);
+      return parts.join(' > ');
     })
     .filter(Boolean);
 }
@@ -154,6 +155,15 @@ function calculateDurationMinutes(
   const optionMinutes = (selectedOptions || []).reduce((sum, opt) => sum + (opt.duration || 0), 0);
   const total = menuMinutes + optionMinutes;
   return total > 0 ? total : 60;
+}
+
+function calculateTotalPrice(
+  selectedMenus: Array<Record<string, any>> | undefined,
+  selectedOptions: Array<Record<string, any>> | undefined
+) {
+  const menuYen = (selectedMenus || []).reduce((sum, menu) => sum + (menu.price || 0), 0);
+  const optionYen = (selectedOptions || []).reduce((sum, opt) => sum + (opt.price || 0), 0);
+  return menuYen + optionYen;
 }
 
 /**
@@ -233,7 +243,6 @@ export async function createReservationEvent(
     lineUserId?: string | null;
     lineDisplayName?: string | null;
     message?: string | null;
-    course?: string | null;
     visitCount?: string | null;
     preferredDate2?: string | null;
     preferredTime2?: string | null;
@@ -253,13 +262,14 @@ export async function createReservationEvent(
   }
 
   const durationMinutes = calculateDurationMinutes(params.selectedMenus, params.selectedOptions);
+  const totalPrice = calculateTotalPrice(params.selectedMenus, params.selectedOptions);
   const startDate = new Date(`${params.reservationDate}T${params.reservationTime}:00+09:00`);
   const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000);
 
   const menuLines = buildMenuLines(params.selectedMenus);
-  const menuText = menuLines.length > 0 ? menuLines.map(line => `・${line}`).join('\n') : '';
+  const menuText = menuLines.map(line => `・${line}`).join('\n');
 
-  // 希望日時テキスト（第二・第三希望がある場合は複数行）
+  // 希望日時セクション
   const dateTimeLines = [`≪第一希望≫ ${params.reservationDate} ${params.reservationTime}`];
   if (params.preferredDate2 && params.preferredTime2) {
     dateTimeLines.push(`≪第二希望≫ ${params.preferredDate2} ${params.preferredTime2}`);
@@ -268,17 +278,24 @@ export async function createReservationEvent(
     dateTimeLines.push(`≪第三希望≫ ${params.preferredDate3} ${params.preferredTime3}`);
   }
 
-  const descriptionParts = [
-    ...dateTimeLines,
-    `≪LINEの名前≫ ${params.lineDisplayName || ''}`,
-    `≪お名前≫ ${params.customerName}`,
-    `≪電話番号≫ ${params.customerPhone}`,
-    `≪コース≫ `,
-    params.course ? `・${params.course}` : '',
-    `≪メニュー≫ `,
-    menuText,
-    `≪ご来店回数≫ ${params.visitCount || ''}`,
-  ];
+  // セクションごとに組み立て、空のセクションはスキップ
+  const sections: string[] = [];
+  sections.push(dateTimeLines.join('\n'));
+
+  const customerLines = [`≪お名前≫ ${params.customerName}`];
+  if (params.lineDisplayName && params.lineDisplayName !== params.customerName) {
+    customerLines.push(`≪LINE名≫ ${params.lineDisplayName}`);
+  }
+  customerLines.push(`≪電話番号≫ ${params.customerPhone}`);
+  if (params.visitCount) {
+    customerLines.push(`≪ご来店回数≫ ${params.visitCount}`);
+  }
+  sections.push(customerLines.join('\n'));
+
+  if (menuText) {
+    sections.push(`≪メニュー≫\n${menuText}`);
+  }
+
   if (params.selectedOptions && params.selectedOptions.length > 0) {
     const optionLines = params.selectedOptions.map((opt: any) => {
       const name = opt.option_name || '';
@@ -286,23 +303,28 @@ export async function createReservationEvent(
       const durationText = (opt.duration || 0) > 0 ? ` (${opt.duration}分)` : '';
       return `・${name}${priceText}${durationText}`;
     }).join('\n');
-    descriptionParts.push('≪オプション≫', optionLines);
+    sections.push(`≪オプション≫\n${optionLines}`);
   }
-  if (params.gender) {
-    descriptionParts.push(`≪性別≫ ${params.gender}`);
+
+  const totalLines: string[] = [];
+  if (totalPrice > 0) totalLines.push(`≪合計金額≫ ¥${totalPrice.toLocaleString()}`);
+  if (durationMinutes > 0) totalLines.push(`≪合計時間≫ ${durationMinutes}分`);
+  if (totalLines.length > 0) sections.push(totalLines.join('\n'));
+
+  const extraLines: string[] = [];
+  if (params.gender) extraLines.push(`≪性別≫ ${params.gender}`);
+  if (params.coupon) extraLines.push(`≪クーポン≫ ${params.coupon}`);
+  extraLines.push(`≪メッセージ≫ ${params.message?.trim() || 'なし'}`);
+  sections.push(extraLines.join('\n'));
+
+  if (params.customFields) {
+    const customLines = Object.entries(params.customFields)
+      .filter(([, value]) => value && String(value).trim())
+      .map(([key, value]) => `≪${key}≫ ${value}`);
+    if (customLines.length > 0) sections.push(customLines.join('\n'));
   }
-  if (params.coupon) {
-    descriptionParts.push(`≪クーポン≫ ${params.coupon}`);
-  }
-  descriptionParts.push(`≪メッセージ≫ `, params.message || '');
-  if (params.customFields && Object.keys(params.customFields).length > 0) {
-    Object.entries(params.customFields).forEach(([key, value]) => {
-      if (value) {
-        descriptionParts.push(`≪${key}≫ ${value}`);
-      }
-    });
-  }
-  const description = descriptionParts.join('\n');
+
+  const description = sections.join('\n\n');
 
   const response = await calendar.events.insert({
     calendarId: params.calendarId,
