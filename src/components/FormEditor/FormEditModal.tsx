@@ -168,7 +168,11 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="store-admin-bg max-w-5xl w-full max-h-[90vh] p-0 flex flex-col sm:max-h-[90vh]">
+      <DialogContent
+        className="store-admin-bg max-w-5xl w-full max-h-[90vh] p-0 flex flex-col sm:max-h-[90vh]"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         {/* モーダルヘッダー */}
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <div className="flex items-center justify-between">

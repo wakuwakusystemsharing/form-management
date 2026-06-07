@@ -796,7 +796,7 @@ class BookingForm {
             selectedMenus.push({
                 menu_id: menu.id,
                 menu_name: menu.name || '',
-                category_name: category?.name || '',
+                category_name: (category?.display_name || category?.name || '').trim(),
                 price,
                 duration,
                 ...(submenu ? { submenu_id: submenu.id, submenu_name: submenu.name || '' } : {})
@@ -1643,14 +1643,19 @@ class BookingForm {
         if (!showPhoneField && !this.state.phone) {
             this.state.phone = '未記入';
         }
-        const allowCross = this.config.menu_structure?.allow_cross_category_selection || false;
-        const hasSelection = allowCross
-            ? (Object.values(this.state.selectedMenus || {}).flat().length > 0)
-            : (this.state.selectedMenu || this.state.selectedSubmenu);
-        if (!hasSelection) {
-            alert('メニューを選択してください');
-            resetSubmitState();
-            return;
+        const menuCats = this.config.menu_structure?.categories || [];
+        const flatMenus = this.config.menu_structure?.menus || [];
+        const totalMenuCount = flatMenus.length + menuCats.reduce((sum, c) => sum + ((c.menus || []).length), 0);
+        if (totalMenuCount > 0) {
+            const allowCross = this.config.menu_structure?.allow_cross_category_selection || false;
+            const hasSelection = allowCross
+                ? (Object.values(this.state.selectedMenus || {}).flat().length > 0)
+                : (this.state.selectedMenu || this.state.selectedSubmenu);
+            if (!hasSelection) {
+                alert('メニューを選択してください');
+                resetSubmitState();
+                return;
+            }
         }
         if (!this.state.selectedDate || !this.state.selectedTime) {
             alert('予約日時を選択してください');
