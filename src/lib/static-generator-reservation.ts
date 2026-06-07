@@ -336,7 +336,9 @@ class BookingForm {
                         const phoneEl = document.getElementById('customer-phone');
                         if (phoneEl) phoneEl.value = data.customerPhone;
                     }
-                    if (data.customerName && !this.state.name) {
+                    // localStorage に保存された名前は LIFF の displayName よりも優先する
+                    // （ユーザーが意図的に入力し直した名前を再表示時に復元するため）
+                    if (data.customerName) {
                         this.state.name = data.customerName;
                         const nameEl = document.getElementById('customer-name');
                         if (nameEl) nameEl.value = data.customerName;
