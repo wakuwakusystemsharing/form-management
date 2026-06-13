@@ -253,6 +253,12 @@ function formatDateTimeForDisplay(value) {
     if (date) return date[1] + '年' + date[2] + '月' + date[3] + '日';
     return value;
 }
+// ローカル時刻ベースで YYYY-MM-DD を生成（toISOString は UTC 変換で日付が前日にズレるため使わない）
+function formatLocalYmd(d) {
+    return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+}
 function shouldBlockAsHoliday(date) {
     if (!FORM_CONFIG.calendar_settings || !FORM_CONFIG.calendar_settings.holidays_as_closed) return false;
     const type = getEffectiveHolidayType(date);
@@ -1068,7 +1074,7 @@ class BookingForm {
             bodyHTML += \`<td style="text-align:center;padding:0.25rem;border:1px solid #9ca3af;font-size:0.75rem;background:#f9fafb;font-weight:500;">\${time}</td>\`;
             
             weekDates.forEach((date, dateIndex) => {
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = formatLocalYmd(date);
         const dayOfWeek = date.getDay();
         
         // 曜日名のマッピング（0=日曜日, 1=月曜日, ...）
@@ -1724,9 +1730,10 @@ class BookingForm {
             if (this.state.selectedDate3) customerInfo.preferred_date3 = this.state.selectedDate3;
             if (this.state.selectedTime3) customerInfo.preferred_time3 = this.state.selectedTime3;
             
-            // 日付をYYYY-MM-DD形式に変換
-            const dateObj = new Date(this.state.selectedDate);
-            const reservationDate = \`\${dateObj.getFullYear()}-\${String(dateObj.getMonth() + 1).padStart(2, '0')}-\${String(dateObj.getDate()).padStart(2, '0')}\`;
+            // selectedDate は既に YYYY-MM-DD（ローカル日付）。new Date() で再パースすると
+            // タイムゾーンによって日付がズレるため、文字列のまま使う。
+            const reservationDate = this.state.selectedDate;
+            const [selYear, selMonth, selDay] = this.state.selectedDate.split('-');
             
             // 流入経路を推定（Web予約フォームのみ）
             const sourceMedium = (function() {
@@ -1818,12 +1825,12 @@ class BookingForm {
                 return;
             }
             
-            // 日時を日本語形式に変換（LINEメッセージ用）
-            const formattedDate = \`\${dateObj.getFullYear()}年\${String(dateObj.getMonth() + 1).padStart(2, '0')}月\${String(dateObj.getDate()).padStart(2, '0')}日 \${this.state.selectedTime}\`;
+            // 日時を日本語形式に変換（LINEメッセージ用）。日付は文字列分割で組み立て TZ 非依存にする。
+            const formattedDate = \`\${selYear}年\${selMonth}月\${selDay}日 \${this.state.selectedTime}\`;
             const formatDateStr = (dateStr, timeStr) => {
                 if (!dateStr || !timeStr) return null;
-                const d = new Date(dateStr);
-                return \`\${d.getFullYear()}年\${String(d.getMonth() + 1).padStart(2, '0')}月\${String(d.getDate()).padStart(2, '0')}日 \${timeStr}\`;
+                const [y, m, d] = dateStr.split('-');
+                return \`\${y}年\${m}月\${d}日 \${timeStr}\`;
             };
             const formattedDate2 = formatDateStr(this.state.selectedDate2, this.state.selectedTime2);
             const formattedDate3 = formatDateStr(this.state.selectedDate3, this.state.selectedTime3);
@@ -2054,7 +2061,7 @@ class BookingForm {
             }
 
             const option = document.createElement('option');
-            option.value = date.toISOString().split('T')[0];
+            option.value = formatLocalYmd(date);
             option.textContent = date.toLocaleDateString('ja-JP', {
                 month: 'numeric',
                 day: 'numeric',
