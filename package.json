@@ -13,7 +13,8 @@
 		"seed:local": "tsx scripts/seed-dummy-stores.ts local",
 		"seed:staging": "tsx scripts/seed-dummy-stores.ts staging",
 		"seed:staging-demo": "NEXT_PUBLIC_APP_ENV=staging tsx scripts/seed-staging-demo.ts",
-		"backfill:customers": "NEXT_PUBLIC_APP_ENV=staging tsx scripts/backfill-customers-from-reservations.ts"
+		"backfill:customers": "NEXT_PUBLIC_APP_ENV=staging tsx scripts/backfill-customers-from-reservations.ts",
+		"redeploy:forms": "tsx scripts/redeploy-all-reservation-forms.ts"
 	},
 	"dependencies": {
 		"@headlessui/react": "^2.2.8",
