@@ -1203,9 +1203,6 @@ class BookingForm {
             } else if (businessEventTimes.length > 0) {
                 // 営業日で、指定されている時間以外の時間は×
                 isAvailable = false;
-            } else if (slotStart.getDay() === 0 && !isBusinessDay && businessEventTimes.length === 0) {
-                // 日曜日で、営業日ではない場合
-                isAvailable = false;
             } else if (isBusinessDay && count < maxConcurrent) {
                 // 営業日でかつ閾値未満
                 isAvailable = true;
