@@ -1069,6 +1069,8 @@ class BookingForm {
         
         // テーブルボディ生成
         let bodyHTML = '<tbody>';
+        // 再描画で選択中の日時が予約不可になった場合に選択をリセットするためのフラグ
+        let selectionWasReset = false;
         timeSlots.forEach((time, timeIndex) => {
             bodyHTML += '<tr>';
             bodyHTML += \`<td style="text-align:center;padding:0.25rem;border:1px solid #9ca3af;font-size:0.75rem;background:#f9fafb;font-weight:500;">\${time}</td>\`;
@@ -1127,9 +1129,15 @@ class BookingForm {
             const visitOption = this.config.visit_count_selection.options?.find(opt => opt.value === this.state.visitCount);
             if (visitOption?.duration) visitDuration = visitOption.duration;
         }
+        const totalDuration = menuDuration + optionsDuration + visitDuration;
         const slotEnd = new Date(slotStart);
-        slotEnd.setMinutes(slotStart.getMinutes() + menuDuration + optionsDuration + visitDuration);
-        
+        slotEnd.setMinutes(slotStart.getMinutes() + totalDuration);
+        // 重なり判定用: メニュー未選択(=幅0)のときはスロット間隔ぶんの幅を持たせる
+        // （幅0だとイベント開始時刻ちょうどのスロットが取りこぼされるため）
+        const overlapEnd = totalDuration > 0
+            ? slotEnd
+            : new Date(slotStart.getTime() + timeInterval * 60000);
+
         // 終了時間が翌日になる場合は不可
         let isNextDay = slotEnd.getDate() !== slotStart.getDate();
         
@@ -1176,14 +1184,14 @@ class BookingForm {
             
             // 営業日のイベント時間内かチェック
             const isBusinessEventTime = businessEventTimes.some(event => {
-                return slotStart < event.end && event.start < slotEnd;
+                return slotStart < event.end && event.start < overlapEnd;
             });
             
             // 予約済みイベントの数をカウント（営業日イベントは除外）
             const count = this.availabilityData.reduce((acc, slot) => {
                 const eventStart = new Date(slot.startTime);
                 const eventEnd = new Date(slot.endTime);
-                if (eventStart < slotEnd && slotStart < eventEnd && slot.title !== "営業日" && slot.summary !== "営業日") {
+                if (eventStart < overlapEnd && slotStart < eventEnd && slot.title !== "営業日" && slot.summary !== "営業日") {
                     return acc + 1;
                 }
                 return acc;
@@ -1223,15 +1231,22 @@ class BookingForm {
         }
 
         const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
-                const bgColor = isSelected ? '#10b981' : (isAvailable && !isPast ? '#fff' : '#f3f4f6');
-                const textColor = isSelected ? '#fff' : (isAvailable && !isPast ? '#111827' : '#9ca3af');
+                // 選択中の日時がメニュー選択等で予約不可になった場合は選択をリセット
+                if (isSelected && (!isAvailable || isPast)) {
+                    this.state.selectedDate = '';
+                    this.state.selectedTime = '';
+                    selectionWasReset = true;
+                }
+                const showSelected = isSelected && isAvailable && !isPast;
+                const bgColor = showSelected ? '#10b981' : (isAvailable && !isPast ? '#fff' : '#f3f4f6');
+                const textColor = showSelected ? '#fff' : (isAvailable && !isPast ? '#111827' : '#9ca3af');
                 const cursor = isAvailable && !isPast ? 'pointer' : 'not-allowed';
                 const hoverStyle = isAvailable && !isPast ? 'onmouseover="this.style.backgroundColor=&quot;#e5e7eb&quot;" onmouseout="if(!this.classList.contains(&quot;selected&quot;)){this.style.backgroundColor=&quot;#fff&quot;}"' : '';
-                
-                bodyHTML += \`<td 
-                    data-date="\${dateStr}" 
+
+                bodyHTML += \`<td
+                    data-date="\${dateStr}"
                     data-time="\${time}"
-                    class="calendar-cell \${isSelected ? 'selected' : ''}"
+                    class="calendar-cell \${showSelected ? 'selected' : ''}"
                     style="text-align:center;padding:0.25rem;border:1px solid #9ca3af;font-size:0.75rem;cursor:\${cursor};background:\${bgColor};color:\${textColor};"
                     \${hoverStyle}
                     onclick="window.bookingForm.handleDateTimeSelect('\${dateStr}', '\${time}', \${isAvailable && !isPast})"
@@ -1241,8 +1256,13 @@ class BookingForm {
             bodyHTML += '</tr>';
         });
         bodyHTML += '</tbody>';
-        
+
         table.innerHTML = headerHTML + bodyHTML;
+
+        // 選択中の日時が予約不可になっていた場合はサマリーを更新（無音リセット）
+        if (selectionWasReset) {
+            this.updateSummary();
+        }
     }
     
     // 日時選択ハンドラー
