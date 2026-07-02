@@ -116,7 +116,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
   const [expandedSections, setExpandedSections] = useState({
     businessHours: true,
     bookingRules: true,
-    dateTimeMode: true
+    dateTimeMode: true,
+    reservationSummary: true
   });
 
   const dayLabels = {
@@ -347,7 +348,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     onUpdate(updatedForm);
   };
 
-  const toggleSection = (section: 'businessHours' | 'bookingRules' | 'dateTimeMode') => {
+  const toggleSection = (section: 'businessHours' | 'bookingRules' | 'dateTimeMode' | 'reservationSummary') => {
     setExpandedSections(prev => ({
       ...prev,
       [section]: !prev[section]
@@ -1031,6 +1032,126 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   • 店舗側通知メール: {form.config.calendar_settings.notification_email}
                 </p>
               )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ご予約内容 */}
+      <div className={themeClasses.card}>
+        <button
+          onClick={() => toggleSection('reservationSummary')}
+          className={`w-full flex items-center justify-between p-4 text-left transition-colors ${
+            theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'
+          }`}
+        >
+          <div className="flex items-center space-x-2">
+            <svg className={`w-5 h-5 ${themeClasses.text.primary}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+            <h3 className={`text-lg font-medium ${themeClasses.text.primary}`}>ご予約内容</h3>
+          </div>
+          <svg
+            className={`w-5 h-5 ${themeClasses.text.secondary} transform transition-transform ${expandedSections.reservationSummary ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {expandedSections.reservationSummary && (
+          <div className={`p-4 border-t ${themeClasses.divider} space-y-4`}>
+            <p className={`text-xs ${themeClasses.text.secondary}`}>
+              予約フォームの「ご予約内容」欄の表示に関する設定です。
+            </p>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  合計金額を表示
+                </label>
+                <InfoTooltip
+                  theme={theme}
+                  text="ONにすると「ご予約内容」欄に選択メニュー・オプションの合計金額を表示します"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const newValue = !(form.config?.reservation_summary?.show_total_price === true);
+                  onUpdate({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      reservation_summary: {
+                        ...form.config?.reservation_summary,
+                        show_total_price: newValue
+                      }
+                    }
+                  });
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                  form.config?.reservation_summary?.show_total_price === true
+                    ? themeClasses.toggle.enabled
+                    : themeClasses.toggle.disabled
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    form.config?.reservation_summary?.show_total_price === true ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  合計時間を表示
+                </label>
+                <InfoTooltip
+                  theme={theme}
+                  text="ONにすると「ご予約内容」欄に選択メニュー・オプションの合計所要時間を表示します"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const newValue = !(form.config?.reservation_summary?.show_total_duration === true);
+                  onUpdate({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      reservation_summary: {
+                        ...form.config?.reservation_summary,
+                        show_total_duration: newValue
+                      }
+                    }
+                  });
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                  form.config?.reservation_summary?.show_total_duration === true
+                    ? themeClasses.toggle.enabled
+                    : themeClasses.toggle.disabled
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    form.config?.reservation_summary?.show_total_duration === true ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className={`${themeClasses.highlight} rounded-lg p-4`}>
+              <h4 className={`text-sm font-medium mb-2 ${theme === 'light' ? 'text-[rgb(244,144,49)]' : 'text-cyan-300'}`}>現在の設定:</h4>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                • 合計金額: {form.config?.reservation_summary?.show_total_price === true ? '表示' : '非表示'}
+              </p>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                • 合計時間: {form.config?.reservation_summary?.show_total_duration === true ? '表示' : '非表示'}
+              </p>
             </div>
           </div>
         )}

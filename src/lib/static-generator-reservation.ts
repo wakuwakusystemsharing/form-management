@@ -1568,10 +1568,12 @@ class BookingForm {
         if (hasMenuSelection) {
             const payload = this.buildSelectionPayload();
             items.push(\`<div class="summary-item" style="align-items:flex-start;"><div><strong>メニュー:</strong><div style="margin-top:0.25rem;">\${payload.summaryHtml}</div></div><button class="summary-edit-button" data-field="menu-field">修正</button></div>\`);
-            if (payload.totalPrice > 0 || payload.totalDuration > 0) {
+            const showTotalPrice = this.config.reservation_summary?.show_total_price === true;
+            const showTotalDuration = this.config.reservation_summary?.show_total_duration === true;
+            if ((showTotalPrice && payload.totalPrice > 0) || (showTotalDuration && payload.totalDuration > 0)) {
                 let totalText = '';
-                if (payload.totalPrice > 0) totalText += \`<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #e5e7eb;"><strong style="font-size:1rem;">合計金額: ¥\${payload.totalPrice.toLocaleString()}</strong></div>\`;
-                if (payload.totalDuration > 0) totalText += \`<div style="margin-top:0.25rem;"><strong style="font-size:1rem;">合計時間: \${payload.totalDuration}分</strong></div>\`;
+                if (showTotalPrice && payload.totalPrice > 0) totalText += \`<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #e5e7eb;"><strong style="font-size:1rem;">合計金額: ¥\${payload.totalPrice.toLocaleString()}</strong></div>\`;
+                if (showTotalDuration && payload.totalDuration > 0) totalText += \`<div style="margin-top:0.25rem;"><strong style="font-size:1rem;">合計時間: \${payload.totalDuration}分</strong></div>\`;
                 if (totalText) items.push(\`<div class="summary-item" style="align-items:flex-start;"><div>\${totalText}</div></div>\`);
             }
         }

@@ -180,6 +180,12 @@ export interface FormConfig {
     notification_email?: string;
   };
 
+  // フォーム上の「ご予約内容」（サマリー）表示設定
+  reservation_summary?: {
+    show_total_price?: boolean;    // 合計金額を表示（未設定 = false: 非表示）
+    show_total_duration?: boolean; // 合計時間を表示（未設定 = false: 非表示）
+  };
+
   ui_settings: {
     theme_color: string;
     button_style: 'rounded' | 'square';
