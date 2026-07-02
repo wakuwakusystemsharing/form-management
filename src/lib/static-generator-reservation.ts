@@ -1017,6 +1017,9 @@ class BookingForm {
     const max = new Date(today);
     max.setDate(today.getDate() + days);
     max.setHours(23,59,59,999);
+    // 予約受付開始日（0 = 当日から）より前の日付は予約不可
+    const minDate = new Date(today);
+    minDate.setDate(today.getDate() + this.getMinAdvanceDays());
 
         const weekDates = this.getWeekDates(this.state.currentWeekStart);
 
@@ -1108,8 +1111,8 @@ class BookingForm {
             isWithinBusinessHours = timeMinutes >= openMinutes && timeMinutes < closeMinutes;
         }
         
-        // 予約可能期間の判定
-        const withinWindow = date.getTime() <= max.getTime();
+        // 予約可能期間の判定（予約受付開始日〜事前予約可能日数の範囲内）
+        const withinWindow = date.getTime() <= max.getTime() && date.getTime() >= minDate.getTime();
         
         // 現在の日時を取得
         const now = new Date();
@@ -2025,6 +2028,12 @@ class BookingForm {
         }
     }
     
+    // 予約受付開始日: 何日後から予約可能か（0 = 当日から）
+    getMinAdvanceDays() {
+        const v = this.config?.calendar_settings?.min_advance_days;
+        return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.floor(v) : 0;
+    }
+
     // 第三希望日時モードの必須選択（1〜3）。未設定 = 全て必須。第一希望は常に必須
     getRequiredDateChoices() {
         const raw = this.config.calendar_settings?.multiple_dates_settings?.required_choices;
@@ -2088,7 +2097,8 @@ class BookingForm {
         defaultOption.textContent = '日付を選択';
         select.appendChild(defaultOption);
 
-        for (let i = 0; i < settings.date_range_days; i++) {
+        // 予約受付開始日（0 = 当日から）より前の日付は選択肢に含めない
+        for (let i = this.getMinAdvanceDays(); i < settings.date_range_days; i++) {
             const date = new Date(today);
             date.setDate(today.getDate() + i);
 
