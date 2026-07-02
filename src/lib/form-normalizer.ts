@@ -109,6 +109,10 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       holidays_as_closed: false,
       excluded_holiday_types: []
     },
+    reservation_summary: {
+      show_total_price: false,
+      show_total_duration: false
+    },
     ui_settings: {
       theme_color: '#3B82F6',
       button_style: 'rounded' as const,
@@ -255,6 +259,14 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.excluded_holiday_types;
           return Array.isArray(v) ? v.filter((s) => typeof s === 'string') : [];
         })()
+      },
+      reservation_summary: {
+        show_total_price: existingConfig?.reservation_summary?.show_total_price
+          ?? (typedConfig as Form['config'])?.reservation_summary?.show_total_price
+          ?? false,
+        show_total_duration: existingConfig?.reservation_summary?.show_total_duration
+          ?? (typedConfig as Form['config'])?.reservation_summary?.show_total_duration
+          ?? false
       },
       ui_settings: {
         theme_color: (existingConfig?.ui_settings?.theme_color || (typedConfig?.basic_info as Form['config']['basic_info'])?.theme_color || (typedBasicInfo?.theme_color as string) || (typedConfig?.ui_settings as Form['config']['ui_settings'])?.theme_color || (typedUiSettings?.theme_color as string) || '#3B82F6') as string,
