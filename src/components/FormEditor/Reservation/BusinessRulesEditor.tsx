@@ -99,6 +99,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     start_time: string;
     end_time: string;
     weekday_hours?: { [key: string]: { open: string; close: string; closed: boolean } };
+    required_choices?: number[];
   }>(
     (() => {
       const existing = form.config?.calendar_settings?.multiple_dates_settings;
@@ -109,6 +110,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         start_time: existing?.start_time || '09:00',
         end_time: existing?.end_time || '18:00',
         weekday_hours: existing?.weekday_hours || defaultWeekdayHours,
+        required_choices: existing?.required_choices || [1, 2, 3],
       };
     })()
   );
@@ -311,6 +313,15 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
       }
     };
     onUpdate(updatedForm);
+  };
+
+  const toggleRequiredChoice = (idx: number) => {
+    if (idx === 1) return; // 第一希望は常に必須
+    const current = multipleDatesSettings.required_choices || [1, 2, 3];
+    const next = current.includes(idx)
+      ? current.filter((n) => n !== idx)
+      : [...current, idx].sort();
+    handleMultipleDatesSettingsChange('required_choices', next);
   };
 
   const handleWeekdayHoursChange = (dayIndex: string, field: 'open' | 'close' | 'closed', value: string | boolean) => {
@@ -579,6 +590,46 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                       className={themeClasses.input}
                     />
                     <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>本日から何日後まで選択可能にするか</p>
+                  </div>
+
+                  {/* 必須選択 */}
+                  <div className="md:col-span-2">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                        必須選択
+                      </label>
+                      <InfoTooltip
+                        theme={theme}
+                        text={'チェックした希望日時を選択しないと予約送信できません。\nチェックを外した希望日時は任意入力になります。\n\n※ 第一希望は予約日時として使用されるため常に必須です。'}
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-4">
+                      {[1, 2, 3].map((idx) => {
+                        const labels: { [key: number]: string } = { 1: '第一希望', 2: '第二希望', 3: '第三希望' };
+                        const checked = (multipleDatesSettings.required_choices || [1, 2, 3]).includes(idx);
+                        return (
+                          <label
+                            key={idx}
+                            className={`flex items-center space-x-2 ${idx === 1 ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={idx === 1}
+                              onChange={() => toggleRequiredChoice(idx)}
+                              className={`rounded ${accentClasses} ${
+                                theme === 'light'
+                                  ? 'border-gray-300 bg-gray-100'
+                                  : 'border-gray-600 bg-gray-700'
+                              }`}
+                            />
+                            <span className={`text-sm ${themeClasses.text.secondary}`}>
+                              {labels[idx]}{idx === 1 ? '（常に必須）' : ''}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 

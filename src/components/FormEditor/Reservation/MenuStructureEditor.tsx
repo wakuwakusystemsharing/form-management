@@ -672,6 +672,18 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
     }
   };
 
+  // メニューオプションの並び替え（フォーム上の表示順に反映）
+  const handleMoveOption = (optionId: string, direction: 'up' | 'down') => {
+    setOptions(prev => {
+      const next = [...prev];
+      const index = next.findIndex(opt => opt.id === optionId);
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (index < 0 || target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
   if (!isOpen) return null;
 
   const themeClasses = getThemeClasses(theme);
@@ -988,7 +1000,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {options.map((option) => (
+                    {options.map((option, optionIndex) => (
                       <div key={option.id} className={`flex items-center justify-between p-3 rounded-md ${themeClasses.card}`}>
                         <div className="flex-1">
                           <div className="flex items-center space-x-2">
@@ -1004,6 +1016,26 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                           </p>
                         </div>
                         <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleMoveOption(option.id, 'up')}
+                            disabled={optionIndex === 0}
+                            title="上へ移動"
+                            className={`p-1 rounded ${theme === 'light' ? 'text-gray-500 hover:text-gray-700 hover:bg-gray-100' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'} disabled:opacity-30 disabled:cursor-not-allowed`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleMoveOption(option.id, 'down')}
+                            disabled={optionIndex === options.length - 1}
+                            title="下へ移動"
+                            className={`p-1 rounded ${theme === 'light' ? 'text-gray-500 hover:text-gray-700 hover:bg-gray-100' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'} disabled:opacity-30 disabled:cursor-not-allowed`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
                           <button
                             onClick={() => handleEditOption(option)}
                             className={`p-1 rounded ${themeClasses.button.edit}`}
@@ -1218,6 +1250,32 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     if (window.confirm('このメニューを削除しますか？')) {
       updateCategories(categories.map(c => c.id === categoryId ? { ...c, menus: c.menus.filter(m => m.id !== menuId) } : c));
     }
+  };
+
+  // メニューの並び替え（フォーム上の表示順に反映）
+  const handleMoveMenuItem = (categoryId: string, menuId: string, direction: 'up' | 'down') => {
+    updateCategories(categories.map(c => {
+      if (c.id !== categoryId) return c;
+      const menus = [...c.menus];
+      const index = menus.findIndex(m => m.id === menuId);
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (index < 0 || target < 0 || target >= menus.length) return c;
+      [menus[index], menus[target]] = [menus[target], menus[index]];
+      return { ...c, menus };
+    }));
+  };
+
+  // カテゴリー共通オプションの並び替え（フォーム上の表示順に反映）
+  const handleMoveCatOpt = (categoryId: string, optId: string, direction: 'up' | 'down') => {
+    updateCategories(categories.map(c => {
+      if (c.id !== categoryId) return c;
+      const options = [...(c.options || [])];
+      const index = options.findIndex(o => o.id === optId);
+      const target = direction === 'up' ? index - 1 : index + 1;
+      if (index < 0 || target < 0 || target >= options.length) return c;
+      [options[index], options[target]] = [options[target], options[index]];
+      return { ...c, options };
+    }));
   };
 
   // カテゴリーオプションCRUD
@@ -2089,7 +2147,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                       <p className={`text-xs text-center py-3 rounded ${themeClasses.emptyState}`}>まだメニューがありません</p>
                     ) : (
                       <div className="space-y-2">
-                        {category.menus.map(menu => (
+                        {category.menus.map((menu, menuIndex) => (
                           <div key={menu.id} className={`flex items-center justify-between p-3 rounded-md ${themeClasses.highlight}`}>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center space-x-2 flex-wrap gap-1">
@@ -2104,6 +2162,22 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                               </p>
                             </div>
                             <div className="flex space-x-1 ml-2">
+                              <button
+                                onClick={() => handleMoveMenuItem(category.id, menu.id, 'up')}
+                                disabled={menuIndex === 0}
+                                title="上へ移動"
+                                className={`p-1.5 rounded ${theme === 'light' ? 'text-gray-500 hover:text-gray-700 hover:bg-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'} disabled:opacity-30 disabled:cursor-not-allowed`}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                              </button>
+                              <button
+                                onClick={() => handleMoveMenuItem(category.id, menu.id, 'down')}
+                                disabled={menuIndex === category.menus.length - 1}
+                                title="下へ移動"
+                                className={`p-1.5 rounded ${theme === 'light' ? 'text-gray-500 hover:text-gray-700 hover:bg-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'} disabled:opacity-30 disabled:cursor-not-allowed`}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                              </button>
                               <button onClick={() => handleEditMenuItem(category.id, menu)} className={`p-1.5 rounded ${theme === 'light' ? 'text-[rgb(244,144,49)] hover:text-[rgb(220,125,35)] hover:bg-white' : 'text-cyan-400 hover:text-cyan-300 hover:bg-gray-700'}`}>
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                               </button>
@@ -2157,7 +2231,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                       <p className={`text-xs text-center py-3 rounded ${themeClasses.emptyState}`}>カテゴリー共通オプションなし</p>
                     ) : (
                       <div className="space-y-2">
-                        {(category.options || []).map(opt => (
+                        {(category.options || []).map((opt, optIndex) => (
                           <div key={opt.id} className={`flex items-center justify-between p-2 rounded-md ${themeClasses.highlight}`}>
                             <div>
                               <span className={`text-sm ${themeClasses.text.primary}`}>{opt.name}</span>
@@ -2166,6 +2240,22 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                               </p>
                             </div>
                             <div className="flex space-x-1">
+                              <button
+                                onClick={() => handleMoveCatOpt(category.id, opt.id, 'up')}
+                                disabled={optIndex === 0}
+                                title="上へ移動"
+                                className={`p-1.5 rounded ${theme === 'light' ? 'text-gray-500 hover:text-gray-700 hover:bg-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'} disabled:opacity-30 disabled:cursor-not-allowed`}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                              </button>
+                              <button
+                                onClick={() => handleMoveCatOpt(category.id, opt.id, 'down')}
+                                disabled={optIndex === (category.options || []).length - 1}
+                                title="下へ移動"
+                                className={`p-1.5 rounded ${theme === 'light' ? 'text-gray-500 hover:text-gray-700 hover:bg-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'} disabled:opacity-30 disabled:cursor-not-allowed`}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                              </button>
                               <button onClick={() => handleEditCatOpt(category.id, opt)} className={`p-1.5 rounded ${theme === 'light' ? 'text-[rgb(244,144,49)] hover:text-[rgb(220,125,35)] hover:bg-white' : 'text-cyan-400 hover:text-cyan-300 hover:bg-gray-700'}`}>
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                               </button>
