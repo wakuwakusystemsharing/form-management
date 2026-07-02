@@ -217,6 +217,18 @@ export default function SurveyQuestionEditor({ questions, onChange }: SurveyQues
                         <Plus className="mr-2 h-4 w-4" />
                         選択肢を追加
                       </Button>
+                      {(q.type === 'radio' || q.type === 'checkbox') && (
+                        <div className="flex items-center space-x-2 pt-2">
+                          <Checkbox
+                            id={`allow-other-${index}`}
+                            checked={q.allow_other || false}
+                            onCheckedChange={(checked) => updateQuestion(index, { allow_other: checked as boolean })}
+                          />
+                          <Label htmlFor={`allow-other-${index}`} className="cursor-pointer">
+                            「その他」ボタンを追加（選択時に理由入力欄を表示）
+                          </Label>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}
