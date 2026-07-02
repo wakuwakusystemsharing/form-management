@@ -1,6 +1,6 @@
 # 予約フォーム管理システム
 
-Next.js 16 (App Router) で構築された LINE LIFF / Web 両対応の予約・アンケートフォーム管理システム。マルチテナント運用に対応し、フォームは静的 HTML として生成 → Supabase Storage 経由で配信されます。
+Next.js 16 (App Router) で構築された LINE LIFF / Web 両対応の予約・アンケートフォーム管理システム。マルチテナント運用に対応し、フォームは静的 HTML として生成 → Supabase Storage 経由で配信されます
 
 ## 🌟 主な機能
 
