@@ -15,6 +15,7 @@ export interface SurveyQuestion {
   required: boolean;
   options?: SurveyQuestionOption[]; // For radio/checkbox
   placeholder?: string;
+  allow_other?: boolean; // radio/checkbox: 選択肢の最後に「その他」ボタン + 理由入力欄を表示
 }
 
 export interface SurveyConfig {
