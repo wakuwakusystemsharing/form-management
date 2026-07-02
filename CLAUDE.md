@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## プロジェクト概要
 
-Next.js 16 (App Router) で構築された LINE LIFF ベースの予約フォーム管理システム。マスター管理者がテナント（組織）を管理し、テナント内のシステム管理者が店舗を作成・管理し、店舗管理者がフォーム設定を行い、顧客が LINE 経由で予約を行います。フォームは静的 HTML として生成され、Supabase Storage にデプロイされます。
+Next.js 16 (App Router) で構築された LINE LIFF ベースの予約フォーム管理システム。マスター管理者がテナント（組織）を管理し、テナント内のシステム管理者が店舗を作成・管理し、店舗管理者がフォーム設定を行い、顧客が LINE 経由で予約を行います。フォームは静的 HTML として生成され、Supabase Storage にデプロイされます。。
 
 ## 必須コマンド
 
