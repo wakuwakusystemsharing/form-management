@@ -176,6 +176,8 @@ export interface FormConfig {
     show_customer_phone?: boolean;
     // 「メールアドレス」フィールドの表示（Web 予約フォーム向け、デフォルト false）。true で確認用 2 欄 + 一致検証 + localStorage 保存
     show_customer_email?: boolean;
+    // 希望日時エリアをメニュー選択まで非表示にする（未設定 = true）。false の場合: メニュー選択に関わらず常に表示
+    hide_datetime_until_menu_selected?: boolean;
     // 店舗側通知メールの宛先（空 / 未設定時は store.owner_email にフォールバック）
     notification_email?: string;
   };
