@@ -323,11 +323,9 @@ class BookingForm {
                 this.state.selectedTime = '';
             }
 
-            // 日時欄はメニュー選択を待たずデフォルトで表示。
-            // カレンダーモードは初期描画のために空き状況を取得 → renderCalendar。
-            if (bookingMode === 'calendar') {
-                setTimeout(() => this.toggleCalendarVisibility(), 0);
-            }
+            // 日時欄の初期表示制御（hide_datetime_until_menu_selected 対応）。
+            // カレンダーモードは表示時に空き状況を取得 → renderCalendar。
+            setTimeout(() => this.toggleCalendarVisibility(), 0);
 
             await this.initializeLIFF();
 
@@ -2181,13 +2179,30 @@ class BookingForm {
     
     toggleCalendarVisibility() {
         const bookingMode = this.config.calendar_settings?.booking_mode || 'calendar';
-        // 日時欄は常時表示（メニュー選択を待たない）。
-        // この関数は (1) 初回ロード時、(2) メニュー選択時のカレンダー再描画、両方から呼ばれる。
+        // この関数は (1) 初回ロード時、(2) メニュー/サブメニュー選択時、(3) 前回メニュー復元時に呼ばれる。
+        // hide_datetime_until_menu_selected が ON（未設定含む）の場合、メニュー選択まで希望日時エリアを非表示にする。
+        const hideUntilMenu = this.config.calendar_settings?.hide_datetime_until_menu_selected !== false;
+        const allowCross = this.config.menu_structure?.allow_cross_category_selection || false;
+        const hasMenuSelection = allowCross
+            ? (this.state.selectedMenus && Object.values(this.state.selectedMenus).flat().length > 0)
+            : !!this.state.selectedMenu;
+        const show = !hideUntilMenu || hasMenuSelection;
+
+        const fieldIds = bookingMode === 'multiple_dates'
+            ? ['datetime-field-1', 'datetime-field-2', 'datetime-field-3']
+            : ['datetime-field'];
+        fieldIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = show ? '' : 'none';
+        });
 
         if (bookingMode === 'multiple_dates') {
-            // 第三希望日時モード: 何もする必要なし（フィールドは初期から visible、選択肢は initializeMultipleDates で生成済み）
+            // 第三希望日時モード: 選択肢は initializeMultipleDates で生成済み。表示制御のみ。
             return;
         }
+
+        // 非表示中はカレンダーの再描画をスキップ（表示されるタイミングで再度呼ばれる）
+        if (!show) return;
 
         // カレンダーモード: 空き状況を再取得してカレンダーを再描画
         this.fetchAvailability(this.state.currentWeekStart).then(() => {
@@ -2424,24 +2439,26 @@ if (document.readyState === 'loading') {
 
   private renderDateTimeFields(config: FormConfig): string {
     const bookingMode = config.calendar_settings?.booking_mode || 'calendar';
-    
+    // ON（未設定含む）の場合はメニュー選択まで非表示のため、初期HTMLも非表示で出力
+    const initiallyHidden = config.calendar_settings?.hide_datetime_until_menu_selected !== false;
+
     if (bookingMode === 'multiple_dates') {
-      return this.renderMultipleDatesField();
+      return this.renderMultipleDatesField(initiallyHidden);
     } else {
-      return this.renderDateTimeField();
+      return this.renderDateTimeField(initiallyHidden);
     }
   }
-  
-  private renderDateTimeField(): string {
-    return `${this.renderCalendarField()}`;
+
+  private renderDateTimeField(initiallyHidden: boolean): string {
+    return `${this.renderCalendarField(initiallyHidden)}`;
   }
-  
-  private renderCalendarField(): string {
+
+  private renderCalendarField(initiallyHidden: boolean): string {
     // 現在は常にカレンダーモードで生成（プレビューと同じ）
     // 静的HTML生成時はプレビューと完全一致させる
     return `
-            <!-- 日時選択（常時表示） -->
-            <div class="field" id="datetime-field">
+            <!-- 日時選択（hide_datetime_until_menu_selected ON 時はメニュー選択まで非表示） -->
+            <div class="field" id="datetime-field"${initiallyHidden ? ' style="display:none;"' : ''}>
                 <label class="field-label">希望日時 <span class="required">*</span></label>
                 
                 <div class="calendar-container">
@@ -2484,10 +2501,11 @@ if (document.readyState === 'loading') {
             </div>`;
   }
   
-  private renderMultipleDatesField(): string {
+  private renderMultipleDatesField(initiallyHidden: boolean): string {
+    const hiddenStyle = initiallyHidden ? ' style="display:none;"' : '';
     return `
             <!-- 第一希望日時 -->
-            <div class="field" id="datetime-field-1">
+            <div class="field" id="datetime-field-1"${hiddenStyle}>
                 <label class="field-label">第一希望日時 <span class="required">*</span></label>
                 <div class="datetime-wrapper" style="text-align: center;">
                     <span class="placeholder" id="placeholder1" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
@@ -2500,7 +2518,7 @@ if (document.readyState === 'loading') {
             </div>
 
             <!-- 第二希望日時 -->
-            <div class="field" id="datetime-field-2">
+            <div class="field" id="datetime-field-2"${hiddenStyle}>
                 <label class="field-label">第二希望日時 <span class="required">*</span></label>
                 <div class="datetime-wrapper" style="text-align: center;">
                     <span class="placeholder" id="placeholder2" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
@@ -2513,7 +2531,7 @@ if (document.readyState === 'loading') {
             </div>
 
             <!-- 第三希望日時 -->
-            <div class="field" id="datetime-field-3">
+            <div class="field" id="datetime-field-3"${hiddenStyle}>
                 <label class="field-label">第三希望日時 <span class="required">*</span></label>
                 <div class="datetime-wrapper" style="text-align: center;">
                     <span class="placeholder" id="placeholder3" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>

@@ -849,6 +849,46 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  希望日時をデフォルトで非表示
+                </label>
+                <InfoTooltip
+                  theme={theme}
+                  text={'ONにすると、メニューが選択されるまで希望日時エリアを非表示にします。メニューを選択すると表示され、選択を解除すると再度非表示になります。\n\nOFFにすると、メニューの選択にかかわらず希望日時エリアが常に表示されます。'}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const current = form.config?.calendar_settings?.hide_datetime_until_menu_selected !== false;
+                  const newValue = !current;
+                  onUpdate({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      calendar_settings: {
+                        ...form.config?.calendar_settings,
+                        hide_datetime_until_menu_selected: newValue
+                      }
+                    }
+                  });
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                  form.config?.calendar_settings?.hide_datetime_until_menu_selected !== false
+                    ? themeClasses.toggle.enabled
+                    : themeClasses.toggle.disabled
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    form.config?.calendar_settings?.hide_datetime_until_menu_selected !== false ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
                   「お名前」フィールドを表示
                 </label>
                 <InfoTooltip
@@ -1017,6 +1057,9 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • 同一ユーザー同時予約上限: {maxConcurrentReservationsPerUser === 0 ? '制限なし' : `${maxConcurrentReservationsPerUser}件まで`}
+              </p>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                • 希望日時エリア: {form.config?.calendar_settings?.hide_datetime_until_menu_selected !== false ? 'メニュー選択後に表示' : '常に表示'}
               </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • お名前フィールド: {form.config?.calendar_settings?.show_customer_name !== false ? '表示' : '非表示'}
