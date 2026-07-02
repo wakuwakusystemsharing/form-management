@@ -140,6 +140,8 @@ export interface FormConfig {
   
   calendar_settings: {
     business_hours: BusinessHours;
+    // 予約受付開始日: 何日後から予約可能か（0 = 当日から、1 = 翌日から。未設定 = 0）。カレンダー/第三希望日時の両モードに適用
+    min_advance_days?: number;
     advance_booking_days: number;
     google_calendar_url?: string;
     // 日時選択モード

@@ -57,6 +57,10 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     form.config?.calendar_settings?.advance_booking_days || 30
   );
 
+  const [minAdvanceDays, setMinAdvanceDays] = useState(
+    form.config?.calendar_settings?.min_advance_days ?? 0
+  );
+
   const [maxConcurrentEvents, setMaxConcurrentEvents] = useState(
     form.config?.calendar_settings?.max_concurrent_events || 1
   );
@@ -167,6 +171,23 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         calendar_settings: {
           ...form.config?.calendar_settings,
           advance_booking_days: days
+        }
+      }
+    };
+    onUpdate(updatedForm);
+  };
+
+  const handleMinAdvanceDaysChange = (days: number) => {
+    const safeValue = Number.isFinite(days) && days >= 0 ? Math.floor(days) : 0;
+    setMinAdvanceDays(safeValue);
+
+    const updatedForm = {
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          min_advance_days: safeValue
         }
       }
     };
@@ -733,6 +754,29 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
             <div className="max-w-xs">
               <div className="flex items-center gap-1.5 mb-2">
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  予約受付開始日
+                </label>
+                <InfoTooltip
+                  theme={theme}
+                  text={'何日後から予約を受け付けるかを設定します。\n\n「0」= 当日から予約可能（従来どおり）\n「1」= 翌日から予約可能\n「2」= 2日後から予約可能\n\nカレンダー表示・第三希望日時選択の両モードに適用されます。'}
+                />
+              </div>
+              <input
+                type="number"
+                min="0"
+                max="365"
+                value={minAdvanceDays}
+                onChange={(e) => handleMinAdvanceDaysChange(parseInt(e.target.value) || 0)}
+                className={themeClasses.input}
+              />
+              <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
+                {minAdvanceDays === 0 ? '当日から予約可能' : `${minAdvanceDays}日後から予約可能`}
+              </p>
+            </div>
+
+            <div className="max-w-xs">
+              <div className="flex items-center gap-1.5 mb-2">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
                   事前予約可能日数
                 </label>
                 <InfoTooltip theme={theme} text="何日先まで予約を受け付けるかを設定します" />
@@ -1097,6 +1141,9 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
 
             <div className={`${themeClasses.highlight} rounded-lg p-4`}>
               <h4 className={`text-sm font-medium mb-2 ${theme === 'light' ? 'text-[rgb(244,144,49)]' : 'text-cyan-300'}`}>現在の設定:</h4>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                • 予約受付開始: {minAdvanceDays === 0 ? '当日から' : `${minAdvanceDays}日後から`}
+              </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • 事前予約: {advanceBookingDays}日先まで
               </p>

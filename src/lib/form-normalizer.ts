@@ -98,6 +98,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         saturday: { open: '09:00', close: '18:00', closed: false },
         sunday: { open: '09:00', close: '18:00', closed: true }
       },
+      min_advance_days: 0,
       advance_booking_days: 30,
       max_concurrent_events: 1,
       max_concurrent_reservations_per_user: 0,
@@ -199,6 +200,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       custom_fields: (existingConfig?.custom_fields ?? (typedConfig as Form['config'])?.custom_fields ?? []) as Form['config']['custom_fields'],
       calendar_settings: {
         business_hours: (existingConfig?.calendar_settings?.business_hours || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.business_hours || typedBusinessRules?.business_hours || defaultConfig.calendar_settings.business_hours) as Form['config']['calendar_settings']['business_hours'],
+        min_advance_days: (() => {
+          const v = existingConfig?.calendar_settings?.min_advance_days
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.min_advance_days;
+          const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 0;
+          return n >= 0 ? n : 0;
+        })(),
         advance_booking_days: (existingConfig?.calendar_settings?.advance_booking_days || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.advance_booking_days || (typedBusinessRules?.advance_booking_days as number) || 30) as number,
         google_calendar_url: (existingConfig?.calendar_settings?.google_calendar_url || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.google_calendar_url) as string | undefined,
         // 日時選択モードのデフォルト値設定

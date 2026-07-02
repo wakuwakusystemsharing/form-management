@@ -6,6 +6,7 @@ import SurveyQuestionEditor from './SurveyQuestionEditor';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 interface SurveyFormEditorProps {
   form: SurveyForm;
@@ -90,6 +91,20 @@ export default function SurveyFormEditor({ form, onUpdate, userRole = 'service_a
                 />
               </div>
               <p className="text-xs text-muted-foreground">フォームのメインカラー</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="survey_notice">注意事項</Label>
+              <Textarea
+                id="survey_notice"
+                value={form.config.basic_info?.notice || ''}
+                onChange={(e) => handleBasicInfoUpdate({ notice: e.target.value })}
+                rows={3}
+                placeholder="例：回答内容は今後のサービス向上のために利用させていただきます。"
+              />
+              <p className="text-xs text-muted-foreground">
+                入力すると、アンケートフォームの最初の質問の上に注意事項として目立つデザインで表示されます（空欄なら非表示）
+              </p>
             </div>
 
             <div className="space-y-2">
