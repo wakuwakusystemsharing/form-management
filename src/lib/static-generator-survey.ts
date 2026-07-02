@@ -16,6 +16,19 @@ export class StaticSurveyGenerator {
     // 質問フィールドの生成
     const questionsHtml = safeConfig.questions.map((q, index) => this.renderQuestion(q, index)).join('\n');
 
+    // 注意事項（入力時のみ Q1 の上に表示）
+    const noticeText = typeof safeConfig.basic_info.notice === 'string' ? safeConfig.basic_info.notice.trim() : '';
+    const noticeHtml = noticeText
+      ? `
+                <div class="notice-box">
+                    <div class="notice-title">
+                        <svg class="notice-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        注意事項
+                    </div>
+                    <div class="notice-text">${this.escapeHtml(noticeText)}</div>
+                </div>`
+      : '';
+
     return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -44,7 +57,7 @@ export class StaticSurveyGenerator {
         </div>
         
         <div class="form-content">
-            <form id="surveyForm" onsubmit="return false;">
+            <form id="surveyForm" onsubmit="return false;">${noticeHtml}
                 ${questionsHtml}
                 
                 <button type="button" class="submit-button" onclick="submitForm()" id="section-submit">${this.escapeHtml(safeConfig.ui_settings.submit_button_text || '送信')}</button>
@@ -341,6 +354,37 @@ export class StaticSurveyGenerator {
             padding: 1.5rem;
         }
         
+        .notice-box {
+            background: #fffbeb;
+            border: 2px solid #f59e0b;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .notice-title {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            font-weight: 700;
+            font-size: 0.9375rem;
+            color: #b45309;
+            margin-bottom: 0.5rem;
+        }
+
+        .notice-icon {
+            width: 1.125rem;
+            height: 1.125rem;
+            flex-shrink: 0;
+        }
+
+        .notice-text {
+            color: #92400e;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
         .field {
             margin-bottom: 1.5rem;
         }
