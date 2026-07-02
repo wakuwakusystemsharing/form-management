@@ -807,9 +807,8 @@ class BookingForm {
                 duration,
                 ...(submenu ? { submenu_id: submenu.id, submenu_name: submenu.name || '' } : {})
             });
-            let menuLine = menu.name + (submenu ? ' &gt; ' + submenu.name : '');
-            if (price > 0 || duration > 0) menuLine += (price > 0 ? ' ¥' + price.toLocaleString() : '') + (duration > 0 ? ' ' + duration + '分' : '');
-            summaryLines.push(menuLine);
+            // ご予約内容にはメニュー名のみ表示（料金・所要時間は表示しない）
+            summaryLines.push(menu.name + (submenu ? ' &gt; ' + submenu.name : ''));
             const msgLine = [category?.name, menu.name, submenu?.name].filter(Boolean).join(' > ');
             const optNames = [];
             const optIds = this.state.selectedOptions?.[menuId] || [];
@@ -821,7 +820,7 @@ class BookingForm {
                     totalPrice += op;
                     totalDuration += od;
                     selectedOptions.push({ option_id: option.id, option_name: option.name || '', menu_id: menuId, price: op, duration: od });
-                    summaryLines.push('+ ' + option.name + (op > 0 ? ' (+¥' + op.toLocaleString() + ')' : '') + (od > 0 ? ' (+' + od + '分)' : ''));
+                    summaryLines.push('+ ' + option.name);
                     optNames.push(option.name);
                 }
             });
@@ -856,7 +855,7 @@ class BookingForm {
                     totalPrice += op;
                     totalDuration += od;
                     selectedOptions.push({ option_id: opt.id, option_name: opt.name || '', category_id: categoryId, price: op, duration: od });
-                    summaryLines.push('+ ' + opt.name + (op > 0 ? ' (+¥' + op.toLocaleString() + ')' : '') + (od > 0 ? ' (+' + od + '分)' : ''));
+                    summaryLines.push('+ ' + opt.name);
                 });
             });
         }
