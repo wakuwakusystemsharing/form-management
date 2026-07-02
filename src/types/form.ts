@@ -154,6 +154,7 @@ export interface FormConfig {
     multiple_dates_settings?: {
       time_interval: 10 | 15 | 30 | 60;   // 時間間隔（分）
       date_range_days: number;            // 選択可能日数（本日から何日後まで）
+      required_choices?: number[];        // 必須にする希望日時（1〜3）。未設定 = [1,2,3]（全て必須）。第一希望(1)は常に必須
       exclude_weekdays: number[];         // 除外曜日 (0:日曜, 1:月曜, ...) - レガシー互換
       start_time: string;                 // 開始時間 "09:00" - レガシー互換
       end_time: string;                   // 終了時間 "18:00" - レガシー互換

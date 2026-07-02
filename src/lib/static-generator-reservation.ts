@@ -1682,7 +1682,25 @@ class BookingForm {
                 return;
             }
         }
-        if (!this.state.selectedDate || !this.state.selectedTime) {
+        if ((this.config.calendar_settings?.booking_mode || 'calendar') === 'multiple_dates') {
+            // 第三希望日時モード: 必須選択（required_choices）に応じてチェック
+            const requiredChoices = this.getRequiredDateChoices();
+            const choiceValues = {
+                1: [this.state.selectedDate, this.state.selectedTime],
+                2: [this.state.selectedDate2, this.state.selectedTime2],
+                3: [this.state.selectedDate3, this.state.selectedTime3]
+            };
+            const choiceLabels = { 1: '第一希望日時', 2: '第二希望日時', 3: '第三希望日時' };
+            for (const idx of requiredChoices) {
+                if (!choiceValues[idx][0] || !choiceValues[idx][1]) {
+                    alert(choiceLabels[idx] + 'を選択してください');
+                    const field = document.getElementById('datetime-field-' + idx);
+                    if (field) field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    resetSubmitState();
+                    return;
+                }
+            }
+        } else if (!this.state.selectedDate || !this.state.selectedTime) {
             alert('予約日時を選択してください');
             resetSubmitState();
             return;
@@ -2007,6 +2025,14 @@ class BookingForm {
         }
     }
     
+    // 第三希望日時モードの必須選択（1〜3）。未設定 = 全て必須。第一希望は常に必須
+    getRequiredDateChoices() {
+        const raw = this.config.calendar_settings?.multiple_dates_settings?.required_choices;
+        const rc = Array.isArray(raw) ? raw.filter(n => n === 1 || n === 2 || n === 3) : [1, 2, 3];
+        if (!rc.includes(1)) rc.unshift(1);
+        return [...new Set(rc)].sort();
+    }
+
     // 第三希望日時モード用関数
     initializeMultipleDates() {
         const settings = this.config.calendar_settings?.multiple_dates_settings || {
@@ -2443,10 +2469,18 @@ if (document.readyState === 'loading') {
     const initiallyHidden = config.calendar_settings?.hide_datetime_until_menu_selected !== false;
 
     if (bookingMode === 'multiple_dates') {
-      return this.renderMultipleDatesField(initiallyHidden);
+      return this.renderMultipleDatesField(config, initiallyHidden);
     } else {
       return this.renderDateTimeField(initiallyHidden);
     }
+  }
+
+  // 第三希望日時モードの必須選択（1〜3）。未設定 = 全て必須。第一希望は常に必須
+  private getRequiredDateChoices(config: FormConfig): number[] {
+    const raw = config.calendar_settings?.multiple_dates_settings?.required_choices;
+    const rc = Array.isArray(raw) ? raw.filter((n) => n === 1 || n === 2 || n === 3) : [1, 2, 3];
+    if (!rc.includes(1)) rc.unshift(1);
+    return [...new Set(rc)].sort();
   }
 
   private renderDateTimeField(initiallyHidden: boolean): string {
@@ -2501,12 +2535,16 @@ if (document.readyState === 'loading') {
             </div>`;
   }
   
-  private renderMultipleDatesField(initiallyHidden: boolean): string {
+  private renderMultipleDatesField(config: FormConfig, initiallyHidden: boolean): string {
     const hiddenStyle = initiallyHidden ? ' style="display:none;"' : '';
+    const required = this.getRequiredDateChoices(config);
+    const mark = (idx: number) => required.includes(idx)
+      ? '<span class="required">*</span>'
+      : '<span style="color:#6b7280;font-weight:normal;font-size:0.75rem;">（任意）</span>';
     return `
             <!-- 第一希望日時 -->
             <div class="field" id="datetime-field-1"${hiddenStyle}>
-                <label class="field-label">第一希望日時 <span class="required">*</span></label>
+                <label class="field-label">第一希望日時 ${mark(1)}</label>
                 <div class="datetime-wrapper" style="text-align: center;">
                     <span class="placeholder" id="placeholder1" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
                     <input type="hidden" id="date1" name="date1">
@@ -2519,7 +2557,7 @@ if (document.readyState === 'loading') {
 
             <!-- 第二希望日時 -->
             <div class="field" id="datetime-field-2"${hiddenStyle}>
-                <label class="field-label">第二希望日時 <span class="required">*</span></label>
+                <label class="field-label">第二希望日時 ${mark(2)}</label>
                 <div class="datetime-wrapper" style="text-align: center;">
                     <span class="placeholder" id="placeholder2" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
                     <input type="hidden" id="date2" name="date2">
@@ -2532,7 +2570,7 @@ if (document.readyState === 'loading') {
 
             <!-- 第三希望日時 -->
             <div class="field" id="datetime-field-3"${hiddenStyle}>
-                <label class="field-label">第三希望日時 <span class="required">*</span></label>
+                <label class="field-label">第三希望日時 ${mark(3)}</label>
                 <div class="datetime-wrapper" style="text-align: center;">
                     <span class="placeholder" id="placeholder3" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
                     <input type="hidden" id="date3" name="date3">

@@ -224,6 +224,15 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
               '6': { open: '09:00', close: '18:00', closed: false },  // 土曜
             };
           }
+          // 必須選択（未設定 = 全て必須、第一希望は常に必須）
+          {
+            const rcRaw = (base as { required_choices?: unknown }).required_choices;
+            const rc = Array.isArray(rcRaw)
+              ? rcRaw.filter((n): n is number => n === 1 || n === 2 || n === 3)
+              : [1, 2, 3];
+            if (!rc.includes(1)) rc.unshift(1);
+            base.required_choices = [...new Set(rc)].sort();
+          }
           return base;
         })() as Form['config']['calendar_settings']['multiple_dates_settings'],
         allow_exceed_business_hours: existingConfig?.calendar_settings?.allow_exceed_business_hours ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.allow_exceed_business_hours ?? false,
