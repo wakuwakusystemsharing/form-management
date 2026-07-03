@@ -379,9 +379,9 @@ class BookingForm {
             await liff.init({ liffId });
             if (liff.isLoggedIn()) {
                 const profile = await liff.getProfile();
-                this.state.name = profile.displayName || '';
-                const nameInputEl = document.getElementById('customer-name');
-                if (nameInputEl) nameInputEl.value = this.state.name;
+                // お名前欄には LINE の displayName を自動入力しない
+                // （ユーザーが入力したテキストを localStorage から復元する方式。
+                //   lineDisplayName は名前欄非表示時のフォールバック用に保持のみ）
 
                 // LINEプロフィール情報を取得
                 this.state.lineDisplayName = profile.displayName || null;
@@ -435,12 +435,27 @@ class BookingForm {
         }
     }
     
+    // お名前欄の入力値を localStorage に即時保存（未送信でも次回開いたときに復元される）
+    persistCustomerName(value) {
+        try {
+            const formId = this.config.basic_info?.form_name || this.config.id || 'default';
+            const key = \`booking_\${formId}\`;
+            const saved = localStorage.getItem(key);
+            const data = saved ? JSON.parse(saved) : {};
+            data.customerName = value;
+            localStorage.setItem(key, JSON.stringify(data));
+        } catch (e) {
+            // プライベートモードなどで localStorage が使えない場合も継続
+        }
+    }
+
     attachEventListeners() {
         // 名前・電話番号（非表示設定時は要素が存在しないのでガード）
         const nameInput = document.getElementById('customer-name');
         if (nameInput) {
             nameInput.addEventListener('input', (e) => {
                 this.state.name = e.target.value;
+                this.persistCustomerName(e.target.value);
                 this.updateSummary();
             });
         }
