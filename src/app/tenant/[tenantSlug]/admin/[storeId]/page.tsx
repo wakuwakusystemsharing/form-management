@@ -2321,31 +2321,54 @@ export default function StoreDetailPage() {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    予約前日にLINEリマインドメッセージを送信します（通数を1消費します）
+                    設定した日数前にLINEリマインドメッセージを送信します（通数を1消費します）
                   </p>
                 </div>
                 {editingStore.reminder_enabled !== false && (
-                  <div className="space-y-2">
-                    <Label>リマインダー送信時刻</Label>
-                    <Select
-                      value={editingStore.reminder_time || '19:00'}
-                      onValueChange={(value) => setEditingStore({...editingStore, reminder_time: value})}
-                    >
-                      <SelectTrigger className="w-[140px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 15 }, (_, i) => {
-                          const hour = i + 7;
-                          const value = `${String(hour).padStart(2, '0')}:00`;
-                          return <SelectItem key={value} value={value}>{value}</SelectItem>;
-                        })}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      翌日の予約がある顧客にリマインドが送信されます
-                    </p>
+                  <div className="flex items-start gap-4">
+                    <div className="space-y-2">
+                      <Label>何日前設定</Label>
+                      <Select
+                        value={String(editingStore.reminder_days_before || 1)}
+                        onValueChange={(value) => setEditingStore({...editingStore, reminder_days_before: parseInt(value)})}
+                      >
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 7 }, (_, i) => {
+                            const days = i + 1;
+                            return <SelectItem key={days} value={String(days)}>{days === 1 ? '前日（1日前）' : `${days}日前`}</SelectItem>;
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>リマインダー送信時刻</Label>
+                      <Select
+                        value={editingStore.reminder_time || '19:00'}
+                        onValueChange={(value) => setEditingStore({...editingStore, reminder_time: value})}
+                      >
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 15 }, (_, i) => {
+                            const hour = i + 7;
+                            const value = `${String(hour).padStart(2, '0')}:00`;
+                            return <SelectItem key={value} value={value}>{value}</SelectItem>;
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
+                )}
+                {editingStore.reminder_enabled !== false && (
+                  <p className="text-xs text-muted-foreground">
+                    {(editingStore.reminder_days_before || 1) === 1
+                      ? '翌日の予約がある顧客にリマインドが送信されます'
+                      : `${editingStore.reminder_days_before}日後の予約がある顧客にリマインドが送信されます`}
+                  </p>
                 )}
                 </div>
               </div>
