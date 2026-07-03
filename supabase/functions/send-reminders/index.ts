@@ -7,15 +7,22 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-function getTomorrowDateStringJst() {
+// JST で今日から days 日後の日付文字列（YYYY-MM-DD）を返す
+function getDateStringJstAfterDays(days: number) {
   const now = new Date();
   const jstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
-  const tomorrow = new Date(jstNow);
-  tomorrow.setDate(jstNow.getDate() + 1);
-  const yyyy = tomorrow.getFullYear();
-  const mm = String(tomorrow.getMonth() + 1).padStart(2, "0");
-  const dd = String(tomorrow.getDate()).padStart(2, "0");
+  const target = new Date(jstNow);
+  target.setDate(jstNow.getDate() + days);
+  const yyyy = target.getFullYear();
+  const mm = String(target.getMonth() + 1).padStart(2, "0");
+  const dd = String(target.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+// 店舗の reminder_days_before を 1〜30 の整数に正規化（未設定・不正値 = 1: 前日）
+function normalizeDaysBefore(value: unknown): number {
+  const n = typeof value === "number" && isFinite(value) ? Math.floor(value) : 1;
+  return n >= 1 && n <= 30 ? n : 1;
 }
 
 function formatDateJapanese(dateStr: string, timeStr: string): string {
@@ -32,11 +39,14 @@ function buildFlexMessage(
   themeColor: string,
   dateText: string,
   menuText: string,
-  customerName: string
+  customerName: string,
+  daysBefore: number
 ) {
+  const headerLabel = daysBefore === 1 ? "【予約前日メッセージ】" : `【予約${daysBefore}日前メッセージ】`;
+  const bodyLabel = daysBefore === 1 ? "明日の予約をお知らせします" : `${daysBefore}日後の予約をお知らせします`;
   return {
     type: "flex",
-    altText: "【予約前日メッセージ】明日の予約をお知らせします",
+    altText: `${headerLabel}${bodyLabel}`,
     contents: {
       type: "bubble",
       size: "mega",
@@ -52,7 +62,7 @@ function buildFlexMessage(
           },
           {
             type: "text",
-            text: "【予約前日メッセージ】",
+            text: headerLabel,
             color: "#ffffff",
             size: "xl",
             weight: "bold",
@@ -67,7 +77,7 @@ function buildFlexMessage(
         contents: [
           {
             type: "text",
-            text: "明日の予約をお知らせします",
+            text: bodyLabel,
             weight: "bold",
             size: "lg",
             color: "#333333",
@@ -183,14 +193,13 @@ function getCurrentHourJst(): string {
 }
 
 Deno.serve(async () => {
-  const targetDate = getTomorrowDateStringJst();
   const currentHour = getCurrentHourJst();
-  console.log(`リマインド対象日: ${targetDate}, 現在時刻(JST): ${currentHour}`);
+  console.log(`現在時刻(JST): ${currentHour}`);
 
   // リマインダーが有効かつ送信時刻が一致する店舗のみ取得
   const { data: eligibleStores, error: storeError } = await supabase
     .from("stores")
-    .select("id,name,line_channel_access_token")
+    .select("id,name,line_channel_access_token,reminder_days_before")
     .eq("reminder_enabled", true)
     .eq("reminder_time", currentHour)
     .not("line_channel_access_token", "is", null);
@@ -213,13 +222,25 @@ Deno.serve(async () => {
   const storeIds = eligibleStores.map((s) => s.id);
   console.log(`対象店舗数: ${eligibleStores.length}件 (${storeIds.join(", ")})`);
 
-  // 対象店舗の翌日予約を取得
+  // 店舗ごとの「何日前」設定からリマインド対象日を算出
+  // 例: 前日設定(1) → 明日の予約 / 2日前設定(2) → 2日後の予約 が対象
+  const targetDateByStore = new Map<string, string>();
+  const targetDates = new Set<string>();
+  eligibleStores.forEach((s) => {
+    const days = normalizeDaysBefore(s.reminder_days_before);
+    const date = getDateStringJstAfterDays(days);
+    targetDateByStore.set(s.id, date);
+    targetDates.add(date);
+  });
+  console.log(`リマインド対象日: ${[...targetDates].join(", ")}`);
+
+  // 対象店舗のリマインド対象日の予約を取得
   const { data: reservations, error } = await supabase
     .from("reservations")
     .select(
       "id,store_id,reservation_date,reservation_time,menu_name,submenu_name,line_user_id,status,customer_name"
     )
-    .eq("reservation_date", targetDate)
+    .in("reservation_date", [...targetDates])
     .neq("status", "cancelled")
     .not("line_user_id", "is", null)
     .in("store_id", storeIds);
@@ -246,7 +267,7 @@ Deno.serve(async () => {
   const DEFAULT_THEME_COLOR = "#877059";
   const storeMap = new Map<
     string,
-    { token: string; name: string; themeColor: string }
+    { token: string; name: string; themeColor: string; daysBefore: number }
   >();
   (stores || []).forEach((store) => {
     if (store.line_channel_access_token) {
@@ -254,6 +275,7 @@ Deno.serve(async () => {
         token: store.line_channel_access_token,
         name: store.name || "店舗",
         themeColor: DEFAULT_THEME_COLOR,
+        daysBefore: normalizeDaysBefore(store.reminder_days_before),
       });
     }
   });
@@ -265,6 +287,10 @@ Deno.serve(async () => {
   for (const reservation of reservations) {
     const storeInfo = storeMap.get(reservation.store_id);
     if (!storeInfo || !reservation.line_user_id) continue;
+
+    // この予約日がこの店舗のリマインド対象日と一致する場合のみ送信
+    // （複数店舗で異なる「何日前」設定があるため、まとめて取得した予約をここで振り分ける）
+    if (reservation.reservation_date !== targetDateByStore.get(reservation.store_id)) continue;
 
     const menu = reservation.submenu_name
       ? `${reservation.menu_name} > ${reservation.submenu_name}`
@@ -280,7 +306,8 @@ Deno.serve(async () => {
       storeInfo.themeColor,
       dateText,
       menu,
-      reservation.customer_name || "お客"
+      reservation.customer_name || "お客",
+      storeInfo.daysBefore
     );
 
     const result = await sendLinePush(

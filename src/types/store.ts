@@ -18,6 +18,7 @@ export interface Store {
   line_channel_access_token?: string; // LINEチャネルアクセストークン
   reminder_enabled?: boolean;         // LINEリマインダー送信の有効/無効
   reminder_time?: string;             // リマインダー送信時刻（HH:00形式、デフォルト19:00）
+  reminder_days_before?: number;      // リマインダーを予約の何日前に送るか（デフォルト1 = 前日）
   created_at: string;
   updated_at: string;
   status: 'active' | 'inactive';

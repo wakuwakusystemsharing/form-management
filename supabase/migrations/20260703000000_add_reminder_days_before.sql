@@ -1,0 +1,3 @@
+-- リマインダーを予約の何日前に送信するかの設定を追加
+-- 1 = 前日（従来の固定動作と同じ、デフォルト）、2 = 2日前、3 = 3日前 ...
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS reminder_days_before INTEGER NOT NULL DEFAULT 1;
