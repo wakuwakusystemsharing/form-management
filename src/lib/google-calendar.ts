@@ -253,6 +253,8 @@ export async function createReservationEvent(
     gender?: string | null;
     coupon?: string | null;
     customFields?: Record<string, string> | null;
+    // Google Calendar の colorId '1'〜'11'。未指定はカレンダーの既定色
+    eventColorId?: string | null;
   },
   storeId?: string
 ) {
@@ -339,7 +341,8 @@ export async function createReservationEvent(
         timeZone: 'Asia/Tokyo'
       },
       description,
-      location: params.lineUserId || undefined
+      location: params.lineUserId || undefined,
+      colorId: params.eventColorId || undefined
     }
   });
 

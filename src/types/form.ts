@@ -146,6 +146,8 @@ export interface FormConfig {
     google_calendar_url?: string;
     // 日時選択モード
     booking_mode?: 'calendar' | 'multiple_dates';  // カレンダー表示 or 第三希望日時選択
+    // 予約イベントの色（Google Calendar の colorId '1'〜'11'。空/未設定 = カレンダーの既定色）
+    event_color_id?: string;
     // カレンダー表示モードの時間間隔（分）。デフォルト 30
     time_interval?: 10 | 15 | 30 | 60;
     // 祝日を予約不可（✕）にする（false / 未設定 = OFF、既存挙動）
