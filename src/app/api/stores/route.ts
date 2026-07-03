@@ -305,6 +305,29 @@ export async function POST(request: NextRequest) {
       orgId = adminData?.org_id || null
     }
 
+    // マスター管理者の場合、作成元のテナントページ（tenant_slug）に紐付ける。
+    // slug 未指定・不一致時は default テナントにフォールバック（org_id が NULL の店舗を作らない）
+    if (!orgId && isMaster) {
+      const tenantSlug = typeof body.tenant_slug === 'string' && body.tenant_slug.trim()
+        ? body.tenant_slug.trim()
+        : 'default'
+      const { data: orgData } = await (adminClient as any)
+        .from('organizations')
+        .select('id')
+        .eq('slug', tenantSlug)
+        .maybeSingle()
+      if (orgData?.id) {
+        orgId = orgData.id
+      } else if (tenantSlug !== 'default') {
+        const { data: defaultOrg } = await (adminClient as any)
+          .from('organizations')
+          .select('id')
+          .eq('slug', 'default')
+          .maybeSingle()
+        orgId = defaultOrg?.id || null
+      }
+    }
+
     // 店舗を挿入
     const { data, error } = await (adminClient as any)
       .from('stores')

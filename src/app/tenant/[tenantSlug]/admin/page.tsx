@@ -513,7 +513,8 @@ export default function TenantAdminPage() {
           'Content-Type': 'application/json',
           ...(token && { 'Authorization': `Bearer ${token}` })
         },
-        body: JSON.stringify(newStore),
+        // マスター管理者が作成した店舗も開いているテナントに紐付くよう slug を渡す
+        body: JSON.stringify({ ...newStore, tenant_slug: tenantSlug }),
       });
 
       if (!response.ok) {
