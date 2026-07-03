@@ -35,6 +35,21 @@ function InfoTooltip({ text, theme = 'light' }: { text: string; theme?: ThemeTyp
   );
 }
 
+// Google Calendar API で指定できる予約イベントの色（colorId '1'〜'11'）
+const GOOGLE_EVENT_COLORS: Array<{ id: string; name: string; hex: string }> = [
+  { id: '1', name: 'ラベンダー', hex: '#7986CB' },
+  { id: '2', name: 'セージ', hex: '#33B679' },
+  { id: '3', name: 'ブドウ', hex: '#8E24AA' },
+  { id: '4', name: 'フラミンゴ', hex: '#E67C73' },
+  { id: '5', name: 'バナナ', hex: '#F6BF26' },
+  { id: '6', name: 'ミカン', hex: '#F4511E' },
+  { id: '7', name: 'ピーコック', hex: '#039BE5' },
+  { id: '8', name: 'グラファイト', hex: '#616161' },
+  { id: '9', name: 'ブルーベリー', hex: '#3F51B5' },
+  { id: '10', name: 'バジル', hex: '#0B8043' },
+  { id: '11', name: 'トマト', hex: '#D50000' },
+];
+
 const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdate, theme = 'dark' }) => {
   const themeClasses = getThemeClasses(theme);
   const accentClasses = theme === 'light'
@@ -570,6 +585,73 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     <option value={30}>30分間隔</option>
                     <option value={60}>60分間隔</option>
                   </select>
+                </div>
+
+                {/* 予約イベントの色変更 */}
+                <div className="mt-4">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                      予約イベントの色変更
+                    </label>
+                    <InfoTooltip
+                      theme={theme}
+                      text={'予約が入ったときに Google カレンダーへ作成される予定の色を選べます。\n「デフォルト」はカレンダー自体の色（従来どおり）です。\n\n※ Google カレンダーの仕様上、予定に指定できる色はこの11色です。'}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onUpdate({
+                        ...form,
+                        config: {
+                          ...form.config,
+                          calendar_settings: {
+                            ...form.config?.calendar_settings,
+                            event_color_id: ''
+                          }
+                        }
+                      })}
+                      className={`px-2.5 h-8 rounded-full border-2 text-xs font-medium transition-all ${
+                        !(form.config?.calendar_settings?.event_color_id)
+                          ? (theme === 'light' ? 'border-[rgb(244,144,49)] text-[rgb(244,144,49)]' : 'border-cyan-400 text-cyan-300')
+                          : (theme === 'light' ? 'border-gray-300 text-gray-500 hover:border-gray-400' : 'border-gray-600 text-gray-400 hover:border-gray-500')
+                      }`}
+                    >
+                      デフォルト
+                    </button>
+                    {GOOGLE_EVENT_COLORS.map((color) => {
+                      const selected = form.config?.calendar_settings?.event_color_id === color.id;
+                      return (
+                        <button
+                          key={color.id}
+                          type="button"
+                          title={color.name}
+                          onClick={() => onUpdate({
+                            ...form,
+                            config: {
+                              ...form.config,
+                              calendar_settings: {
+                                ...form.config?.calendar_settings,
+                                event_color_id: color.id
+                              }
+                            }
+                          })}
+                          className={`w-8 h-8 rounded-full transition-all ${
+                            selected
+                              ? 'ring-2 ring-offset-2 scale-110 ' + (theme === 'light' ? 'ring-[rgb(244,144,49)] ring-offset-white' : 'ring-cyan-400 ring-offset-gray-800')
+                              : 'hover:scale-105'
+                          }`}
+                          style={{ backgroundColor: color.hex }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <p className={`text-xs ${themeClasses.text.secondary} mt-2`}>
+                    選択中: {
+                      GOOGLE_EVENT_COLORS.find(c => c.id === form.config?.calendar_settings?.event_color_id)?.name
+                      || 'デフォルト（カレンダーの色）'
+                    }
+                  </p>
                 </div>
               </div>
             )}

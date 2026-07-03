@@ -776,6 +776,15 @@ export async function POST(request: Request) {
       if (storeError) {
         console.error('[API] Store calendar lookup error:', storeError);
       } else if (storeData?.google_calendar_id) {
+        // フォーム設定の予約イベント色（'1'〜'11' 以外は既定色扱い）
+        let eventColorId: string | null = null;
+        try {
+          const formConfigForColor = await getFormConfig(body.form_id);
+          const v = formConfigForColor?.calendar_settings?.event_color_id;
+          if (typeof v === 'string' && /^([1-9]|1[01])$/.test(v)) eventColorId = v;
+        } catch {
+          // 色設定の取得失敗は既定色で続行
+        }
         const eventId = await createReservationEvent(
           {
             calendarId: storeData.google_calendar_id,
@@ -795,7 +804,8 @@ export async function POST(request: Request) {
             selectedOptions: body.selected_options || [],
             gender: customerInfo.gender_label || customerInfo.gender || null,
             coupon: customerInfo.coupon_label || customerInfo.coupon || null,
-            customFields: customerInfo.custom_fields_labeled || null
+            customFields: customerInfo.custom_fields_labeled || null,
+            eventColorId
           },
           body.store_id
         );

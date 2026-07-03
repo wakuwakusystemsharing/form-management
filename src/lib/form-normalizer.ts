@@ -210,6 +210,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         google_calendar_url: (existingConfig?.calendar_settings?.google_calendar_url || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.google_calendar_url) as string | undefined,
         // 日時選択モードのデフォルト値設定
         booking_mode: (existingConfig?.calendar_settings?.booking_mode || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.booking_mode || 'calendar') as Form['config']['calendar_settings']['booking_mode'],
+        event_color_id: (() => {
+          const v = existingConfig?.calendar_settings?.event_color_id
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.event_color_id;
+          // Google Calendar API の colorId は '1'〜'11' のみ有効。それ以外は既定色（空文字）
+          return typeof v === 'string' && /^([1-9]|1[01])$/.test(v) ? v : '';
+        })(),
         multiple_dates_settings: (() => {
           const existing = existingConfig?.calendar_settings?.multiple_dates_settings || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.multiple_dates_settings;
           const base = existing || {
