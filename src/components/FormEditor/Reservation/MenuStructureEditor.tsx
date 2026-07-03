@@ -1920,7 +1920,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     <option value="checkbox">複数選択 (ボタン)</option>
                   </select>
                 </div>
-                <div className="flex items-center mt-6">
+                <div className="flex items-center mt-6 gap-4 flex-wrap">
                   <label className="flex items-center space-x-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1938,12 +1938,39 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                         onUpdate(updatedForm);
                       }}
                       className={`h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${
-                        theme === 'light' 
-                          ? 'bg-gray-100 border-gray-300' 
+                        theme === 'light'
+                          ? 'bg-gray-100 border-gray-300'
                           : 'bg-gray-700 border-gray-600'
                       }`}
                     />
                     <span className={`text-sm ${themeClasses.text.secondary}`}>必須項目にする</span>
+                  </label>
+                  <label
+                    className="flex items-center space-x-2 cursor-pointer"
+                    title="入力・選択した内容をお客様の端末（ブラウザ）に保存し、次回フォームを開いたときに復元します。データは端末内にのみ保存され、他のお客様に表示されることはありません。"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={field.restore_enabled === true}
+                      onChange={(e) => {
+                        const currentFields = [...(form.config?.custom_fields || [])];
+                        currentFields[index] = { ...currentFields[index], restore_enabled: e.target.checked };
+                        const updatedForm = {
+                          ...form,
+                          config: {
+                            ...form.config,
+                            custom_fields: currentFields
+                          }
+                        };
+                        onUpdate(updatedForm);
+                      }}
+                      className={`h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${
+                        theme === 'light'
+                          ? 'bg-gray-100 border-gray-300'
+                          : 'bg-gray-700 border-gray-600'
+                      }`}
+                    />
+                    <span className={`text-sm ${themeClasses.text.secondary}`}>復元機能をオンにする</span>
                   </label>
                 </div>
               </div>

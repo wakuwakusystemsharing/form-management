@@ -16,6 +16,7 @@ export interface SurveyQuestion {
   options?: SurveyQuestionOption[]; // For radio/checkbox
   placeholder?: string;
   allow_other?: boolean; // radio/checkbox: 選択肢の最後に「その他」ボタン + 理由入力欄を表示
+  restore_enabled?: boolean; // 回答内容を端末の localStorage に保存し、再訪時に復元する（他ユーザーには共有されない）
 }
 
 export interface SurveyConfig {

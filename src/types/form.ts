@@ -123,6 +123,8 @@ export interface FormConfig {
       value: string;
     }>;
     placeholder?: string;
+    // 入力/選択内容を端末の localStorage に保存し、再訪時に復元する（他ユーザーには共有されない）
+    restore_enabled?: boolean;
   }>;
   
   menu_structure: {
