@@ -72,6 +72,84 @@ export class StaticSurveyGenerator {
         // null = 取得失敗（不明）。サーバ側で既存値を上書きしない。
         let lineFriendFlag = null;
 
+        // 質問定義と復元機能用ストレージキー（このフォーム専用）
+        const SURVEY_QUESTIONS = ${JSON.stringify(safeConfig.questions)};
+        const SURVEY_STORAGE_KEY = ${JSON.stringify(`survey_${surveyFormId || safeConfig.basic_info.title || 'default'}`)};
+
+        // 復元機能: 回答をこの端末の localStorage にのみ保存する（サーバーには送らない）
+        function loadSurveySaved() {
+            try {
+                const s = localStorage.getItem(SURVEY_STORAGE_KEY);
+                return s ? JSON.parse(s) : {};
+            } catch (e) { return {}; }
+        }
+
+        function saveSurveyAnswer(questionId, payload) {
+            const q = SURVEY_QUESTIONS.find(x => x.id === questionId);
+            if (!q || q.restore_enabled !== true) return;
+            try {
+                const data = loadSurveySaved();
+                data[questionId] = payload;
+                localStorage.setItem(SURVEY_STORAGE_KEY, JSON.stringify(data));
+            } catch (e) {
+                // プライベートモードなどで localStorage が使えない場合も継続
+            }
+        }
+
+        // radio/checkbox の現在の選択状態 + その他理由を保存
+        function saveChoiceAnswer(questionId) {
+            const container = document.getElementById('container-' + questionId);
+            if (!container) return;
+            const sel = Array.from(container.querySelectorAll('.choice-button.selected'))
+                .map(btn => ({ label: btn.innerText, other: !!btn.dataset.other }));
+            const reasonInput = document.getElementById('other-input-' + questionId);
+            saveSurveyAnswer(questionId, { sel, otherReason: reasonInput ? reasonInput.value : '' });
+        }
+
+        // 復元機能ONの質問の回答を復元 + 入力保存リスナーを設定
+        document.addEventListener('DOMContentLoaded', function () {
+            const saved = loadSurveySaved();
+            SURVEY_QUESTIONS.forEach(function (q) {
+                if (q.restore_enabled !== true) return;
+                const data = saved[q.id];
+
+                if (q.type === 'radio' || q.type === 'checkbox') {
+                    // 復元: 保存済みの選択肢を selected に戻す（ラベル一致 / その他は data-other で判定）
+                    if (data && Array.isArray(data.sel)) {
+                        const container = document.getElementById('container-' + q.id);
+                        if (container) {
+                            const buttons = Array.from(container.querySelectorAll('.choice-button'));
+                            data.sel.forEach(function (s) {
+                                buttons.forEach(function (btn) {
+                                    const match = s.other ? !!btn.dataset.other : (!btn.dataset.other && btn.innerText === s.label);
+                                    if (match) btn.classList.add('selected');
+                                });
+                            });
+                            updateOtherReasonVisibility(q.id);
+                        }
+                        const reasonInput = document.getElementById('other-input-' + q.id);
+                        if (reasonInput && typeof data.otherReason === 'string') reasonInput.value = data.otherReason;
+                    }
+                    // その他理由の入力を保存
+                    const reasonInput = document.getElementById('other-input-' + q.id);
+                    if (reasonInput) {
+                        reasonInput.addEventListener('input', function () { saveChoiceAnswer(q.id); });
+                    }
+                } else {
+                    const el = document.getElementById(q.id);
+                    if (!el) return;
+                    // 復元
+                    if (data && typeof data.v === 'string' && data.v !== '') {
+                        el.value = data.v;
+                    }
+                    // 入力の保存
+                    el.addEventListener(q.type === 'select' ? 'change' : 'input', function () {
+                        saveSurveyAnswer(q.id, { v: el.value });
+                    });
+                }
+            });
+        });
+
         // LIFF初期化
         document.addEventListener('DOMContentLoaded', async function () {
             const liffId = '${safeConfig.basic_info.liff_id}';
@@ -122,6 +200,7 @@ export class StaticSurveyGenerator {
             }
 
             updateOtherReasonVisibility(questionId);
+            saveChoiceAnswer(questionId);
         }
 
         // 「その他」ボタンの選択状態に応じて理由入力欄を表示/非表示
@@ -154,7 +233,7 @@ export class StaticSurveyGenerator {
         function submitForm() {
             const formData = {};
             const formDataDisplay = {};
-            const questions = ${JSON.stringify(safeConfig.questions)};
+            const questions = SURVEY_QUESTIONS;
             let hasError = false;
 
             for (const q of questions) {

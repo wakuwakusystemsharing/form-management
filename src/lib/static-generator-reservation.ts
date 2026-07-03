@@ -358,6 +358,10 @@ class BookingForm {
                         if (emailEl) emailEl.value = data.customerEmail;
                         if (emailConfirmEl) emailConfirmEl.value = data.customerEmail;
                     }
+                    // カスタムフィールドの復元（復元機能ONの項目のみ）
+                    if (data.customFields) {
+                        this.restoreCustomFields(data.customFields);
+                    }
                 }
             } catch (e) {}
 
@@ -449,6 +453,61 @@ class BookingForm {
         }
     }
 
+    // localStorage に保存されたカスタムフィールド値を復元（復元機能ONの項目のみ）
+    restoreCustomFields(savedCustomFields) {
+        if (!savedCustomFields || !this.config.custom_fields) return;
+        this.config.custom_fields.forEach((field) => {
+            if (field.restore_enabled !== true) return;
+            const val = savedCustomFields[field.id];
+            if (val === undefined || val === null || val === '') return;
+            if (field.type === 'radio') {
+                document.querySelectorAll('input[name="custom-field-' + field.id + '"]').forEach((radio) => {
+                    if (radio.value === val) {
+                        radio.checked = true;
+                        this.state.customFields[field.id] = val;
+                    }
+                });
+            } else if (field.type === 'checkbox') {
+                if (Array.isArray(val) && val.length > 0) {
+                    const wanted = new Set(val);
+                    const checkedVals = [];
+                    document.querySelectorAll('input[data-field-id="' + field.id + '"][data-field-type="checkbox"]').forEach((cb) => {
+                        if (wanted.has(cb.value)) {
+                            cb.checked = true;
+                            checkedVals.push(cb.value);
+                        }
+                    });
+                    if (checkedVals.length > 0) this.state.customFields[field.id] = checkedVals;
+                }
+            } else if (typeof val === 'string') {
+                const el = document.getElementById('custom-field-' + field.id);
+                if (el) {
+                    el.value = val;
+                    // select や date は値が選択肢/形式に合わないと反映されないため、反映確認後に state 更新
+                    if (el.value === val) this.state.customFields[field.id] = val;
+                }
+            }
+        });
+        this.updateSummary();
+    }
+
+    // 復元機能ONのカスタムフィールドの入力値を localStorage に即時保存
+    // （この端末のブラウザ内にのみ保存され、他のユーザーに共有されることはない）
+    persistCustomField(field, value) {
+        if (!field || field.restore_enabled !== true) return;
+        try {
+            const formId = this.config.basic_info?.form_name || this.config.id || 'default';
+            const key = \`booking_\${formId}\`;
+            const saved = localStorage.getItem(key);
+            const data = saved ? JSON.parse(saved) : {};
+            if (!data.customFields) data.customFields = {};
+            data.customFields[field.id] = value;
+            localStorage.setItem(key, JSON.stringify(data));
+        } catch (e) {
+            // プライベートモードなどで localStorage が使えない場合も継続
+        }
+    }
+
     attachEventListeners() {
         // 名前・電話番号（非表示設定時は要素が存在しないのでガード）
         const nameInput = document.getElementById('customer-name');
@@ -531,12 +590,14 @@ class BookingForm {
                 if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime')) {
                     el.addEventListener('input', function() {
                         self.state.customFields[field.id] = el.value;
+                        self.persistCustomField(field, el.value);
                         self.updateSummary();
                     });
                 }
                 if (el && field.type === 'select') {
                     el.addEventListener('change', function() {
                         self.state.customFields[field.id] = el.value;
+                        self.persistCustomField(field, el.value);
                         self.updateSummary();
                     });
                 }
@@ -545,6 +606,7 @@ class BookingForm {
                         radio.addEventListener('change', function() {
                             if (radio.checked) {
                                 self.state.customFields[field.id] = radio.value;
+                                self.persistCustomField(field, radio.value);
                                 self.updateSummary();
                             }
                         });
@@ -555,6 +617,7 @@ class BookingForm {
                         cb.addEventListener('change', function() {
                             const checked = Array.from(document.querySelectorAll('input[data-field-id="' + field.id + '"][data-field-type="checkbox"]:checked')).map(function(c) { return c.value; });
                             self.state.customFields[field.id] = checked;
+                            self.persistCustomField(field, checked);
                             self.updateSummary();
                         });
                     });
@@ -1991,6 +2054,12 @@ class BookingForm {
                         }
                     }
                 }
+                // 復元機能ONのカスタムフィールド値（customFields）を消さないようマージ保存
+                let existingCustomFields = {};
+                try {
+                    const prev = localStorage.getItem(bookingKey);
+                    if (prev) existingCustomFields = JSON.parse(prev).customFields || {};
+                } catch (e) {}
                 localStorage.setItem(bookingKey, JSON.stringify({
                     timestamp: Date.now(),
                     selectedMenus: menusToSave,
@@ -2002,7 +2071,8 @@ class BookingForm {
                     couponUsage: this.state.coupon,
                     customerName: this.state.name,
                     customerPhone: this.state.phone,
-                    customerEmail: (this.state.email || '').trim()
+                    customerEmail: (this.state.email || '').trim(),
+                    customFields: existingCustomFields
                 }));
             } catch (e) {
                 // プライベートモードなどでlocalStorageが使えない場合も継続

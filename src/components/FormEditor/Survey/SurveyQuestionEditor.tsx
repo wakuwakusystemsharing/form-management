@@ -147,15 +147,30 @@ export default function SurveyQuestionEditor({ questions, onChange }: SurveyQues
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center space-x-2 pt-8">
-                    <Checkbox
-                      id={`required-${index}`}
-                      checked={q.required}
-                      onCheckedChange={(checked) => updateQuestion(index, { required: checked as boolean })}
-                    />
-                    <Label htmlFor={`required-${index}`} className="cursor-pointer">
-                      必須項目にする
-                    </Label>
+                  <div className="flex items-center gap-4 pt-8 flex-wrap">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`required-${index}`}
+                        checked={q.required}
+                        onCheckedChange={(checked) => updateQuestion(index, { required: checked as boolean })}
+                      />
+                      <Label htmlFor={`required-${index}`} className="cursor-pointer">
+                        必須項目にする
+                      </Label>
+                    </div>
+                    <div
+                      className="flex items-center space-x-2"
+                      title="回答した内容をお客様の端末（ブラウザ）に保存し、次回フォームを開いたときに復元します。データは端末内にのみ保存され、他のお客様に表示されることはありません。"
+                    >
+                      <Checkbox
+                        id={`restore-${index}`}
+                        checked={q.restore_enabled === true}
+                        onCheckedChange={(checked) => updateQuestion(index, { restore_enabled: checked as boolean })}
+                      />
+                      <Label htmlFor={`restore-${index}`} className="cursor-pointer">
+                        復元機能をオンにする
+                      </Label>
+                    </div>
                   </div>
                 </div>
 
