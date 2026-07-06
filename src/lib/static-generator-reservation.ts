@@ -115,19 +115,33 @@ export class StaticReservationGenerator {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${this.escapeHtml(safeConfig.basic_info.form_name)}</title>
     <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
     <script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
-    <style>${this.generateCSS(safeConfig)}</style>
+    <style>${this.generateCSS(safeConfig)}
+${this.generateDesignOverridesCSS(safeConfig)}</style>
 </head>
 <body>
+    ${safeConfig.ui_settings?.show_side_nav === false ? '' : `
+    <!-- 右側の追従ナビ -->
+    <div class="side-nav" id="sideNav">
+        <a href="#submit-button">
+            <span>⇩</span>
+            <i class="fas fa-comment"></i>
+        </a>
+    </div>
+    `}
+    <div id="treatment-text"></div>
+
     <div class="form-container">
         <div class="form-header">
             <h1>${this.escapeHtml(safeConfig.basic_info.form_name)}</h1>
             <p>${this.escapeHtml(safeConfig.basic_info.store_name || 'ご予約フォーム')}</p>
         </div>
-        
-        <div class="form-content">
-            <h2 class="section-title">ご予約内容</h2>
 
+        <div class="form-content">
             ${safeConfig.basic_info?.notice ? `<div class="notice-banner">${this.escapeHtml(safeConfig.basic_info.notice)}</div>` : ''}
 
             ${safeConfig.ui_settings?.show_repeat_booking ? this.renderRepeatBookingButton(safeConfig) : ''}
@@ -467,6 +481,8 @@ class BookingForm {
                     if (radio.value === val) {
                         radio.checked = true;
                         this.state.customFields[field.id] = val;
+                        const lbl = radio.closest ? radio.closest('.choice-label') : null;
+                        if (lbl) lbl.classList.add('selected');
                     }
                 });
             } else if (field.type === 'checkbox') {
@@ -477,6 +493,8 @@ class BookingForm {
                         if (wanted.has(cb.value)) {
                             cb.checked = true;
                             checkedVals.push(cb.value);
+                            const lbl = cb.closest ? cb.closest('.choice-label') : null;
+                            if (lbl) lbl.classList.add('selected');
                         }
                     });
                     if (checkedVals.length > 0) this.state.customFields[field.id] = checkedVals;
@@ -606,6 +624,11 @@ class BookingForm {
                 if (field.type === 'radio') {
                     document.querySelectorAll('input[name="custom-field-' + field.id + '"]').forEach(function(radio) {
                         radio.addEventListener('change', function() {
+                            // ボタンデザインの選択状態をラベルに反映
+                            document.querySelectorAll('input[name="custom-field-' + field.id + '"]').forEach(function(r) {
+                                const lbl = r.closest('.choice-label');
+                                if (lbl) lbl.classList.toggle('selected', r.checked);
+                            });
                             if (radio.checked) {
                                 self.state.customFields[field.id] = radio.value;
                                 self.persistCustomField(field, radio.value);
@@ -617,6 +640,9 @@ class BookingForm {
                 if (field.type === 'checkbox') {
                     document.querySelectorAll('input[data-field-id="' + field.id + '"][data-field-type="checkbox"]').forEach(function(cb) {
                         cb.addEventListener('change', function() {
+                            // ボタンデザインの選択状態をラベルに反映
+                            const lbl = cb.closest('.choice-label');
+                            if (lbl) lbl.classList.toggle('selected', cb.checked);
                             const checked = Array.from(document.querySelectorAll('input[data-field-id="' + field.id + '"][data-field-type="checkbox"]:checked')).map(function(c) { return c.value; });
                             self.state.customFields[field.id] = checked;
                             self.persistCustomField(field, checked);
@@ -713,6 +739,12 @@ class BookingForm {
                     }
                 }
                 
+                // 選択されたメニューの詳細ポップアップ（説明/画像がある場合のみ）
+                const nowSelected = allowCross
+                    ? ((this.state.selectedMenus[categoryId] || []).includes(menuId))
+                    : (this.state.selectedMenu && this.state.selectedMenu.id === menuId);
+                if (nowSelected) this.showDetailPopup(item, menu); else this.closeDetailPopup();
+
                 this.toggleCalendarVisibility();
                 this.updateSummary();
             });
@@ -740,11 +772,21 @@ class BookingForm {
                 } else {
                     // 選択
                     this.state.selectedOptions[menuId] = [...currentOptions, optionId];
-                    item.style.borderColor = '#3b82f6';
-                    item.style.backgroundColor = '#eff6ff';
-                    item.style.color = '#1e40af';
+                    item.style.borderColor = 'var(--primary-color)';
+                    item.style.backgroundColor = 'var(--primary-color)';
+                    item.style.color = '#ffffff';
                 }
-                
+
+                // 選択したオプションの詳細ポップアップ
+                if (!isSelected) {
+                    const popupCat = this.config.menu_structure.categories.find(c => (c.menus || []).some(m => m.id === menuId));
+                    const popupMenu = popupCat ? popupCat.menus.find(m => m.id === menuId) : null;
+                    const popupOpt = popupMenu && popupMenu.options ? popupMenu.options.find(o => o.id === optionId) : null;
+                    if (popupOpt) this.showDetailPopup(item, popupOpt); else this.closeDetailPopup();
+                } else {
+                    this.closeDetailPopup();
+                }
+
                 this.updateSummary();
             });
         });
@@ -764,9 +806,17 @@ class BookingForm {
                     item.style.color = '#374151';
                 } else {
                     this.state.selectedCategoryOptions[categoryId] = [...current, optionId];
-                    item.style.borderColor = '#3b82f6';
-                    item.style.backgroundColor = '#eff6ff';
-                    item.style.color = '#1e40af';
+                    item.style.borderColor = 'var(--primary-color)';
+                    item.style.backgroundColor = 'var(--primary-color)';
+                    item.style.color = '#ffffff';
+                }
+                // 選択したオプションの詳細ポップアップ
+                if (!isSelected) {
+                    const popupCat = this.config.menu_structure.categories.find(c => c.id === categoryId);
+                    const popupOpt = popupCat && popupCat.options ? popupCat.options.find(o => o.id === optionId) : null;
+                    if (popupOpt) this.showDetailPopup(item, popupOpt); else this.closeDetailPopup();
+                } else {
+                    this.closeDetailPopup();
                 }
                 this.updateSummary();
             });
@@ -826,6 +876,15 @@ class BookingForm {
         document.getElementById('submit-button').addEventListener('click', () => {
             this.handleSubmit();
         });
+
+        // 詳細ポップアップ: 外側タップで閉じる（選択ボタン自身のタップは各処理側で制御）
+        document.addEventListener('click', (e) => {
+            const popup = document.getElementById('treatment-text');
+            if (!popup || popup.style.display !== 'block') return;
+            if (popup.contains(e.target)) return;
+            if (e.target.closest && (e.target.closest('.menu-item') || e.target.closest('.menu-option-item') || e.target.closest('.category-option-item') || e.target.closest('.submenu-item'))) return;
+            popup.style.display = 'none';
+        });
         
         // サマリー修正ボタン
         document.querySelectorAll('.summary-edit-button').forEach(btn => {
@@ -879,6 +938,62 @@ class BookingForm {
         return { menuDuration, optionsDuration };
     }
     
+    // メニュー/オプションの詳細ポップアップ（説明文または画像がある場合のみ表示）
+    escapeHtmlText(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    showDetailPopup(button, item) {
+        const popup = document.getElementById('treatment-text');
+        if (!popup || !item) return;
+        const desc = (item.description || '').trim();
+        const image = item.image || item.image_url || '';
+        if (!desc && !image) { this.closeDetailPopup(); return; }
+        const parts = [];
+        parts.push('<div class="t-title-row"><i class="fas fa-star t-icon"></i><span class="t-title">' + this.escapeHtmlText(item.name || '') + '</span></div>');
+        if (image) parts.push('<div class="t-image"><img src="' + this.escapeHtmlText(image) + '" alt="" loading="lazy"></div>');
+        if ((item.duration || 0) > 0 && !item.hide_duration) {
+            parts.push('<div class="t-time-row"><i class="fas fa-clock t-icon"></i> 所要時間：' + item.duration + '分</div>');
+        }
+        if ((item.price || 0) > 0 && !item.hide_price) {
+            parts.push('<div class="t-price-row"><div><div class="t-price-label">料金</div><div class="t-price-val">¥' + Number(item.price).toLocaleString() + '</div></div></div>');
+        }
+        if (desc) parts.push('<div class="t-detail"><i class="fas fa-list-ul t-icon"></i>' + this.escapeHtmlText(desc).replace(/\\n/g, '<br>') + '</div>');
+        parts.push('<button type="button" class="t-close-bottom" onclick="window.bookingForm.closeDetailPopup()">閉じる</button>');
+        popup.innerHTML = '<button type="button" class="treatment-close" onclick="window.bookingForm.closeDetailPopup()">×</button><div class="treatment-content">' + parts.join('') + '</div>';
+        popup.style.display = 'block';
+
+        // タップしたボタンの直下にカードを表示（参考デザインと同じ位置調整）
+        const rect = button.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+        popup.style.top = '0px';
+        popup.style.left = '0px';
+        const cardWidth = popup.offsetWidth || 280;
+        let left = rect.left + scrollLeft;
+        const maxLeft = scrollLeft + document.documentElement.clientWidth - cardWidth - 16;
+        if (left > maxLeft) left = maxLeft;
+        if (left < 8) left = 8;
+        popup.style.left = left + 'px';
+        popup.style.top = (rect.bottom + scrollTop + 8) + 'px';
+    }
+
+    closeDetailPopup() {
+        const popup = document.getElementById('treatment-text');
+        if (popup) popup.style.display = 'none';
+    }
+
+    // ご予約内容欄の日時表示用: '2026-07-09','12:30' → '2026年07月09日 12時30分'
+    formatDateTimeJa(dateStr, timeStr) {
+        let d = dateStr || '';
+        const dm = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(d);
+        if (dm) d = dm[1] + '年' + dm[2] + '月' + dm[3] + '日';
+        let t = timeStr || '';
+        const tm = /^([0-9]{1,2}):([0-9]{2})$/.exec(t);
+        if (tm) t = String(tm[1]).padStart(2, '0') + '時' + tm[2] + '分';
+        return (d + ' ' + t).trim();
+    }
+
     // 選択内容をAPI・サマリー・LINE用に1か所で構築（重複排除）
     buildSelectionPayload() {
         const selectedMenus = [];
@@ -986,19 +1101,16 @@ class BookingForm {
         container.innerHTML = \`
             <div class="submenu-title">サブメニューを選択してください</div>
             \${menu.sub_menu_items.map((sub, idx) => \`
-                <button class="submenu-item" data-submenu-index="\${idx}">
-                    \${sub.image ? \`
-                        <div class="menu-item-image">
-                            <img src="\${sub.image}" alt="\${sub.name}" class="menu-image" loading="lazy" onerror="this.parentElement.style.display='none'">
+                <button class="submenu-item" data-submenu-index="\${idx}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
+                    <div style="display:flex;align-items:center;">
+                        <div>
+                            <div style="text-align:left;font-size:0.875rem;font-weight:500;">\${sub.name}</div>
+                            \${sub.description ? \`<div style="font-size:0.75rem;opacity:0.7;text-align:left;margin-top:0.125rem;">\${sub.description}</div>\` : ''}
                         </div>
-                    \` : ''}
-                    <div class="menu-item-content">
-                        <div class="menu-item-name">\${sub.name}</div>
-                        \${sub.description ? \`<div class="menu-item-desc">\${sub.description}</div>\` : ''}
                     </div>
-                    <div class="menu-item-info">
-                        \${!sub.hide_price ? \`<div class="menu-item-price">¥\${sub.price.toLocaleString()}</div>\` : ''}
-                        \${!sub.hide_duration ? \`<div class="menu-item-duration">\${sub.duration}分</div>\` : ''}
+                    <div style="text-align:right;margin-left:0.5rem;">
+                        \${!sub.hide_price ? \`<div style="font-weight:500;font-size:0.875rem;">¥\${sub.price.toLocaleString()}</div>\` : ''}
+                        \${!sub.hide_duration ? \`<div style="font-size:0.75rem;opacity:0.7;">\${sub.duration}分</div>\` : ''}
                     </div>
                 </button>
             \`).join('')}
@@ -1016,6 +1128,8 @@ class BookingForm {
                 this.state.selectedSubmenu = submenu;
                 if (!this.state.selectedSubMenus) this.state.selectedSubMenus = {};
                 this.state.selectedSubMenus[menuId] = submenu.id;
+                // 選択したサブメニューの詳細ポップアップ（説明/画像がある場合のみ）
+                this.showDetailPopup(sub, submenu);
                 this.toggleCalendarVisibility();
                 this.updateSummary();
             });
@@ -1154,11 +1268,11 @@ class BookingForm {
         }
         
         // テーブルヘッダー生成
-        let headerHTML = '<thead><tr><th style="text-align:center;padding:0.5rem;background:#f3f4f6;border:1px solid #9ca3af;font-size:0.75rem;vertical-align:middle;width:17%;box-sizing:border-box;">時間</th>';
+        let headerHTML = '<thead><tr><th style="text-align:center;padding:0.5rem;background:#f9f9f9;border:1px solid #696969;font-size:0.75rem;vertical-align:middle;width:17%;box-sizing:border-box;">時間</th>';
         weekDates.forEach(date => {
             const dayOfWeek = date.getDay();
             const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
-            headerHTML += \`<th style="text-align:center;padding:0.4rem 0.3rem;background:#f3f4f6;border:1px solid #9ca3af;font-size:0.7rem;vertical-align:middle;line-height:1.3;width:calc((100% - 17%) / 7);box-sizing:border-box;word-break:keep-all;white-space:normal;">\${date.getMonth() + 1}/\${date.getDate()}<br style="line-height:0.8;" />(\${dayNames[dayOfWeek]})</th>\`;
+            headerHTML += \`<th style="text-align:center;padding:0.4rem 0.3rem;background:#f9f9f9;border:1px solid #696969;font-size:0.7rem;vertical-align:middle;line-height:1.3;width:calc((100% - 17%) / 7);box-sizing:border-box;word-break:keep-all;white-space:normal;">\${date.getMonth() + 1}/\${date.getDate()}<br style="line-height:0.8;" />(\${dayNames[dayOfWeek]})</th>\`;
         });
         headerHTML += '</tr></thead>';
         
@@ -1168,7 +1282,7 @@ class BookingForm {
         let selectionWasReset = false;
         timeSlots.forEach((time, timeIndex) => {
             bodyHTML += '<tr>';
-            bodyHTML += \`<td style="text-align:center;padding:0.25rem;border:1px solid #9ca3af;font-size:0.75rem;background:#f9fafb;font-weight:500;">\${time}</td>\`;
+            bodyHTML += \`<td style="text-align:center;padding:0.25rem;border:1px solid #696969;font-size:0.75rem;background:#f9f9f9;font-weight:500;">\${time}</td>\`;
             
             weekDates.forEach((date, dateIndex) => {
         const dateStr = formatLocalYmd(date);
@@ -1333,16 +1447,16 @@ class BookingForm {
                     selectionWasReset = true;
                 }
                 const showSelected = isSelected && isAvailable && !isPast;
-                const bgColor = showSelected ? '#10b981' : (isAvailable && !isPast ? '#fff' : '#f3f4f6');
-                const textColor = showSelected ? '#fff' : (isAvailable && !isPast ? '#111827' : '#9ca3af');
+                const bgColor = showSelected ? 'var(--primary-color)' : (isAvailable && !isPast ? '#fff' : '#a0a0a0');
+                const textColor = showSelected ? '#fff' : (isAvailable && !isPast ? 'var(--primary-color)' : '#ffffff');
                 const cursor = isAvailable && !isPast ? 'pointer' : 'not-allowed';
-                const hoverStyle = isAvailable && !isPast ? 'onmouseover="this.style.backgroundColor=&quot;#e5e7eb&quot;" onmouseout="if(!this.classList.contains(&quot;selected&quot;)){this.style.backgroundColor=&quot;#fff&quot;}"' : '';
+                const hoverStyle = isAvailable && !isPast ? 'onmouseover="this.style.backgroundColor=&quot;#fffbe6&quot;" onmouseout="if(!this.classList.contains(&quot;selected&quot;)){this.style.backgroundColor=&quot;#fff&quot;}"' : '';
 
                 bodyHTML += \`<td
                     data-date="\${dateStr}"
                     data-time="\${time}"
-                    class="calendar-cell \${showSelected ? 'selected' : ''}"
-                    style="text-align:center;padding:0.25rem;border:1px solid #9ca3af;font-size:0.75rem;cursor:\${cursor};background:\${bgColor};color:\${textColor};"
+                    class="calendar-cell\${showSelected ? ' selected' : ''}\${isAvailable && !isPast ? '' : ' unavailable'}"
+                    style="text-align:center;padding:0.25rem;border:1px solid #696969;font-size:0.9rem;font-weight:bold;cursor:\${cursor};background:\${bgColor};color:\${textColor};"
                     \${hoverStyle}
                     onclick="window.bookingForm.handleDateTimeSelect('\${dateStr}', '\${time}', \${isAvailable && !isPast})"
                 >\${isAvailable && !isPast ? '○' : '×'}</td>\`;
@@ -1375,7 +1489,7 @@ class BookingForm {
         const cell = document.querySelector(\`.calendar-cell[data-date="\${dateStr}"][data-time="\${time}"]\`);
         if (cell) {
             cell.classList.add('selected');
-            cell.style.backgroundColor = '#10b981';
+            cell.style.backgroundColor = 'var(--primary-color)';
             cell.style.color = '#fff';
         }
         
@@ -1676,13 +1790,13 @@ class BookingForm {
             const bMode = this.config.calendar_settings?.booking_mode || 'calendar';
             if (bMode === 'multiple_dates') {
                 let dateHtml = \`<strong>希望日時:</strong><div style="margin-top:0.25rem;font-size:0.875rem;">\`;
-                dateHtml += \`第一希望: \${this.state.selectedDate} \${this.state.selectedTime}\`;
-                if (this.state.selectedDate2 && this.state.selectedTime2) dateHtml += \`<br>第二希望: \${this.state.selectedDate2} \${this.state.selectedTime2}\`;
-                if (this.state.selectedDate3 && this.state.selectedTime3) dateHtml += \`<br>第三希望: \${this.state.selectedDate3} \${this.state.selectedTime3}\`;
+                dateHtml += \`第一希望: \${this.formatDateTimeJa(this.state.selectedDate, this.state.selectedTime)}\`;
+                if (this.state.selectedDate2 && this.state.selectedTime2) dateHtml += \`<br>第二希望: \${this.formatDateTimeJa(this.state.selectedDate2, this.state.selectedTime2)}\`;
+                if (this.state.selectedDate3 && this.state.selectedTime3) dateHtml += \`<br>第三希望: \${this.formatDateTimeJa(this.state.selectedDate3, this.state.selectedTime3)}\`;
                 dateHtml += \`</div>\`;
                 items.push(\`<div class="summary-item" style="align-items:flex-start;"><div>\${dateHtml}</div><button class="summary-edit-button" data-field="datetime-field-1">修正</button></div>\`);
             } else {
-                items.push(\`<div class="summary-item"><span><strong>希望日時:</strong> \${this.state.selectedDate} \${this.state.selectedTime}</span><button class="summary-edit-button" data-field="datetime-field">修正</button></div>\`);
+                items.push(\`<div class="summary-item"><span><strong>希望日時:</strong> \${this.formatDateTimeJa(this.state.selectedDate, this.state.selectedTime)}</span><button class="summary-edit-button" data-field="datetime-field">修正</button></div>\`);
             }
         }
         if (this.state.message) {
@@ -2619,33 +2733,27 @@ if (document.readyState === 'loading') {
                 <label class="field-label">希望日時 <span class="required">*</span></label>
                 
                 <div class="calendar-container">
-                    <!-- 現在の月表示 -->
-                    <div class="current-month-container" style="margin-bottom:1rem;text-align:center;">
-                        <span id="current-month" class="current-month" style="font-size:1.125rem;font-weight:bold;color:#374151;"></span>
+                    <!-- 現在の月表示（ヘッダーバー） -->
+                    <div class="calendar-header-bar">
+                        <span id="current-month" class="current-month"></span>
                     </div>
 
-                    <!-- 月移動ボタン -->
-                    <div class="month-button-container" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;gap:0.5rem;">
-                        <button type="button" onclick="window.bookingForm.navigateMonth('prev')" 
-                                class="month-button" style="flex:1;padding:0.5rem 1.25rem;background:#374151;color:#fff;border:none;border-radius:0.25rem;cursor:pointer;font-weight:500;">
-                            前月
-                        </button>
-                        <button type="button" onclick="window.bookingForm.navigateMonth('next')" 
-                                class="month-button" style="flex:1;padding:0.5rem 1.25rem;background:#374151;color:#fff;border:none;border-radius:0.25rem;cursor:pointer;font-weight:500;">
-                            翌月
-                        </button>
+                    <!-- 月・週移動ボタン -->
+                    <div class="calendar-controls">
+                        <div class="control-group">
+                            <button type="button" onclick="window.bookingForm.navigateMonth('prev')" class="month-button">◀ 前月</button>
+                            <button type="button" onclick="window.bookingForm.navigateMonth('next')" class="month-button">翌月 ▶</button>
+                        </div>
+                        <div class="control-group">
+                            <button type="button" onclick="window.bookingForm.navigateWeek('prev')" class="week-button">◀ 前週</button>
+                            <button type="button" onclick="window.bookingForm.navigateWeek('next')" class="week-button">翌週 ▶</button>
+                        </div>
                     </div>
 
-                    <!-- 週移動ボタン -->
-                    <div class="week-button-container" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;gap:0.5rem;">
-                        <button type="button" onclick="window.bookingForm.navigateWeek('prev')" 
-                                class="week-button" style="flex:1;padding:0.5rem 1.25rem;background:#374151;color:#fff;border:none;border-radius:0.25rem;cursor:pointer;font-weight:500;">
-                            前週
-                        </button>
-                        <button type="button" onclick="window.bookingForm.navigateWeek('next')" 
-                                class="week-button" style="flex:1;padding:0.5rem 1.25rem;background:#374151;color:#fff;border:none;border-radius:0.25rem;cursor:pointer;font-weight:500;">
-                            翌週
-                        </button>
+                    <!-- 凡例（〇✕の説明） -->
+                    <div class="calendar-legend">
+                        <div class="legend-item"><span class="legend-marker marker-ok"></span><span>予約可</span></div>
+                        <div class="legend-item"><span class="legend-marker marker-ng">✕</span><span>満席</span></div>
                     </div>
 
                     <!-- カレンダーテーブル -->
@@ -2767,6 +2875,554 @@ if (document.readyState === 'loading') {
                 <label class="field-label">同意事項${requiredMark}</label>
                 <div class="agreement-text">${this.escapeHtml((agreement.text || '').trim())}</div>${buttonHtml}
             </div>`;
+  }
+
+  // 参考デザイン（ダークネイビー×シャンパンゴールド）を既存クラスに適用する上書きCSS。
+  // DOM 構造・クラス名・JS は変更せず、見た目のみ差し替える。
+  private generateDesignOverridesCSS(config: FormConfig): string {
+    const themeColor = config.basic_info.theme_color || '#1b2a4e';
+    return `
+        :root {
+            --primary-color: ${themeColor};
+            --accent-color: #c5a059;
+            --bg-color: #f4f6f9;
+            --text-color: #333333;
+            --white: #ffffff;
+            --required-bg: #ff4c4c;
+        }
+        button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; font-family: inherit; }
+        body {
+            font-family: 'Noto Sans JP', 'Poppins', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+        .form-container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 10px 0 40px;
+        }
+        .form-header {
+            background: var(--primary-color) !important;
+            color: var(--white);
+            border-radius: 4px 4px 0 0;
+            border-top: 4px solid var(--accent-color);
+            box-shadow: none;
+            margin-bottom: 0;
+            padding: 20px 15px;
+            text-align: center;
+        }
+        .form-header h1 { font-size: 22px; font-weight: 700; letter-spacing: 1px; }
+        .form-content {
+            border-radius: 0 0 4px 4px;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
+            padding: 25px;
+        }
+        .field-label {
+            display: flex;
+            align-items: center;
+            padding: 8px 15px;
+            font-weight: 700;
+            color: #1b2a4e;
+            font-size: 16px;
+            background-color: transparent;
+            border-bottom: 2px solid var(--primary-color);
+            border-left: 6px solid var(--accent-color);
+            border-radius: 0;
+            line-height: 1.4;
+            margin-bottom: 15px;
+        }
+        /* 必須マーク: 「*」を「必須」の赤バッジ表示に置き換え（テキスト自体はJSに影響しない） */
+        .field-label .required {
+            font-size: 0;
+            margin-left: auto;
+            background-color: var(--required-bg);
+            color: var(--white);
+            padding: 2px 6px;
+            border-radius: 2px;
+            line-height: 1.4;
+        }
+        .field-label .required::before { content: "必須"; font-size: 11px; font-weight: normal; }
+        .input {
+            padding: 14px;
+            border: 1px solid #ccc;
+            border-radius: 2px;
+            font-size: 16px;
+            background-color: #fafafa;
+        }
+        .input:focus {
+            border-color: var(--primary-color);
+            background-color: var(--white);
+            box-shadow: 0 0 0 1px var(--primary-color);
+        }
+        .choice-button, .menu-item, .submenu-item, .menu-option-item, .category-option-item {
+            border-radius: 2px;
+            border-color: #ccc;
+        }
+        .choice-button.selected,
+        .menu-item.selected,
+        .submenu-item.selected {
+            background-color: var(--primary-color) !important;
+            border-color: var(--primary-color) !important;
+            color: var(--white) !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        .menu-item.selected .menu-item-name,
+        .menu-item.selected .menu-item-price,
+        .menu-item.selected .menu-item-duration,
+        .menu-item.selected .menu-item-desc,
+        .submenu-item.selected .menu-item-name,
+        .submenu-item.selected .menu-item-price,
+        .submenu-item.selected .menu-item-duration,
+        .submenu-item.selected .menu-item-desc {
+            color: var(--white) !important;
+        }
+        /* 選択中バッジ（疑似要素なので innerText・送信内容には影響しない） */
+        .choice-button.selected::after,
+        .menu-item.selected::after,
+        .submenu-item.selected::after {
+            content: "✓ 選択中";
+            display: block;
+            width: fit-content;
+            margin: 6px auto 0;
+            padding: 1px 12px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            line-height: 1.7;
+            background-color: var(--accent-color);
+            color: var(--white);
+        }
+        .category-header {
+            background: var(--primary-color);
+            color: var(--white);
+            border-radius: 2px;
+        }
+        .summary-box {
+            border: 1px solid #eee;
+            border-radius: 0;
+            background: #fcfcfc;
+            padding: 15px;
+        }
+        .summary-title {
+            display: flex;
+            align-items: center;
+            padding: 8px 15px;
+            font-weight: 700;
+            color: #1b2a4e;
+            font-size: 16px;
+            border-bottom: 2px solid var(--primary-color);
+            border-left: 6px solid var(--accent-color);
+            margin: -5px -5px 15px -5px;
+        }
+        .summary-edit-button {
+            background-color: transparent;
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+            border-radius: 2px;
+            padding: 4px 10px;
+            font-size: 12px;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+        .summary-edit-button:hover { background-color: var(--primary-color); color: var(--white); }
+        .agreement-box { border-radius: 0; border-color: #eee; background: #fcfcfc; }
+        .agreement-button { border-radius: 2px; }
+        .agreement-button.selected {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        .submit-button {
+            padding: 18px;
+            font-size: 18px;
+            font-weight: bold;
+            background: var(--primary-color);
+            border-radius: 4px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            border-bottom: 4px solid var(--accent-color);
+        }
+        .submit-button:active { transform: translateY(2px); border-bottom-width: 2px; box-shadow: none; }
+        /* 前回と同じメニューで予約する: 実線ボーダー + フォームに合わせた背景色 */
+        .repeat-booking-button {
+            border: 2px solid var(--primary-color) !important;
+            background-color: var(--bg-color) !important;
+            color: var(--primary-color) !important;
+            border-radius: 3px !important;
+            font-weight: bold !important;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        /* メニュー/オプションボタン内の画像は非表示（画像は詳細ポップアップにのみ表示） */
+        .menu-item .menu-item-image,
+        .submenu-item .menu-item-image { display: none !important; }
+        /* 「✓ 選択中」バッジは横並びボタンでは行内に割り込まず、下の行に折り返して中央表示 */
+        .menu-item.selected,
+        .submenu-item.selected { flex-wrap: wrap; }
+        /* バッジの直前で改行させるための全幅ダミー要素（見えない） */
+        .menu-item.selected::before,
+        .submenu-item.selected::before {
+            content: "";
+            flex-basis: 100%;
+            height: 0;
+            order: 5;
+        }
+        /* バッジ本体はテキスト幅のまま中央寄せ */
+        .menu-item.selected::after,
+        .submenu-item.selected::after {
+            order: 6;
+            flex-basis: auto;
+            width: fit-content;
+            margin: 8px auto 0;
+        }
+        /* サブメニュー: メニューオプション（眉カット等）と同じボタン形状・配置 */
+        .submenu-item {
+            align-items: center !important;
+            padding: 0.5rem !important;
+            border: 2px solid #d1d5db !important;
+            border-radius: 0.375rem !important;
+            background: #fff;
+        }
+        .submenu-item.selected {
+            border-color: var(--primary-color) !important;
+        }
+        .submenu-item .menu-item-content {
+            flex: 1;
+            min-width: 0;
+            text-align: left;
+        }
+        .submenu-item .menu-item-info {
+            flex-shrink: 0;
+            margin-left: 10px;
+            text-align: right;
+        }
+        /* カスタムフィールドの単一/複数選択: ご来店回数と同じボタンデザイン */
+        .custom-field-radios,
+        .custom-field-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+        .choice-label {
+            position: relative;
+            flex: 1 1 45%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 14px 10px;
+            border: 1px solid #ccc;
+            border-radius: 2px;
+            background-color: var(--white);
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.2s;
+            word-break: break-word;
+            line-height: 1.4;
+        }
+        @media (hover: hover) and (pointer: fine) {
+            .choice-label:hover { border-color: var(--accent-color); background-color: #fffcf5; }
+        }
+        .choice-label input[type="radio"],
+        .choice-label input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            width: 1px;
+            height: 1px;
+            pointer-events: none;
+        }
+        .choice-label.selected {
+            background-color: var(--primary-color);
+            color: var(--white);
+            border-color: var(--primary-color);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        .choice-label.selected::after {
+            content: "✓ 選択中";
+            display: block;
+            width: fit-content;
+            margin: 6px auto 0;
+            padding: 1px 12px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            line-height: 1.7;
+            background-color: var(--accent-color);
+            color: var(--white);
+        }
+        /* カテゴリー開閉ボタン: タップで開閉できることが分かるデザイン */
+        .category-header {
+            background: var(--white) !important;
+            border: 1px solid #ccc !important;
+            border-left: 6px solid var(--accent-color) !important;
+            border-radius: 2px !important;
+            color: var(--primary-color) !important;
+            font-size: 15px !important;
+            font-weight: 700 !important;
+            padding: 14px 12px !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+        .category-header::after {
+            content: "タップで開く";
+            font-size: 11px;
+            font-weight: 500;
+            margin-left: auto;
+            margin-right: 10px;
+            opacity: 0.75;
+            white-space: nowrap;
+        }
+        .category-header.open::after { content: "タップで閉じる"; }
+        .category-header-name { text-align: left; }
+        .category-header-chevron { order: 1; border-color: var(--primary-color) !important; }
+        .category-header.open {
+            background: var(--primary-color) !important;
+            color: var(--white) !important;
+            border-color: var(--primary-color) !important;
+            border-left-color: var(--accent-color) !important;
+        }
+        .category-header.open .category-header-chevron { border-color: var(--white) !important; }
+        /* カレンダー: ヘッダー・操作ボタン・凡例 */
+        .calendar-header-bar {
+            background: var(--primary-color);
+            color: var(--white);
+            padding: 15px 12px;
+            border-radius: 6px 6px 0 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .calendar-header-bar .current-month {
+            font-family: 'Poppins', 'Noto Sans JP', sans-serif;
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: 0.15em;
+            border-bottom: 2px solid var(--accent-color);
+            padding-bottom: 4px;
+            color: var(--white) !important;
+        }
+        .calendar-controls {
+            background-color: #fff;
+            padding: 10px;
+            border: 1px solid #696969;
+            border-top: none;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .control-group { display: flex; gap: 5px; flex: 1; }
+        .month-button, .week-button {
+            padding: 8px 12px;
+            background-color: #f0f0f0 !important;
+            color: #333 !important;
+            border: 1px solid #ccc !important;
+            border-radius: 4px !important;
+            font-size: 12px !important;
+            font-weight: bold !important;
+            flex: 1;
+            white-space: nowrap;
+            min-height: 36px;
+            cursor: pointer;
+        }
+        .month-button:hover, .week-button:hover { background-color: #e0e0e0 !important; }
+        .calendar-legend {
+            display: flex;
+            justify-content: flex-end;
+            gap: 15px;
+            padding: 8px 10px;
+            background: #fff;
+            border-left: 1px solid #696969;
+            border-right: 1px solid #696969;
+            font-size: 12px;
+        }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-marker { width: 14px; height: 14px; border-radius: 2px; display: inline-block; }
+        .marker-ok { background-color: #fff; border: 1px solid var(--accent-color); position: relative; }
+        .marker-ok::after {
+            content: "〇";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10px;
+            color: var(--accent-color);
+            line-height: 1;
+        }
+        .marker-ng { background-color: #a0a0a0; color: #fff; text-align: center; line-height: 14px; font-size: 10px; }
+        .calendar-table-wrapper {
+            border: 1px solid #696969 !important;
+            border-radius: 0 0 6px 6px !important;
+            box-shadow: none !important;
+        }
+        /* カレンダーセル: 参考デザインのサイズ・書体 */
+        #calendar-table { table-layout: fixed; min-width: 320px; }
+        #calendar-table th {
+            background-color: #f9f9f9 !important;
+            color: #333 !important;
+            font-weight: bold;
+            padding: 8px 0 !important;
+            font-size: 12px !important;
+            border-bottom: 2px solid #696969 !important;
+        }
+        #calendar-table td {
+            height: 40px;
+            padding: 10px 0 !important;
+            font-size: 14px !important;
+            vertical-align: middle;
+        }
+        #calendar-table th:first-child,
+        #calendar-table td:first-child {
+            width: 50px !important;
+            background-color: #f9f9f9 !important;
+            font-weight: bold;
+            font-size: 11px !important;
+            color: #555 !important;
+        }
+        /* 満席セル: 濃グレー + 斜線パターン */
+        #calendar-table td.calendar-cell.unavailable {
+            background-color: #a0a0a0 !important;
+            color: #ffffff !important;
+            background-image: linear-gradient(45deg, rgba(0, 0, 0, 0.08) 25%, transparent 25%, transparent 50%, rgba(0, 0, 0, 0.08) 50%, rgba(0, 0, 0, 0.08) 75%, transparent 75%, transparent) !important;
+            background-size: 8px 8px !important;
+            font-weight: normal !important;
+        }
+        #calendar-table th:not(:first-child) { width: auto !important; }
+        /* ご予約内容: 各項目の間に点線の区切り */
+        .summary-item { padding: 8px 0 !important; margin: 0 !important; }
+        .summary-item + .summary-item { border-top: 1px dashed #ccc; }
+        /* メニュー/オプション詳細ポップアップ */
+        #treatment-text {
+            display: none;
+            position: absolute;
+            z-index: 1500;
+            background-color: var(--white);
+            width: 300px;
+            max-width: 90vw;
+            padding: 0;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            border-top: 5px solid var(--accent-color);
+            overflow: hidden;
+            animation: fadeIn 0.3s ease;
+        }
+        #treatment-text .treatment-close {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            width: 30px;
+            height: 30px;
+            border: none;
+            background: #f0f0f0;
+            color: #999;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        #treatment-text .treatment-close:hover { background-color: var(--primary-color); color: var(--white); }
+        .treatment-content { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+        .t-title-row {
+            display: flex;
+            align-items: center;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--primary-color);
+            padding-bottom: 6px;
+            border-bottom: 1px solid #eee;
+        }
+        .t-title { letter-spacing: 0.05em; }
+        .t-icon { margin-right: 6px; }
+        .t-image { text-align: center; }
+        .t-image img { max-width: 100%; max-height: 200px; height: auto; border-radius: 4px; display: inline-block; }
+        .t-time-row {
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            font-weight: bold;
+            color: var(--primary-color);
+            border-bottom: 1px dashed #eee;
+            padding-bottom: 8px;
+        }
+        .t-price-row { display: flex; justify-content: space-between; align-items: flex-end; background: #fdfdfd; }
+        .t-price-label { font-size: 12px; color: #666; margin-bottom: 4px; }
+        .t-price-val { font-size: 24px; font-weight: 800; color: var(--accent-color); line-height: 1; letter-spacing: 0.05em; }
+        .t-detail { font-size: 12px; color: #555; line-height: 1.6; }
+        .t-close-bottom {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: var(--white);
+            color: var(--text-color);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .t-close-bottom:hover { border-color: var(--primary-color); background-color: var(--primary-color); color: var(--white); }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* 右端の追従ナビ */
+        .side-nav {
+            position: fixed;
+            right: 0;
+            top: 82%;
+            transform: translateY(50%);
+            background: var(--primary-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px 4px;
+            border-radius: 8px 0 0 8px;
+            z-index: 1000;
+            width: 40px;
+            box-shadow: -2px 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        .side-nav a {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-color);
+            text-decoration: none;
+            font-size: 10px;
+            margin: 0;
+            width: 100%;
+            height: 40px;
+            text-align: center;
+        }
+        .side-nav a span {
+            font-size: 32px;
+            font-weight: bold;
+            display: block;
+            line-height: 1;
+            margin-bottom: 2px;
+        }
+        .side-nav a i { font-size: 16px; }
+        @media (max-width: 600px) {
+            .form-container { padding: 0 0 30px; }
+            .form-header { border-radius: 0; }
+            .form-content { border-radius: 0; box-shadow: none; padding: 20px 15px; }
+            .form-header h1 { font-size: 20px; }
+            .field-label { font-size: 15px; padding: 8px 10px; }
+            .submit-button { font-size: 17px; padding: 16px; }
+            #calendar-table th:first-child,
+            #calendar-table td:first-child { width: 44px !important; font-size: 10px !important; }
+            #calendar-table th { font-size: 11px !important; padding: 6px 0 !important; }
+            #treatment-text { width: calc(100vw - 24px); max-width: 340px; }
+            .side-nav { width: 35px; }
+            .side-nav a span { font-size: 28px; }
+        }
+    `;
   }
 
   private generateCSS(config: FormConfig): string {
@@ -3160,7 +3816,7 @@ if (document.readyState === 'loading') {
         }
         
         #calendar-table td.calendar-cell.selected {
-            background-color: #10b981 !important;
+            background-color: var(--primary-color, #10b981) !important;
             color: #fff !important;
         }
         
