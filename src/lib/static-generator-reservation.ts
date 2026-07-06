@@ -1817,9 +1817,11 @@ class BookingForm {
                 }
             }
         }
-        // 同意事項の必須チェック（表示されている場合のみ）
+        // 同意事項の必須チェック（「同意する」ボタンが表示されている場合のみ。
+        // ボタン非表示時は同意操作ができないためチェックしない）
         const agreementCfg = this.config.reservation_summary?.agreement;
         if (agreementCfg?.enabled === true && agreementCfg.required === true
+            && agreementCfg.hide_button !== true
             && (agreementCfg.text || '').trim() && !this.state.agreementAccepted) {
             alert('同意事項を確認して「同意する」ボタンをタップしてください。');
             const agreementField = document.getElementById('agreement-field');
@@ -2754,13 +2756,16 @@ if (document.readyState === 'loading') {
   private renderAgreementField(config: FormConfig): string {
     const agreement = config.reservation_summary?.agreement;
     if (agreement?.enabled !== true || !(agreement.text || '').trim()) return '';
-    const requiredMark = agreement.required ? ' <span class="required">*</span>' : '';
+    const hideButton = agreement.hide_button === true;
+    // ボタン非表示時は同意操作ができないため必須マークも付けない（テキスト表示のみ）
+    const requiredMark = agreement.required && !hideButton ? ' <span class="required">*</span>' : '';
+    const buttonHtml = hideButton ? '' : `
+                <button type="button" id="agreement-button" class="agreement-button">同意する</button>`;
     return `
             <!-- 同意事項 -->
             <div class="field agreement-box" id="agreement-field">
                 <label class="field-label">同意事項${requiredMark}</label>
-                <div class="agreement-text">${this.escapeHtml((agreement.text || '').trim())}</div>
-                <button type="button" id="agreement-button" class="agreement-button">同意する</button>
+                <div class="agreement-text">${this.escapeHtml((agreement.text || '').trim())}</div>${buttonHtml}
             </div>`;
   }
 

@@ -117,7 +117,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       agreement: {
         enabled: false,
         text: '',
-        required: false
+        required: false,
+        hide_button: false
       }
     },
     ui_settings: {
@@ -304,7 +305,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           return {
             enabled: a?.enabled === true,
             text: typeof a?.text === 'string' ? a.text : '',
-            required: a?.required === true
+            required: a?.required === true,
+            hide_button: a?.hide_button === true
           };
         })()
       },
