@@ -2923,7 +2923,7 @@ if (document.readyState === 'loading') {
             align-items: center;
             padding: 8px 15px;
             font-weight: 700;
-            color: var(--primary-color);
+            color: #1b2a4e;
             font-size: 16px;
             background-color: transparent;
             border-bottom: 2px solid var(--primary-color);
@@ -3010,7 +3010,7 @@ if (document.readyState === 'loading') {
             align-items: center;
             padding: 8px 15px;
             font-weight: 700;
-            color: var(--primary-color);
+            color: #1b2a4e;
             font-size: 16px;
             border-bottom: 2px solid var(--primary-color);
             border-left: 6px solid var(--accent-color);
@@ -3037,7 +3037,7 @@ if (document.readyState === 'loading') {
             padding: 18px;
             font-size: 18px;
             font-weight: bold;
-            background: linear-gradient(135deg, var(--primary-color), #2c3e50);
+            background: var(--primary-color);
             border-radius: 4px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
             border-bottom: 4px solid var(--accent-color);
@@ -3053,7 +3053,37 @@ if (document.readyState === 'loading') {
             box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
         }
         /* メニュー/オプションボタン内の画像は非表示（画像は詳細ポップアップにのみ表示） */
-        .menu-item .menu-item-image { display: none !important; }
+        .menu-item .menu-item-image,
+        .submenu-item .menu-item-image { display: none !important; }
+        /* 「✓ 選択中」バッジは横並びボタンでは行内に割り込まず、下の行に折り返して中央表示 */
+        .menu-item.selected::after,
+        .submenu-item.selected::after {
+            flex-basis: 100%;
+            margin-top: 8px;
+        }
+        .menu-item.selected,
+        .submenu-item.selected { flex-wrap: wrap; }
+        /* サブメニュー: メニューオプション（眉カット等）と同じボタン形状・配置 */
+        .submenu-item {
+            align-items: center !important;
+            padding: 0.5rem !important;
+            border: 2px solid #d1d5db !important;
+            border-radius: 0.375rem !important;
+            background: #fff;
+        }
+        .submenu-item.selected {
+            border-color: var(--primary-color) !important;
+        }
+        .submenu-item .menu-item-content {
+            flex: 1;
+            min-width: 0;
+            text-align: left;
+        }
+        .submenu-item .menu-item-info {
+            flex-shrink: 0;
+            margin-left: 10px;
+            text-align: right;
+        }
         /* カスタムフィールドの単一/複数選択: ご来店回数と同じボタンデザイン */
         .custom-field-radios,
         .custom-field-checkboxes {
@@ -3065,6 +3095,10 @@ if (document.readyState === 'loading') {
         .choice-label {
             position: relative;
             flex: 1 1 45%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
             padding: 14px 10px;
             border: 1px solid #ccc;
             border-radius: 2px;

@@ -429,7 +429,7 @@ export class StaticSurveyGenerator {
             gap: 4px;
             padding: 8px 15px;
             font-weight: 700;
-            color: var(--primary-color);
+            color: #1b2a4e;
             font-size: 16px;
             border-bottom: 2px solid var(--primary-color);
             border-left: 6px solid var(--accent-color);
@@ -491,7 +491,7 @@ export class StaticSurveyGenerator {
             padding: 18px;
             font-size: 18px;
             font-weight: bold;
-            background: linear-gradient(135deg, var(--primary-color), #2c3e50);
+            background: var(--primary-color);
             border-radius: 4px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
             border-bottom: 4px solid var(--accent-color);
