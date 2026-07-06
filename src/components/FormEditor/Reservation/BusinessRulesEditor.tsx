@@ -1392,7 +1392,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                           agreement: {
                             enabled: !(current?.enabled === true),
                             text: typeof current?.text === 'string' ? current.text : '',
-                            required: current?.required === true
+                            required: current?.required === true,
+                            hide_button: current?.hide_button === true
                           }
                         }
                       }
@@ -1429,7 +1430,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                               agreement: {
                                 enabled: true,
                                 text: e.target.value,
-                                required: current?.required === true
+                                required: current?.required === true,
+                                hide_button: current?.hide_button === true
                               }
                             }
                           }
@@ -1455,7 +1457,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                               agreement: {
                                 enabled: true,
                                 text: typeof current?.text === 'string' ? current.text : '',
-                                required: e.target.checked
+                                required: e.target.checked,
+                                hide_button: current?.hide_button === true
                               }
                             }
                           }
@@ -1471,6 +1474,44 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                       必須項目にする（「同意する」をタップしないと予約送信できません）
                     </span>
                   </label>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.config?.reservation_summary?.agreement?.hide_button === true}
+                      onChange={(e) => {
+                        const current = form.config?.reservation_summary?.agreement;
+                        onUpdate({
+                          ...form,
+                          config: {
+                            ...form.config,
+                            reservation_summary: {
+                              ...form.config?.reservation_summary,
+                              agreement: {
+                                enabled: true,
+                                text: typeof current?.text === 'string' ? current.text : '',
+                                required: current?.required === true,
+                                hide_button: e.target.checked
+                              }
+                            }
+                          }
+                        });
+                      }}
+                      className={`h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${
+                        theme === 'light'
+                          ? 'bg-gray-100 border-gray-300'
+                          : 'bg-gray-700 border-gray-600'
+                      }`}
+                    />
+                    <span className={`text-sm ${themeClasses.text.secondary}`}>
+                      「同意する」ボタンを非表示にする（テキスト表示のみ）
+                    </span>
+                  </label>
+                  {form.config?.reservation_summary?.agreement?.hide_button === true
+                    && form.config?.reservation_summary?.agreement?.required === true && (
+                    <p className={`text-xs ${theme === 'light' ? 'text-amber-600' : 'text-amber-400'}`}>
+                      ※ ボタン非表示のため「必須項目にする」は動作しません（同意操作ができないため、送信ブロックは行われません）
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -1485,7 +1526,9 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • 同意事項: {form.config?.reservation_summary?.agreement?.enabled === true
-                  ? (form.config?.reservation_summary?.agreement?.required === true ? '表示（同意必須）' : '表示（任意）')
+                  ? (form.config?.reservation_summary?.agreement?.hide_button === true
+                    ? '表示（テキストのみ・ボタンなし）'
+                    : form.config?.reservation_summary?.agreement?.required === true ? '表示（同意必須）' : '表示（任意）')
                   : '非表示'}
               </p>
             </div>

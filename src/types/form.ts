@@ -198,6 +198,8 @@ export interface FormConfig {
       enabled?: boolean;
       text?: string;
       required?: boolean;
+      // 「同意する」ボタンを非表示にする（テキスト表示のみ。ON時は required の送信ブロックも無効）
+      hide_button?: boolean;
     };
   };
 
