@@ -113,7 +113,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
     },
     reservation_summary: {
       show_total_price: false,
-      show_total_duration: false
+      show_total_duration: false,
+      agreement: {
+        enabled: false,
+        text: '',
+        required: false
+      }
     },
     ui_settings: {
       theme_color: '#3B82F6',
@@ -292,7 +297,16 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           ?? false,
         show_total_duration: existingConfig?.reservation_summary?.show_total_duration
           ?? (typedConfig as Form['config'])?.reservation_summary?.show_total_duration
-          ?? false
+          ?? false,
+        agreement: (() => {
+          const a = existingConfig?.reservation_summary?.agreement
+            ?? (typedConfig as Form['config'])?.reservation_summary?.agreement;
+          return {
+            enabled: a?.enabled === true,
+            text: typeof a?.text === 'string' ? a.text : '',
+            required: a?.required === true
+          };
+        })()
       },
       ui_settings: {
         theme_color: (existingConfig?.ui_settings?.theme_color || (typedConfig?.basic_info as Form['config']['basic_info'])?.theme_color || (typedBasicInfo?.theme_color as string) || (typedConfig?.ui_settings as Form['config']['ui_settings'])?.theme_color || (typedUiSettings?.theme_color as string) || '#3B82F6') as string,

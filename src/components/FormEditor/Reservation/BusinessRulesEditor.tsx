@@ -1367,6 +1367,114 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </button>
             </div>
 
+            {/* 同意事項 */}
+            <div className={`pt-3 border-t ${themeClasses.divider} space-y-3`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                    同意事項
+                  </label>
+                  <InfoTooltip
+                    theme={theme}
+                    text={'ONにすると、予約フォームのご予約内容の下に同意事項テキストと「同意する」ボタンを表示します。\n\n「必須項目にする」をONにすると、「同意する」ボタンをタップしないと予約を送信できなくなります。'}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = form.config?.reservation_summary?.agreement;
+                    onUpdate({
+                      ...form,
+                      config: {
+                        ...form.config,
+                        reservation_summary: {
+                          ...form.config?.reservation_summary,
+                          agreement: {
+                            enabled: !(current?.enabled === true),
+                            text: typeof current?.text === 'string' ? current.text : '',
+                            required: current?.required === true
+                          }
+                        }
+                      }
+                    });
+                  }}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                    form.config?.reservation_summary?.agreement?.enabled === true
+                      ? themeClasses.toggle.enabled
+                      : themeClasses.toggle.disabled
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      form.config?.reservation_summary?.agreement?.enabled === true ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {form.config?.reservation_summary?.agreement?.enabled === true && (
+                <div className="space-y-3">
+                  <div>
+                    <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>同意事項テキスト</label>
+                    <textarea
+                      value={form.config?.reservation_summary?.agreement?.text || ''}
+                      onChange={(e) => {
+                        const current = form.config?.reservation_summary?.agreement;
+                        onUpdate({
+                          ...form,
+                          config: {
+                            ...form.config,
+                            reservation_summary: {
+                              ...form.config?.reservation_summary,
+                              agreement: {
+                                enabled: true,
+                                text: e.target.value,
+                                required: current?.required === true
+                              }
+                            }
+                          }
+                        });
+                      }}
+                      rows={4}
+                      placeholder="例：キャンセルは前日までにご連絡ください。当日キャンセルはキャンセル料が発生する場合があります。"
+                      className={`w-full ${themeClasses.input} text-sm`}
+                    />
+                  </div>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.config?.reservation_summary?.agreement?.required === true}
+                      onChange={(e) => {
+                        const current = form.config?.reservation_summary?.agreement;
+                        onUpdate({
+                          ...form,
+                          config: {
+                            ...form.config,
+                            reservation_summary: {
+                              ...form.config?.reservation_summary,
+                              agreement: {
+                                enabled: true,
+                                text: typeof current?.text === 'string' ? current.text : '',
+                                required: e.target.checked
+                              }
+                            }
+                          }
+                        });
+                      }}
+                      className={`h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${
+                        theme === 'light'
+                          ? 'bg-gray-100 border-gray-300'
+                          : 'bg-gray-700 border-gray-600'
+                      }`}
+                    />
+                    <span className={`text-sm ${themeClasses.text.secondary}`}>
+                      必須項目にする（「同意する」をタップしないと予約送信できません）
+                    </span>
+                  </label>
+                </div>
+              )}
+            </div>
+
             <div className={`${themeClasses.highlight} rounded-lg p-4`}>
               <h4 className={`text-sm font-medium mb-2 ${theme === 'light' ? 'text-[rgb(244,144,49)]' : 'text-cyan-300'}`}>現在の設定:</h4>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
@@ -1374,6 +1482,11 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • 合計時間: {form.config?.reservation_summary?.show_total_duration === true ? '表示' : '非表示'}
+              </p>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                • 同意事項: {form.config?.reservation_summary?.agreement?.enabled === true
+                  ? (form.config?.reservation_summary?.agreement?.required === true ? '表示（同意必須）' : '表示（任意）')
+                  : '非表示'}
               </p>
             </div>
           </div>

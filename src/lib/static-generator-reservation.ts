@@ -168,7 +168,8 @@ export class StaticReservationGenerator {
             ${this.renderDateTimeFields(safeConfig)}
             ${this.renderMessageField()}
             ${this.renderSummary()}
-            
+            ${this.renderAgreementField(safeConfig)}
+
             <button type="button" id="submit-button" class="submit-button">予約する</button>
         </div>
     </div>
@@ -291,6 +292,7 @@ class BookingForm {
             selectedDate3: '',
             selectedTime3: '',
             message: '',
+            agreementAccepted: false, // 同意事項の「同意する」ボタンの状態
             lineUserId: null, // LINEユーザーID
             lineDisplayName: null, // LINE表示名
             linePictureUrl: null, // LINEプロフィール画像URL
@@ -805,6 +807,21 @@ class BookingForm {
             });
         }
         
+        // 同意事項の「同意する」ボタン（タップで同意 ⇔ 解除）
+        const agreementButton = document.getElementById('agreement-button');
+        if (agreementButton) {
+            agreementButton.addEventListener('click', () => {
+                this.state.agreementAccepted = !this.state.agreementAccepted;
+                if (this.state.agreementAccepted) {
+                    agreementButton.classList.add('selected');
+                    agreementButton.textContent = '✓ 同意しました';
+                } else {
+                    agreementButton.classList.remove('selected');
+                    agreementButton.textContent = '同意する';
+                }
+            });
+        }
+
         // 送信
         document.getElementById('submit-button').addEventListener('click', () => {
             this.handleSubmit();
@@ -1800,6 +1817,16 @@ class BookingForm {
                 }
             }
         }
+        // 同意事項の必須チェック（表示されている場合のみ）
+        const agreementCfg = this.config.reservation_summary?.agreement;
+        if (agreementCfg?.enabled === true && agreementCfg.required === true
+            && (agreementCfg.text || '').trim() && !this.state.agreementAccepted) {
+            alert('同意事項を確認して「同意する」ボタンをタップしてください。');
+            const agreementField = document.getElementById('agreement-field');
+            if (agreementField) agreementField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            resetSubmitState();
+            return;
+        }
         
         try {
             const payload = this.buildSelectionPayload();
@@ -2724,6 +2751,19 @@ if (document.readyState === 'loading') {
             </div>`;
   }
 
+  private renderAgreementField(config: FormConfig): string {
+    const agreement = config.reservation_summary?.agreement;
+    if (agreement?.enabled !== true || !(agreement.text || '').trim()) return '';
+    const requiredMark = agreement.required ? ' <span class="required">*</span>' : '';
+    return `
+            <!-- 同意事項 -->
+            <div class="field agreement-box" id="agreement-field">
+                <label class="field-label">同意事項${requiredMark}</label>
+                <div class="agreement-text">${this.escapeHtml((agreement.text || '').trim())}</div>
+                <button type="button" id="agreement-button" class="agreement-button">同意する</button>
+            </div>`;
+  }
+
   private generateCSS(config: FormConfig): string {
     const themeColor = config.basic_info.theme_color || '#3B82F6';
     
@@ -3230,6 +3270,46 @@ if (document.readyState === 'loading') {
             border: 2px solid #e5e7eb;
             border-radius: 0.5rem;
             background-color: #f9fafb;
+        }
+
+        .agreement-box {
+            padding: 1rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 0.5rem;
+            background-color: #f9fafb;
+        }
+
+        .agreement-text {
+            font-size: 0.875rem;
+            color: #374151;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            max-height: 12rem;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .agreement-button {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid #d1d5db;
+            border-radius: 0.375rem;
+            background: #fff;
+            color: #374151;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .agreement-button.selected {
+            border-color: ${themeColor};
+            background-color: ${themeColor};
+            color: #fff;
         }
         
         .summary-title {
