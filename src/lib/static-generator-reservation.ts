@@ -481,6 +481,8 @@ class BookingForm {
                     if (radio.value === val) {
                         radio.checked = true;
                         this.state.customFields[field.id] = val;
+                        const lbl = radio.closest ? radio.closest('.choice-label') : null;
+                        if (lbl) lbl.classList.add('selected');
                     }
                 });
             } else if (field.type === 'checkbox') {
@@ -491,6 +493,8 @@ class BookingForm {
                         if (wanted.has(cb.value)) {
                             cb.checked = true;
                             checkedVals.push(cb.value);
+                            const lbl = cb.closest ? cb.closest('.choice-label') : null;
+                            if (lbl) lbl.classList.add('selected');
                         }
                     });
                     if (checkedVals.length > 0) this.state.customFields[field.id] = checkedVals;
@@ -620,6 +624,11 @@ class BookingForm {
                 if (field.type === 'radio') {
                     document.querySelectorAll('input[name="custom-field-' + field.id + '"]').forEach(function(radio) {
                         radio.addEventListener('change', function() {
+                            // ボタンデザインの選択状態をラベルに反映
+                            document.querySelectorAll('input[name="custom-field-' + field.id + '"]').forEach(function(r) {
+                                const lbl = r.closest('.choice-label');
+                                if (lbl) lbl.classList.toggle('selected', r.checked);
+                            });
                             if (radio.checked) {
                                 self.state.customFields[field.id] = radio.value;
                                 self.persistCustomField(field, radio.value);
@@ -631,6 +640,9 @@ class BookingForm {
                 if (field.type === 'checkbox') {
                     document.querySelectorAll('input[data-field-id="' + field.id + '"][data-field-type="checkbox"]').forEach(function(cb) {
                         cb.addEventListener('change', function() {
+                            // ボタンデザインの選択状態をラベルに反映
+                            const lbl = cb.closest('.choice-label');
+                            if (lbl) lbl.classList.toggle('selected', cb.checked);
                             const checked = Array.from(document.querySelectorAll('input[data-field-id="' + field.id + '"][data-field-type="checkbox"]:checked')).map(function(c) { return c.value; });
                             self.state.customFields[field.id] = checked;
                             self.persistCustomField(field, checked);
@@ -938,15 +950,15 @@ class BookingForm {
         const image = item.image || item.image_url || '';
         if (!desc && !image) { this.closeDetailPopup(); return; }
         const parts = [];
-        parts.push('<div class="t-title-row"><span class="t-icon">📌</span><span class="t-title">' + this.escapeHtmlText(item.name || '') + '</span></div>');
+        parts.push('<div class="t-title-row"><i class="fas fa-star t-icon"></i><span class="t-title">' + this.escapeHtmlText(item.name || '') + '</span></div>');
         if (image) parts.push('<div class="t-image"><img src="' + this.escapeHtmlText(image) + '" alt="" loading="lazy"></div>');
         if ((item.duration || 0) > 0 && !item.hide_duration) {
-            parts.push('<div class="t-time-row"><span class="t-icon">🕒</span>施術時間：' + item.duration + '分</div>');
+            parts.push('<div class="t-time-row"><i class="fas fa-clock t-icon"></i> 所要時間：' + item.duration + '分</div>');
         }
         if ((item.price || 0) > 0 && !item.hide_price) {
             parts.push('<div class="t-price-row"><div><div class="t-price-label">料金</div><div class="t-price-val">¥' + Number(item.price).toLocaleString() + '</div></div></div>');
         }
-        if (desc) parts.push('<div class="t-detail">' + this.escapeHtmlText(desc).replace(/\\n/g, '<br>') + '</div>');
+        if (desc) parts.push('<div class="t-detail"><i class="fas fa-list-ul t-icon"></i>' + this.escapeHtmlText(desc).replace(/\\n/g, '<br>') + '</div>');
         parts.push('<button type="button" class="t-close-bottom" onclick="window.bookingForm.closeDetailPopup()">閉じる</button>');
         popup.innerHTML = '<button type="button" class="treatment-close" onclick="window.bookingForm.closeDetailPopup()">×</button><div class="treatment-content">' + parts.join('') + '</div>';
         popup.style.display = 'block';
@@ -3042,6 +3054,92 @@ if (document.readyState === 'loading') {
         }
         /* メニュー/オプションボタン内の画像は非表示（画像は詳細ポップアップにのみ表示） */
         .menu-item .menu-item-image { display: none !important; }
+        /* カスタムフィールドの単一/複数選択: ご来店回数と同じボタンデザイン */
+        .custom-field-radios,
+        .custom-field-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+        .choice-label {
+            position: relative;
+            flex: 1 1 45%;
+            padding: 14px 10px;
+            border: 1px solid #ccc;
+            border-radius: 2px;
+            background-color: var(--white);
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.2s;
+            word-break: break-word;
+            line-height: 1.4;
+        }
+        @media (hover: hover) and (pointer: fine) {
+            .choice-label:hover { border-color: var(--accent-color); background-color: #fffcf5; }
+        }
+        .choice-label input[type="radio"],
+        .choice-label input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            width: 1px;
+            height: 1px;
+            pointer-events: none;
+        }
+        .choice-label.selected {
+            background-color: var(--primary-color);
+            color: var(--white);
+            border-color: var(--primary-color);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        .choice-label.selected::after {
+            content: "✓ 選択中";
+            display: block;
+            width: fit-content;
+            margin: 6px auto 0;
+            padding: 1px 12px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            line-height: 1.7;
+            background-color: var(--accent-color);
+            color: var(--white);
+        }
+        /* カテゴリー開閉ボタン: タップで開閉できることが分かるデザイン */
+        .category-header {
+            background: var(--white) !important;
+            border: 1px solid #ccc !important;
+            border-left: 6px solid var(--accent-color) !important;
+            border-radius: 2px !important;
+            color: var(--primary-color) !important;
+            font-size: 15px !important;
+            font-weight: 700 !important;
+            padding: 14px 12px !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+        .category-header::after {
+            content: "タップで開く";
+            font-size: 11px;
+            font-weight: 500;
+            margin-left: auto;
+            margin-right: 10px;
+            opacity: 0.75;
+            white-space: nowrap;
+        }
+        .category-header.open::after { content: "タップで閉じる"; }
+        .category-header-name { text-align: left; }
+        .category-header-chevron { order: 1; border-color: var(--primary-color) !important; }
+        .category-header.open {
+            background: var(--primary-color) !important;
+            color: var(--white) !important;
+            border-color: var(--primary-color) !important;
+            border-left-color: var(--accent-color) !important;
+        }
+        .category-header.open .category-header-chevron { border-color: var(--white) !important; }
         /* カレンダー: ヘッダー・操作ボタン・凡例 */
         .calendar-header-bar {
             background: var(--primary-color);
