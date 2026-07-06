@@ -1531,7 +1531,8 @@ class BookingForm {
             });
         }
 
-        if (isOpen && allowCross) {
+        if (isOpen) {
+            // 開いているカテゴリを再タップしたら閉じる
             target.style.display = 'none';
             if (header) header.classList.remove('open');
         } else {
@@ -3054,6 +3055,26 @@ if (document.readyState === 'loading') {
         /* メニュー/オプションボタン内の画像は非表示（画像は詳細ポップアップにのみ表示） */
         .menu-item .menu-item-image,
         .submenu-item .menu-item-image { display: none !important; }
+        /* メニューボタン: オプション（眉カット等）と同じ「名前が左・料金/所要時間が右」の配置 */
+        .menu-item {
+            flex-direction: row !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            padding: 0.5rem !important;
+        }
+        .menu-item .menu-item-content { flex: 1; min-width: 0; padding: 0; }
+        .menu-item .menu-item-name { font-size: 0.875rem; font-weight: 500; color: inherit; }
+        .menu-item .menu-item-desc { font-size: 0.75rem; margin-top: 0.125rem; }
+        .menu-item .menu-item-info {
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0;
+            padding: 0;
+            margin-left: 0.5rem;
+            flex-shrink: 0;
+        }
+        .menu-item .menu-item-price { font-weight: 500; font-size: 0.875rem; color: inherit; }
+        .menu-item .menu-item-duration { font-size: 0.75rem; opacity: 0.7; }
         /* 「✓ 選択中」バッジは横並びボタンでは行内に割り込まず、下の行に折り返して中央表示 */
         .menu-item.selected,
         .submenu-item.selected { flex-wrap: wrap; }
@@ -3159,7 +3180,7 @@ if (document.readyState === 'loading') {
             border: 1px solid #ccc !important;
             border-left: 6px solid var(--accent-color) !important;
             border-radius: 2px !important;
-            color: var(--primary-color) !important;
+            color: #1b2a4e !important;
             font-size: 15px !important;
             font-weight: 700 !important;
             padding: 14px 12px !important;
@@ -3176,7 +3197,7 @@ if (document.readyState === 'loading') {
         }
         .category-header.open::after { content: "タップで閉じる"; }
         .category-header-name { text-align: left; }
-        .category-header-chevron { order: 1; border-color: var(--primary-color) !important; }
+        .category-header-chevron { order: 1; border-color: #1b2a4e !important; }
         .category-header.open {
             background: var(--primary-color) !important;
             color: var(--white) !important;
