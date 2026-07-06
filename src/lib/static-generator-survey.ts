@@ -36,9 +36,13 @@ export class StaticSurveyGenerator {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${this.escapeHtml(safeConfig.basic_info.title)}</title>
     <link rel="icon" href="data:,">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
     <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
     <style>
         ${css}
+        ${this.generateDesignOverridesCSS(safeConfig)}
     </style>
 </head>
 <body>
@@ -379,6 +383,130 @@ export class StaticSurveyGenerator {
             ${descriptionHtml}
             ${fieldHtml}
         </div>
+    `;
+  }
+
+  // 参考デザイン（ダークネイビー×シャンパンゴールド）を既存クラスに適用する上書きCSS。
+  // DOM 構造・クラス名・JS は変更せず、見た目のみ差し替える。
+  private generateDesignOverridesCSS(config: SurveyConfig): string {
+    const themeColor = config.basic_info.theme_color || '#1b2a4e';
+    return `
+        :root {
+            --primary-color: ${themeColor};
+            --accent-color: #c5a059;
+            --bg-color: #f4f6f9;
+            --text-color: #333333;
+            --white: #ffffff;
+            --required-bg: #ff4c4c;
+        }
+        button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; font-family: inherit; }
+        body {
+            font-family: 'Noto Sans JP', 'Poppins', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+        .form-container { max-width: 500px; padding: 10px 0 40px; }
+        .form-header {
+            background-color: var(--primary-color) !important;
+            color: var(--white);
+            border-radius: 4px 4px 0 0;
+            border-top: 4px solid var(--accent-color);
+            box-shadow: none;
+            margin-bottom: 0;
+            text-align: center;
+            padding: 20px 15px;
+        }
+        .form-header h1 { font-size: 22px; font-weight: 700; letter-spacing: 1px; }
+        .form-content {
+            border-radius: 0 0 4px 4px;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
+            padding: 25px;
+        }
+        .field-label {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 8px 15px;
+            font-weight: 700;
+            color: var(--primary-color);
+            font-size: 16px;
+            border-bottom: 2px solid var(--primary-color);
+            border-left: 6px solid var(--accent-color);
+            line-height: 1.4;
+            margin-bottom: 15px;
+        }
+        .required {
+            margin-left: auto;
+            background: var(--required-bg);
+            color: var(--white);
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 2px;
+            font-weight: normal;
+        }
+        .input {
+            padding: 14px;
+            border: 1px solid #ccc;
+            border-radius: 2px;
+            font-size: 16px;
+            background-color: #fafafa;
+        }
+        .input:focus {
+            border-color: var(--primary-color);
+            background-color: var(--white);
+            box-shadow: 0 0 0 1px var(--primary-color);
+        }
+        .choice-button {
+            border: 1px solid #ccc;
+            border-radius: 2px;
+            font-weight: 500;
+            font-size: 15px;
+        }
+        @media (hover: hover) and (pointer: fine) {
+            .choice-button:hover { border-color: var(--accent-color); background-color: #fffcf5; }
+        }
+        .choice-button.selected {
+            background-color: var(--primary-color) !important;
+            border-color: var(--primary-color) !important;
+            color: var(--white) !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        /* 選択中バッジ（疑似要素なので innerText・送信内容には影響しない） */
+        .choice-button.selected::after {
+            content: "✓ 選択中";
+            display: block;
+            width: fit-content;
+            margin: 6px auto 0;
+            padding: 1px 12px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            line-height: 1.7;
+            background-color: var(--accent-color);
+            color: var(--white);
+        }
+        .submit-button {
+            padding: 18px;
+            font-size: 18px;
+            font-weight: bold;
+            background: linear-gradient(135deg, var(--primary-color), #2c3e50);
+            border-radius: 4px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            border-bottom: 4px solid var(--accent-color);
+        }
+        .submit-button:active { transform: translateY(2px); border-bottom-width: 2px; box-shadow: none; }
+        .side-nav { background: var(--primary-color); }
+        .side-nav a { color: var(--accent-color); }
+        @media (max-width: 600px) {
+            .form-container { padding: 0 0 30px; }
+            .form-header { border-radius: 0; }
+            .form-content { border-radius: 0; box-shadow: none; padding: 20px 15px; }
+            .form-header h1 { font-size: 20px; }
+            .field-label { font-size: 15px; padding: 8px 10px; }
+            .submit-button { font-size: 17px; padding: 16px; }
+        }
     `;
   }
 
