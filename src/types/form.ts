@@ -193,6 +193,12 @@ export interface FormConfig {
   reservation_summary?: {
     show_total_price?: boolean;    // 合計金額を表示（未設定 = false: 非表示）
     show_total_duration?: boolean; // 合計時間を表示（未設定 = false: 非表示）
+    // 同意事項（ご予約内容の下に表示。required 時は「同意する」を押さないと予約送信不可）
+    agreement?: {
+      enabled?: boolean;
+      text?: string;
+      required?: boolean;
+    };
   };
 
   ui_settings: {
