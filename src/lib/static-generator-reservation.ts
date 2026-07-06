@@ -1101,19 +1101,16 @@ class BookingForm {
         container.innerHTML = \`
             <div class="submenu-title">サブメニューを選択してください</div>
             \${menu.sub_menu_items.map((sub, idx) => \`
-                <button class="submenu-item" data-submenu-index="\${idx}">
-                    \${sub.image ? \`
-                        <div class="menu-item-image">
-                            <img src="\${sub.image}" alt="\${sub.name}" class="menu-image" loading="lazy" onerror="this.parentElement.style.display='none'">
+                <button class="submenu-item" data-submenu-index="\${idx}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
+                    <div style="display:flex;align-items:center;">
+                        <div>
+                            <div style="text-align:left;font-size:0.875rem;font-weight:500;">\${sub.name}</div>
+                            \${sub.description ? \`<div style="font-size:0.75rem;opacity:0.7;text-align:left;margin-top:0.125rem;">\${sub.description}</div>\` : ''}
                         </div>
-                    \` : ''}
-                    <div class="menu-item-content">
-                        <div class="menu-item-name">\${sub.name}</div>
-                        \${sub.description ? \`<div class="menu-item-desc">\${sub.description}</div>\` : ''}
                     </div>
-                    <div class="menu-item-info">
-                        \${!sub.hide_price ? \`<div class="menu-item-price">¥\${sub.price.toLocaleString()}</div>\` : ''}
-                        \${!sub.hide_duration ? \`<div class="menu-item-duration">\${sub.duration}分</div>\` : ''}
+                    <div style="text-align:right;margin-left:0.5rem;">
+                        \${!sub.hide_price ? \`<div style="font-weight:500;font-size:0.875rem;">¥\${sub.price.toLocaleString()}</div>\` : ''}
+                        \${!sub.hide_duration ? \`<div style="font-size:0.75rem;opacity:0.7;">\${sub.duration}分</div>\` : ''}
                     </div>
                 </button>
             \`).join('')}
@@ -1131,6 +1128,8 @@ class BookingForm {
                 this.state.selectedSubmenu = submenu;
                 if (!this.state.selectedSubMenus) this.state.selectedSubMenus = {};
                 this.state.selectedSubMenus[menuId] = submenu.id;
+                // 選択したサブメニューの詳細ポップアップ（説明/画像がある場合のみ）
+                this.showDetailPopup(sub, submenu);
                 this.toggleCalendarVisibility();
                 this.updateSummary();
             });
@@ -3056,13 +3055,24 @@ if (document.readyState === 'loading') {
         .menu-item .menu-item-image,
         .submenu-item .menu-item-image { display: none !important; }
         /* 「✓ 選択中」バッジは横並びボタンでは行内に割り込まず、下の行に折り返して中央表示 */
-        .menu-item.selected::after,
-        .submenu-item.selected::after {
-            flex-basis: 100%;
-            margin-top: 8px;
-        }
         .menu-item.selected,
         .submenu-item.selected { flex-wrap: wrap; }
+        /* バッジの直前で改行させるための全幅ダミー要素（見えない） */
+        .menu-item.selected::before,
+        .submenu-item.selected::before {
+            content: "";
+            flex-basis: 100%;
+            height: 0;
+            order: 5;
+        }
+        /* バッジ本体はテキスト幅のまま中央寄せ */
+        .menu-item.selected::after,
+        .submenu-item.selected::after {
+            order: 6;
+            flex-basis: auto;
+            width: fit-content;
+            margin: 8px auto 0;
+        }
         /* サブメニュー: メニューオプション（眉カット等）と同じボタン形状・配置 */
         .submenu-item {
             align-items: center !important;
