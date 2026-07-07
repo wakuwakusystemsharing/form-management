@@ -768,7 +768,7 @@ class BookingForm {
                     this.state.selectedOptions[menuId] = currentOptions.filter(id => id !== optionId);
                     item.style.borderColor = '#d1d5db';
                     item.style.backgroundColor = 'white';
-                    item.style.color = '#374151';
+                    item.style.color = '#1b2a4e';
                 } else {
                     // 選択
                     this.state.selectedOptions[menuId] = [...currentOptions, optionId];
@@ -803,7 +803,7 @@ class BookingForm {
                     this.state.selectedCategoryOptions[categoryId] = current.filter(id => id !== optionId);
                     item.style.borderColor = '#d1d5db';
                     item.style.backgroundColor = 'white';
-                    item.style.color = '#374151';
+                    item.style.color = '#1b2a4e';
                 } else {
                     this.state.selectedCategoryOptions[categoryId] = [...current, optionId];
                     item.style.borderColor = 'var(--primary-color)';
@@ -871,6 +871,14 @@ class BookingForm {
                 }
             });
         }
+
+        // 日付/日時入力: 値の有無でヒント表示を切り替え
+        document.querySelectorAll('input[type="date"], input[type="datetime-local"]').forEach((el) => {
+            const syncDateHint = () => el.classList.toggle('has-value', !!el.value);
+            el.addEventListener('change', syncDateHint);
+            el.addEventListener('input', syncDateHint);
+            syncDateHint();
+        });
 
         // 送信
         document.getElementById('submit-button').addEventListener('click', () => {
@@ -2581,14 +2589,14 @@ if (document.readyState === 'loading') {
         return `
             <div class="field" id="custom-field-wrap-${field.id}">
                 <label class="field-label" for="${id}">${label}</label>
-                <input type="date" id="${id}" class="input" data-field-id="${field.id}">
+                <div class="date-input-wrap"><input type="date" id="${id}" class="input" data-field-id="${field.id}"><span class="date-input-hint">タップしてご選択ください</span></div>
             </div>`;
       }
       if (field.type === 'datetime') {
         return `
             <div class="field" id="custom-field-wrap-${field.id}">
                 <label class="field-label" for="${id}">${label}</label>
-                <input type="datetime-local" id="${id}" class="input" data-field-id="${field.id}">
+                <div class="date-input-wrap"><input type="datetime-local" id="${id}" class="input" data-field-id="${field.id}"><span class="date-input-hint">タップしてご選択ください</span></div>
             </div>`;
       }
       if (field.type === 'select' && field.options?.length) {
@@ -2958,6 +2966,14 @@ if (document.readyState === 'loading') {
         .choice-button, .menu-item, .submenu-item, .menu-option-item, .category-option-item {
             border-radius: 2px;
             border-color: #ccc;
+            color: #1b2a4e;
+        }
+        /* 復元時などクラスで selected になったオプションも選択色に（クリック時はインラインスタイルが優先） */
+        .menu-option-item.selected,
+        .category-option-item.selected {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            color: var(--white);
         }
         .choice-button.selected,
         .menu-item.selected,
@@ -3052,6 +3068,32 @@ if (document.readyState === 'loading') {
             font-weight: bold !important;
             box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
         }
+        /* 日付・日時入力: スマホで横幅をページに収める + 未選択時ヒント */
+        input[type="date"].input,
+        input[type="datetime-local"].input {
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            display: block;
+            -webkit-appearance: none;
+            appearance: none;
+            min-height: 48px;
+        }
+        .date-input-wrap { position: relative; }
+        .date-input-wrap input:not(.has-value) { color: transparent; }
+        .date-input-wrap input:not(.has-value)::-webkit-datetime-edit { color: transparent; }
+        .date-input-hint {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9aa0a6;
+            font-size: 15px;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        .date-input-wrap input.has-value + .date-input-hint { display: none; }
         /* メニュー/オプションボタン内の画像は非表示（画像は詳細ポップアップにのみ表示） */
         .menu-item .menu-item-image,
         .submenu-item .menu-item-image { display: none !important; }
@@ -3134,7 +3176,7 @@ if (document.readyState === 'loading') {
             border: 1px solid #ccc;
             border-radius: 2px;
             background-color: var(--white);
-            color: var(--text-color);
+            color: #1b2a4e;
             cursor: pointer;
             font-size: 15px;
             font-weight: 500;
