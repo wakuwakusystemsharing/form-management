@@ -154,6 +154,16 @@ export class StaticSurveyGenerator {
             });
         });
 
+        // 日付/日時入力: 値の有無でヒント表示を切り替え
+        document.addEventListener('DOMContentLoaded', function () {
+            document.querySelectorAll('input[type="date"], input[type="datetime-local"]').forEach(function (el) {
+                const syncDateHint = function () { el.classList.toggle('has-value', !!el.value); };
+                el.addEventListener('change', syncDateHint);
+                el.addEventListener('input', syncDateHint);
+                syncDateHint();
+            });
+        });
+
         // LIFF初期化
         document.addEventListener('DOMContentLoaded', async function () {
             const liffId = '${safeConfig.basic_info.liff_id}';
@@ -341,10 +351,10 @@ export class StaticSurveyGenerator {
         fieldHtml = `<textarea id="${q.id}" class="input" rows="${q.type === 'textarea' ? 3 : 1}" placeholder="入力してください"></textarea>`;
         break;
       case 'date':
-        fieldHtml = `<div class="date-inputs"><input type="date" id="${q.id}" class="input"></div>`;
+        fieldHtml = `<div class="date-inputs date-input-wrap"><input type="date" id="${q.id}" class="input"><span class="date-input-hint">タップしてご選択ください</span></div>`;
         break;
       case 'datetime':
-        fieldHtml = `<div class="date-inputs"><input type="datetime-local" id="${q.id}" class="input"></div>`;
+        fieldHtml = `<div class="date-inputs date-input-wrap"><input type="datetime-local" id="${q.id}" class="input"><span class="date-input-hint">タップしてご選択ください</span></div>`;
         break;
       case 'select': {
         const opts = (q.options || []).map(opt =>
@@ -487,6 +497,32 @@ export class StaticSurveyGenerator {
             background-color: var(--accent-color);
             color: var(--white);
         }
+        /* 日付・日時入力: スマホで横幅をページに収める + 未選択時ヒント */
+        input[type="date"].input,
+        input[type="datetime-local"].input {
+            width: 100%;
+            max-width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            display: block;
+            -webkit-appearance: none;
+            appearance: none;
+            min-height: 48px;
+        }
+        .date-input-wrap { position: relative; }
+        .date-input-wrap input:not(.has-value) { color: transparent; }
+        .date-input-wrap input:not(.has-value)::-webkit-datetime-edit { color: transparent; }
+        .date-input-hint {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9aa0a6;
+            font-size: 15px;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        .date-input-wrap input.has-value + .date-input-hint { display: none; }
         .submit-button {
             padding: 18px;
             font-size: 18px;
