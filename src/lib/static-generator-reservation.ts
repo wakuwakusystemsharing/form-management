@@ -2632,7 +2632,7 @@ if (document.readyState === 'loading') {
                                             </div>
                                         ` : ''}
                                         <div class="menu-item-content">
-                                            <div class="menu-item-name">${this.escapeHtml(menu.name)}${menu.has_submenu ? ' ▶' : ''}</div>
+                                            <div class="menu-item-name">${this.escapeHtml(menu.name)}${menu.has_submenu ? ' &#x25B6;&#xFE0E;' : ''}</div>
                                             ${menu.description ? `<div class="menu-item-desc">${this.escapeHtml(menu.description)}</div>` : ''}
                                         </div>
                                         ${!menu.has_submenu && (menu.price !== undefined || menu.duration) ? `
@@ -2750,12 +2750,12 @@ if (document.readyState === 'loading') {
                     <!-- 月・週移動ボタン -->
                     <div class="calendar-controls">
                         <div class="control-group">
-                            <button type="button" onclick="window.bookingForm.navigateMonth('prev')" class="month-button">◀ 前月</button>
-                            <button type="button" onclick="window.bookingForm.navigateMonth('next')" class="month-button">翌月 ▶</button>
+                            <button type="button" onclick="window.bookingForm.navigateMonth('prev')" class="month-button">&#x25C0;&#xFE0E; 前月</button>
+                            <button type="button" onclick="window.bookingForm.navigateMonth('next')" class="month-button">翌月 &#x25B6;&#xFE0E;</button>
                         </div>
                         <div class="control-group">
-                            <button type="button" onclick="window.bookingForm.navigateWeek('prev')" class="week-button">◀ 前週</button>
-                            <button type="button" onclick="window.bookingForm.navigateWeek('next')" class="week-button">翌週 ▶</button>
+                            <button type="button" onclick="window.bookingForm.navigateWeek('prev')" class="week-button">&#x25C0;&#xFE0E; 前週</button>
+                            <button type="button" onclick="window.bookingForm.navigateWeek('next')" class="week-button">翌週 &#x25B6;&#xFE0E;</button>
                         </div>
                     </div>
 
@@ -3320,6 +3320,18 @@ if (document.readyState === 'loading') {
             border: 1px solid #696969 !important;
             border-radius: 0 0 6px 6px !important;
             box-shadow: none !important;
+            /* 縦に長いカレンダーは内部スクロールにして、日付ヘッダー行を追従表示させる */
+            max-height: 65vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        #calendar-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            /* border-collapse ではスクロール中にセル罫線が追従しないため box-shadow で線を描く */
+            box-shadow: inset -1px 0 0 #696969, inset 0 -2px 0 #696969;
+            border-top: none !important;
         }
         /* カレンダーセル: 参考デザインのサイズ・書体 */
         #calendar-table { table-layout: fixed; min-width: 320px; }
