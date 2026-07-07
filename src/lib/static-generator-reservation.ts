@@ -872,6 +872,18 @@ class BookingForm {
             });
         }
 
+        // カレンダー内部を少しスクロールしたらスクロールヒントを消す
+        const calScrollWrapper = document.querySelector('.calendar-table-wrapper');
+        if (calScrollWrapper) {
+            calScrollWrapper.addEventListener('scroll', () => {
+                if (calScrollWrapper.scrollTop > 30 && !this.state.calendarScrollHintDismissed) {
+                    this.state.calendarScrollHintDismissed = true;
+                    const hint = document.getElementById('calendar-scroll-hint');
+                    if (hint) hint.style.display = 'none';
+                }
+            });
+        }
+
         // 日付/日時入力: 値の有無でヒント表示を切り替え
         document.querySelectorAll('input[type="date"], input[type="datetime-local"]').forEach((el) => {
             const syncDateHint = () => el.classList.toggle('has-value', !!el.value);
@@ -1480,6 +1492,18 @@ class BookingForm {
         if (selectionWasReset) {
             this.updateSummary();
         }
+
+        // カレンダーが内部スクロールになる高さならスクロールヒントを表示
+        this.updateCalendarScrollHint();
+    }
+
+    // カレンダー内部がスクロール可能なときだけ「下にスクロールできます」ヒントを出す
+    updateCalendarScrollHint() {
+        const wrapper = document.querySelector('.calendar-table-wrapper');
+        const hint = document.getElementById('calendar-scroll-hint');
+        if (!wrapper || !hint) return;
+        const scrollable = wrapper.scrollHeight > wrapper.clientHeight + 10;
+        hint.style.display = (scrollable && !this.state.calendarScrollHintDismissed) ? 'flex' : 'none';
     }
     
     // 日時選択ハンドラー
@@ -2770,6 +2794,7 @@ if (document.readyState === 'loading') {
                         <table id="calendar-table" style="width:100%;border-collapse:collapse;">
                             <!-- JavaScriptで動的生成 -->
                         </table>
+                        <div id="calendar-scroll-hint" class="calendar-scroll-hint" style="display:none;"><span class="scroll-hint-arrow">⇩</span>下にスクロールできます</div>
                     </div>
                 </div>
             </div>`;
@@ -3332,6 +3357,31 @@ if (document.readyState === 'loading') {
             /* border-collapse ではスクロール中にセル罫線が追従しないため box-shadow で線を描く */
             box-shadow: inset -1px 0 0 #696969, inset 0 -2px 0 #696969;
             border-top: none !important;
+        }
+        /* カレンダーのスクロールヒント（下部に追従表示、少しスクロールすると消える） */
+        .calendar-scroll-hint {
+            position: sticky;
+            bottom: 0;
+            z-index: 3;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 0;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            color: #ffffff;
+            background: linear-gradient(to top, rgba(27, 42, 78, 0.85), rgba(27, 42, 78, 0.5));
+            pointer-events: none;
+        }
+        .calendar-scroll-hint .scroll-hint-arrow {
+            display: inline-block;
+            animation: scrollHintBounce 1.2s ease-in-out infinite;
+        }
+        @keyframes scrollHintBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(4px); }
         }
         /* カレンダーセル: 参考デザインのサイズ・書体 */
         #calendar-table { table-layout: fixed; min-width: 320px; }
