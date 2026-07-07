@@ -1,4 +1,5 @@
 import { SurveyConfig, SurveyQuestion } from '@/types/survey';
+import { computeAccentColor } from './color-utils';
 
 /**
  * アンケートフォーム用静的HTMLジェネレータ
@@ -400,10 +401,12 @@ export class StaticSurveyGenerator {
   // DOM 構造・クラス名・JS は変更せず、見た目のみ差し替える。
   private generateDesignOverridesCSS(config: SurveyConfig): string {
     const themeColor = config.basic_info.theme_color || '#1b2a4e';
+    // アクセント色はテーマカラーの補色から自動生成（ネイビーなら従来のシャンパンゴールドと一致）
+    const accentColor = computeAccentColor(themeColor);
     return `
         :root {
             --primary-color: ${themeColor};
-            --accent-color: #c5a059;
+            --accent-color: ${accentColor};
             --bg-color: #f4f6f9;
             --text-color: #333333;
             --white: #ffffff;
