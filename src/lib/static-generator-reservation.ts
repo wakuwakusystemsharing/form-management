@@ -1126,7 +1126,6 @@ class BookingForm {
                     <div style="display:flex;align-items:center;">
                         <div>
                             <div style="text-align:left;font-size:0.875rem;font-weight:500;">\${sub.name}</div>
-                            \${sub.description ? \`<div style="font-size:0.75rem;opacity:0.7;text-align:left;margin-top:0.125rem;">\${sub.description}</div>\` : ''}
                         </div>
                     </div>
                     <div style="text-align:right;margin-left:0.5rem;">
@@ -2658,7 +2657,6 @@ if (document.readyState === 'loading') {
                                         ` : ''}
                                         <div class="menu-item-content">
                                             <div class="menu-item-name">${this.escapeHtml(menu.name)}${menu.has_submenu ? ' &#x25B6;&#xFE0E;' : ''}</div>
-                                            ${menu.description ? `<div class="menu-item-desc">${this.escapeHtml(menu.description)}</div>` : ''}
                                         </div>
                                         ${!menu.has_submenu && (menu.price !== undefined || menu.duration) ? `
                                             <div class="menu-item-info">
@@ -2678,7 +2676,6 @@ if (document.readyState === 'loading') {
                                                                 ${this.escapeHtml(option.name)}
                                                                 ${option.is_default ? '<span style="margin-left:0.5rem;padding:0.25rem 0.5rem;font-size:0.75rem;background:#fed7aa;color:#9a3412;border-radius:0.25rem;">おすすめ</span>' : ''}
                                                             </div>
-                                                            ${option.description ? `<div style="font-size:0.75rem;opacity:0.7;text-align:left;margin-top:0.125rem;">${this.escapeHtml(option.description)}</div>` : ''}
                                                         </div>
                                                     </div>
                                                     <div style="text-align:right;margin-left:0.5rem;">
@@ -2701,7 +2698,6 @@ if (document.readyState === 'loading') {
                                         <button type="button" class="category-option-item" data-category-id="${category.id}" data-option-id="${opt.id || `catopt-${idx}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
                                             <div>
                                                 <div style="font-size:0.875rem;font-weight:500;">${this.escapeHtml(opt.name)}</div>
-                                                ${opt.description ? `<div style="font-size:0.75rem;opacity:0.7;margin-top:0.125rem;">${this.escapeHtml(opt.description)}</div>` : ''}
                                             </div>
                                             <div style="text-align:right;margin-left:0.5rem;">
                                                 ${(opt.price || 0) > 0 && !opt.hide_price ? `<div style="font-weight:500;font-size:0.875rem;">+¥${(opt.price || 0).toLocaleString()}</div>` : ''}
@@ -3468,7 +3464,7 @@ if (document.readyState === 'loading') {
             align-items: center;
             font-size: 15px;
             font-weight: 700;
-            color: var(--primary-color);
+            color: #374151;
             padding-bottom: 6px;
             border-bottom: 1px solid #eee;
         }
@@ -3481,13 +3477,13 @@ if (document.readyState === 'loading') {
             align-items: center;
             font-size: 14px;
             font-weight: bold;
-            color: var(--primary-color);
+            color: #374151;
             border-bottom: 1px dashed #eee;
             padding-bottom: 8px;
         }
         .t-price-row { display: flex; justify-content: space-between; align-items: flex-end; background: #fdfdfd; }
         .t-price-label { font-size: 12px; color: #666; margin-bottom: 4px; }
-        .t-price-val { font-size: 24px; font-weight: 800; color: var(--accent-color); line-height: 1; letter-spacing: 0.05em; }
+        .t-price-val { font-size: 24px; font-weight: 800; color: #374151; line-height: 1; letter-spacing: 0.05em; }
         .t-detail { font-size: 12px; color: #555; line-height: 1.6; }
         .t-close-bottom {
             width: 100%;
