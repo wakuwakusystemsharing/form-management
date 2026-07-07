@@ -3,6 +3,7 @@
  * プレビュー画面と完全一致するHTMLを生成
  */
 
+import { computeAccentColor, hexToRgb } from './color-utils';
 import { FormConfig } from '@/types/form';
 
 export class StaticReservationGenerator {
@@ -2915,10 +2916,13 @@ if (document.readyState === 'loading') {
   // DOM 構造・クラス名・JS は変更せず、見た目のみ差し替える。
   private generateDesignOverridesCSS(config: FormConfig): string {
     const themeColor = config.basic_info.theme_color || '#1b2a4e';
+    // アクセント色はテーマカラーの補色から自動生成（ネイビーなら従来のシャンパンゴールドと一致）
+    const accentColor = computeAccentColor(themeColor);
+    const themeRgb = hexToRgb(themeColor) || { r: 27, g: 42, b: 78 };
     return `
         :root {
             --primary-color: ${themeColor};
-            --accent-color: #c5a059;
+            --accent-color: ${accentColor};
             --bg-color: #f4f6f9;
             --text-color: #333333;
             --white: #ffffff;
@@ -3372,7 +3376,7 @@ if (document.readyState === 'loading') {
             font-weight: bold;
             letter-spacing: 1px;
             color: #ffffff;
-            background: linear-gradient(to top, rgba(27, 42, 78, 0.85), rgba(27, 42, 78, 0.5));
+            background: linear-gradient(to top, rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, 0.85), rgba(${themeRgb.r}, ${themeRgb.g}, ${themeRgb.b}, 0.5));
             pointer-events: none;
         }
         .calendar-scroll-hint .scroll-hint-arrow {
@@ -3399,6 +3403,12 @@ if (document.readyState === 'loading') {
             font-size: 14px !important;
             vertical-align: middle;
         }
+        /* 予約可否の 〇× は太字で大きく表示（時間列は対象外） */
+        #calendar-table td.calendar-cell {
+            font-size: 19px !important;
+            font-weight: bold !important;
+            line-height: 1;
+        }
         #calendar-table th:first-child,
         #calendar-table td:first-child {
             width: 50px !important;
@@ -3413,7 +3423,6 @@ if (document.readyState === 'loading') {
             color: #ffffff !important;
             background-image: linear-gradient(45deg, rgba(0, 0, 0, 0.08) 25%, transparent 25%, transparent 50%, rgba(0, 0, 0, 0.08) 50%, rgba(0, 0, 0, 0.08) 75%, transparent 75%, transparent) !important;
             background-size: 8px 8px !important;
-            font-weight: normal !important;
         }
         #calendar-table th:not(:first-child) { width: auto !important; }
         /* ご予約内容: 各項目の間に点線の区切り */
@@ -3517,7 +3526,7 @@ if (document.readyState === 'loading') {
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            color: var(--accent-color);
+            color: #ffffff;
             text-decoration: none;
             font-size: 10px;
             margin: 0;
