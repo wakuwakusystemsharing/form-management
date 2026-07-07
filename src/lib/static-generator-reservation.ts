@@ -3403,6 +3403,12 @@ if (document.readyState === 'loading') {
             font-size: 14px !important;
             vertical-align: middle;
         }
+        /* 予約可否の 〇× は太字で大きく表示（時間列は対象外） */
+        #calendar-table td.calendar-cell {
+            font-size: 19px !important;
+            font-weight: bold !important;
+            line-height: 1;
+        }
         #calendar-table th:first-child,
         #calendar-table td:first-child {
             width: 50px !important;
@@ -3417,7 +3423,6 @@ if (document.readyState === 'loading') {
             color: #ffffff !important;
             background-image: linear-gradient(45deg, rgba(0, 0, 0, 0.08) 25%, transparent 25%, transparent 50%, rgba(0, 0, 0, 0.08) 50%, rgba(0, 0, 0, 0.08) 75%, transparent 75%, transparent) !important;
             background-size: 8px 8px !important;
-            font-weight: normal !important;
         }
         #calendar-table th:not(:first-child) { width: auto !important; }
         /* ご予約内容: 各項目の間に点線の区切り */
@@ -3521,7 +3526,7 @@ if (document.readyState === 'loading') {
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            color: var(--accent-color);
+            color: #ffffff;
             text-decoration: none;
             font-size: 10px;
             margin: 0;

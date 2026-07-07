@@ -537,7 +537,7 @@ export class StaticSurveyGenerator {
         }
         .submit-button:active { transform: translateY(2px); border-bottom-width: 2px; box-shadow: none; }
         .side-nav { background: var(--primary-color); }
-        .side-nav a { color: var(--accent-color); }
+        .side-nav a { color: #ffffff; }
         @media (max-width: 600px) {
             .form-container { padding: 0 0 30px; }
             .form-header { border-radius: 0; }
