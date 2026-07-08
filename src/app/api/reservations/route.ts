@@ -713,6 +713,7 @@ export async function POST(request: Request) {
     } = { staff_id: null, staff_name: null, staff_calendar_id: null, staff_no_preference: body.staff_no_preference === true };
     let staffCalendarIdForEvent: string | null = null;
     let staffNameForEvent: string | null = null;
+    let staffEventColorId: string | null = null;
 
     if (body.staff_id || body.staff_no_preference === true) {
       try {
@@ -749,6 +750,8 @@ export async function POST(request: Request) {
             staffNameForEvent = member.name;
             if (isCalendarMode && member.calendar_id) {
               staffCalendarIdForEvent = member.calendar_id;
+              staffEventColorId = typeof member.event_color_id === 'string' && /^([1-9]|1[01])$/.test(member.event_color_id)
+                ? member.event_color_id : null;
               // 直前の空き再チェック（失敗時は従来どおり続行）
               try {
                 const busy = await getBusyCalendars([member.calendar_id], slotStart.toISOString(), slotEnd.toISOString(), body.store_id);
@@ -793,6 +796,8 @@ export async function POST(request: Request) {
             };
             staffNameForEvent = member.name;
             staffCalendarIdForEvent = member.calendar_id;
+            staffEventColorId = typeof member.event_color_id === 'string' && /^([1-9]|1[01])$/.test(member.event_color_id)
+              ? member.event_color_id : null;
           }
         }
       } catch (staffError) {
@@ -925,7 +930,8 @@ export async function POST(request: Request) {
             gender: customerInfo.gender_label || customerInfo.gender || null,
             coupon: customerInfo.coupon_label || customerInfo.coupon || null,
             customFields: customerInfo.custom_fields_labeled || null,
-            eventColorId,
+            // スタッフのカレンダーに作成する場合はスタッフごとの色設定を使用（フォームの色設定は不使用）
+            eventColorId: staffCalendarIdForEvent ? staffEventColorId : eventColorId,
             staffName: staffNameForEvent
           },
           body.store_id

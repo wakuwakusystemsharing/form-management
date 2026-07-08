@@ -312,7 +312,10 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
               id: m.id,
               name: m.name,
               calendar_id: typeof m.calendar_id === 'string' ? m.calendar_id : '',
-              calendar_name: typeof m.calendar_name === 'string' ? m.calendar_name : ''
+              calendar_name: typeof m.calendar_name === 'string' ? m.calendar_name : '',
+              event_color_id: typeof m.event_color_id === 'string' && /^([1-9]|1[01])$/.test(m.event_color_id)
+                ? m.event_color_id
+                : ''
             }))
         };
       })(),

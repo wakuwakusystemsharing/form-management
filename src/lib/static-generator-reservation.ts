@@ -2584,7 +2584,10 @@ class BookingForm {
         const hasMenuSelection = allowCross
             ? (this.state.selectedMenus && Object.values(this.state.selectedMenus).flat().length > 0)
             : !!this.state.selectedMenu;
-        const show = !hideUntilMenu || hasMenuSelection;
+        // スタッフ選択が空き判定に効くフォームでは、スタッフの選択もカレンダー表示の条件にする
+        // （メニュー選択だけではカレンダーを出さず、スタッフをタップしたら表示）
+        const staffSelected = this.isStaffCalendarMode() ? !!this.state.selectedStaffId : true;
+        const show = !hideUntilMenu || (hasMenuSelection && staffSelected);
 
         const fieldIds = bookingMode === 'multiple_dates'
             ? ['datetime-field-1', 'datetime-field-2', 'datetime-field-3']
