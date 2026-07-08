@@ -220,6 +220,17 @@ export interface FormConfig {
     }>;
   };
 
+  // フォーム上の任意の位置に表示する画像/テキストブロック（詳細設定 → 画像orテキスト設置）
+  content_blocks?: Array<{
+    id: string;
+    type: 'text' | 'image';
+    text?: string;        // type=text の表示テキスト
+    image_url?: string;   // type=image の画像URL
+    // 表示位置の基準となるセクション: 'name' | 'phone' | 'email' | 'staff' | 'menu' | 'datetime' | 'message' | 'summary' | 'submit'
+    anchor: string;
+    position: 'above' | 'below';  // 基準セクションの上か下か
+  }>;
+
   // フォーム上の「ご予約内容」（サマリー）表示設定
   reservation_summary?: {
     show_total_price?: boolean;    // 合計金額を表示（未設定 = false: 非表示）

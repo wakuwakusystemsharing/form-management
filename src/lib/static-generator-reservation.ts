@@ -148,6 +148,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
 
             ${safeConfig.ui_settings?.show_repeat_booking ? this.renderRepeatBookingButton(safeConfig) : ''}
             
+            ${this.renderContentBlocksAt(safeConfig, 'name', 'above')}
             ${safeConfig.calendar_settings?.show_customer_name === false ? '' : `
             <!-- お客様名 -->
             <div class="field" id="name-field">
@@ -155,6 +156,8 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
                 <input type="text" id="customer-name" class="input" placeholder="山田太郎">
             </div>
             `}
+            ${this.renderContentBlocksAt(safeConfig, 'name', 'below')}
+            ${this.renderContentBlocksAt(safeConfig, 'phone', 'above')}
             ${safeConfig.calendar_settings?.show_customer_phone === false ? '' : `
             <!-- 電話番号 -->
             <div class="field" id="phone-field">
@@ -162,6 +165,8 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
                 <input type="tel" id="customer-phone" class="input" placeholder="090-1234-5678">
             </div>
             `}
+            ${this.renderContentBlocksAt(safeConfig, 'phone', 'below')}
+            ${this.renderContentBlocksAt(safeConfig, 'email', 'above')}
             ${(safeConfig.calendar_settings?.show_customer_email === true || safeConfig.form_type === 'web') ? `
             <!-- メールアドレス（Web 予約フォームでは必須、それ以外は show_customer_email に従う） -->
             <div class="field" id="email-field">
@@ -175,19 +180,32 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
                 <p id="email-mismatch-hint" style="font-size:0.75rem;color:#dc2626;margin-top:0.25rem;display:none;">メールアドレスが一致しません</p>
             </div>
             ` : ''}
+            ${this.renderContentBlocksAt(safeConfig, 'email', 'below')}
 
+            ${this.renderContentBlocksAt(safeConfig, 'staff', 'above')}
             ${this.renderStaffField(safeConfig)}
+            ${this.renderContentBlocksAt(safeConfig, 'staff', 'below')}
             ${safeConfig.gender_selection.enabled ? this.renderGenderField(safeConfig) : ''}
             ${safeConfig.visit_count_selection.enabled ? this.renderVisitCountField(safeConfig) : ''}
             ${safeConfig.coupon_selection.enabled ? this.renderCouponField(safeConfig) : ''}
             ${safeConfig.custom_fields?.length ? this.renderCustomFields(safeConfig) : ''}
+            ${this.renderContentBlocksAt(safeConfig, 'menu', 'above')}
             ${this.renderMenuField(safeConfig)}
+            ${this.renderContentBlocksAt(safeConfig, 'menu', 'below')}
+            ${this.renderContentBlocksAt(safeConfig, 'datetime', 'above')}
             ${this.renderDateTimeFields(safeConfig)}
+            ${this.renderContentBlocksAt(safeConfig, 'datetime', 'below')}
+            ${this.renderContentBlocksAt(safeConfig, 'message', 'above')}
             ${this.renderMessageField()}
+            ${this.renderContentBlocksAt(safeConfig, 'message', 'below')}
+            ${this.renderContentBlocksAt(safeConfig, 'summary', 'above')}
             ${this.renderSummary()}
+            ${this.renderContentBlocksAt(safeConfig, 'summary', 'below')}
             ${this.renderAgreementField(safeConfig)}
 
+            ${this.renderContentBlocksAt(safeConfig, 'submit', 'above')}
             <button type="button" id="submit-button" class="submit-button">予約する</button>
+            ${this.renderContentBlocksAt(safeConfig, 'submit', 'below')}
         </div>
     </div>
     
@@ -3097,6 +3115,24 @@ if (document.readyState === 'loading') {
             </div>`;
   }
 
+  // 指定セクションの上/下に表示する画像・テキストブロックを描画
+  private renderContentBlocksAt(config: FormConfig, anchor: string, position: 'above' | 'below'): string {
+    const blocks = (config.content_blocks || []).filter(b => {
+      if (!b || b.anchor !== anchor || (b.position || 'above') !== position) return false;
+      if (b.type === 'text') return !!(b.text && b.text.trim());
+      if (b.type === 'image') return !!(b.image_url && /^https?:/i.test(b.image_url.trim()));
+      return false;
+    });
+    if (blocks.length === 0) return '';
+    const items = blocks.map(b => {
+      if (b.type === 'image') {
+        return `<div class="content-block content-block-image"><img src="${this.escapeHtml((b.image_url || '').trim())}" alt="" loading="lazy"></div>`;
+      }
+      return `<div class="content-block content-block-text">${this.escapeHtml(b.text || '').replace(/\n/g, '<br>')}</div>`;
+    }).join('');
+    return items;
+  }
+
   private renderNoticeButtons(config: FormConfig): string {
     const buttons = (config.basic_info?.notice_buttons || []).filter(b =>
       b && b.label && b.url
@@ -3380,6 +3416,21 @@ if (document.readyState === 'loading') {
             border-bottom: 4px solid var(--accent-color);
         }
         .submit-button:active { transform: translateY(2px); border-bottom-width: 2px; box-shadow: none; }
+        /* 画像・テキスト設置ブロック */
+        .content-block {
+            margin-bottom: 20px;
+        }
+        .content-block-text {
+            font-size: 14px;
+            color: var(--text-dark, #333);
+            line-height: 1.7;
+        }
+        .content-block-image img {
+            display: block;
+            max-width: 100%;
+            margin: 0 auto;
+            border-radius: 4px;
+        }
         /* 注意書きの下のリンクボタン */
         .notice-link-buttons {
             display: flex;

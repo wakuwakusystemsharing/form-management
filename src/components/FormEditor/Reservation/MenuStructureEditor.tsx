@@ -3,6 +3,19 @@
 import React, { useState } from 'react';
 import { Form, MenuCategory, MenuItem, MenuOption, SubMenuItem } from '@/types/form';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
+
+// 画像orテキスト設置ブロックの表示位置（フォーム上のセクション）
+const CONTENT_BLOCK_ANCHORS: Array<{ value: string; label: string }> = [
+  { value: 'name', label: 'お名前' },
+  { value: 'phone', label: '電話番号' },
+  { value: 'email', label: 'メールアドレス' },
+  { value: 'staff', label: '担当スタッフ' },
+  { value: 'menu', label: 'メニュー' },
+  { value: 'datetime', label: '希望日時' },
+  { value: 'message', label: 'メッセージ' },
+  { value: 'summary', label: 'ご予約内容' },
+  { value: 'submit', label: '送信ボタン' },
+];
 import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 import ImageCropperModal from './ImageCropperModal';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -1488,6 +1501,51 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
   // スタッフごとのメニュー/オプション表示設定モーダル（開いているスタッフの index）
   const [staffMenuModalIndex, setStaffMenuModalIndex] = useState<number | null>(null);
 
+  // 画像orテキスト設置ブロック
+  const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
+  const currentContentBlocks = () => form.config?.content_blocks || [];
+  const updateContentBlocks = (blocks: NonNullable<Form['config']['content_blocks']>) => {
+    onUpdate({ ...form, config: { ...form.config, content_blocks: blocks } });
+  };
+  const updateContentBlock = (index: number, patch: Partial<NonNullable<Form['config']['content_blocks']>[number]>) => {
+    const next = [...currentContentBlocks()];
+    if (!next[index]) return;
+    next[index] = { ...next[index], ...patch };
+    updateContentBlocks(next);
+  };
+  const moveContentBlock = (index: number, direction: 'up' | 'down') => {
+    const next = [...currentContentBlocks()];
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    updateContentBlocks(next);
+  };
+  const handleBlockImageUpload = async (index: number, file: File) => {
+    const block = currentContentBlocks()[index];
+    if (!block) return;
+    setUploadingBlockId(block.id);
+    try {
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      formData.append('storeId', form.store_id);
+      formData.append('menuId', block.id);
+      if (block.image_url) formData.append('oldImageUrl', block.image_url);
+      const response = await fetch('/api/upload/menu-image', { method: 'POST', body: formData });
+      if (response.ok) {
+        const { url } = await response.json();
+        updateContentBlock(index, { image_url: url });
+      } else {
+        const error = await response.json().catch(() => ({}));
+        alert(`アップロードに失敗しました: ${error.error || ''}`);
+      }
+    } catch (e) {
+      console.error('Content block image upload error:', e);
+      alert('アップロードに失敗しました');
+    } finally {
+      setUploadingBlockId(null);
+    }
+  };
+
   const currentStaffSelection = () => (
     form.config?.staff_selection || { enabled: false, required: false, allow_no_preference: true, staff: [] }
   );
@@ -1987,6 +2045,132 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             </div>
           ))}
         </div>
+      </div>
+
+      {/* 画像orテキスト設置 */}
+      <div className={`p-4 ${themeClasses.card} rounded-lg`}>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h3 className={`text-sm font-medium ${themeClasses.text.primary}`}>
+              🖼️ 画像orテキスト設置
+            </h3>
+            <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
+              フォームの各項目の上または下に、任意のテキストや画像を表示できます
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => updateContentBlocks([
+              ...currentContentBlocks(),
+              { id: `cb_${Math.random().toString(36).slice(2, 9)}`, type: 'text', text: '', image_url: '', anchor: 'name', position: 'above' }
+            ])}
+            className={`px-2 py-1 text-xs rounded-md shrink-0 ${themeClasses.button.secondary}`}
+          >
+            ＋ 追加
+          </button>
+        </div>
+        {currentContentBlocks().length === 0 ? (
+          <p className={`text-xs ${themeClasses.text.tertiary}`}>「＋ 追加」でテキストまたは画像のブロックを追加できます</p>
+        ) : (
+          <div className="space-y-3">
+            {currentContentBlocks().map((block, index, arr) => (
+              <div key={block.id} className={`p-3 rounded-md ${themeClasses.highlight}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={block.type}
+                    onChange={(e) => updateContentBlock(index, { type: e.target.value as 'text' | 'image' })}
+                    className={`${themeClasses.input} text-sm`}
+                  >
+                    <option value="text">テキスト</option>
+                    <option value="image">画像</option>
+                  </select>
+                  <span className={`text-xs ${themeClasses.text.secondary}`}>表示位置:</span>
+                  <select
+                    value={block.anchor}
+                    onChange={(e) => updateContentBlock(index, { anchor: e.target.value })}
+                    className={`${themeClasses.input} text-sm`}
+                  >
+                    {CONTENT_BLOCK_ANCHORS.map(a => (
+                      <option key={a.value} value={a.value}>{a.label}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={block.position}
+                    onChange={(e) => updateContentBlock(index, { position: e.target.value as 'above' | 'below' })}
+                    className={`${themeClasses.input} text-sm`}
+                  >
+                    <option value="above">の上</option>
+                    <option value="below">の下</option>
+                  </select>
+                  <div className="flex space-x-1 ml-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => moveContentBlock(index, 'up')}
+                      disabled={index === 0}
+                      title="上へ"
+                      className={`p-1.5 rounded ${index === 0 ? 'opacity-30 cursor-not-allowed' : ''} ${themeClasses.text.secondary} ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveContentBlock(index, 'down')}
+                      disabled={index === arr.length - 1}
+                      title="下へ"
+                      className={`p-1.5 rounded ${index === arr.length - 1 ? 'opacity-30 cursor-not-allowed' : ''} ${themeClasses.text.secondary} ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateContentBlocks(currentContentBlocks().filter((_, i) => i !== index))}
+                      title="削除"
+                      className={`p-1.5 rounded text-red-400 hover:text-red-300 ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                  </div>
+                </div>
+                {block.type === 'text' ? (
+                  <textarea
+                    value={block.text || ''}
+                    onChange={(e) => updateContentBlock(index, { text: e.target.value })}
+                    placeholder="表示するテキストを入力してください"
+                    rows={3}
+                    className={`w-full mt-2 text-sm rounded-md border px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
+                      theme === 'light'
+                        ? 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                        : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
+                    }`}
+                  />
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {block.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={block.image_url} alt="設置画像プレビュー" className="max-h-32 rounded-md border" />
+                    ) : (
+                      <p className={`text-xs ${themeClasses.text.tertiary}`}>画像が未設定です</p>
+                    )}
+                    <label className={`inline-block px-2 py-1 text-xs rounded-md cursor-pointer ${themeClasses.button.secondary}`}>
+                      {uploadingBlockId === block.id ? 'アップロード中…' : (block.image_url ? '画像を変更' : '画像をアップロード')}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploadingBlockId === block.id}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleBlockImageUpload(index, file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 性別選択機能設定 */}
