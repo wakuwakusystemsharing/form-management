@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Form, BusinessHours } from '@/types/form';
+import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
 import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 
 interface BusinessRulesEditorProps {
@@ -34,21 +35,6 @@ function InfoTooltip({ text, theme = 'light' }: { text: string; theme?: ThemeTyp
     </span>
   );
 }
-
-// Google Calendar API で指定できる予約イベントの色（colorId '1'〜'11'）
-const GOOGLE_EVENT_COLORS: Array<{ id: string; name: string; hex: string }> = [
-  { id: '1', name: 'ラベンダー', hex: '#7986CB' },
-  { id: '2', name: 'セージ', hex: '#33B679' },
-  { id: '3', name: 'ブドウ', hex: '#8E24AA' },
-  { id: '4', name: 'フラミンゴ', hex: '#E67C73' },
-  { id: '5', name: 'バナナ', hex: '#F6BF26' },
-  { id: '6', name: 'ミカン', hex: '#F4511E' },
-  { id: '7', name: 'ピーコック', hex: '#039BE5' },
-  { id: '8', name: 'グラファイト', hex: '#616161' },
-  { id: '9', name: 'ブルーベリー', hex: '#3F51B5' },
-  { id: '10', name: 'バジル', hex: '#0B8043' },
-  { id: '11', name: 'トマト', hex: '#D50000' },
-];
 
 const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdate, theme = 'dark' }) => {
   const themeClasses = getThemeClasses(theme);
@@ -598,6 +584,13 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                       text={'予約が入ったときに Google カレンダーへ作成される予定の色を選べます。\n「デフォルト」はカレンダー自体の色（従来どおり）です。\n\n※ Google カレンダーの仕様上、予定に指定できる色はこの11色です。'}
                     />
                   </div>
+                  {form.config?.staff_selection?.enabled === true ? (
+                    <p className={`text-xs p-3 rounded ${theme === 'light' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-amber-900/30 text-amber-300 border border-amber-700'}`}>
+                      スタッフ選択が有効なため、予約イベントの色は<strong>スタッフごと</strong>に設定します。
+                      <br />メニュー構成 → 詳細設定 → スタッフ選択の各スタッフで色を選んでください。
+                    </p>
+                  ) : (
+                  <>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
@@ -652,6 +645,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                       || 'デフォルト（カレンダーの色）'
                     }
                   </p>
+                  </>
+                  )}
                 </div>
               </div>
             )}

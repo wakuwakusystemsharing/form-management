@@ -200,6 +200,7 @@ export interface FormConfig {
       name: string;                 // 表示名
       calendar_id: string;          // 紐付ける Google カレンダーID
       calendar_name?: string;       // 編集画面表示用のカレンダー名
+      event_color_id?: string;      // 予約イベントの色（colorId '1'〜'11'。空 = カレンダーの既定色）
     }>;
   };
 

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Form, MenuCategory, MenuItem, MenuOption, SubMenuItem } from '@/types/form';
+import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
 import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 import ImageCropperModal from './ImageCropperModal';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -1394,7 +1395,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     });
   };
 
-  const updateStaffMember = (index: number, patch: Partial<{ name: string; calendar_id: string; calendar_name: string }>) => {
+  const updateStaffMember = (index: number, patch: Partial<{ name: string; calendar_id: string; calendar_name: string; event_color_id: string }>) => {
     const staff = [...currentStaffSelection().staff];
     staff[index] = { ...staff[index], ...patch };
     updateStaffSelection({ staff });
@@ -1561,7 +1562,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                 <p className={`text-xs text-center py-3 rounded ${themeClasses.emptyState}`}>まだスタッフがいません。「スタッフを追加」から登録してください。</p>
               ) : (
                 (form.config?.staff_selection?.staff || []).map((member, index, arr) => (
-                  <div key={member.id} className={`flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-md ${themeClasses.highlight}`}>
+                  <div key={member.id} className={`p-3 rounded-md ${themeClasses.highlight}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                     <input
                       type="text"
                       value={member.name}
@@ -1618,6 +1620,39 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                       </button>
                     </div>
+                  </div>
+                  {/* スタッフごとの予約イベント色 */}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span className={`text-xs ${themeClasses.text.secondary} mr-1`}>イベント色:</span>
+                    <button
+                      type="button"
+                      onClick={() => updateStaffMember(index, { event_color_id: '' })}
+                      className={`px-2 h-6 rounded-full border text-[10px] font-medium transition-all ${
+                        !member.event_color_id
+                          ? (theme === 'light' ? 'border-[rgb(244,144,49)] text-[rgb(244,144,49)]' : 'border-cyan-400 text-cyan-300')
+                          : (theme === 'light' ? 'border-gray-300 text-gray-500 hover:border-gray-400' : 'border-gray-600 text-gray-400 hover:border-gray-500')
+                      }`}
+                    >
+                      デフォルト
+                    </button>
+                    {GOOGLE_EVENT_COLORS.map((color) => {
+                      const selected = member.event_color_id === color.id;
+                      return (
+                        <button
+                          key={color.id}
+                          type="button"
+                          title={color.name}
+                          onClick={() => updateStaffMember(index, { event_color_id: color.id })}
+                          className={`w-5 h-5 rounded-full transition-all ${
+                            selected
+                              ? 'ring-2 ring-offset-1 scale-110 ' + (theme === 'light' ? 'ring-[rgb(244,144,49)] ring-offset-white' : 'ring-cyan-400 ring-offset-gray-800')
+                              : 'hover:scale-105'
+                          }`}
+                          style={{ backgroundColor: color.hex }}
+                        />
+                      );
+                    })}
+                  </div>
                   </div>
                 ))
               )}
