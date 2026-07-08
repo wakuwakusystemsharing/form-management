@@ -358,6 +358,9 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
   const [isDefault, setIsDefault] = useState(false);
   const [hidePrice, setHidePrice] = useState(false);
   const [hideDuration, setHideDuration] = useState(false);
+  const [timeWindowEnabled, setTimeWindowEnabled] = useState(false);
+  const [timeWindowStart, setTimeWindowStart] = useState('09:00');
+  const [timeWindowEnd, setTimeWindowEnd] = useState('18:00');
 
   React.useEffect(() => {
     if (option) {
@@ -368,6 +371,9 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       setIsDefault(option.is_default || false);
       setHidePrice(option.hide_price || false);
       setHideDuration(option.hide_duration || false);
+      setTimeWindowEnabled(option.time_window_enabled === true);
+      setTimeWindowStart(option.time_window_start || '09:00');
+      setTimeWindowEnd(option.time_window_end || '18:00');
     } else {
       setName('');
       setPrice('');
@@ -376,6 +382,9 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       setIsDefault(false);
       setHidePrice(false);
       setHideDuration(false);
+      setTimeWindowEnabled(false);
+      setTimeWindowStart('09:00');
+      setTimeWindowEnd('18:00');
     }
   }, [option]);
 
@@ -388,7 +397,10 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       description: description || undefined,
       is_default: isDefault,
       hide_price: hidePrice || undefined,
-      hide_duration: hideDuration || undefined
+      hide_duration: hideDuration || undefined,
+      time_window_enabled: timeWindowEnabled || undefined,
+      time_window_start: timeWindowEnabled ? timeWindowStart : undefined,
+      time_window_end: timeWindowEnabled ? timeWindowEnd : undefined
     };
     onSave(newOption);
     onClose();
@@ -511,6 +523,46 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
                 デフォルトで選択する
               </label>
             </div>
+
+            {/* このオプションの対応時間設定 */}
+            <div className={`p-3 rounded-md ${themeClasses.card}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className={`text-sm font-medium ${themeClasses.text.primary}`}>このオプションの対応時間設定</h4>
+                  <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                    ONにすると、選択時は指定した時間帯だけ予約カレンダーで〇になります（時間帯外は✕）
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={timeWindowEnabled}
+                    onChange={(e) => setTimeWindowEnabled(e.target.checked)}
+                    className="sr-only"
+                  />
+                  <div className={`w-11 h-6 rounded-full transition-colors ${timeWindowEnabled ? themeClasses.toggle.enabled : themeClasses.toggle.disabled}`}>
+                    <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${timeWindowEnabled ? 'translate-x-5' : 'translate-x-0'} mt-0.5 ml-0.5`}></div>
+                  </div>
+                </label>
+              </div>
+              {timeWindowEnabled && (
+                <div className="flex items-center gap-2 mt-3">
+                  <input
+                    type="time"
+                    value={timeWindowStart}
+                    onChange={(e) => setTimeWindowStart(e.target.value)}
+                    className={`px-3 py-2 rounded-md ${themeClasses.input}`}
+                  />
+                  <span className={`${themeClasses.text.secondary}`}>〜</span>
+                  <input
+                    type="time"
+                    value={timeWindowEnd}
+                    onChange={(e) => setTimeWindowEnd(e.target.value)}
+                    className={`px-3 py-2 rounded-md ${themeClasses.input}`}
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           <div className={`flex justify-end space-x-3 mt-6 pt-4 border-t ${themeClasses.divider}`}>
@@ -561,6 +613,9 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   const [cropperOpen, setCropperOpen] = useState(false);
   const [hidePrice, setHidePrice] = useState(false);
   const [hideDuration, setHideDuration] = useState(false);
+  const [timeWindowEnabled, setTimeWindowEnabled] = useState(false);
+  const [timeWindowStart, setTimeWindowStart] = useState('09:00');
+  const [timeWindowEnd, setTimeWindowEnd] = useState('18:00');
 
   React.useEffect(() => {
     if (isOpen) {
@@ -576,6 +631,9 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setSubMenuItems(menuItem.sub_menu_items || []);
         setHidePrice(menuItem.hide_price || false);
         setHideDuration(menuItem.hide_duration || false);
+        setTimeWindowEnabled(menuItem.time_window_enabled === true);
+        setTimeWindowStart(menuItem.time_window_start || '09:00');
+        setTimeWindowEnd(menuItem.time_window_end || '18:00');
       } else {
         setName('');
         setPrice('');
@@ -588,6 +646,9 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setSubMenuItems([]);
         setHidePrice(false);
         setHideDuration(false);
+        setTimeWindowEnabled(false);
+        setTimeWindowStart('09:00');
+        setTimeWindowEnd('18:00');
       }
     }
   }, [menuItem, isOpen]);
@@ -606,7 +667,10 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       has_submenu: hasSubmenu,
       sub_menu_items: hasSubmenu ? subMenuItems : undefined,
       hide_price: hidePrice || undefined,
-      hide_duration: hideDuration || undefined
+      hide_duration: hideDuration || undefined,
+      time_window_enabled: timeWindowEnabled || undefined,
+      time_window_start: timeWindowEnabled ? timeWindowStart : undefined,
+      time_window_end: timeWindowEnabled ? timeWindowEnd : undefined
     };
     onSave(newMenuItem);
     onClose();
@@ -980,6 +1044,46 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                 </div>
               )}
 
+
+            {/* このメニューの対応時間設定 */}
+            <div className={`p-3 rounded-md ${themeClasses.card}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className={`text-sm font-medium ${themeClasses.text.primary}`}>このメニューの対応時間設定</h4>
+                  <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                    ONにすると、選択時は指定した時間帯だけ予約カレンダーで〇になります（時間帯外は✕）
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={timeWindowEnabled}
+                    onChange={(e) => setTimeWindowEnabled(e.target.checked)}
+                    className="sr-only"
+                  />
+                  <div className={`w-11 h-6 rounded-full transition-colors ${timeWindowEnabled ? themeClasses.toggle.enabled : themeClasses.toggle.disabled}`}>
+                    <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${timeWindowEnabled ? 'translate-x-5' : 'translate-x-0'} mt-0.5 ml-0.5`}></div>
+                  </div>
+                </label>
+              </div>
+              {timeWindowEnabled && (
+                <div className="flex items-center gap-2 mt-3">
+                  <input
+                    type="time"
+                    value={timeWindowStart}
+                    onChange={(e) => setTimeWindowStart(e.target.value)}
+                    className={`px-3 py-2 rounded-md ${themeClasses.input}`}
+                  />
+                  <span className={`${themeClasses.text.secondary}`}>〜</span>
+                  <input
+                    type="time"
+                    value={timeWindowEnd}
+                    onChange={(e) => setTimeWindowEnd(e.target.value)}
+                    className={`px-3 py-2 rounded-md ${themeClasses.input}`}
+                  />
+                </div>
+              )}
+            </div>
               {/* オプション設定 */}
               {!hasSubmenu && (
               <div className="space-y-4">
