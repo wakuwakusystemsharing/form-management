@@ -315,7 +315,13 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
               calendar_name: typeof m.calendar_name === 'string' ? m.calendar_name : '',
               event_color_id: typeof m.event_color_id === 'string' && /^([1-9]|1[01])$/.test(m.event_color_id)
                 ? m.event_color_id
-                : ''
+                : '',
+              hidden_menu_ids: Array.isArray(m.hidden_menu_ids)
+                ? m.hidden_menu_ids.filter((x): x is string => typeof x === 'string')
+                : [],
+              hidden_option_ids: Array.isArray(m.hidden_option_ids)
+                ? m.hidden_option_ids.filter((x): x is string => typeof x === 'string')
+                : []
             }))
         };
       })(),

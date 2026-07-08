@@ -1381,6 +1381,9 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     return () => { cancelled = true; };
   }, [form.config?.staff_selection?.enabled, form.store_id, staffCalendarsLoaded]);
 
+  // スタッフごとのメニュー/オプション表示設定モーダル（開いているスタッフの index）
+  const [staffMenuModalIndex, setStaffMenuModalIndex] = useState<number | null>(null);
+
   const currentStaffSelection = () => (
     form.config?.staff_selection || { enabled: false, required: false, allow_no_preference: true, staff: [] }
   );
@@ -1395,7 +1398,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     });
   };
 
-  const updateStaffMember = (index: number, patch: Partial<{ name: string; calendar_id: string; calendar_name: string; event_color_id: string }>) => {
+  const updateStaffMember = (index: number, patch: Partial<{ name: string; calendar_id: string; calendar_name: string; event_color_id: string; hidden_menu_ids: string[]; hidden_option_ids: string[] }>) => {
     const staff = [...currentStaffSelection().staff];
     staff[index] = { ...staff[index], ...patch };
     updateStaffSelection({ staff });
@@ -1407,6 +1410,21 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     if (target < 0 || target >= staff.length) return;
     [staff[index], staff[target]] = [staff[target], staff[index]];
     updateStaffSelection({ staff });
+  };
+
+  const isStaffItemHidden = (index: number, kind: 'menu' | 'option', id: string) => {
+    const member = currentStaffSelection().staff[index];
+    const list = kind === 'menu' ? member?.hidden_menu_ids : member?.hidden_option_ids;
+    return Array.isArray(list) && list.includes(id);
+  };
+
+  const toggleStaffHiddenItem = (index: number, kind: 'menu' | 'option', id: string, visible: boolean) => {
+    const member = currentStaffSelection().staff[index];
+    if (!member) return;
+    const key = kind === 'menu' ? 'hidden_menu_ids' : 'hidden_option_ids';
+    const current = Array.isArray(member[key]) ? (member[key] as string[]) : [];
+    const next = visible ? current.filter(x => x !== id) : (current.includes(id) ? current : [...current, id]);
+    updateStaffMember(index, { [key]: next });
   };
 
   return (
@@ -1653,6 +1671,19 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                       );
                     })}
                   </div>
+                  {/* スタッフごとのメニュー/オプション表示設定 */}
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setStaffMenuModalIndex(index)}
+                      className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
+                    >
+                      メニューオプション設定
+                      {((member.hidden_menu_ids?.length || 0) + (member.hidden_option_ids?.length || 0)) > 0
+                        ? `（${(member.hidden_menu_ids?.length || 0) + (member.hidden_option_ids?.length || 0)}件 非表示中）`
+                        : ''}
+                    </button>
+                  </div>
                   </div>
                 ))
               )}
@@ -1677,6 +1708,79 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
           </div>
         )}
       </div>
+
+      {/* スタッフごとのメニュー/オプション表示設定モーダル */}
+      <Dialog open={staffMenuModalIndex !== null} onOpenChange={(open) => { if (!open) setStaffMenuModalIndex(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              メニューオプション設定
+              {staffMenuModalIndex !== null && currentStaffSelection().staff[staffMenuModalIndex]
+                ? `（${currentStaffSelection().staff[staffMenuModalIndex].name || 'スタッフ'}）`
+                : ''}
+            </DialogTitle>
+            <DialogDescription>
+              チェックを外したメニュー・オプションは、このスタッフが選択されているときに予約フォームへ表示されません（デフォルトはすべて表示）。
+            </DialogDescription>
+          </DialogHeader>
+          {staffMenuModalIndex !== null && (
+            <div className="space-y-4">
+              {(form.config?.menu_structure?.categories || []).length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">メニューがまだ登録されていません。先にカテゴリー・メニューを作成してください。</p>
+              ) : (
+                (form.config?.menu_structure?.categories || []).map(category => (
+                  <div key={category.id} className="space-y-2 border rounded-md p-3">
+                    <h4 className="text-sm font-semibold">{category.display_name || category.name}</h4>
+                    {category.menus.map(menu => (
+                      <div key={menu.id} className="ml-1 space-y-1">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!isStaffItemHidden(staffMenuModalIndex, 'menu', menu.id)}
+                            onChange={(e) => toggleStaffHiddenItem(staffMenuModalIndex, 'menu', menu.id, e.target.checked)}
+                            className="h-4 w-4 rounded"
+                          />
+                          <span className="text-sm">{menu.name}</span>
+                        </label>
+                        {(menu.options || []).map(opt => (
+                          <label key={opt.id} className="flex items-center gap-2 cursor-pointer ml-6">
+                            <input
+                              type="checkbox"
+                              checked={!isStaffItemHidden(staffMenuModalIndex, 'option', opt.id)}
+                              onChange={(e) => toggleStaffHiddenItem(staffMenuModalIndex, 'option', opt.id, e.target.checked)}
+                              className="h-4 w-4 rounded"
+                            />
+                            <span className="text-xs text-muted-foreground">{opt.name}（オプション）</span>
+                          </label>
+                        ))}
+                      </div>
+                    ))}
+                    {(category.options || []).length > 0 && (
+                      <div className="ml-1 space-y-1 pt-1">
+                        <p className="text-xs text-muted-foreground">カテゴリー共通オプション</p>
+                        {(category.options || []).map(opt => (
+                          <label key={opt.id} className="flex items-center gap-2 cursor-pointer ml-2">
+                            <input
+                              type="checkbox"
+                              checked={!isStaffItemHidden(staffMenuModalIndex, 'option', opt.id)}
+                              onChange={(e) => toggleStaffHiddenItem(staffMenuModalIndex, 'option', opt.id, e.target.checked)}
+                              className="h-4 w-4 rounded"
+                            />
+                            <span className="text-xs">{opt.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setStaffMenuModalIndex(null)}>閉じる</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 注意書き */}
       <div className={`p-4 ${themeClasses.card} rounded-lg`}>
