@@ -3128,7 +3128,12 @@ if (document.readyState === 'loading') {
       if (b.type === 'image') {
         return `<div class="content-block content-block-image"><img src="${this.escapeHtml((b.image_url || '').trim())}" alt="" loading="lazy"></div>`;
       }
-      return `<div class="content-block content-block-text">${this.escapeHtml(b.text || '').replace(/\n/g, '<br>')}</div>`;
+      // [color=#rrggbb]〜[/color] を <span style="color:..."> に変換（hex のみ許可 = CSSインジェクション防止）
+      const textHtml = this.escapeHtml(b.text || '')
+        .replace(/\[color=(#[0-9a-fA-F]{3,8})\]/g, '<span style="color:$1">')
+        .replace(/\[\/color\]/g, '</span>')
+        .replace(/\n/g, '<br>');
+      return `<div class="content-block content-block-text">${textHtml}</div>`;
     }).join('');
     return items;
   }
@@ -3424,6 +3429,11 @@ if (document.readyState === 'loading') {
             font-size: 14px;
             color: var(--text-dark, #333);
             line-height: 1.7;
+            background-color: var(--bg-color);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-left: 3px solid var(--accent-color);
+            border-radius: 4px;
+            padding: 14px 16px;
         }
         .content-block-image img {
             display: block;

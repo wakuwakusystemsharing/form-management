@@ -4,6 +4,24 @@ import React, { useState } from 'react';
 import { Form, MenuCategory, MenuItem, MenuOption, SubMenuItem } from '@/types/form';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
 
+// テキストブロックの文字色プリセット
+const CONTENT_TEXT_COLORS: Array<{ label: string; hex: string }> = [
+  { label: '赤', hex: '#dc2626' },
+  { label: '青', hex: '#2563eb' },
+  { label: '緑', hex: '#16a34a' },
+  { label: 'オレンジ', hex: '#ea580c' },
+];
+
+// 編集画面プレビュー用: [color=#xxxxxx]〜[/color] タグ付きテキストを安全な HTML に変換
+function renderContentTextPreview(text: string): string {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+    .replace(/\[color=(#[0-9a-fA-F]{3,8})\]/g, '<span style="color:$1">')
+    .replace(/\[\/color\]/g, '</span>')
+    .replace(/\n/g, '<br>');
+}
+
 // 画像orテキスト設置ブロックの表示位置（フォーム上のセクション）
 const CONTENT_BLOCK_ANCHORS: Array<{ value: string; label: string }> = [
   { value: 'name', label: 'お名前' },
@@ -1520,6 +1538,28 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     [next[index], next[target]] = [next[target], next[index]];
     updateContentBlocks(next);
   };
+  // テキストブロック: textarea の選択範囲に色タグを適用
+  const blockTextareaRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const applyColorToBlockSelection = (index: number, blockId: string, color: string) => {
+    const ta = blockTextareaRefs.current[blockId];
+    const text = currentContentBlocks()[index]?.text || '';
+    if (!ta) return;
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? 0;
+    if (start === end) {
+      alert('色を付けたい部分をテキスト内でドラッグして選択してから、色を選んでください');
+      return;
+    }
+    const next = text.slice(0, start) + `[color=${color}]` + text.slice(start, end) + '[/color]' + text.slice(end);
+    updateContentBlock(index, { text: next });
+  };
+  const clearBlockColors = (index: number) => {
+    const text = currentContentBlocks()[index]?.text || '';
+    updateContentBlock(index, {
+      text: text.replace(/\[color=#[0-9a-fA-F]{3,8}\]/g, '').replace(/\[\/color\]/g, '')
+    });
+  };
+
   const handleBlockImageUpload = async (index: number, file: File) => {
     const block = currentContentBlocks()[index];
     if (!block) return;
@@ -2132,17 +2172,70 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                   </div>
                 </div>
                 {block.type === 'text' ? (
-                  <textarea
-                    value={block.text || ''}
-                    onChange={(e) => updateContentBlock(index, { text: e.target.value })}
-                    placeholder="表示するテキストを入力してください"
-                    rows={3}
-                    className={`w-full mt-2 text-sm rounded-md border px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
-                      theme === 'light'
-                        ? 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
-                        : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
-                    }`}
-                  />
+                  <div className="mt-2 space-y-2">
+                    <textarea
+                      ref={(el) => { blockTextareaRefs.current[block.id] = el; }}
+                      value={block.text || ''}
+                      onChange={(e) => updateContentBlock(index, { text: e.target.value })}
+                      placeholder="表示するテキストを入力してください"
+                      rows={3}
+                      className={`w-full text-sm rounded-md border px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
+                        theme === 'light'
+                          ? 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                          : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
+                      }`}
+                    />
+                    {/* 文字色ツールバー */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className={`text-xs ${themeClasses.text.secondary} mr-1`}>文字色:</span>
+                      {CONTENT_TEXT_COLORS.map((c) => (
+                        <button
+                          key={c.hex}
+                          type="button"
+                          title={c.label}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => applyColorToBlockSelection(index, block.id, c.hex)}
+                          className="w-5 h-5 rounded-full hover:scale-110 transition-transform"
+                          style={{ backgroundColor: c.hex }}
+                        />
+                      ))}
+                      <label
+                        title="好きな色を選ぶ"
+                        onMouseDown={(e) => e.preventDefault()}
+                        className={`w-5 h-5 rounded-full cursor-pointer overflow-hidden border ${theme === 'light' ? 'border-gray-300' : 'border-gray-500'}`}
+                        style={{ background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)' }}
+                      >
+                        <input
+                          type="color"
+                          className="opacity-0 w-full h-full cursor-pointer"
+                          onChange={(e) => applyColorToBlockSelection(index, block.id, e.target.value)}
+                        />
+                      </label>
+                      {(block.text || '').includes('[color=') && (
+                        <button
+                          type="button"
+                          onClick={() => clearBlockColors(index)}
+                          className={`px-2 py-0.5 text-xs rounded-md ${themeClasses.button.secondary}`}
+                        >
+                          色をすべて解除
+                        </button>
+                      )}
+                      <span className={`text-[10px] ${themeClasses.text.tertiary} w-full`}>
+                        色を変えたい部分をテキスト内で選択してから色を押してください
+                      </span>
+                    </div>
+                    {/* プレビュー */}
+                    {(block.text || '').trim() && (
+                      <div>
+                        <p className={`text-[10px] ${themeClasses.text.tertiary} mb-1`}>フォーム上の表示イメージ:</p>
+                        <div
+                          className="text-sm rounded border p-3 leading-relaxed"
+                          style={{ backgroundColor: '#f7f8fa', borderLeft: '3px solid #c5a059', color: '#333' }}
+                          dangerouslySetInnerHTML={{ __html: renderContentTextPreview(block.text || '') }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="mt-2 space-y-2">
                     {block.image_url ? (
