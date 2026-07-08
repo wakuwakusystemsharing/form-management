@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface SurveyFormEditorProps {
   form: SurveyForm;
@@ -178,6 +179,31 @@ export default function SurveyFormEditor({ form, onUpdate, userRole = 'service_a
                 placeholder="例: アンケート回答"
               />
             </div>
+
+            {/* システム管理者のみ表示 */}
+            {userRole === 'service_admin' && (
+              <div className="space-y-2">
+                <Label htmlFor="survey_status">公開ステータス</Label>
+                <Select
+                  value={form.status}
+                  onValueChange={(value) => onUpdate({
+                    ...form,
+                    status: value as 'active' | 'inactive'
+                  })}
+                >
+                  <SelectTrigger id="survey_status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inactive">非公開（下書き）</SelectItem>
+                    <SelectItem value="active">公開中</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {form.status === 'active' ? '顧客がフォームにアクセス可能です' : 'フォームは非公開です（管理者のみ確認可能）'}
+                </p>
+              </div>
+            )}
           </div>
         </TabsContent>
 
