@@ -164,6 +164,18 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         theme_color: (existingConfig?.basic_info?.theme_color as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.theme_color || (typedBasicInfo?.theme_color as string) || '#3B82F6',
         logo_url: (existingConfig?.basic_info?.logo_url as string | undefined) || (typedConfig?.basic_info as Form['config']['basic_info'])?.logo_url || (typedBasicInfo?.logo_url as string | undefined),
         notice: (existingConfig?.basic_info?.notice as string | undefined) || (typedConfig?.basic_info as Form['config']['basic_info'])?.notice || (typedBasicInfo?.notice as string | undefined),
+        notice_buttons: (() => {
+          const raw = existingConfig?.basic_info?.notice_buttons
+            ?? (typedConfig?.basic_info as Form['config']['basic_info'])?.notice_buttons;
+          if (!Array.isArray(raw)) return [];
+          return raw
+            .filter((b) => b && typeof b.label === 'string' && typeof b.url === 'string')
+            .map((b) => ({
+              id: typeof b.id === 'string' && b.id ? b.id : `nb_${Math.random().toString(36).slice(2, 9)}`,
+              label: b.label,
+              url: b.url
+            }));
+        })(),
         second_message: (() => {
           const raw = existingConfig?.basic_info?.second_message
             ?? (typedConfig?.basic_info as Form['config']['basic_info'])?.second_message;

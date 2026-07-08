@@ -144,6 +144,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
 
         <div class="form-content">
             ${safeConfig.basic_info?.notice ? `<div class="notice-banner">${this.escapeHtml(safeConfig.basic_info.notice)}</div>` : ''}
+            ${this.renderNoticeButtons(safeConfig)}
 
             ${safeConfig.ui_settings?.show_repeat_booking ? this.renderRepeatBookingButton(safeConfig) : ''}
             
@@ -3096,6 +3097,25 @@ if (document.readyState === 'loading') {
             </div>`;
   }
 
+  private renderNoticeButtons(config: FormConfig): string {
+    const buttons = (config.basic_info?.notice_buttons || []).filter(b =>
+      b && b.label && b.url
+      // 安全なスキームのみ許可（javascript: 等のインジェクション防止）
+      && /^(https?:|tel:|mailto:|sms:|line:)/i.test(b.url.trim())
+    );
+    if (buttons.length === 0) return '';
+    const items = buttons.map(b => {
+      const url = b.url.trim();
+      const isWebLink = /^https?:/i.test(url);
+      return `<a class="notice-link-button" href="${this.escapeHtml(url)}"${isWebLink ? ' target="_blank" rel="noopener noreferrer"' : ''}>${this.escapeHtml(b.label)}</a>`;
+    }).join('\n                ');
+    return `
+            <!-- 注意書きリンクボタン -->
+            <div class="notice-link-buttons">
+                ${items}
+            </div>`;
+  }
+
   private renderStaffField(config: FormConfig): string {
     const ss = config.staff_selection;
     if (ss?.enabled !== true) return '';
@@ -3360,6 +3380,30 @@ if (document.readyState === 'loading') {
             border-bottom: 4px solid var(--accent-color);
         }
         .submit-button:active { transform: translateY(2px); border-bottom-width: 2px; box-shadow: none; }
+        /* 注意書きの下のリンクボタン */
+        .notice-link-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .notice-link-button {
+            flex: 1 1 45%;
+            display: block;
+            padding: 12px 10px;
+            border: 2px solid var(--primary-color);
+            border-radius: 2px;
+            background-color: var(--white);
+            color: #1b2a4e;
+            text-align: center;
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        @media (hover: hover) and (pointer: fine) {
+            .notice-link-button:hover { background-color: var(--bg-color); }
+        }
         /* 前回と同じメニューで予約する: 実線ボーダー + フォームに合わせた背景色 */
         .repeat-booking-button {
             border: 2px solid var(--primary-color) !important;
