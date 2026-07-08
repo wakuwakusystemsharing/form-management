@@ -3729,7 +3729,10 @@ if (document.readyState === 'loading') {
             /* 縦に長いカレンダーは内部スクロールにして、日付ヘッダー行を追従表示させる */
             max-height: 65vh;
             overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
+            /* iOS のバウンス（ラバーバンド）と、端に達したときのページ側への
+               スクロール連鎖を無効化。-webkit-overflow-scrolling: touch は
+               旧iOSでバウンスを誘発するため指定しない（iOS13以降は慣性スクロールが標準） */
+            overscroll-behavior: none;
         }
         #calendar-table thead th {
             position: sticky;
