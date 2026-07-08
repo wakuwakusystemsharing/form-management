@@ -337,6 +337,21 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             }))
         };
       })(),
+      content_blocks: (() => {
+        const raw = existingConfig?.content_blocks
+          ?? (typedConfig as Form['config'])?.content_blocks;
+        if (!Array.isArray(raw)) return [];
+        return raw
+          .filter((b) => b && typeof b === 'object' && (b.type === 'text' || b.type === 'image'))
+          .map((b) => ({
+            id: typeof b.id === 'string' && b.id ? b.id : `cb_${Math.random().toString(36).slice(2, 9)}`,
+            type: b.type,
+            text: typeof b.text === 'string' ? b.text : '',
+            image_url: typeof b.image_url === 'string' ? b.image_url : '',
+            anchor: typeof b.anchor === 'string' && b.anchor ? b.anchor : 'name',
+            position: b.position === 'below' ? 'below' as const : 'above' as const
+          }));
+      })(),
       reservation_summary: {
         show_total_price: existingConfig?.reservation_summary?.show_total_price
           ?? (typedConfig as Form['config'])?.reservation_summary?.show_total_price
