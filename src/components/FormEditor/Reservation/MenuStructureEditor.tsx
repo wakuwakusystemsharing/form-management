@@ -1919,6 +1919,74 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
               : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
           }`}
         />
+
+        {/* リンクボタン */}
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className={`text-xs ${themeClasses.text.secondary}`}>
+              リンクボタン（注意書きの下に表示。例: ホームページのURL、電話は tel:0312345678）
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                const current = form.config?.basic_info?.notice_buttons || [];
+                onUpdate({
+                  ...form,
+                  config: {
+                    ...form.config,
+                    basic_info: {
+                      ...form.config?.basic_info,
+                      notice_buttons: [
+                        ...current,
+                        { id: `nb_${Math.random().toString(36).slice(2, 9)}`, label: '', url: '' }
+                      ]
+                    }
+                  }
+                });
+              }}
+              className={`px-2 py-1 text-xs rounded-md shrink-0 ${themeClasses.button.secondary}`}
+            >
+              ＋ ボタン追加
+            </button>
+          </div>
+          {(form.config?.basic_info?.notice_buttons || []).map((btn, index) => (
+            <div key={btn.id} className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={btn.label}
+                onChange={(e) => {
+                  const next = [...(form.config?.basic_info?.notice_buttons || [])];
+                  next[index] = { ...next[index], label: e.target.value };
+                  onUpdate({ ...form, config: { ...form.config, basic_info: { ...form.config?.basic_info, notice_buttons: next } } });
+                }}
+                placeholder="ボタン名（例: ホームページ）"
+                className={`${themeClasses.input} text-sm flex-1 min-w-0`}
+              />
+              <input
+                type="text"
+                value={btn.url}
+                onChange={(e) => {
+                  const next = [...(form.config?.basic_info?.notice_buttons || [])];
+                  next[index] = { ...next[index], url: e.target.value };
+                  onUpdate({ ...form, config: { ...form.config, basic_info: { ...form.config?.basic_info, notice_buttons: next } } });
+                }}
+                placeholder="URL（例: https://example.com / tel:0312345678）"
+                className={`${themeClasses.input} text-sm flex-1 min-w-0`}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const next = (form.config?.basic_info?.notice_buttons || []).filter((_, i) => i !== index);
+                  onUpdate({ ...form, config: { ...form.config, basic_info: { ...form.config?.basic_info, notice_buttons: next } } });
+                }}
+                title="削除"
+                className={`p-1.5 rounded text-red-400 hover:text-red-300 self-end sm:self-auto shrink-0 ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* 性別選択機能設定 */}

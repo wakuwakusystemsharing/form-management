@@ -84,6 +84,12 @@ export interface FormConfig {
     theme_color: string;
     logo_url?: string;
     notice?: string;   // フォーム上部に表示する注意書き（任意）
+    // 注意書きの下に表示するリンクボタン（例: ホームページ / tel:電話番号）
+    notice_buttons?: Array<{
+      id: string;
+      label: string;   // ボタン名
+      url: string;     // リンク先（https:// / tel: / mailto: など）
+    }>;
     // フォーム送信時に LIFF が 2 通目に流すテキスト（公式 LINE の完全一致応答メッセージ用）
     second_message?: {
       enabled: boolean;
