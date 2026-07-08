@@ -1348,6 +1348,66 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // スタッフ選択: 店舗に連携している Google カレンダー一覧
+  const [staffCalendars, setStaffCalendars] = useState<Array<{ id: string; summary: string; primary: boolean }>>([]);
+  const [staffCalendarError, setStaffCalendarError] = useState('');
+  const [staffCalendarsLoaded, setStaffCalendarsLoaded] = useState(false);
+
+  React.useEffect(() => {
+    if (!form.config?.staff_selection?.enabled || staffCalendarsLoaded) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/stores/${form.store_id}/calendar/list`, { credentials: 'include' });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (res.ok && Array.isArray(data.calendars)) {
+          setStaffCalendars(data.calendars);
+          setStaffCalendarError('');
+        } else {
+          setStaffCalendars([]);
+          setStaffCalendarError(data.error || 'カレンダー一覧の取得に失敗しました');
+        }
+      } catch {
+        if (!cancelled) {
+          setStaffCalendars([]);
+          setStaffCalendarError('カレンダー一覧の取得に失敗しました');
+        }
+      } finally {
+        if (!cancelled) setStaffCalendarsLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [form.config?.staff_selection?.enabled, form.store_id, staffCalendarsLoaded]);
+
+  const currentStaffSelection = () => (
+    form.config?.staff_selection || { enabled: false, required: false, allow_no_preference: true, staff: [] }
+  );
+
+  const updateStaffSelection = (patch: Partial<NonNullable<Form['config']['staff_selection']>>) => {
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        staff_selection: { ...currentStaffSelection(), ...patch }
+      }
+    });
+  };
+
+  const updateStaffMember = (index: number, patch: Partial<{ name: string; calendar_id: string; calendar_name: string }>) => {
+    const staff = [...currentStaffSelection().staff];
+    staff[index] = { ...staff[index], ...patch };
+    updateStaffSelection({ staff });
+  };
+
+  const moveStaffMember = (index: number, direction: 'up' | 'down') => {
+    const staff = [...currentStaffSelection().staff];
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= staff.length) return;
+    [staff[index], staff[target]] = [staff[target], staff[index]];
+    updateStaffSelection({ staff });
+  };
+
   return (
     <div className="space-y-4">
       {/* ページヘッダー */}
@@ -1427,6 +1487,160 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             </div>
           </label>
         </div>
+      </div>
+
+      {/* スタッフ選択設定 */}
+      <div className={`mb-6 p-4 ${themeClasses.card} rounded-lg`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className={`text-sm font-medium ${themeClasses.text.primary}`}>
+              👥 スタッフ選択
+            </h3>
+            <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
+              フォームにスタッフの単一選択ボタンを表示します。スタッフごとに Google カレンダーを紐付けると、選択されたスタッフのカレンダーで空き状況の判定と予約イベントの作成を行います
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer ml-4 shrink-0">
+            <input
+              type="checkbox"
+              checked={form.config?.staff_selection?.enabled === true}
+              onChange={(e) => updateStaffSelection({ enabled: e.target.checked })}
+              className="sr-only"
+            />
+            <div className={`w-11 h-6 rounded-full transition-colors ${
+              form.config?.staff_selection?.enabled === true
+                ? themeClasses.toggle.enabled
+                : themeClasses.toggle.disabled
+            }`}>
+              <div className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform ${
+                form.config?.staff_selection?.enabled === true
+                  ? 'translate-x-5'
+                  : 'translate-x-0'
+              } mt-0.5 ml-0.5`}></div>
+            </div>
+          </label>
+        </div>
+
+        {form.config?.staff_selection?.enabled === true && (
+          <div className="mt-4 space-y-4">
+            {staffCalendarError && (
+              <div className={`text-xs p-3 rounded ${theme === 'light' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-amber-900/30 text-amber-300 border border-amber-700'}`}>
+                ⚠️ {staffCalendarError}
+                <br />スタッフ選択には店舗のGoogleカレンダー連携（店舗OAuth連携）が必要です。店舗管理画面からカレンダー連携を行ってください。
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.config?.staff_selection?.required === true}
+                  onChange={(e) => updateStaffSelection({ required: e.target.checked })}
+                  className={`h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${
+                    theme === 'light' ? 'bg-gray-100 border-gray-300' : 'bg-gray-700 border-gray-600'
+                  }`}
+                />
+                <span className={`text-sm ${themeClasses.text.secondary}`}>必須項目にする</span>
+              </label>
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.config?.staff_selection?.allow_no_preference !== false}
+                  onChange={(e) => updateStaffSelection({ allow_no_preference: e.target.checked })}
+                  className={`h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${
+                    theme === 'light' ? 'bg-gray-100 border-gray-300' : 'bg-gray-700 border-gray-600'
+                  }`}
+                />
+                <span className={`text-sm ${themeClasses.text.secondary}`}>「指名なし」ボタンを表示（空いているスタッフに自動割当）</span>
+              </label>
+            </div>
+
+            {/* スタッフ一覧 */}
+            <div className="space-y-2">
+              {(form.config?.staff_selection?.staff || []).length === 0 ? (
+                <p className={`text-xs text-center py-3 rounded ${themeClasses.emptyState}`}>まだスタッフがいません。「スタッフを追加」から登録してください。</p>
+              ) : (
+                (form.config?.staff_selection?.staff || []).map((member, index, arr) => (
+                  <div key={member.id} className={`flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-md ${themeClasses.highlight}`}>
+                    <input
+                      type="text"
+                      value={member.name}
+                      onChange={(e) => updateStaffMember(index, { name: e.target.value })}
+                      placeholder={`スタッフ名（例: 田中）`}
+                      className={`${themeClasses.input} text-sm flex-1 min-w-0`}
+                    />
+                    <select
+                      value={member.calendar_id || ''}
+                      onChange={(e) => {
+                        const cal = staffCalendars.find(c => c.id === e.target.value);
+                        updateStaffMember(index, { calendar_id: e.target.value, calendar_name: cal?.summary || '' });
+                      }}
+                      className={`${themeClasses.input} text-sm flex-1 min-w-0`}
+                    >
+                      <option value="">カレンダーを選択してください</option>
+                      {/* 保存済みのカレンダーが一覧に無い場合も選択肢として表示（連携切れ等） */}
+                      {member.calendar_id && !staffCalendars.some(c => c.id === member.calendar_id) && (
+                        <option value={member.calendar_id}>{member.calendar_name || member.calendar_id}</option>
+                      )}
+                      {staffCalendars.map(cal => (
+                        <option key={cal.id} value={cal.id}>{cal.summary}{cal.primary ? '（メイン）' : ''}</option>
+                      ))}
+                    </select>
+                    <div className="flex space-x-1 shrink-0 self-end sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => moveStaffMember(index, 'up')}
+                        disabled={index === 0}
+                        title="上へ移動"
+                        className={`p-1.5 rounded ${theme === 'light' ? 'text-gray-500 hover:text-gray-700 hover:bg-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'} disabled:opacity-30 disabled:cursor-not-allowed`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveStaffMember(index, 'down')}
+                        disabled={index === arr.length - 1}
+                        title="下へ移動"
+                        className={`p-1.5 rounded ${theme === 'light' ? 'text-gray-500 hover:text-gray-700 hover:bg-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700'} disabled:opacity-30 disabled:cursor-not-allowed`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`スタッフ「${member.name || '（名称未設定）'}」を削除しますか？`)) {
+                            updateStaffSelection({ staff: currentStaffSelection().staff.filter((_, i) => i !== index) });
+                          }
+                        }}
+                        title="削除"
+                        className={`p-1.5 rounded text-red-400 hover:text-red-300 ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+              <button
+                type="button"
+                onClick={() => updateStaffSelection({
+                  staff: [
+                    ...currentStaffSelection().staff,
+                    { id: Math.random().toString(36).slice(2, 11), name: '', calendar_id: '', calendar_name: '' }
+                  ]
+                })}
+                className={`w-full px-3 py-2 text-sm rounded-md ${themeClasses.button.secondary}`}
+              >
+                ＋ スタッフを追加
+              </button>
+              {(form.config?.staff_selection?.staff || []).some(m => m.name && !m.calendar_id) && (
+                <p className={`text-xs ${theme === 'light' ? 'text-amber-600' : 'text-amber-400'}`}>
+                  ※ カレンダー未選択のスタッフはフォームに表示されません
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 注意書き */}
