@@ -175,12 +175,12 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
             </div>
             ` : ''}
 
+            ${this.renderStaffField(safeConfig)}
             ${safeConfig.gender_selection.enabled ? this.renderGenderField(safeConfig) : ''}
             ${safeConfig.visit_count_selection.enabled ? this.renderVisitCountField(safeConfig) : ''}
             ${safeConfig.coupon_selection.enabled ? this.renderCouponField(safeConfig) : ''}
             ${safeConfig.custom_fields?.length ? this.renderCustomFields(safeConfig) : ''}
             ${this.renderMenuField(safeConfig)}
-            ${this.renderStaffField(safeConfig)}
             ${this.renderDateTimeFields(safeConfig)}
             ${this.renderMessageField()}
             ${this.renderSummary()}
@@ -617,6 +617,8 @@ class BookingForm {
                     this.state.selectedStaffId = staffId;
                     btn.classList.add('selected');
                 }
+                // スタッフごとのメニュー/オプション表示を適用（非表示対象の選択は解除される）
+                this.applyStaffMenuVisibility();
                 if (this.isStaffCalendarMode()) {
                     this.toggleCalendarVisibility();
                 }
@@ -2380,6 +2382,88 @@ class BookingForm {
     getMinAdvanceDays() {
         const v = this.config?.calendar_settings?.min_advance_days;
         return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.floor(v) : 0;
+    }
+
+    // 選択中スタッフに応じてメニュー/オプションの表示を切り替える。
+    // 非表示対象がすでに選択されていた場合は選択を解除する（スタッフ切替時の整合性維持）
+    applyStaffMenuVisibility() {
+        const ss = this.config.staff_selection;
+        if (!ss || ss.enabled !== true) return;
+        const member = (ss.staff || []).find(m => m && m.id === this.state.selectedStaffId);
+        const hiddenMenus = new Set(member && Array.isArray(member.hidden_menu_ids) ? member.hidden_menu_ids : []);
+        const hiddenOptions = new Set(member && Array.isArray(member.hidden_option_ids) ? member.hidden_option_ids : []);
+        let selectionChanged = false;
+
+        document.querySelectorAll('.menu-item').forEach(item => {
+            const menuId = item.dataset.menuId;
+            const hidden = hiddenMenus.has(menuId);
+            item.style.display = hidden ? 'none' : '';
+            if (!hidden) return;
+            // 単一選択の解除
+            if (this.state.selectedMenu && this.state.selectedMenu.id === menuId) {
+                item.classList.remove('selected', 'has-submenu');
+                this.state.selectedMenu = null;
+                this.state.selectedSubmenu = null;
+                if (this.state.selectedOptions) delete this.state.selectedOptions[menuId];
+                this.hideSubmenu();
+                const optContainer = document.getElementById('options-' + menuId);
+                if (optContainer) optContainer.style.display = 'none';
+                selectionChanged = true;
+            }
+            // カテゴリー横断選択の解除
+            if (this.state.selectedMenus) {
+                Object.keys(this.state.selectedMenus).forEach(catId => {
+                    const list = this.state.selectedMenus[catId] || [];
+                    if (list.includes(menuId)) {
+                        const next = list.filter(id => id !== menuId);
+                        if (next.length > 0) this.state.selectedMenus[catId] = next;
+                        else delete this.state.selectedMenus[catId];
+                        if (this.state.selectedSubMenus) delete this.state.selectedSubMenus[menuId];
+                        if (this.state.selectedOptions) delete this.state.selectedOptions[menuId];
+                        item.classList.remove('selected', 'has-submenu');
+                        const optContainer = document.getElementById('options-' + menuId);
+                        if (optContainer) optContainer.style.display = 'none';
+                        selectionChanged = true;
+                    }
+                });
+            }
+        });
+
+        document.querySelectorAll('.menu-option-item').forEach(item => {
+            const optionId = item.dataset.optionId;
+            const menuId = item.dataset.menuId;
+            const hidden = hiddenOptions.has(optionId);
+            item.style.display = hidden ? 'none' : 'flex';
+            if (!hidden) return;
+            const current = (this.state.selectedOptions && this.state.selectedOptions[menuId]) || [];
+            if (current.includes(optionId)) {
+                this.state.selectedOptions[menuId] = current.filter(id => id !== optionId);
+                item.style.borderColor = '#d1d5db';
+                item.style.backgroundColor = 'white';
+                item.style.color = '#1b2a4e';
+                selectionChanged = true;
+            }
+        });
+
+        document.querySelectorAll('.category-option-item').forEach(item => {
+            const optionId = item.dataset.optionId;
+            const categoryId = item.dataset.categoryId;
+            const hidden = hiddenOptions.has(optionId);
+            item.style.display = hidden ? 'none' : 'flex';
+            if (!hidden) return;
+            const current = (this.state.selectedCategoryOptions && this.state.selectedCategoryOptions[categoryId]) || [];
+            if (current.includes(optionId)) {
+                this.state.selectedCategoryOptions[categoryId] = current.filter(id => id !== optionId);
+                item.style.borderColor = '#d1d5db';
+                item.style.backgroundColor = 'white';
+                item.style.color = '#1b2a4e';
+                selectionChanged = true;
+            }
+        });
+
+        if (selectionChanged) {
+            this.closeDetailPopup();
+        }
     }
 
     // スタッフ選択: カレンダー連携対象のスタッフ一覧（名前とカレンダーIDが設定済みのもの）
