@@ -233,6 +233,7 @@ export default function AdminStoreReservationsPage() {
                         <TableRow>
                           <TableHead>予約日時</TableHead>
                           <TableHead>顧客名</TableHead>
+                          <TableHead>担当</TableHead>
                           <TableHead>電話番号</TableHead>
                           <TableHead>メールアドレス</TableHead>
                           <TableHead>経路</TableHead>
@@ -247,6 +248,13 @@ export default function AdminStoreReservationsPage() {
                               {formatDate(reservation.reservation_date, reservation.reservation_time)}
                             </TableCell>
                             <TableCell>{reservation.customer_name}</TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {(() => {
+                                const r = reservation as { staff_name?: string | null; staff_no_preference?: boolean };
+                                if (!r.staff_name) return '-';
+                                return r.staff_no_preference ? `${r.staff_name}（指名なし）` : r.staff_name;
+                              })()}
+                            </TableCell>
                             <TableCell>{reservation.customer_phone}</TableCell>
                             <TableCell>{reservation.customer_email || '-'}</TableCell>
                             <TableCell className="text-muted-foreground">

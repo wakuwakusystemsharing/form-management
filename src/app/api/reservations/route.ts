@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
-import { createReservationEvent } from '@/lib/google-calendar';
+import { createReservationEvent, getBusyCalendars } from '@/lib/google-calendar';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { sendReservationEmails } from '@/lib/reservation-email';
 import {
@@ -548,6 +548,19 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       };
 
+      // スタッフ選択（local はカレンダー連携なし: 名前の記録のみ）
+      if (body.staff_id || body.staff_no_preference === true) {
+        try {
+          const formConfigForStaff = await getFormConfig(body.form_id);
+          const localStaff = (formConfigForStaff?.staff_selection?.staff || []).find((m: any) => m && m.id === body.staff_id);
+          (newReservation as any).staff_id = localStaff?.id || null;
+          (newReservation as any).staff_name = localStaff?.name || null;
+          (newReservation as any).staff_no_preference = body.staff_no_preference === true;
+        } catch {
+          // localのスタッフ解決失敗は無視
+        }
+      }
+
       const reservations = readReservations();
       reservations.push(newReservation);
       writeReservations(reservations);
@@ -592,6 +605,7 @@ export async function POST(request: Request) {
                     selected_menus: newReservation.selected_menus,
                     selected_options: newReservation.selected_options || null,
                     message: body.message || null,
+                    staff_name: (newReservation as any).staff_name || null,
                   },
                   store: storeInfo as any,
                   form: { config: formConfig },
@@ -688,6 +702,105 @@ export async function POST(request: Request) {
     const selectedMenus = body.selected_menus || [];
     const customerInfo = body.customer_info || {};
 
+    // === スタッフ選択 ===
+    // フォーム設定からスタッフを解決。カレンダーモードでは送信直前の空き再チェック（ダブルブッキング対策）と
+    // 指名なしの自動割当（空いているスタッフからランダム）を行う。
+    let staffFields: {
+      staff_id: string | null;
+      staff_name: string | null;
+      staff_calendar_id: string | null;
+      staff_no_preference: boolean;
+    } = { staff_id: null, staff_name: null, staff_calendar_id: null, staff_no_preference: body.staff_no_preference === true };
+    let staffCalendarIdForEvent: string | null = null;
+    let staffNameForEvent: string | null = null;
+
+    if (body.staff_id || body.staff_no_preference === true) {
+      try {
+        const formConfigForStaff = await getFormConfig(body.form_id);
+        const ss = formConfigForStaff?.staff_selection;
+        const bookingModeForStaff = body.booking_mode || customerInfo.booking_mode
+          || formConfigForStaff?.calendar_settings?.booking_mode || 'calendar';
+        const isCalendarMode = bookingModeForStaff !== 'multiple_dates';
+
+        if (ss?.enabled === true) {
+          const allStaff = Array.isArray(ss.staff) ? ss.staff : [];
+          const staffWithCalendar = allStaff.filter((m: any) => m && m.id && m.name && m.calendar_id);
+
+          // 予約枠の時間帯（空き再チェック用）。所要時間不明時は30分枠で判定
+          const durationMin = Number(customerInfo.total_duration) > 0 ? Number(customerInfo.total_duration) : 30;
+          const slotStart = new Date(`${body.reservation_date}T${body.reservation_time}:00+09:00`);
+          const slotEnd = new Date(slotStart.getTime() + durationMin * 60 * 1000);
+
+          if (body.staff_id) {
+            // スタッフ指名あり
+            const member = allStaff.find((m: any) => m && m.id === body.staff_id);
+            if (!member) {
+              return NextResponse.json(
+                { error: '選択されたスタッフが見つかりません。フォームを開き直してもう一度お試しください。' },
+                { status: 400 }
+              );
+            }
+            staffFields = {
+              staff_id: member.id,
+              staff_name: member.name,
+              staff_calendar_id: isCalendarMode && member.calendar_id ? member.calendar_id : null,
+              staff_no_preference: false,
+            };
+            staffNameForEvent = member.name;
+            if (isCalendarMode && member.calendar_id) {
+              staffCalendarIdForEvent = member.calendar_id;
+              // 直前の空き再チェック（失敗時は従来どおり続行）
+              try {
+                const busy = await getBusyCalendars([member.calendar_id], slotStart.toISOString(), slotEnd.toISOString(), body.store_id);
+                if (busy.has(member.calendar_id)) {
+                  return NextResponse.json(
+                    { error: '申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。', code: 'slot_taken' },
+                    { status: 409 }
+                  );
+                }
+              } catch (fbError) {
+                console.error('[API] staff freeBusy check error (named):', fbError);
+              }
+            }
+          } else if (isCalendarMode && staffWithCalendar.length > 0) {
+            // 指名なし: 空いているスタッフからランダムに割当
+            let candidates = staffWithCalendar;
+            try {
+              const busy = await getBusyCalendars(
+                staffWithCalendar.map((m: any) => m.calendar_id),
+                slotStart.toISOString(),
+                slotEnd.toISOString(),
+                body.store_id
+              );
+              candidates = staffWithCalendar.filter((m: any) => !busy.has(m.calendar_id));
+              if (candidates.length === 0) {
+                return NextResponse.json(
+                  { error: '申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。', code: 'slot_taken' },
+                  { status: 409 }
+                );
+              }
+            } catch (fbError) {
+              // 照会失敗時は全員を候補にして続行（予約自体は止めない）
+              console.error('[API] staff freeBusy check error (no preference):', fbError);
+              candidates = staffWithCalendar;
+            }
+            const member = candidates[Math.floor(Math.random() * candidates.length)];
+            staffFields = {
+              staff_id: member.id,
+              staff_name: member.name,
+              staff_calendar_id: member.calendar_id,
+              staff_no_preference: true,
+            };
+            staffNameForEvent = member.name;
+            staffCalendarIdForEvent = member.calendar_id;
+          }
+        }
+      } catch (staffError) {
+        console.error('[API] staff resolution error:', staffError);
+        // スタッフ解決に失敗しても予約は継続（従来どおり店舗カレンダーへ）
+      }
+    }
+
     // menu_nameとsubmenu_nameを抽出（最初のメニューから）
     let menuName = '';
     let submenuName: string | null = null;
@@ -724,6 +837,11 @@ export async function POST(request: Request) {
       line_user_id: body.line_user_id || null, // LINEユーザーID
       customer_id: customerId, // 顧客ID (CRM連携)
       source_medium: VALID_SOURCE_MEDIUMS.includes(body.source_medium) ? body.source_medium : null,
+      // スタッフ選択（担当スタッフ・イベント作成先カレンダー）
+      staff_id: staffFields.staff_id,
+      staff_name: staffFields.staff_name,
+      staff_calendar_id: staffFields.staff_calendar_id,
+      staff_no_preference: staffFields.staff_no_preference,
       status: 'pending'
     };
 
@@ -773,9 +891,11 @@ export async function POST(request: Request) {
         .eq('id', body.store_id)
         .single();
 
+      // スタッフ選択時はスタッフのカレンダーへ、それ以外は従来どおり店舗カレンダーへ
+      const targetCalendarId = staffCalendarIdForEvent || storeData?.google_calendar_id || null;
       if (storeError) {
         console.error('[API] Store calendar lookup error:', storeError);
-      } else if (storeData?.google_calendar_id) {
+      } else if (targetCalendarId) {
         // フォーム設定の予約イベント色（'1'〜'11' 以外は既定色扱い）
         let eventColorId: string | null = null;
         try {
@@ -787,7 +907,7 @@ export async function POST(request: Request) {
         }
         const eventId = await createReservationEvent(
           {
-            calendarId: storeData.google_calendar_id,
+            calendarId: targetCalendarId,
             reservationDate: body.reservation_date,
             reservationTime: body.reservation_time,
             customerName: body.customer_name,
@@ -805,7 +925,8 @@ export async function POST(request: Request) {
             gender: customerInfo.gender_label || customerInfo.gender || null,
             coupon: customerInfo.coupon_label || customerInfo.coupon || null,
             customFields: customerInfo.custom_fields_labeled || null,
-            eventColorId
+            eventColorId,
+            staffName: staffNameForEvent
           },
           body.store_id
         );

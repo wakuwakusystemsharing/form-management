@@ -13,6 +13,7 @@ import { sendEmail } from './email-sender';
 import { buildCustomerConfirmationEmail, buildStoreNotificationEmail } from './email-templates';
 
 interface ReservationLike {
+  staff_name?: string | null;
   id: string;
   customer_name: string;
   customer_phone: string;

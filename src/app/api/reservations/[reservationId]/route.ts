@@ -165,18 +165,23 @@ export async function PATCH(
     }
 
     // キャンセル時にGoogleカレンダーのイベントを削除
+    // （スタッフ選択予約はスタッフのカレンダーから、それ以外は従来どおり店舗カレンダーから削除）
     if (status === 'cancelled' && reservation.google_calendar_event_id) {
       try {
-        const { data: storeData } = await (adminClient as any)
-          .from('stores')
-          .select('google_calendar_id')
-          .eq('id', reservation.store_id)
-          .single();
+        let targetCalendarId: string | null = (reservation as { staff_calendar_id?: string | null }).staff_calendar_id || null;
+        if (!targetCalendarId) {
+          const { data: storeData } = await (adminClient as any)
+            .from('stores')
+            .select('google_calendar_id')
+            .eq('id', reservation.store_id)
+            .single();
+          targetCalendarId = storeData?.google_calendar_id || null;
+        }
 
-        if (storeData?.google_calendar_id) {
+        if (targetCalendarId) {
           const { deleteCalendarEvent } = await import('@/lib/google-calendar');
           await deleteCalendarEvent(
-            storeData.google_calendar_id,
+            targetCalendarId,
             reservation.google_calendar_event_id,
             reservation.store_id
           );

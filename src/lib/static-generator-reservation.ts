@@ -180,6 +180,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
             ${safeConfig.coupon_selection.enabled ? this.renderCouponField(safeConfig) : ''}
             ${safeConfig.custom_fields?.length ? this.renderCustomFields(safeConfig) : ''}
             ${this.renderMenuField(safeConfig)}
+            ${this.renderStaffField(safeConfig)}
             ${this.renderDateTimeFields(safeConfig)}
             ${this.renderMessageField()}
             ${this.renderSummary()}
@@ -308,6 +309,7 @@ class BookingForm {
             selectedTime3: '',
             message: '',
             agreementAccepted: false, // 同意事項の「同意する」ボタンの状態
+            selectedStaffId: '', // 選択中のスタッフID（'none' = 指名なし、'' = 未選択）
             lineUserId: null, // LINEユーザーID
             lineDisplayName: null, // LINE表示名
             linePictureUrl: null, // LINEプロフィール画像URL
@@ -599,6 +601,25 @@ class BookingForm {
                 document.querySelectorAll('.coupon-button').forEach(b => b.classList.remove('selected'));
                 btn.classList.add('selected');
                 this.state.coupon = btn.dataset.value;
+                this.updateSummary();
+            });
+        });
+
+        // スタッフ選択（単一選択。再タップで解除。スタッフによって空き状況が変わるためカレンダーを再取得）
+        document.querySelectorAll('.staff-button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const staffId = btn.dataset.staffId;
+                const wasSelected = this.state.selectedStaffId === staffId;
+                document.querySelectorAll('.staff-button').forEach(b => b.classList.remove('selected'));
+                if (wasSelected) {
+                    this.state.selectedStaffId = '';
+                } else {
+                    this.state.selectedStaffId = staffId;
+                    btn.classList.add('selected');
+                }
+                if (this.isStaffCalendarMode()) {
+                    this.toggleCalendarVisibility();
+                }
                 this.updateSummary();
             });
         });
@@ -1190,7 +1211,11 @@ class BookingForm {
         endTime.setDate(endTime.getDate() + 7);
         endTime.setHours(23, 59, 59, 999);
         
-        const cacheKey = startTime.toISOString() + endTime.toISOString();
+        // スタッフ選択モードでは選択中スタッフごとに空き状況が異なるためキーを分ける
+        const staffParam = this.isStaffCalendarMode()
+            ? (this.state.selectedStaffId && this.state.selectedStaffId !== 'none' ? this.state.selectedStaffId : 'all')
+            : '';
+        const cacheKey = startTime.toISOString() + endTime.toISOString() + ':' + staffParam;
         
         // キャッシュを確認
         if (this.availabilityCache[cacheKey]) {
@@ -1200,8 +1225,9 @@ class BookingForm {
             return;
         }
         
-        const url = \`\${window.location.origin}/api/stores/\${STORE_ID}/calendar/availability\` + 
-            \`?start=\${startTime.toISOString()}&end=\${endTime.toISOString()}\`;
+        const url = \`\${window.location.origin}/api/stores/\${STORE_ID}/calendar/availability\` +
+            \`?start=\${startTime.toISOString()}&end=\${endTime.toISOString()}\` +
+            (staffParam ? \`&staff_id=\${encodeURIComponent(staffParam)}&form_id=\${encodeURIComponent(FORM_ID || '')}\` : '');
         
         try {
             const response = await fetch(url);
@@ -1431,7 +1457,25 @@ class BookingForm {
             const maxConcurrent = (typeof rawMax === 'number' && Number.isFinite(rawMax) && rawMax >= 1) ? Math.floor(rawMax) : 1;
 
             // 空き状況の判定ロジック（count >= maxConcurrent で予約不可）
-            if (isBusinessEventTime && count >= maxConcurrent) {
+            if (this.isStaffCalendarMode()) {
+                // スタッフ選択モード: スタッフ1人につき1件でも予定が重なれば×（同時刻閾値の設定は無視）
+                const busyByStaff = {};
+                this.availabilityData.forEach(slot => {
+                    if (!slot.staff_id) return;
+                    const es = new Date(slot.startTime);
+                    const ee = new Date(slot.endTime);
+                    if (es < overlapEnd && slotStart < ee && slot.title !== '営業日' && slot.summary !== '営業日') {
+                        busyByStaff[slot.staff_id] = true;
+                    }
+                });
+                if (this.state.selectedStaffId && this.state.selectedStaffId !== 'none') {
+                    // スタッフ指名あり: そのスタッフが空いていれば〇
+                    isAvailable = !busyByStaff[this.state.selectedStaffId];
+                } else {
+                    // 指名なし/未選択: 誰か1人でも空いていれば〇
+                    isAvailable = this.getCalendarStaff().some(m => !busyByStaff[m.id]);
+                }
+            } else if (isBusinessEventTime && count >= maxConcurrent) {
                 // 営業日のイベント時間内で同時刻に閾値以上のイベントがある場合
                 isAvailable = false;
             } else if (isBusinessEventTime) {
@@ -1804,6 +1848,14 @@ class BookingForm {
             const label = this.config.coupon_selection?.options.find(o => o.value === this.state.coupon)?.label;
             items.push(\`<div class="summary-item"><span><strong>クーポン:</strong> \${label}</span><button class="summary-edit-button" data-field="coupon-field">修正</button></div>\`);
         }
+        if (this.config.staff_selection?.enabled === true && this.state.selectedStaffId) {
+            const staffLabel = this.state.selectedStaffId === 'none'
+                ? '指名なし'
+                : ((this.config.staff_selection.staff || []).find(m => m.id === this.state.selectedStaffId)?.name || '');
+            if (staffLabel) {
+                items.push(\`<div class="summary-item"><span><strong>担当スタッフ:</strong> \${staffLabel}</span><button class="summary-edit-button" data-field="staff-field">修正</button></div>\`);
+            }
+        }
         const hasMenuSelection = this.config.menu_structure?.allow_cross_category_selection
             ? (this.state.selectedMenus && Object.values(this.state.selectedMenus).flat().length > 0)
             : (this.state.selectedMenu || this.state.selectedSubmenu);
@@ -1925,6 +1977,16 @@ class BookingForm {
                 resetSubmitState();
                 return;
             }
+        }
+        // スタッフ選択の必須チェック（スタッフボタンが表示されている場合のみ）
+        const staffCfg = this.config.staff_selection;
+        if (staffCfg?.enabled === true && staffCfg.required === true
+            && document.getElementById('staff-field') && !this.state.selectedStaffId) {
+            alert('担当スタッフを選択してください');
+            const staffField = document.getElementById('staff-field');
+            if (staffField) staffField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            resetSubmitState();
+            return;
         }
         if ((this.config.calendar_settings?.booking_mode || 'calendar') === 'multiple_dates') {
             // 第三希望日時モード: 必須選択（required_choices）に応じてチェック
@@ -2069,7 +2131,10 @@ class BookingForm {
                 // null = 不明（サーバ側で既存値を上書きしない）
                 line_friend_flag: this.state.lineFriendFlag, // 友だち追加状態 (true/false/null)
                 source_medium: sourceMedium,
-                booking_mode: this.config.calendar_settings?.booking_mode || 'calendar'
+                booking_mode: this.config.calendar_settings?.booking_mode || 'calendar',
+                // スタッフ選択（'none' = 指名なし → サーバー側で空きスタッフに自動割当）
+                staff_id: (this.state.selectedStaffId && this.state.selectedStaffId !== 'none') ? this.state.selectedStaffId : null,
+                staff_no_preference: this.state.selectedStaffId === 'none'
             };
             
             // /api/reservationsにPOSTリクエストを送信
@@ -2088,13 +2153,26 @@ class BookingForm {
                 if (response.ok) {
                     apiSuccess = true;
                     console.log('予約データをデータベースに保存しました');
+                    // 指名なしの場合、サーバーで割り当てられた担当スタッフをメッセージに反映
+                    try {
+                        const created = await response.json();
+                        if (created && created.staff_name && this.state.selectedStaffId === 'none') {
+                            messageText = messageText.replace('《担当スタッフ》\\n指名なし\\n', \`《担当スタッフ》\\n指名なし（担当: \${created.staff_name}）\\n\`);
+                        }
+                    } catch (parseError) {
+                        // レスポンス解析失敗は無視（メッセージは「指名なし」のまま送信）
+                    }
                 } else {
                     const errorData = await response.json().catch(() => ({}));
                     if (response.status === 409 && errorData && errorData.code === 'concurrent_reservation_limit') {
                         blockReason = errorData.error || '既に予約があります。予約が過ぎるまで新しい予約はできません。';
                     }
+                    // スタッフ選択: 送信直前の再チェックで枠が埋まっていた場合（ダブルブッキング防止）
+                    if (response.status === 409 && errorData && errorData.code === 'slot_taken') {
+                        blockReason = errorData.error || '申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。';
+                    }
                     console.error('予約データの保存に失敗しました:', errorData);
-                    // 409 (concurrent_reservation_limit) 以外は LINE メッセージ送信を継続（既存挙動）
+                    // 409 (concurrent_reservation_limit / slot_taken) 以外は LINE メッセージ送信を継続（既存挙動）
                 }
             } catch (apiError) {
                 console.error('API送信エラー:', apiError);
@@ -2143,6 +2221,16 @@ class BookingForm {
                 const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
                 const visitCountText = visitLabel || this.state.visitCount || '';
                 messageText += \`《ご来店回数》\\n\${visitCountText}\\n\`;
+            }
+
+            // 担当スタッフ（スタッフ選択が有効で選択されている場合）
+            if (this.config.staff_selection?.enabled === true && this.state.selectedStaffId) {
+                const staffMsgLabel = this.state.selectedStaffId === 'none'
+                    ? '指名なし'
+                    : ((this.config.staff_selection.staff || []).find(m => m.id === this.state.selectedStaffId)?.name || '');
+                if (staffMsgLabel) {
+                    messageText += \`《担当スタッフ》\\n\${staffMsgLabel}\\n\`;
+                }
             }
 
             // メニュー（希望日時式はカテゴリーごとに改行表示）
@@ -2292,6 +2380,20 @@ class BookingForm {
     getMinAdvanceDays() {
         const v = this.config?.calendar_settings?.min_advance_days;
         return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.floor(v) : 0;
+    }
+
+    // スタッフ選択: カレンダー連携対象のスタッフ一覧（名前とカレンダーIDが設定済みのもの）
+    getCalendarStaff() {
+        const ss = this.config.staff_selection;
+        return ss && Array.isArray(ss.staff) ? ss.staff.filter(m => m && m.name && m.calendar_id) : [];
+    }
+
+    // スタッフ選択が空き状況・イベント作成に効くモードか（有効 + カレンダーモード + 対象スタッフあり）
+    isStaffCalendarMode() {
+        const ss = this.config.staff_selection;
+        if (!ss || ss.enabled !== true) return false;
+        if ((this.config.calendar_settings?.booking_mode || 'calendar') !== 'calendar') return false;
+        return this.getCalendarStaff().length > 0;
     }
 
     // 第三希望日時モードの必須選択（1〜3）。未設定 = 全て必須。第一希望は常に必須
@@ -2840,6 +2942,30 @@ if (document.readyState === 'loading') {
                         <select id="date3_day" class="datetime-input" aria-label="日付を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
                         <select id="date3_time" class="datetime-input" aria-label="時間を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
                     </div>
+                </div>
+            </div>`;
+  }
+
+  private renderStaffField(config: FormConfig): string {
+    const ss = config.staff_selection;
+    if (ss?.enabled !== true) return '';
+    const bookingMode = config.calendar_settings?.booking_mode || 'calendar';
+    // カレンダーモードではカレンダー未設定のスタッフは表示しない（空き判定・イベント作成ができないため）
+    const staff = (ss.staff || []).filter(m => m.name && (bookingMode === 'multiple_dates' || m.calendar_id));
+    if (staff.length === 0) return '';
+    const requiredMark = ss.required ? ' <span class="required">*</span>' : '';
+    const buttons = staff.map(m =>
+      `<button type="button" class="choice-button staff-button" data-staff-id="${this.escapeHtml(m.id)}">${this.escapeHtml(m.name)}</button>`
+    ).join('\n                    ');
+    const noPrefButton = ss.allow_no_preference !== false
+      ? `\n                    <button type="button" class="choice-button staff-button" data-staff-id="none">指名なし</button>`
+      : '';
+    return `
+            <!-- スタッフ選択 -->
+            <div class="field" id="staff-field">
+                <label class="field-label">担当スタッフをお選びください${requiredMark}</label>
+                <div class="button-group">
+                    ${buttons}${noPrefButton}
                 </div>
             </div>`;
   }

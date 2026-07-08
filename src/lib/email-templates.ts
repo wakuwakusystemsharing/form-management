@@ -19,6 +19,7 @@ interface SelectedOptionLike {
 }
 
 interface ReservationLike {
+  staff_name?: string | null;
   id: string;
   customer_name: string;
   customer_phone: string;
@@ -117,6 +118,10 @@ export function buildCustomerConfirmationEmail({ store, reservation }: BuildArgs
     lines.push('■ オプション');
     lines.push(optionsText);
   }
+  if (reservation.staff_name) {
+    lines.push('■ 担当スタッフ');
+    lines.push(reservation.staff_name);
+  }
   lines.push('■ お客様メッセージ');
   lines.push(messageText);
   lines.push('──────────────────────');
@@ -161,6 +166,9 @@ export function buildStoreNotificationEmail({ store, reservation }: BuildArgs): 
   if (optionsText) {
     lines.push('■ オプション：');
     lines.push(optionsText);
+  }
+  if (reservation.staff_name) {
+    lines.push(`■ 担当　　：${reservation.staff_name}`);
   }
   lines.push('');
   lines.push('[お客様情報]');

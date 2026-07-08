@@ -111,6 +111,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       holidays_as_closed: false,
       excluded_holiday_types: []
     },
+    staff_selection: {
+      enabled: false,
+      required: false,
+      allow_no_preference: true,
+      staff: []
+    },
     reservation_summary: {
       show_total_price: false,
       show_total_duration: false,
@@ -292,6 +298,24 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           return Array.isArray(v) ? v.filter((s) => typeof s === 'string') : [];
         })()
       },
+      staff_selection: (() => {
+        const ss = existingConfig?.staff_selection
+          ?? (typedConfig as Form['config'])?.staff_selection;
+        const staffRaw = Array.isArray(ss?.staff) ? ss.staff : [];
+        return {
+          enabled: ss?.enabled === true,
+          required: ss?.required === true,
+          allow_no_preference: ss?.allow_no_preference !== false,
+          staff: staffRaw
+            .filter((m) => m && typeof m.id === 'string' && m.id && typeof m.name === 'string')
+            .map((m) => ({
+              id: m.id,
+              name: m.name,
+              calendar_id: typeof m.calendar_id === 'string' ? m.calendar_id : '',
+              calendar_name: typeof m.calendar_name === 'string' ? m.calendar_name : ''
+            }))
+        };
+      })(),
       reservation_summary: {
         show_total_price: existingConfig?.reservation_summary?.show_total_price
           ?? (typedConfig as Form['config'])?.reservation_summary?.show_total_price

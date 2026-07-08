@@ -189,6 +189,20 @@ export interface FormConfig {
     notification_email?: string;
   };
 
+  // スタッフ選択（メニュー選択の後に単一選択ボタンを表示。
+  // カレンダーモードでは選択スタッフのカレンダーで空き判定し、そのカレンダーへイベント作成する）
+  staff_selection?: {
+    enabled: boolean;
+    required?: boolean;             // 必須にするか（未選択だと予約送信不可）
+    allow_no_preference?: boolean;  // 「指名なし」ボタンを表示するか（未設定 = true）
+    staff: Array<{
+      id: string;                   // スタッフID（ランダム生成）
+      name: string;                 // 表示名
+      calendar_id: string;          // 紐付ける Google カレンダーID
+      calendar_name?: string;       // 編集画面表示用のカレンダー名
+    }>;
+  };
+
   // フォーム上の「ご予約内容」（サマリー）表示設定
   reservation_summary?: {
     show_total_price?: boolean;    // 合計金額を表示（未設定 = false: 非表示）

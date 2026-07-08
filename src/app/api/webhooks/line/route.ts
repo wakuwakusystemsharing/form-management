@@ -388,7 +388,7 @@ export async function POST(req: NextRequest) {
     const todayStr = today.toISOString().split('T')[0];
     const { data: reservations } = await (adminClient as any)
       .from('reservations')
-      .select('reservation_date,reservation_time,menu_name,submenu_name')
+      .select('reservation_date,reservation_time,menu_name,submenu_name,staff_name,staff_no_preference')
       .eq('store_id', storeId)
       .eq('line_user_id', userId)
       .neq('status', 'cancelled')
@@ -429,7 +429,14 @@ export async function POST(req: NextRequest) {
                 { type: 'text', text: '📋 メニュー', size: 'sm', color: themeColor, weight: 'bold' },
                 { type: 'text', text: `・${menu}`, size: 'sm', wrap: true }
               ]
-            }
+            },
+            ...(r.staff_name ? [{
+              type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
+              contents: [
+                { type: 'text', text: '👤 担当', size: 'sm', color: themeColor, weight: 'bold' },
+                { type: 'text', text: `${r.staff_name}${r.staff_no_preference ? '（指名なし）' : ''}`, size: 'sm', wrap: true }
+              ]
+            }] : [])
           ],
           paddingAll: '20px'
         }
@@ -444,7 +451,7 @@ export async function POST(req: NextRequest) {
     const todayStr = today.toISOString().split('T')[0];
     const { data: reservations } = await (adminClient as any)
       .from('reservations')
-      .select('reservation_date,reservation_time,menu_name,submenu_name')
+      .select('reservation_date,reservation_time,menu_name,submenu_name,staff_name,staff_no_preference')
       .eq('store_id', storeId)
       .eq('line_user_id', userId)
       .neq('status', 'cancelled')
@@ -475,7 +482,11 @@ export async function POST(req: NextRequest) {
             { type: 'text', text: '📅 日時', size: 'sm', color: themeColor, weight: 'bold' },
             { type: 'text', text: `${formatDate(r.reservation_date)} ${timeText}`, size: 'sm', wrap: true },
             { type: 'text', text: '📋 メニュー', size: 'sm', color: themeColor, weight: 'bold', margin: 'md' },
-            { type: 'text', text: `・${menu}`, size: 'sm', wrap: true }
+            { type: 'text', text: `・${menu}`, size: 'sm', wrap: true },
+            ...(r.staff_name ? [
+              { type: 'text', text: '👤 担当', size: 'sm', color: themeColor, weight: 'bold', margin: 'md' },
+              { type: 'text', text: `${r.staff_name}${r.staff_no_preference ? '（指名なし）' : ''}`, size: 'sm', wrap: true }
+            ] : [])
           ]
         },
         {
@@ -550,17 +561,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (store.google_calendar_id) {
+    // スタッフ選択予約はスタッフのカレンダーから、それ以外は店舗カレンダーから削除
+    const cancelCalendarId = (target as { staff_calendar_id?: string | null }).staff_calendar_id
+      || store.google_calendar_id || null;
+    if (cancelCalendarId) {
       try {
         const eventIdToDelete = (target as { google_calendar_event_id?: string | null })
           .google_calendar_event_id || null;
         if (eventIdToDelete) {
-          await deleteCalendarEvent(store.google_calendar_id, eventIdToDelete, storeId);
+          await deleteCalendarEvent(cancelCalendarId, eventIdToDelete, storeId);
         } else {
           // 旧予約: イベントID未保存の場合は日付範囲で検索して一致するイベントを削除
           const start = new Date(`${target.reservation_date}T00:00:00+09:00`).toISOString();
           const end = new Date(`${target.reservation_date}T23:59:59+09:00`).toISOString();
-          const events = await listCalendarEvents(store.google_calendar_id, start, end, storeId);
+          const events = await listCalendarEvents(cancelCalendarId, start, end, storeId);
           const timeStr =
             typeof target.reservation_time === 'string'
               ? target.reservation_time.slice(0, 5)
@@ -576,7 +590,7 @@ export async function POST(req: NextRequest) {
             return matchSummary && (matchLocation || matchTime);
           });
           if (event?.id) {
-            await deleteCalendarEvent(store.google_calendar_id, event.id, storeId);
+            await deleteCalendarEvent(cancelCalendarId, event.id, storeId);
           }
         }
       } catch (calendarError) {

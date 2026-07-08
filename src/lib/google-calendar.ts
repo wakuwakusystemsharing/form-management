@@ -233,6 +233,44 @@ export async function listCalendarEvents(
   return response.data.items || [];
 }
 
+/**
+ * 複数カレンダーの指定時間帯の空きを一括照会し、「埋まっている」カレンダーIDの集合を返す。
+ * freeBusy API を使うため1リクエストで済む（スタッフ選択の指名なし割当・直前再チェック用）。
+ * 照会エラーになったカレンダーは安全側（埋まっている扱い）にする。
+ */
+export async function getBusyCalendars(
+  calendarIds: string[],
+  startIso: string,
+  endIso: string,
+  storeId?: string
+): Promise<Set<string>> {
+  const busy = new Set<string>();
+  if (calendarIds.length === 0) return busy;
+  const calendar = await getCalendarClient(storeId);
+  if (!calendar) {
+    throw new Error('Google Calendar APIの認証情報が設定されていません');
+  }
+  const response = await calendar.freebusy.query({
+    requestBody: {
+      timeMin: startIso,
+      timeMax: endIso,
+      items: calendarIds.map((id) => ({ id })),
+    },
+  });
+  const calendars = response.data.calendars || {};
+  for (const id of calendarIds) {
+    const info = (calendars as Record<string, { busy?: unknown[]; errors?: unknown[] }>)[id];
+    if (!info) {
+      busy.add(id); // 情報が返らないカレンダーは安全側で埋まっている扱い
+      continue;
+    }
+    if ((info.errors || []).length > 0 || (info.busy || []).length > 0) {
+      busy.add(id);
+    }
+  }
+  return busy;
+}
+
 export async function createReservationEvent(
   params: {
     calendarId: string;
@@ -255,6 +293,8 @@ export async function createReservationEvent(
     customFields?: Record<string, string> | null;
     // Google Calendar の colorId '1'〜'11'。未指定はカレンダーの既定色
     eventColorId?: string | null;
+    // 担当スタッフ名（スタッフ選択機能。イベントタイトルと説明文に含める）
+    staffName?: string | null;
   },
   storeId?: string
 ) {
@@ -291,6 +331,9 @@ export async function createReservationEvent(
   customerLines.push(`≪電話番号≫ ${params.customerPhone}`);
   if (params.visitCount) {
     customerLines.push(`≪ご来店回数≫ ${params.visitCount}`);
+  }
+  if (params.staffName) {
+    customerLines.push(`≪担当スタッフ≫ ${params.staffName}`);
   }
   sections.push(customerLines.join('\n'));
 
@@ -331,7 +374,7 @@ export async function createReservationEvent(
   const response = await calendar.events.insert({
     calendarId: params.calendarId,
     requestBody: {
-      summary: `予約: ${params.customerName}`,
+      summary: `予約: ${params.customerName}${params.staffName ? `（担当: ${params.staffName}）` : ''}`,
       start: {
         dateTime: startDate.toISOString(),
         timeZone: 'Asia/Tokyo'

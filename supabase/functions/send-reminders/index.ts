@@ -40,7 +40,8 @@ function buildFlexMessage(
   dateText: string,
   menuText: string,
   customerName: string,
-  daysBefore: number
+  daysBefore: number,
+  staffName?: string | null
 ) {
   const headerLabel = daysBefore === 1 ? "【予約前日メッセージ】" : `【予約${daysBefore}日前メッセージ】`;
   const bodyLabel = daysBefore === 1 ? "明日の予約をお知らせします" : `${daysBefore}日後の予約をお知らせします`;
@@ -126,6 +127,24 @@ function buildFlexMessage(
                 color: "#333333",
                 margin: "xs",
               },
+              ...(staffName ? [
+                {
+                  type: "text",
+                  text: "👤 担当",
+                  color: "#666666",
+                  size: "sm",
+                  weight: "bold",
+                  margin: "lg",
+                },
+                {
+                  type: "text",
+                  text: staffName,
+                  wrap: true,
+                  size: "sm",
+                  color: "#333333",
+                  margin: "xs",
+                },
+              ] : []),
               {
                 type: "text",
                 text: "👤 お名前",
@@ -238,7 +257,7 @@ Deno.serve(async () => {
   const { data: reservations, error } = await supabase
     .from("reservations")
     .select(
-      "id,store_id,reservation_date,reservation_time,menu_name,submenu_name,line_user_id,status,customer_name"
+      "id,store_id,reservation_date,reservation_time,menu_name,submenu_name,line_user_id,status,customer_name,staff_name"
     )
     .in("reservation_date", [...targetDates])
     .neq("status", "cancelled")
@@ -307,7 +326,8 @@ Deno.serve(async () => {
       dateText,
       menu,
       reservation.customer_name || "お客",
-      storeInfo.daysBefore
+      storeInfo.daysBefore,
+      reservation.staff_name || null
     );
 
     const result = await sendLinePush(
