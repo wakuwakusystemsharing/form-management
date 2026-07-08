@@ -8,6 +8,10 @@ export interface MenuOption {
   is_default?: boolean;      // デフォルトで選択されるか
   hide_price?: boolean;      // 料金を非表示にするか
   hide_duration?: boolean;   // 所要時間を非表示にするか
+  // 対応時間設定: ON なら選択時に指定時間帯のみ予約カレンダーで〇になる（時間帯外は✕）
+  time_window_enabled?: boolean;
+  time_window_start?: string;   // "09:00"
+  time_window_end?: string;     // "15:00"
 }
 
 // サブメニューの型定義
@@ -40,6 +44,10 @@ export interface MenuItem {
   sub_menu_items?: SubMenuItem[];  // サブメニュー項目
   hide_price?: boolean;      // 料金を非表示にするか
   hide_duration?: boolean;   // 所要時間を非表示にするか
+  // 対応時間設定: ON なら選択時に指定時間帯のみ予約カレンダーで〇になる（時間帯外は✕）
+  time_window_enabled?: boolean;
+  time_window_start?: string;   // "09:00"
+  time_window_end?: string;     // "15:00"
 }
 
 export interface MenuCategory {

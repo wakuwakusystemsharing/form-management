@@ -802,13 +802,17 @@ class BookingForm {
                 }
 
                 // 選択したオプションの詳細ポップアップ
+                const popupCat = this.config.menu_structure.categories.find(c => (c.menus || []).some(m => m.id === menuId));
+                const popupMenu = popupCat ? popupCat.menus.find(m => m.id === menuId) : null;
+                const popupOpt = popupMenu && popupMenu.options ? popupMenu.options.find(o => o.id === optionId) : null;
                 if (!isSelected) {
-                    const popupCat = this.config.menu_structure.categories.find(c => (c.menus || []).some(m => m.id === menuId));
-                    const popupMenu = popupCat ? popupCat.menus.find(m => m.id === menuId) : null;
-                    const popupOpt = popupMenu && popupMenu.options ? popupMenu.options.find(o => o.id === optionId) : null;
                     if (popupOpt) this.showDetailPopup(item, popupOpt); else this.closeDetailPopup();
                 } else {
                     this.closeDetailPopup();
+                }
+                // 対応時間設定のあるオプションはカレンダーの〇×に影響するため再描画
+                if (popupOpt && popupOpt.time_window_enabled === true) {
+                    this.toggleCalendarVisibility();
                 }
 
                 this.updateSummary();
@@ -835,12 +839,16 @@ class BookingForm {
                     item.style.color = '#ffffff';
                 }
                 // 選択したオプションの詳細ポップアップ
+                const popupCat = this.config.menu_structure.categories.find(c => c.id === categoryId);
+                const popupOpt = popupCat && popupCat.options ? popupCat.options.find(o => o.id === optionId) : null;
                 if (!isSelected) {
-                    const popupCat = this.config.menu_structure.categories.find(c => c.id === categoryId);
-                    const popupOpt = popupCat && popupCat.options ? popupCat.options.find(o => o.id === optionId) : null;
                     if (popupOpt) this.showDetailPopup(item, popupOpt); else this.closeDetailPopup();
                 } else {
                     this.closeDetailPopup();
+                }
+                // 対応時間設定のあるオプションはカレンダーの〇×に影響するため再描画
+                if (popupOpt && popupOpt.time_window_enabled === true) {
+                    this.toggleCalendarVisibility();
                 }
                 this.updateSummary();
             });
@@ -1297,6 +1305,9 @@ class BookingForm {
                 }
             });
         }
+        // 選択中メニュー/オプションの対応時間設定（セルごとの判定用に1回だけ計算）
+        const menuTimeWindows = this.getActiveTimeWindows();
+
         const rawInterval = this.config?.calendar_settings?.time_interval;
         const timeInterval = (rawInterval === 10 || rawInterval === 15 || rawInterval === 30 || rawInterval === 60) ? rawInterval : 30;
         const timeSlots = [];
@@ -1369,6 +1380,13 @@ class BookingForm {
         
         // 予約可能期間の判定（予約受付開始日〜事前予約可能日数の範囲内）
         const withinWindow = date.getTime() <= max.getTime() && date.getTime() >= minDate.getTime();
+
+        // メニュー/オプションの対応時間設定（すべての時間帯に収まらないスロットは✕）
+        let isWithinMenuWindows = true;
+        if (menuTimeWindows.length > 0) {
+            const slotMin = parseInt(time.split(':')[0], 10) * 60 + parseInt(time.split(':')[1], 10);
+            isWithinMenuWindows = menuTimeWindows.every(w => slotMin >= w.start && slotMin < w.end);
+        }
         
         // 現在の日時を取得
         const now = new Date();
@@ -1415,7 +1433,7 @@ class BookingForm {
         // 空き状況の判定
         let isAvailable = false;
 
-        if (isPast || isNextDay || endsAfterClose || !withinWindow || isClosed || !isWithinBusinessHours) {
+        if (isPast || isNextDay || endsAfterClose || !withinWindow || isClosed || !isWithinBusinessHours || !isWithinMenuWindows) {
             isAvailable = false;
         } else if (this.availabilityData && this.availabilityData.length > 0) {
             // カレンダーAPIから取得したデータがある場合
@@ -2464,6 +2482,51 @@ class BookingForm {
         if (selectionChanged) {
             this.closeDetailPopup();
         }
+    }
+
+    // 選択中のメニュー/オプションの「対応時間設定」を集める（分単位の時間帯リスト）
+    // 複数指定されている場合はすべての時間帯に収まるスロットのみ〇になる
+    getActiveTimeWindows() {
+        const windows = [];
+        const add = (item) => {
+            if (!item || item.time_window_enabled !== true) return;
+            const parse = (t, fallback) => {
+                const m = /^([0-9]{1,2}):([0-9]{2})$/.exec(t || '');
+                return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : fallback;
+            };
+            const start = parse(item.time_window_start, 0);
+            const end = parse(item.time_window_end, 24 * 60);
+            if (end > start) windows.push({ start, end });
+        };
+        const cats = this.config.menu_structure?.categories || [];
+        const allowCross = this.config.menu_structure?.allow_cross_category_selection || false;
+        if (allowCross && this.state.selectedMenus) {
+            Object.entries(this.state.selectedMenus).forEach(([catId, ids]) => {
+                const cat = cats.find(c => c.id === catId);
+                (ids || []).forEach(id => {
+                    const menu = cat && cat.menus ? cat.menus.find(m => m.id === id) : null;
+                    add(menu);
+                    ((this.state.selectedOptions && this.state.selectedOptions[id]) || []).forEach(oid => {
+                        add(menu && menu.options ? menu.options.find(op => op.id === oid) : null);
+                    });
+                });
+            });
+        } else if (this.state.selectedMenu) {
+            add(this.state.selectedMenu);
+            const mid = this.state.selectedMenu.id;
+            ((this.state.selectedOptions && this.state.selectedOptions[mid]) || []).forEach(oid => {
+                add(this.state.selectedMenu.options ? this.state.selectedMenu.options.find(op => op.id === oid) : null);
+            });
+        }
+        if (this.state.selectedCategoryOptions) {
+            Object.entries(this.state.selectedCategoryOptions).forEach(([catId, ids]) => {
+                const cat = cats.find(c => c.id === catId);
+                (ids || []).forEach(oid => {
+                    add(cat && cat.options ? cat.options.find(op => op.id === oid) : null);
+                });
+            });
+        }
+        return windows;
     }
 
     // スタッフ選択: カレンダー連携対象のスタッフ一覧（名前とカレンダーIDが設定済みのもの）
