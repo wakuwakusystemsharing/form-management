@@ -2244,26 +2244,30 @@ class BookingForm {
             const formattedDate3 = formatDateStr(this.state.selectedDate3, this.state.selectedTime3);
             
             // メッセージ本文を構築（《ラベル》\\n値 形式）
+            // 送信時の項目編集: LINE メッセージに含める項目（false = 非表示）。
+            // 表示のみの制御で、DB保存・Googleカレンダー・メール送信の内容には影響しない
+            const lineItems = this.config.line_message_items || {};
+            const showLineItem = (key) => lineItems[key] !== false;
             const formName = this.config.basic_info?.form_name || '予約フォーム';
             let messageText = '【' + formName + '】\\n';
 
             // お名前 / 電話番号（表示設定が有効な場合のみ LINE メッセージに含める）
-            if (showNameField) {
+            if (showNameField && showLineItem('name')) {
                 messageText += \`《お名前》\\n\${this.state.name || ''}\\n\`;
             }
-            if (showPhoneField) {
+            if (showPhoneField && showLineItem('phone')) {
                 messageText += \`《電話番号》\\n\${this.state.phone || ''}\\n\`;
             }
 
             // ご来店回数（有効時のみ表示）
-            if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
+            if (this.config.visit_count_selection?.enabled && this.state.visitCount && showLineItem('visit_count')) {
                 const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
                 const visitCountText = visitLabel || this.state.visitCount || '';
                 messageText += \`《ご来店回数》\\n\${visitCountText}\\n\`;
             }
 
             // 担当スタッフ（スタッフ選択が有効で選択されている場合）
-            if (this.config.staff_selection?.enabled === true && this.state.selectedStaffId) {
+            if (this.config.staff_selection?.enabled === true && this.state.selectedStaffId && showLineItem('staff')) {
                 const staffMsgLabel = this.state.selectedStaffId === 'none'
                     ? '指名なし'
                     : ((this.config.staff_selection.staff || []).find(m => m.id === this.state.selectedStaffId)?.name || '');
@@ -2274,14 +2278,16 @@ class BookingForm {
 
             // メニュー（希望日時式はカテゴリーごとに改行表示）
             const bookingModeForMenu = this.config.calendar_settings?.booking_mode || 'calendar';
-            if (bookingModeForMenu === 'multiple_dates' && menuTextGrouped) {
+            if (!showLineItem('menu')) {
+                // 《メニュー》を送信テキストから除外（表示のみの制御）
+            } else if (bookingModeForMenu === 'multiple_dates' && menuTextGrouped) {
                 messageText += \`\\n《メニュー》\\n\${menuTextGrouped}\\n\`;
             } else {
                 messageText += \`\\n《メニュー》\\n\${menuTextForMessage || ''}\\n\`;
             }
 
             // オプション（メニュー個別 / カテゴリー共通の両方を統合表示）
-            if (selectedOptions && selectedOptions.length > 0) {
+            if (selectedOptions && selectedOptions.length > 0 && showLineItem('options')) {
                 const optionLines = selectedOptions.map(opt => {
                     const name = opt.option_name || '';
                     const priceText = (opt.price || 0) > 0 ? \` ¥\${Number(opt.price).toLocaleString()}\` : '';
@@ -2292,26 +2298,30 @@ class BookingForm {
             }
 
             if (totalPrice > 0 || totalDuration > 0) {
-                if (totalPrice > 0) messageText += \`\\n《合計金額》\\n¥\${totalPrice.toLocaleString()}\\n\`;
-                if (totalDuration > 0) messageText += \`\\n《合計時間》\\n\${totalDuration}分\\n\`;
+                if (totalPrice > 0 && showLineItem('total_price')) messageText += \`\\n《合計金額》\\n¥\${totalPrice.toLocaleString()}\\n\`;
+                if (totalDuration > 0 && showLineItem('total_duration')) messageText += \`\\n《合計時間》\\n\${totalDuration}分\\n\`;
             }
 
-            // 希望日時
-            const bookingModeForMsg = this.config.calendar_settings?.booking_mode || 'calendar';
-            messageText += \`\\n【希望日時】\\n\`;
-            if (bookingModeForMsg === 'multiple_dates') {
-                messageText += \`《第一希望日》\\n\${formattedDate}\\n\`;
-                if (formattedDate2) messageText += \`《第二希望日》\\n\${formattedDate2}\\n\`;
-                if (formattedDate3) messageText += \`《第三希望日》\\n\${formattedDate3}\\n\`;
-            } else {
-                messageText += \`《希望日》\\n\${formattedDate}\\n\`;
+            // 希望日時（送信時の項目編集で非表示にできる）
+            if (showLineItem('datetime')) {
+                const bookingModeForMsg = this.config.calendar_settings?.booking_mode || 'calendar';
+                messageText += \`\\n【希望日時】\\n\`;
+                if (bookingModeForMsg === 'multiple_dates') {
+                    messageText += \`《第一希望日》\\n\${formattedDate}\\n\`;
+                    if (formattedDate2) messageText += \`《第二希望日》\\n\${formattedDate2}\\n\`;
+                    if (formattedDate3) messageText += \`《第三希望日》\\n\${formattedDate3}\\n\`;
+                } else {
+                    messageText += \`《希望日》\\n\${formattedDate}\\n\`;
+                }
             }
 
             // メッセージ
-            messageText += \`\\n《メッセージ》\\n\${this.state.message || 'なし'}\`;
+            if (showLineItem('message')) {
+                messageText += \`\\n《メッセージ》\\n\${this.state.message || 'なし'}\`;
+            }
 
             // 性別（オプション）
-            if (this.config.gender_selection?.enabled && this.state.gender) {
+            if (this.config.gender_selection?.enabled && this.state.gender && showLineItem('gender')) {
                 const genderLabel = this.config.gender_selection.options.find(o => o.value === this.state.gender)?.label;
                 if (genderLabel) {
                     messageText += \`\\n\\n《性別》\\n\${genderLabel}\`;
@@ -2319,7 +2329,7 @@ class BookingForm {
             }
 
             // クーポン（オプション）
-            if (this.config.coupon_selection?.enabled && this.state.coupon) {
+            if (this.config.coupon_selection?.enabled && this.state.coupon && showLineItem('coupon')) {
                 const couponLabel = this.config.coupon_selection.options.find(o => o.value === this.state.coupon)?.label;
                 if (couponLabel) {
                     messageText += \`\\n\\n《クーポン》\\n\${couponLabel}\`;
@@ -2327,7 +2337,7 @@ class BookingForm {
             }
 
             // カスタムフィールド
-            if (this.config.custom_fields && this.config.custom_fields.length > 0) {
+            if (this.config.custom_fields && this.config.custom_fields.length > 0 && showLineItem('custom_fields')) {
                 this.config.custom_fields.forEach(field => {
                     const value = this.state.customFields?.[field.id];
                     if (value) {
