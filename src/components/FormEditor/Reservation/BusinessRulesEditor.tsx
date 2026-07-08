@@ -1530,6 +1530,68 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
           </div>
         )}
       </div>
+
+      {/* 送信時の項目編集 */}
+      <div className={themeClasses.card}>
+        <div className="p-4">
+          <div className="flex items-center space-x-2 mb-1">
+            <svg className={`w-5 h-5 ${themeClasses.text.primary}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+            </svg>
+            <h3 className={`text-lg font-medium ${themeClasses.text.primary}`}>送信時の項目編集</h3>
+          </div>
+          <p className={`text-xs ${themeClasses.text.secondary} mb-1`}>
+            「予約する」タップ時に公式LINEのトークへ送信されるテキストの項目ごとの表示 / 非表示を設定します。
+          </p>
+          <p className={`text-xs ${theme === 'light' ? 'text-amber-600' : 'text-amber-400'} mb-3`}>
+            ※ 送信テキストの見た目だけの設定です。非表示にしても予約データの保存・Googleカレンダー登録・メール通知の内容は変わりません。
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+            {([
+              { key: 'name', label: '《お名前》' },
+              { key: 'phone', label: '《電話番号》' },
+              { key: 'visit_count', label: '《ご来店回数》' },
+              { key: 'staff', label: '《担当スタッフ》' },
+              { key: 'menu', label: '《メニュー》' },
+              { key: 'options', label: '《オプション》' },
+              { key: 'total_price', label: '《合計金額》' },
+              { key: 'total_duration', label: '《合計時間》' },
+              { key: 'datetime', label: '【希望日時】（希望日/第一〜第三希望日）' },
+              { key: 'message', label: '《メッセージ》' },
+              { key: 'gender', label: '《性別》' },
+              { key: 'coupon', label: '《クーポン》' },
+              { key: 'custom_fields', label: 'カスタム項目（追加した項目すべて）' },
+            ] as Array<{ key: keyof NonNullable<Form['config']['line_message_items']>; label: string }>).map((item) => {
+              const visible = form.config?.line_message_items?.[item.key] !== false;
+              return (
+                <div key={item.key} className="flex items-center justify-between gap-2">
+                  <span className={`text-sm ${themeClasses.text.secondary}`}>{item.label}</span>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={visible}
+                      onChange={(e) => onUpdate({
+                        ...form,
+                        config: {
+                          ...form.config,
+                          line_message_items: {
+                            ...form.config?.line_message_items,
+                            [item.key]: e.target.checked
+                          }
+                        }
+                      })}
+                      className="sr-only"
+                    />
+                    <div className={`w-9 h-5 rounded-full transition-colors ${visible ? (theme === 'light' ? 'bg-[rgb(244,144,49)]' : 'bg-cyan-500') : (theme === 'light' ? 'bg-gray-300' : 'bg-gray-600')}`}>
+                      <div className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform ${visible ? 'translate-x-4' : 'translate-x-0'} mt-0.5 ml-0.5`}></div>
+                    </div>
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

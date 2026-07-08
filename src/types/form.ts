@@ -231,6 +231,24 @@ export interface FormConfig {
     position: 'above' | 'below';  // 基準セクションの上か下か
   }>;
 
+  // 送信時の項目編集: 予約送信時に LINE トークへ送るテキストの項目ごとの表示設定
+  // false = 非表示（未設定 = 表示）。表示のみの制御で、DB保存・Googleカレンダー・メールには影響しない
+  line_message_items?: {
+    name?: boolean;            // 《お名前》
+    phone?: boolean;           // 《電話番号》
+    visit_count?: boolean;     // 《ご来店回数》
+    staff?: boolean;           // 《担当スタッフ》
+    menu?: boolean;            // 《メニュー》
+    options?: boolean;         // 《オプション》
+    total_price?: boolean;     // 《合計金額》
+    total_duration?: boolean;  // 《合計時間》
+    datetime?: boolean;        // 【希望日時】《希望日》/《第一〜第三希望日》
+    message?: boolean;         // 《メッセージ》
+    gender?: boolean;          // 《性別》
+    coupon?: boolean;          // 《クーポン》
+    custom_fields?: boolean;   // カスタム項目（《項目名》すべて）
+  };
+
   // フォーム上の「ご予約内容」（サマリー）表示設定
   reservation_summary?: {
     show_total_price?: boolean;    // 合計金額を表示（未設定 = false: 非表示）

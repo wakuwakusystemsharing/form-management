@@ -352,6 +352,15 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             position: b.position === 'below' ? 'below' as const : 'above' as const
           }));
       })(),
+      line_message_items: (() => {
+        const raw = (existingConfig?.line_message_items
+          ?? (typedConfig as Form['config'])?.line_message_items) as Record<string, unknown> | undefined;
+        const keys = ['name', 'phone', 'visit_count', 'staff', 'menu', 'options', 'total_price',
+          'total_duration', 'datetime', 'message', 'gender', 'coupon', 'custom_fields'] as const;
+        const out: Record<string, boolean> = {};
+        keys.forEach((k) => { out[k] = raw?.[k] !== false; });
+        return out as Form['config']['line_message_items'];
+      })(),
       reservation_summary: {
         show_total_price: existingConfig?.reservation_summary?.show_total_price
           ?? (typedConfig as Form['config'])?.reservation_summary?.show_total_price
