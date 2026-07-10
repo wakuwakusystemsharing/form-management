@@ -1327,6 +1327,11 @@ class BookingForm {
         // 選択中メニュー/オプションの対応時間設定（セルごとの判定用に1回だけ計算）
         const menuTimeWindows = this.getActiveTimeWindows();
 
+        // デフォルトで✕にする時間帯（設定された時刻のスロットは常に✕。"9:00" → "09:00" に正規化）
+        const blockedTimesSet = new Set((this.config.calendar_settings?.blocked_times || [])
+            .map(t => { const m = /^([0-9]{1,2}):([0-9]{2})/.exec(t || ''); return m ? String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2] : ''; })
+            .filter(Boolean));
+
         const rawInterval = this.config?.calendar_settings?.time_interval;
         const timeInterval = (rawInterval === 10 || rawInterval === 15 || rawInterval === 30 || rawInterval === 60) ? rawInterval : 30;
         const timeSlots = [];
@@ -1452,7 +1457,7 @@ class BookingForm {
         // 空き状況の判定
         let isAvailable = false;
 
-        if (isPast || isNextDay || endsAfterClose || !withinWindow || isClosed || !isWithinBusinessHours || !isWithinMenuWindows) {
+        if (isPast || isNextDay || endsAfterClose || !withinWindow || isClosed || !isWithinBusinessHours || !isWithinMenuWindows || blockedTimesSet.has(time)) {
             isAvailable = false;
         } else if (this.availabilityData && this.availabilityData.length > 0) {
             // カレンダーAPIから取得したデータがある場合
@@ -2690,7 +2695,13 @@ class BookingForm {
         // 時間スロット生成
         const timeSlots = this.generateTimeSlots(startTime, endTime, settings.time_interval);
 
+        // デフォルトで✕にする時間帯は選択肢から除外（"9:00" → "09:00" に正規化）
+        const blockedTimes = new Set((settings.blocked_times || [])
+            .map(t => { const m = /^([0-9]{1,2}):([0-9]{2})/.exec(t || ''); return m ? String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2] : ''; })
+            .filter(Boolean));
+
         timeSlots.forEach(time => {
+            if (blockedTimes.has(time)) return;
             const option = document.createElement('option');
             option.value = time;
             option.textContent = time;

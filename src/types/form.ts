@@ -166,6 +166,8 @@ export interface FormConfig {
     event_color_id?: string;
     // カレンダー表示モードの時間間隔（分）。デフォルト 30
     time_interval?: 10 | 15 | 30 | 60;
+    // デフォルトで✕にする時間帯（"HH:MM"）。カレンダー表示モードで該当スロットを常に✕にする
+    blocked_times?: string[];
     // 祝日を予約不可（✕）にする（false / 未設定 = OFF、既存挙動）
     holidays_as_closed?: boolean;
     // マスタートグル ON 時に ✕ にしない祝日タイプの ID 配列（空配列 = 全祝日 ✕）
@@ -173,6 +175,7 @@ export interface FormConfig {
     // 第三希望日時モード用設定
     multiple_dates_settings?: {
       time_interval: 10 | 15 | 30 | 60;   // 時間間隔（分）
+      blocked_times?: string[];           // デフォルトで✕にする時間帯（"HH:MM"）。時間選択の選択肢から除外
       date_range_days: number;            // 選択可能日数（本日から何日後まで）
       required_choices?: number[];        // 必須にする希望日時（1〜3）。未設定 = [1,2,3]（全て必須）。第一希望(1)は常に必須
       exclude_weekdays: number[];         // 除外曜日 (0:日曜, 1:月曜, ...) - レガシー互換
