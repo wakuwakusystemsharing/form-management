@@ -105,6 +105,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     end_time: string;
     weekday_hours?: { [key: string]: { open: string; close: string; closed: boolean } };
     required_choices?: number[];
+    blocked_times?: string[];
   }>(
     (() => {
       const existing = form.config?.calendar_settings?.multiple_dates_settings;
@@ -116,6 +117,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         end_time: existing?.end_time || '18:00',
         weekday_hours: existing?.weekday_hours || defaultWeekdayHours,
         required_choices: existing?.required_choices || [1, 2, 3],
+        blocked_times: existing?.blocked_times || [],
       };
     })()
   );
@@ -337,6 +339,27 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     onUpdate(updatedForm);
   };
 
+  // 時間間隔 × 営業時間から、フォームに表示される時間スロット一覧を生成
+  // （デフォルトで✕にする時間帯 のプルダウン選択肢用。営業中の曜日の最も早い開始〜最も遅い終了）
+  const generateSlotOptions = (
+    hours: Array<{ open?: string; close?: string; closed?: boolean }>,
+    interval: number
+  ): string[] => {
+    const toMin = (t: string) => {
+      const [h, m] = t.split(':').map(Number);
+      return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+    };
+    const openDays = hours.filter(h => h && !h.closed);
+    if (openDays.length === 0) return [];
+    const start = Math.min(...openDays.map(h => toMin(h.open || '09:00')));
+    const end = Math.max(...openDays.map(h => toMin(h.close || '18:00')));
+    const out: string[] = [];
+    for (let m = start; m < end; m += interval) {
+      out.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+    }
+    return out;
+  };
+
   const toggleRequiredChoice = (idx: number) => {
     if (idx === 1) return; // 第一希望は常に必須
     const current = multipleDatesSettings.required_choices || [1, 2, 3];
@@ -395,94 +418,6 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
         <h2 className={`text-xl font-semibold ${themeClasses.text.primary}`}>営業時間・ルール設定</h2>
-      </div>
-
-      {/* 営業時間設定 */}
-      <div className={themeClasses.card}>
-        <button
-          onClick={() => toggleSection('businessHours')}
-          className={`w-full flex items-center justify-between p-4 text-left transition-colors ${
-            theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'
-          }`}
-        >
-          <div className="flex items-center space-x-2">
-            <svg className={`w-5 h-5 ${themeClasses.text.primary}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <h3 className={`text-lg font-medium ${themeClasses.text.primary}`}>営業時間設定</h3>
-          </div>
-          <svg 
-            className={`w-5 h-5 ${themeClasses.text.secondary} transform transition-transform ${expandedSections.businessHours ? 'rotate-180' : ''}`} 
-            fill="none" 
-            stroke="currentColor" 
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-
-        {expandedSections.businessHours && (
-          <div className={`p-4 border-t ${themeClasses.divider}`}>
-            {/* 曜日別設定 */}
-            <div className="space-y-3">
-              {Object.entries(dayLabels).map(([day, label]) => (
-                <div key={day} className={`rounded-lg p-3 ${
-                  theme === 'light' 
-                    ? 'border border-gray-300 bg-gray-50' 
-                    : 'border border-gray-700 bg-gray-900/50'
-                }`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                    <div className={`w-full sm:w-16 text-sm font-medium ${themeClasses.text.secondary} flex-shrink-0`}>
-                      {label}
-                    </div>
-                    
-                    <label className="flex items-center space-x-2 flex-shrink-0">
-                      <input
-                        type="checkbox"
-                        checked={!businessHours[day]?.closed}
-                        onChange={(e) => handleBusinessHoursChange(day, 'closed', !e.target.checked)}
-                        className={`rounded ${accentClasses} ${
-                          theme === 'light'
-                            ? 'border-gray-300 bg-gray-100'
-                            : 'border-gray-600 bg-gray-700'
-                        }`}
-                      />
-                      <span className={`text-sm ${themeClasses.text.secondary}`}>営業</span>
-                    </label>
-
-                    {!businessHours[day]?.closed && (
-                      <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-1">
-                        <input
-                          type="time"
-                          value={businessHours[day]?.open || '09:00'}
-                          onChange={(e) => handleBusinessHoursChange(day, 'open', e.target.value)}
-                          className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
-                        />
-                        <span className={`text-sm ${themeClasses.text.secondary} hidden sm:inline`}>〜</span>
-                        <input
-                          type="time"
-                          value={businessHours[day]?.close || '18:00'}
-                          onChange={(e) => handleBusinessHoursChange(day, 'close', e.target.value)}
-                          className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
-                        />
-                      </div>
-                    )}
-
-                    {businessHours[day]?.closed && (
-                      <span className={`px-2 py-1 text-xs rounded ${
-                        theme === 'light'
-                          ? 'bg-gray-200 text-gray-600 border border-gray-300'
-                          : 'bg-gray-700 text-gray-400 border border-gray-600'
-                      }`}>
-                        定休日
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
         {/* 日時選択モード設定 */}
@@ -573,6 +508,66 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   </select>
                 </div>
 
+                {/* デフォルトで✕にする時間帯 */}
+                <div className="mt-4 max-w-xs">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                      デフォルトで✕にする時間帯
+                    </label>
+                    <InfoTooltip
+                      theme={theme}
+                      text={'設定した時刻のスロットは、予約フォームのカレンダーで常に✕になります。\n例: 13:00 を追加 → 毎日 13:00 の枠が✕'}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    {(form.config?.calendar_settings?.blocked_times || []).map((t, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <select
+                          value={t}
+                          onChange={(e) => {
+                            const next = [...(form.config?.calendar_settings?.blocked_times || [])];
+                            next[idx] = e.target.value;
+                            onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, blocked_times: next } } });
+                          }}
+                          className={themeClasses.input}
+                        >
+                          {(() => {
+                            const slots = generateSlotOptions(Object.values(businessHours), calendarTimeInterval);
+                            // 時間間隔や営業時間の変更で選択肢から外れた保存済みの値も表示は維持
+                            const opts = slots.includes(t) || !t ? slots : [t, ...slots];
+                            return opts.map(slot => (
+                              <option key={slot} value={slot}>{slot}</option>
+                            ));
+                          })()}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = (form.config?.calendar_settings?.blocked_times || []).filter((_, i) => i !== idx);
+                            onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, blocked_times: next } } });
+                          }}
+                          title="削除"
+                          className={`p-1.5 rounded text-red-400 hover:text-red-300 ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const slots = generateSlotOptions(Object.values(businessHours), calendarTimeInterval);
+                        const used = form.config?.calendar_settings?.blocked_times || [];
+                        const nextSlot = slots.find(slot => !used.includes(slot)) || slots[0] || '12:00';
+                        onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, blocked_times: [...used, nextSlot] } } });
+                      }}
+                      className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
+                    >
+                      ＋ 時間帯を追加
+                    </button>
+                  </div>
+                </div>
+
                 {/* 予約イベントの色変更 */}
                 <div className="mt-4">
                   <div className="flex items-center gap-1.5 mb-2">
@@ -648,6 +643,76 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   </>
                   )}
                 </div>
+
+                {/* 営業時間設定（カレンダー表示モードの受付時間） */}
+                <div className="mt-4">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                      営業時間設定
+                    </label>
+                    <InfoTooltip
+                      theme={theme}
+                      text={'カレンダーに〇が表示される受付時間を曜日別に設定します。\n「営業」のチェックを外した曜日は終日✕になります。'}
+                    />
+                  </div>
+            <div className="space-y-3">
+              {Object.entries(dayLabels).map(([day, label]) => (
+                <div key={day} className={`rounded-lg p-3 ${
+                  theme === 'light' 
+                    ? 'border border-gray-300 bg-gray-50' 
+                    : 'border border-gray-700 bg-gray-900/50'
+                }`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                    <div className={`w-full sm:w-16 text-sm font-medium ${themeClasses.text.secondary} flex-shrink-0`}>
+                      {label}
+                    </div>
+                    
+                    <label className="flex items-center space-x-2 flex-shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={!businessHours[day]?.closed}
+                        onChange={(e) => handleBusinessHoursChange(day, 'closed', !e.target.checked)}
+                        className={`rounded ${accentClasses} ${
+                          theme === 'light'
+                            ? 'border-gray-300 bg-gray-100'
+                            : 'border-gray-600 bg-gray-700'
+                        }`}
+                      />
+                      <span className={`text-sm ${themeClasses.text.secondary}`}>営業</span>
+                    </label>
+
+                    {!businessHours[day]?.closed && (
+                      <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-1">
+                        <input
+                          type="time"
+                          value={businessHours[day]?.open || '09:00'}
+                          onChange={(e) => handleBusinessHoursChange(day, 'open', e.target.value)}
+                          className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
+                        />
+                        <span className={`text-sm ${themeClasses.text.secondary} hidden sm:inline`}>〜</span>
+                        <input
+                          type="time"
+                          value={businessHours[day]?.close || '18:00'}
+                          onChange={(e) => handleBusinessHoursChange(day, 'close', e.target.value)}
+                          className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
+                        />
+                      </div>
+                    )}
+
+                    {businessHours[day]?.closed && (
+                      <span className={`px-2 py-1 text-xs rounded ${
+                        theme === 'light'
+                          ? 'bg-gray-200 text-gray-600 border border-gray-300'
+                          : 'bg-gray-700 text-gray-400 border border-gray-600'
+                      }`}>
+                        定休日
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+                </div>
               </div>
             )}
 
@@ -672,6 +737,68 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                       <option value={30}>30分間隔</option>
                       <option value={60}>60分間隔</option>
                     </select>
+                  </div>
+
+                  {/* デフォルトで✕にする時間帯 */}
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                        デフォルトで✕にする時間帯
+                      </label>
+                      <InfoTooltip
+                        theme={theme}
+                        text={'設定した時刻は、希望日時の時間選択の選択肢に表示されなくなります。\n例: 13:00 を追加 → どの日でも 13:00 は選べない'}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      {(multipleDatesSettings.blocked_times || []).map((t, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <select
+                            value={t}
+                            onChange={(e) => {
+                              const next = [...(multipleDatesSettings.blocked_times || [])];
+                              next[idx] = e.target.value;
+                              handleMultipleDatesSettingsChange('blocked_times', next);
+                            }}
+                            className={themeClasses.input}
+                          >
+                            {(() => {
+                              const hoursList = multipleDatesSettings.weekday_hours
+                                ? Object.values(multipleDatesSettings.weekday_hours)
+                                : [{ open: multipleDatesSettings.start_time, close: multipleDatesSettings.end_time, closed: false }];
+                              const slots = generateSlotOptions(hoursList, multipleDatesSettings.time_interval);
+                              const opts = slots.includes(t) || !t ? slots : [t, ...slots];
+                              return opts.map(slot => (
+                                <option key={slot} value={slot}>{slot}</option>
+                              ));
+                            })()}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => handleMultipleDatesSettingsChange('blocked_times', (multipleDatesSettings.blocked_times || []).filter((_, i) => i !== idx))}
+                            title="削除"
+                            className={`p-1.5 rounded text-red-400 hover:text-red-300 ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const hoursList = multipleDatesSettings.weekday_hours
+                            ? Object.values(multipleDatesSettings.weekday_hours)
+                            : [{ open: multipleDatesSettings.start_time, close: multipleDatesSettings.end_time, closed: false }];
+                          const slots = generateSlotOptions(hoursList, multipleDatesSettings.time_interval);
+                          const used = multipleDatesSettings.blocked_times || [];
+                          const nextSlot = slots.find(slot => !used.includes(slot)) || slots[0] || '12:00';
+                          handleMultipleDatesSettingsChange('blocked_times', [...used, nextSlot]);
+                        }}
+                        className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
+                      >
+                        ＋ 時間帯を追加
+                      </button>
+                    </div>
                   </div>
 
                   {/* 選択可能日数 */}

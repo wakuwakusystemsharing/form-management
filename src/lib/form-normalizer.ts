@@ -270,6 +270,13 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             if (!rc.includes(1)) rc.unshift(1);
             base.required_choices = [...new Set(rc)].sort();
           }
+          // デフォルトで✕にする時間帯（"HH:MM" のみ保持）
+          {
+            const btRaw = (base as { blocked_times?: unknown }).blocked_times;
+            base.blocked_times = Array.isArray(btRaw)
+              ? btRaw.filter((x): x is string => typeof x === 'string' && /^\d{1,2}:\d{2}$/.test(x))
+              : [];
+          }
           return base;
         })() as Form['config']['calendar_settings']['multiple_dates_settings'],
         allow_exceed_business_hours: existingConfig?.calendar_settings?.allow_exceed_business_hours ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.allow_exceed_business_hours ?? false,
@@ -290,6 +297,13 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.time_interval;
           return v === 10 || v === 15 || v === 30 || v === 60 ? v : 30;
         })() as 10 | 15 | 30 | 60,
+        blocked_times: (() => {
+          const v = existingConfig?.calendar_settings?.blocked_times
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.blocked_times;
+          return Array.isArray(v)
+            ? v.filter((x): x is string => typeof x === 'string' && /^\d{1,2}:\d{2}$/.test(x))
+            : [];
+        })(),
         show_customer_name: existingConfig?.calendar_settings?.show_customer_name ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_name ?? true,
         show_customer_phone: existingConfig?.calendar_settings?.show_customer_phone ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_phone ?? true,
         show_customer_email: existingConfig?.calendar_settings?.show_customer_email ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_email ?? false,
