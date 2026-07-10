@@ -339,6 +339,27 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     onUpdate(updatedForm);
   };
 
+  // 時間間隔 × 営業時間から、フォームに表示される時間スロット一覧を生成
+  // （デフォルトで✕にする時間帯 のプルダウン選択肢用。営業中の曜日の最も早い開始〜最も遅い終了）
+  const generateSlotOptions = (
+    hours: Array<{ open?: string; close?: string; closed?: boolean }>,
+    interval: number
+  ): string[] => {
+    const toMin = (t: string) => {
+      const [h, m] = t.split(':').map(Number);
+      return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+    };
+    const openDays = hours.filter(h => h && !h.closed);
+    if (openDays.length === 0) return [];
+    const start = Math.min(...openDays.map(h => toMin(h.open || '09:00')));
+    const end = Math.max(...openDays.map(h => toMin(h.close || '18:00')));
+    const out: string[] = [];
+    for (let m = start; m < end; m += interval) {
+      out.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+    }
+    return out;
+  };
+
   const toggleRequiredChoice = (idx: number) => {
     if (idx === 1) return; // 第一希望は常に必須
     const current = multipleDatesSettings.required_choices || [1, 2, 3];
@@ -501,16 +522,24 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   <div className="space-y-2">
                     {(form.config?.calendar_settings?.blocked_times || []).map((t, idx) => (
                       <div key={idx} className="flex items-center gap-2">
-                        <input
-                          type="time"
+                        <select
                           value={t}
                           onChange={(e) => {
                             const next = [...(form.config?.calendar_settings?.blocked_times || [])];
                             next[idx] = e.target.value;
                             onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, blocked_times: next } } });
                           }}
-                          className={themeClasses.timeInput}
-                        />
+                          className={themeClasses.input}
+                        >
+                          {(() => {
+                            const slots = generateSlotOptions(Object.values(businessHours), calendarTimeInterval);
+                            // 時間間隔や営業時間の変更で選択肢から外れた保存済みの値も表示は維持
+                            const opts = slots.includes(t) || !t ? slots : [t, ...slots];
+                            return opts.map(slot => (
+                              <option key={slot} value={slot}>{slot}</option>
+                            ));
+                          })()}
+                        </select>
                         <button
                           type="button"
                           onClick={() => {
@@ -526,7 +555,12 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     ))}
                     <button
                       type="button"
-                      onClick={() => onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, blocked_times: [...(form.config?.calendar_settings?.blocked_times || []), '12:00'] } } })}
+                      onClick={() => {
+                        const slots = generateSlotOptions(Object.values(businessHours), calendarTimeInterval);
+                        const used = form.config?.calendar_settings?.blocked_times || [];
+                        const nextSlot = slots.find(slot => !used.includes(slot)) || slots[0] || '12:00';
+                        onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, blocked_times: [...used, nextSlot] } } });
+                      }}
                       className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
                     >
                       ＋ 時間帯を追加
@@ -719,16 +753,26 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     <div className="space-y-2">
                       {(multipleDatesSettings.blocked_times || []).map((t, idx) => (
                         <div key={idx} className="flex items-center gap-2">
-                          <input
-                            type="time"
+                          <select
                             value={t}
                             onChange={(e) => {
                               const next = [...(multipleDatesSettings.blocked_times || [])];
                               next[idx] = e.target.value;
                               handleMultipleDatesSettingsChange('blocked_times', next);
                             }}
-                            className={themeClasses.timeInput}
-                          />
+                            className={themeClasses.input}
+                          >
+                            {(() => {
+                              const hoursList = multipleDatesSettings.weekday_hours
+                                ? Object.values(multipleDatesSettings.weekday_hours)
+                                : [{ open: multipleDatesSettings.start_time, close: multipleDatesSettings.end_time, closed: false }];
+                              const slots = generateSlotOptions(hoursList, multipleDatesSettings.time_interval);
+                              const opts = slots.includes(t) || !t ? slots : [t, ...slots];
+                              return opts.map(slot => (
+                                <option key={slot} value={slot}>{slot}</option>
+                              ));
+                            })()}
+                          </select>
                           <button
                             type="button"
                             onClick={() => handleMultipleDatesSettingsChange('blocked_times', (multipleDatesSettings.blocked_times || []).filter((_, i) => i !== idx))}
@@ -741,7 +785,15 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                       ))}
                       <button
                         type="button"
-                        onClick={() => handleMultipleDatesSettingsChange('blocked_times', [...(multipleDatesSettings.blocked_times || []), '12:00'])}
+                        onClick={() => {
+                          const hoursList = multipleDatesSettings.weekday_hours
+                            ? Object.values(multipleDatesSettings.weekday_hours)
+                            : [{ open: multipleDatesSettings.start_time, close: multipleDatesSettings.end_time, closed: false }];
+                          const slots = generateSlotOptions(hoursList, multipleDatesSettings.time_interval);
+                          const used = multipleDatesSettings.blocked_times || [];
+                          const nextSlot = slots.find(slot => !used.includes(slot)) || slots[0] || '12:00';
+                          handleMultipleDatesSettingsChange('blocked_times', [...used, nextSlot]);
+                        }}
                         className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
                       >
                         ＋ 時間帯を追加
