@@ -935,6 +935,9 @@ class BookingForm {
             });
         }
 
+        // カレンダーが上端/下端に達したら、続きのドラッグでページ側をスクロールさせる
+        this.setupCalendarEdgeScroll();
+
         // 日付/日時入力: 値の有無でヒント表示を切り替え
         document.querySelectorAll('input[type="date"], input[type="datetime-local"]').forEach((el) => {
             const syncDateHint = () => el.classList.toggle('has-value', !!el.value);
@@ -2434,6 +2437,34 @@ class BookingForm {
     getMinAdvanceDays() {
         const v = this.config?.calendar_settings?.min_advance_days;
         return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.floor(v) : 0;
+    }
+
+    // カレンダー内スクロールが上端/下端に達したら、続きのドラッグでページ側をスクロールさせる。
+    // overscroll-behavior: none で iOS のバウンスと標準のスクロール連鎖を止めているため、
+    // 端に達したときだけ指の移動量ぶんページを手動スクロールして操作感を保つ
+    setupCalendarEdgeScroll() {
+        const wrapper = document.querySelector('.calendar-table-wrapper');
+        if (!wrapper || wrapper.dataset.edgeScrollBound === '1') return;
+        wrapper.dataset.edgeScrollBound = '1';
+        let lastY = null;
+        wrapper.addEventListener('touchstart', (e) => {
+            if (e.touches && e.touches.length === 1) lastY = e.touches[0].clientY;
+        }, { passive: true });
+        wrapper.addEventListener('touchmove', (e) => {
+            if (lastY === null || !e.touches || e.touches.length !== 1) return;
+            const y = e.touches[0].clientY;
+            const dy = lastY - y; // 正 = 下方向へのスクロール
+            lastY = y;
+            // カレンダーが内部スクロールしない高さのときは、標準のページスクロールに任せる
+            const scrollable = wrapper.scrollHeight > wrapper.clientHeight + 1;
+            if (!scrollable) return;
+            const atTop = wrapper.scrollTop <= 0;
+            const atBottom = wrapper.scrollTop + wrapper.clientHeight >= wrapper.scrollHeight - 1;
+            if ((dy < 0 && atTop) || (dy > 0 && atBottom)) {
+                window.scrollBy(0, dy);
+            }
+        }, { passive: true });
+        wrapper.addEventListener('touchend', () => { lastY = null; }, { passive: true });
     }
 
     // 選択中スタッフに応じてメニュー/オプションの表示を切り替える。
