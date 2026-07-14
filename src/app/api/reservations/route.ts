@@ -766,16 +766,36 @@ export async function POST(request: Request) {
               }
             }
           } else if (isCalendarMode && staffWithCalendar.length > 0) {
-            // 指名なし: 空いているスタッフからランダムに割当
-            let candidates = staffWithCalendar;
+            // 指名なし: 選択されたメニュー/オプションに対応でき、かつ空いているスタッフからランダムに割当
+            // （メニューオプション設定で非表示にしたメニュー/オプションを含む予約は、そのスタッフへ割り当てない）
+            const selectedMenuIds = (body.selected_menus || [])
+              .map((m: any) => m && m.menu_id)
+              .filter((id: unknown): id is string => typeof id === 'string' && !!id);
+            const selectedOptionIds = (body.selected_options || [])
+              .map((op: any) => op && op.option_id)
+              .filter((id: unknown): id is string => typeof id === 'string' && !!id);
+            const canHandleSelection = (m: any) => {
+              const hiddenMenus = Array.isArray(m.hidden_menu_ids) ? m.hidden_menu_ids : [];
+              const hiddenOptions = Array.isArray(m.hidden_option_ids) ? m.hidden_option_ids : [];
+              return !selectedMenuIds.some((id: string) => hiddenMenus.includes(id))
+                && !selectedOptionIds.some((id: string) => hiddenOptions.includes(id));
+            };
+            const capableStaff = staffWithCalendar.filter(canHandleSelection);
+            if (capableStaff.length === 0) {
+              return NextResponse.json(
+                { error: '申し訳ありません。選択されたメニューに対応できるスタッフがいません。メニューをご確認ください。', code: 'slot_taken' },
+                { status: 409 }
+              );
+            }
+            let candidates = capableStaff;
             try {
               const busy = await getBusyCalendars(
-                staffWithCalendar.map((m: any) => m.calendar_id),
+                capableStaff.map((m: any) => m.calendar_id),
                 slotStart.toISOString(),
                 slotEnd.toISOString(),
                 body.store_id
               );
-              candidates = staffWithCalendar.filter((m: any) => !busy.has(m.calendar_id));
+              candidates = capableStaff.filter((m: any) => !busy.has(m.calendar_id));
               if (candidates.length === 0) {
                 return NextResponse.json(
                   { error: '申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。', code: 'slot_taken' },
@@ -783,9 +803,9 @@ export async function POST(request: Request) {
                 );
               }
             } catch (fbError) {
-              // 照会失敗時は全員を候補にして続行（予約自体は止めない）
+              // 照会失敗時は対応可能なスタッフ全員を候補にして続行（予約自体は止めない）
               console.error('[API] staff freeBusy check error (no preference):', fbError);
-              candidates = staffWithCalendar;
+              candidates = capableStaff;
             }
             const member = candidates[Math.floor(Math.random() * candidates.length)];
             staffFields = {

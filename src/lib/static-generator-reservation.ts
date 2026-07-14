@@ -829,8 +829,9 @@ class BookingForm {
                 } else {
                     this.closeDetailPopup();
                 }
-                // 対応時間設定のあるオプションはカレンダーの〇×に影響するため再描画
-                if (popupOpt && popupOpt.time_window_enabled === true) {
+                // 対応時間設定のあるオプション、または指名なしのスタッフモード（対応可能スタッフが変わる）は再描画
+                if ((popupOpt && popupOpt.time_window_enabled === true)
+                    || (this.isStaffCalendarMode() && (!this.state.selectedStaffId || this.state.selectedStaffId === 'none'))) {
                     this.toggleCalendarVisibility();
                 }
 
@@ -865,8 +866,9 @@ class BookingForm {
                 } else {
                     this.closeDetailPopup();
                 }
-                // 対応時間設定のあるオプションはカレンダーの〇×に影響するため再描画
-                if (popupOpt && popupOpt.time_window_enabled === true) {
+                // 対応時間設定のあるオプション、または指名なしのスタッフモード（対応可能スタッフが変わる）は再描画
+                if ((popupOpt && popupOpt.time_window_enabled === true)
+                    || (this.isStaffCalendarMode() && (!this.state.selectedStaffId || this.state.selectedStaffId === 'none'))) {
                     this.toggleCalendarVisibility();
                 }
                 this.updateSummary();
@@ -1520,7 +1522,7 @@ class BookingForm {
                     isAvailable = !busyByStaff[this.state.selectedStaffId];
                 } else {
                     // 指名なし/未選択: 誰か1人でも空いていれば〇
-                    isAvailable = this.getCalendarStaff().some(m => !busyByStaff[m.id]);
+                    isAvailable = this.getCapableCalendarStaff().some(m => !busyByStaff[m.id]);
                 }
             } else if (isBusinessEventTime && count >= maxConcurrent) {
                 // 営業日のイベント時間内で同時刻に閾値以上のイベントがある場合
@@ -2592,6 +2594,31 @@ class BookingForm {
             });
         }
         return windows;
+    }
+
+    // 指名なし/未選択時の空き判定用: 現在選択中のメニュー/オプションに対応できるスタッフのみ返す
+    // （メニューオプション設定で非表示にしている項目を含む選択には、そのスタッフを候補にしない）
+    getCapableCalendarStaff() {
+        const staff = this.getCalendarStaff();
+        const menuIds = [];
+        const optionIds = [];
+        if (this.config.menu_structure?.allow_cross_category_selection && this.state.selectedMenus) {
+            Object.values(this.state.selectedMenus).forEach(ids => (ids || []).forEach(id => menuIds.push(id)));
+        } else if (this.state.selectedMenu) {
+            menuIds.push(this.state.selectedMenu.id);
+        }
+        if (this.state.selectedOptions) {
+            Object.values(this.state.selectedOptions).forEach(ids => (ids || []).forEach(id => optionIds.push(id)));
+        }
+        if (this.state.selectedCategoryOptions) {
+            Object.values(this.state.selectedCategoryOptions).forEach(ids => (ids || []).forEach(id => optionIds.push(id)));
+        }
+        if (menuIds.length === 0 && optionIds.length === 0) return staff;
+        return staff.filter(m => {
+            const hiddenMenus = Array.isArray(m.hidden_menu_ids) ? m.hidden_menu_ids : [];
+            const hiddenOptions = Array.isArray(m.hidden_option_ids) ? m.hidden_option_ids : [];
+            return !menuIds.some(id => hiddenMenus.includes(id)) && !optionIds.some(id => hiddenOptions.includes(id));
+        });
     }
 
     // スタッフ選択: カレンダー連携対象のスタッフ一覧（名前とカレンダーIDが設定済みのもの）
