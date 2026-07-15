@@ -2832,7 +2832,12 @@ class BookingForm {
         // スタッフ選択が空き判定に効くフォームでは、スタッフの選択もカレンダー表示の条件にする
         // （メニュー選択だけではカレンダーを出さず、スタッフをタップしたら表示）
         const staffSelected = this.isStaffCalendarMode() ? !!this.state.selectedStaffId : true;
-        const show = !hideUntilMenu || (hasMenuSelection && staffSelected);
+        // 第三希望日時モードでメニューが1つも設定されていない場合は常に表示
+        // （選択できるメニューが存在せず「メニュー選択で表示」が成立しないため）
+        const hasAnyMenus = (this.config.menu_structure?.categories || []).some(c => (c.menus || []).length > 0)
+            || ((this.config.menu_structure?.menus || []).length > 0);
+        const isMultiDatesNoMenus = (this.config.calendar_settings?.booking_mode || 'calendar') === 'multiple_dates' && !hasAnyMenus;
+        const show = !hideUntilMenu || isMultiDatesNoMenus || (hasMenuSelection && staffSelected);
 
         const fieldIds = bookingMode === 'multiple_dates'
             ? ['datetime-field-1', 'datetime-field-2', 'datetime-field-3']
@@ -3082,8 +3087,13 @@ if (document.readyState === 'loading') {
 
   private renderDateTimeFields(config: FormConfig): string {
     const bookingMode = config.calendar_settings?.booking_mode || 'calendar';
-    // ON（未設定含む）の場合はメニュー選択まで非表示のため、初期HTMLも非表示で出力
-    const initiallyHidden = config.calendar_settings?.hide_datetime_until_menu_selected !== false;
+    // メニューが1つも設定されていないフォームかどうか（カテゴリー内・シンプル構造の両方を確認）
+    const hasAnyMenus = (config.menu_structure?.categories || []).some((c) => (c.menus || []).length > 0)
+      || ((config.menu_structure?.menus || []).length > 0);
+    // ON（未設定含む）の場合はメニュー選択まで非表示のため、初期HTMLも非表示で出力。
+    // ただし第三希望日時モードでメニューが1つもない場合は、選択できるメニューが存在しないため常に表示する
+    const initiallyHidden = config.calendar_settings?.hide_datetime_until_menu_selected !== false
+      && !(bookingMode === 'multiple_dates' && !hasAnyMenus);
 
     if (bookingMode === 'multiple_dates') {
       return this.renderMultipleDatesField(config, initiallyHidden);
