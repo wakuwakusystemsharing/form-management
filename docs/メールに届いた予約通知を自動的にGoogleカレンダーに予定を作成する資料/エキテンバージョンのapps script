@@ -1,0 +1,148 @@
+function createEventFromEmail() {
+  // 多重起動（トリガーのオーバーラップ）を防ぐ。ロックが取れなければ今回はスキップ。
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(0)) {
+    Logger.log('別の実行が処理中のためスキップしました。');
+    return;
+  }
+
+  try {
+    processEkitenReservations();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function processEkitenReservations() {
+  // ▼▼▼ カレンダーIDを設定してください ▼▼▼
+  var CALENDAR_ID_ISHIKARI = '';   // （A）のカレンダーID
+  var CALENDAR_ID_SHINKOTONI = ''; // （B）のカレンダーID
+  // ▲▲▲ カレンダーIDを設定してください ▲▲▲
+
+  var emailAddress = 'reserve@ekiten.jp';
+  var subjectKeyword = '即予約を受け付けました';
+  var FIXED_DURATION_MINUTES = 20; // 所要時間は固定20分
+
+  var threads = GmailApp.search(
+    'from:' + emailAddress + ' subject:"' + subjectKeyword + '" is:unread newer_than:1d'
+  );
+
+  threads.forEach(function(thread) {
+    var messages = thread.getMessages();
+
+    messages.forEach(function(message) {
+      if (!message.isUnread()) {
+        return;
+      }
+
+      // タイトル（件名）で対象メールを絞り込み
+      if (message.getSubject().indexOf(subjectKeyword) === -1) {
+        return;
+      }
+
+      var body = message.getPlainBody();
+
+      // 全角スペースを半角に（改行はそのまま）
+      body = body.replace(/　/g, ' ');
+
+      Logger.log(body); // 取得した本文をログに出力
+
+      // 店舗判定 → カレンダーIDの振り分け
+      var calendarId = null;
+      var shopName = null;
+      if (body.indexOf('石狩店') !== -1) {
+        calendarId = CALENDAR_ID_ISHIKARI;
+        shopName = '石狩店';
+      } else if (body.indexOf('新琴似店') !== -1) {
+        calendarId = CALENDAR_ID_SHINKOTONI;
+        shopName = '新琴似店';
+      } else {
+        Logger.log('店舗名（石狩店／新琴似店）が見つかりませんでした。スキップします。');
+        return;
+      }
+
+      // 各項目を抽出
+      var reservationNumberMatch = body.match(/【予約番号】\s*\n?\s*([^\n【]+)/);
+      var dateTimeMatch = body.match(/【来店日時】\s*\n?\s*(\d{4})年(\d{1,2})月(\d{1,2})日\s*\(([^)]+)\)\s*(\d{1,2}):(\d{2})/);
+      var menuMatch = body.match(/【メニュー】\s*\n?\s*([^\n【]+)/);
+      var staffMatch = body.match(/【スタッフ】\s*\n?\s*([^\n【]+)/);
+      var couponMatch = body.match(/【ご利用クーポン】\s*\n?\s*([^\n【]+)/);
+      var nameMatch = body.match(/お名前[：:]\s*([^\n【]+)/);
+      var phoneMatch = body.match(/電話番号[：:]\s*([^\n【]+)/);
+
+      if (!reservationNumberMatch || !dateTimeMatch || !nameMatch) {
+        Logger.log('必要な情報（予約番号・来店日時・お名前）が見つかりませんでした。メール内容を確認してください。');
+        return;
+      }
+
+      var reservationNumber = reservationNumberMatch[1].trim();
+      var year = parseInt(dateTimeMatch[1], 10);
+      var month = parseInt(dateTimeMatch[2], 10) - 1;
+      var day = parseInt(dateTimeMatch[3], 10);
+      var weekday = dateTimeMatch[4].trim(); // 曜日
+      var hour = parseInt(dateTimeMatch[5], 10);
+      var minute = parseInt(dateTimeMatch[6], 10);
+      var eventDate = new Date(year, month, day, hour, minute);
+
+      // 所要時間は固定20分
+      var endDate = new Date(eventDate.getTime() + FIXED_DURATION_MINUTES * 60 * 1000);
+
+      var name = nameMatch[1].trim();
+      var menu = menuMatch ? menuMatch[1].trim() : '設定なし';
+      var staff = staffMatch ? staffMatch[1].trim() : '設定なし';
+      var coupon = couponMatch ? couponMatch[1].trim() : '設定なし';
+      var phone = phoneMatch ? phoneMatch[1].trim() : '';
+
+      var calendar = CalendarApp.getCalendarById(calendarId);
+      if (!calendar) {
+        Logger.log('カレンダーが取得できませんでした。カレンダーIDを確認してください：' + calendarId);
+        return;
+      }
+
+      var descriptionTemplate = [
+        '◇ご予約内容',
+        '■店舗',
+        shopName,
+        '■予約番号',
+        reservationNumber,
+        '■来店日時',
+        year + '年' + (month + 1) + '月' + day + '日（' + weekday + '）' + hour + ':' + ('0' + minute).slice(-2),
+        '■メニュー',
+        menu,
+        '■スタッフ',
+        staff,
+        '■ご利用クーポン',
+        coupon,
+        '■お名前',
+        name,
+        '■電話番号',
+        phone
+      ].join('\n');
+
+      // 重複チェック：同じ日に同じ予約番号の予定が既にあれば作成しない
+      // （createEvent成功後にmarkReadできず中断した場合の二重登録を防ぐ）
+      var dayStart = new Date(year, month, day, 0, 0, 0);
+      var dayEnd = new Date(year, month, day + 1, 0, 0, 0);
+      var existingEvents = calendar.getEvents(dayStart, dayEnd);
+      var isDuplicate = existingEvents.some(function(ev) {
+        return (ev.getDescription() || '').indexOf(reservationNumber) !== -1;
+      });
+
+      if (isDuplicate) {
+        Logger.log('予約番号 ' + reservationNumber + ' の予定は既に存在するため作成をスキップしました。');
+        message.markRead();
+        return;
+      }
+
+      // カレンダーイベントの作成
+      calendar.createEvent(
+        'エキテン予約, ' + name,
+        eventDate,
+        endDate,
+        { description: descriptionTemplate }
+      );
+
+      message.markRead();
+    });
+  });
+}

@@ -1,0 +1,87 @@
+function createEventFromEmail() {
+  var calendarId = 'officialline0101@gmail.com';
+  var emailAddress = 'nakae.tsubasa0@gmail.com';
+  var threads = GmailApp.search('from:' + emailAddress + ' newer_than:1d');
+
+  threads.forEach(function(thread) {
+    var messages = thread.getMessages();
+    
+    messages.forEach(function(message) {
+      if (message.isUnread()) { 
+        var body = message.getBody();
+
+        // 全角スペースを半角に（改行はそのまま）
+        body = body.replace(/　/g, ' ');
+
+        Logger.log(body); // 取得した本文をログに出力
+
+        var reservationNumberMatch = body.match(/■予約番号.*?([A-Z0-9]+)/);
+        var nameMatch = body.match(/■氏名.*?([^\n■]+)/);
+        var dateTimeMatch = body.match(/■来店日時.*?(\d{4})年(\d{2})月(\d{2})日（(.+)）(\d{2}):(\d{2})/);
+        var staffMatch = body.match(/■指名スタッフ.*?([^\n■]+)/);
+        var menuMatch = body.match(/■メニュー([\s\S]*?)■/); // メニュー詳細を取得
+        var couponMatch = body.match(/■ご利用クーポン.*?([^\n■]+)/);
+        var totalAmountMatch = body.match(/■合計金額.*?予約時合計金額.*?([\d,]+円)/);
+
+        if (!reservationNumberMatch || !nameMatch || !dateTimeMatch || !staffMatch || !menuMatch || !couponMatch || !totalAmountMatch) {
+          Logger.log("必要な情報が見つかりませんでした。メール内容を確認してください。");
+          return;
+        }
+
+        var reservationNumber = reservationNumberMatch[1].trim();
+        var name = nameMatch[1].trim();
+        var year = dateTimeMatch[1];
+        var month = parseInt(dateTimeMatch[2], 10) - 1;
+        var day = dateTimeMatch[3];
+        var weekday = dateTimeMatch[4]; // 曜日
+        var hour = dateTimeMatch[5];
+        var minute = dateTimeMatch[6];
+        var eventDate = new Date(year, month, day, hour, minute);
+
+        var staff = staffMatch[1].trim();
+        var menu = menuMatch[1].trim().replace(/\n/g, '\n　'); // メニューを適切に整形
+        var coupon = couponMatch[1].trim();
+        var totalAmount = totalAmountMatch[1].trim();
+
+        // 所要時間の取得
+        var durationMatch = menu.match(/所要時間目安：(\d+)時間(?:(\d+)分)?/);
+        var durationHours = durationMatch ? parseInt(durationMatch[1], 10) : 1;
+        var durationMinutes = durationMatch && durationMatch[2] ? parseInt(durationMatch[2], 10) : 0;
+        var endDate = new Date(eventDate.getTime() + durationHours * 60 * 60 * 1000 + durationMinutes * 60 * 1000);
+
+        var calendar = CalendarApp.getCalendarById(calendarId);
+
+        var descriptionTemplate = `
+◇ご予約内容
+■予約番号
+${reservationNumber}
+■氏名
+${name}
+■来店日時
+${year}年${month + 1}月${day}日（${weekday}）${hour}:${minute}
+■指名スタッフ
+${staff}
+■メニュー
+${menu}
+■ご利用クーポン
+${coupon}
+■合計金額
+予約時合計金額　${totalAmount}
+`;
+
+// 氏名から <br> を削除
+name = name.replace(/<br>/g, '');
+
+// カレンダーイベントの作成
+calendar.createEvent(
+  'HPB予約, ' + name,
+  eventDate,
+  endDate,
+  { description: descriptionTemplate.trim() }
+);
+
+        message.markRead();
+      }
+    });
+  });
+}
