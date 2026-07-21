@@ -34,7 +34,8 @@ import {
   AlertTriangle,
   MessageCircle,
   Info,
-  HelpCircle
+  HelpCircle,
+  Mail
 } from 'lucide-react';
 import { getStoreSetupStatus } from '@/lib/store-setup-status';
 import { formatDateTimeForDisplay } from '@/lib/format-utils';
@@ -1290,6 +1291,15 @@ export default function StoreDetailPage() {
             >
               <Calendar className="h-3.5 w-3.5 mr-1" />
               <span className="hidden sm:inline">予約一覧</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push(`/tenant/${tenantSlug}/admin/${storeId}/mail-integration`)}
+              className="text-muted-foreground hover:text-foreground text-xs h-8"
+            >
+              <Mail className="h-3.5 w-3.5 mr-1" />
+              <span className="hidden sm:inline">メール連携</span>
             </Button>
             <Button
               variant="ghost"
