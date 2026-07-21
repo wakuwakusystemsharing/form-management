@@ -83,8 +83,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     form.config?.calendar_settings?.booking_mode || 'calendar'
   );
 
-  const [calendarTimeInterval, setCalendarTimeInterval] = useState<10 | 15 | 30 | 60>(
-    (form.config?.calendar_settings?.time_interval as 10 | 15 | 30 | 60) || 30
+  const [calendarTimeInterval, setCalendarTimeInterval] = useState<10 | 15 | 20 | 30 | 45 | 60 | 120>(
+    (form.config?.calendar_settings?.time_interval as 10 | 15 | 20 | 30 | 45 | 60 | 120) || 30
   );
 
   const defaultWeekdayHours: { [key: string]: { open: string; close: string; closed: boolean } } = {
@@ -98,7 +98,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
   };
 
   const [multipleDatesSettings, setMultipleDatesSettings] = useState<{
-    time_interval: 10 | 15 | 30 | 60;
+    time_interval: 10 | 15 | 20 | 30 | 45 | 60 | 120;
     date_range_days: number;
     exclude_weekdays: number[];
     start_time: string;
@@ -197,7 +197,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     onUpdate(updatedForm);
   };
 
-  const handleCalendarTimeIntervalChange = (value: 10 | 15 | 30 | 60) => {
+  const handleCalendarTimeIntervalChange = (value: 10 | 15 | 20 | 30 | 45 | 60 | 120) => {
     setCalendarTimeInterval(value);
 
     const updatedForm = {
@@ -498,13 +498,16 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   </div>
                   <select
                     value={calendarTimeInterval}
-                    onChange={(e) => handleCalendarTimeIntervalChange(parseInt(e.target.value) as 10 | 15 | 30 | 60)}
+                    onChange={(e) => handleCalendarTimeIntervalChange(parseInt(e.target.value) as 10 | 15 | 20 | 30 | 45 | 60 | 120)}
                     className={themeClasses.input}
                   >
                     <option value={10}>10分間隔</option>
                     <option value={15}>15分間隔</option>
+                    <option value={20}>20分間隔</option>
                     <option value={30}>30分間隔</option>
+                    <option value={45}>45分間隔</option>
                     <option value={60}>60分間隔</option>
+                    <option value={120}>120分間隔</option>
                   </select>
                 </div>
 
@@ -729,13 +732,16 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     </label>
                     <select
                       value={multipleDatesSettings.time_interval}
-                      onChange={(e) => handleMultipleDatesSettingsChange('time_interval', parseInt(e.target.value) as 10 | 15 | 30 | 60)}
+                      onChange={(e) => handleMultipleDatesSettingsChange('time_interval', parseInt(e.target.value) as 10 | 15 | 20 | 30 | 45 | 60 | 120)}
                       className={themeClasses.input}
                     >
                       <option value={10}>10分間隔</option>
                       <option value={15}>15分間隔</option>
+                      <option value={20}>20分間隔</option>
                       <option value={30}>30分間隔</option>
+                      <option value={45}>45分間隔</option>
                       <option value={60}>60分間隔</option>
+                      <option value={120}>120分間隔</option>
                     </select>
                   </div>
 
