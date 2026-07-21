@@ -155,7 +155,67 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(reservations || []);
+    let result: unknown[] = reservations || [];
+
+    // 外部予約メール連携の予約をマージ（include_external=1 のときのみ。店舗管理画面の予約管理で使用）
+    if (searchParams.get('include_external') === '1') {
+      const { data: externals } = await (adminClient as any)
+        .from('external_reservations')
+        .select('id,source,status,reservation_number,reservation_date,reservation_time,duration_minutes,customer_name,customer_phone,menu_text,staff_text,created_at')
+        .eq('store_id', storeId)
+        .in('status', ['created', 'cancelled'])
+        .not('reservation_date', 'is', null);
+
+      let mapped = (externals || []).map((e: any) => ({
+        id: `ext_${e.id}`,
+        external_id: e.id,
+        is_external: true,
+        external_source: e.source,
+        reservation_number: e.reservation_number,
+        form_id: '',
+        store_id: storeId,
+        customer_name: e.customer_name || 'お客様',
+        customer_phone: e.customer_phone || '',
+        selected_menus: e.menu_text
+          ? [{ menu_name: e.menu_text, duration: e.duration_minutes || undefined }]
+          : [],
+        selected_options: [],
+        reservation_date: e.reservation_date,
+        reservation_time: (e.reservation_time || '').slice(0, 5),
+        customer_info: {},
+        staff_name: e.staff_text && !['設定なし', '指名なし'].includes(e.staff_text) ? e.staff_text : null,
+        // 外部予約は媒体側で成立済みのため cancelled 以外は confirmed 扱い
+        status: e.status === 'cancelled' ? 'cancelled' : 'confirmed',
+        created_at: e.created_at,
+        updated_at: e.created_at,
+      }));
+
+      // フォーム予約と同じフィルタを適用
+      if (status) {
+        mapped = mapped.filter((e: any) => e.status === status);
+      }
+      if (dateFrom) {
+        mapped = mapped.filter((e: any) => e.reservation_date >= dateFrom);
+      }
+      if (dateTo) {
+        mapped = mapped.filter((e: any) => e.reservation_date <= dateTo);
+      }
+      if (search) {
+        const q = search.toLowerCase();
+        mapped = mapped.filter((e: any) =>
+          e.customer_name?.toLowerCase().includes(q) ||
+          e.customer_phone?.toLowerCase().includes(q)
+        );
+      }
+
+      result = [...result, ...mapped].sort((a: any, b: any) => {
+        const dateA = `${a.reservation_date}T${a.reservation_time || '00:00'}`;
+        const dateB = `${b.reservation_date}T${b.reservation_time || '00:00'}`;
+        return dateB.localeCompare(dateA);
+      });
+    }
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Store reservations fetch error:', error);
     return NextResponse.json(

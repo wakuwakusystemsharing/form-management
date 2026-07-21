@@ -234,6 +234,38 @@ export async function listCalendarEvents(
 }
 
 /**
+ * 汎用のカレンダーイベント作成（外部予約メール連携用）。
+ * createReservationEvent はフォーム予約専用の説明文を組み立てるため、
+ * タイトル・説明・開始/終了を呼び出し側で自由に指定したい用途はこちらを使う。
+ * @returns 作成したイベントID（失敗時は null）
+ */
+export async function createGenericCalendarEvent(
+  params: {
+    calendarId: string;
+    title: string;
+    description: string;
+    startIso: string;  // 例: '2026-07-18T14:40:00+09:00'
+    endIso: string;
+  },
+  storeId?: string
+): Promise<string | null> {
+  const calendar = await getCalendarClient(storeId);
+  if (!calendar) {
+    throw new Error('Google Calendar APIの認証情報が設定されていません');
+  }
+  const response = await calendar.events.insert({
+    calendarId: params.calendarId,
+    requestBody: {
+      summary: params.title,
+      description: params.description,
+      start: { dateTime: params.startIso, timeZone: 'Asia/Tokyo' },
+      end: { dateTime: params.endIso, timeZone: 'Asia/Tokyo' },
+    },
+  });
+  return response.data.id || null;
+}
+
+/**
  * 複数カレンダーの指定時間帯の空きを一括照会し、「埋まっている」カレンダーIDの集合を返す。
  * freeBusy API を使うため1リクエストで済む（スタッフ選択の指名なし割当・直前再チェック用）。
  * 照会エラーになったカレンダーは安全側（埋まっている扱い）にする。

@@ -58,6 +58,21 @@ interface Reservation {
   source_medium?: string | null;
 }
 
+// 外部予約メール連携（媒体）バッジ
+const EXTERNAL_SOURCE_LABELS: Record<string, string> = {
+  salonboard: 'ホットペッパー',
+  ekiten: 'エキテン',
+};
+function externalBadge(reservation: unknown) {
+  const r = reservation as { is_external?: boolean; external_source?: string };
+  if (!r.is_external) return null;
+  return (
+    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-purple-50 text-purple-700 border border-purple-200 whitespace-nowrap">
+      {EXTERNAL_SOURCE_LABELS[r.external_source || ''] || '外部'}予約
+    </span>
+  );
+}
+
 export default function StoreAdminPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -346,6 +361,7 @@ export default function StoreAdminPage() {
       : debouncedReservationSearch;
     const params = new URLSearchParams();
     if (activeSearch) params.append('search', activeSearch);
+    params.append('include_external', '1'); // 外部予約メール連携の予約もマージ
     fetch(`/api/stores/${storeId}/reservations?${params.toString()}`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => setReservations(data))
@@ -841,7 +857,7 @@ export default function StoreAdminPage() {
                                 }}
                               >
                                 <div className="flex items-center justify-between mb-2">
-                                  <span className="font-medium text-sm">{reservation.customer_name}</span>
+                                  <span className="font-medium text-sm flex items-center gap-1.5">{reservation.customer_name}{externalBadge(reservation)}</span>
                                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
                                     reservation.status === 'confirmed' ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20' :
                                     reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
@@ -899,10 +915,17 @@ export default function StoreAdminPage() {
                                   >
                                     <TableCell className="font-medium">{reservation.customer_name}</TableCell>
                                     <TableCell>
-                                      <div className="text-sm">
-                                        <div className="font-medium">{getFormName(reservation.form_id)}</div>
-                                        <div className="text-xs text-muted-foreground font-mono">{reservation.form_id}</div>
-                                      </div>
+                                      {(reservation as any).is_external ? (
+                                        <div className="text-sm">
+                                          {externalBadge(reservation)}
+                                          <div className="text-xs text-muted-foreground mt-1">メール連携で自動登録</div>
+                                        </div>
+                                      ) : (
+                                        <div className="text-sm">
+                                          <div className="font-medium">{getFormName(reservation.form_id)}</div>
+                                          <div className="text-xs text-muted-foreground font-mono">{reservation.form_id}</div>
+                                        </div>
+                                      )}
                                     </TableCell>
                                     <TableCell>{reservation.customer_phone}</TableCell>
                                     <TableCell>
@@ -1505,9 +1528,23 @@ export default function StoreAdminPage() {
                       </div>
                     </div>
                     <div>
-                      <Label className="text-sm text-muted-foreground">フォーム</Label>
-                      <p className="font-medium">{getFormName(selectedReservation.form_id)}</p>
-                      <p className="text-xs text-muted-foreground font-mono break-all">{selectedReservation.form_id}</p>
+                      <Label className="text-sm text-muted-foreground">{(selectedReservation as any).is_external ? '予約媒体' : 'フォーム'}</Label>
+                      {(selectedReservation as any).is_external ? (
+                        <div className="mt-1 space-y-1">
+                          {externalBadge(selectedReservation)}
+                          {(selectedReservation as any).reservation_number && (
+                            <p className="text-xs text-muted-foreground">予約番号: {(selectedReservation as any).reservation_number}</p>
+                          )}
+                          {(selectedReservation as any).staff_name && (
+                            <p className="text-xs text-muted-foreground">担当: {(selectedReservation as any).staff_name}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <p className="font-medium">{getFormName(selectedReservation.form_id)}</p>
+                          <p className="text-xs text-muted-foreground font-mono break-all">{selectedReservation.form_id}</p>
+                        </>
+                      )}
                     </div>
                     {selectedReservation.source_medium && (
                       <div>
@@ -1665,7 +1702,7 @@ export default function StoreAdminPage() {
               {/* ステータス変更ボタン */}
               {selectedReservation.status !== 'cancelled' && (
                 <div className="flex gap-2 pt-2 border-t">
-                  {selectedReservation.status !== 'confirmed' && (
+                  {selectedReservation.status !== 'confirmed' && !(selectedReservation as any).is_external && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -1696,9 +1733,16 @@ export default function StoreAdminPage() {
                     variant="outline"
                     className="bg-red-50 text-red-600 border-red-200 hover:bg-red-600 hover:text-white"
                     onClick={async () => {
-                      if (!confirm('この予約をキャンセルしますか？')) return;
+                      const isExternal = (selectedReservation as any).is_external === true;
+                      const confirmMsg = isExternal
+                        ? 'この予約をキャンセルしますか？（Googleカレンダーのイベントも削除されます。媒体側の予約は別途キャンセルしてください）'
+                        : 'この予約をキャンセルしますか？';
+                      if (!confirm(confirmMsg)) return;
                       try {
-                        const res = await fetch(`/api/reservations/${selectedReservation.id}`, {
+                        const cancelUrl = isExternal
+                          ? `/api/stores/${storeId}/external-reservations/${(selectedReservation as any).external_id}`
+                          : `/api/reservations/${selectedReservation.id}`;
+                        const res = await fetch(cancelUrl, {
                           method: 'PATCH',
                           headers: { 'Content-Type': 'application/json' },
                           credentials: 'include',
