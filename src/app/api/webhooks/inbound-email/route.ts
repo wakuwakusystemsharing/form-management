@@ -50,29 +50,41 @@ function verifySvixSignature(
 }
 
 // ===== Received Emails API で本文を取得 =====
-async function fetchReceivedEmail(emailId: string): Promise<{
-  from: string; to: string[]; subject: string; text: string; html: string;
-} | null> {
+// 失敗時は詳細（HTTPステータス等）を返し、Webhook レスポンスで確認できるようにする
+type FetchMailResult =
+  | { ok: true; from: string; to: string[]; subject: string; text: string; html: string }
+  | { ok: false; detail: string };
+
+async function fetchReceivedEmail(emailId: string): Promise<FetchMailResult> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.error('[inbound-email] RESEND_API_KEY 未設定');
-    return null;
+    return { ok: false, detail: 'RESEND_API_KEY が未設定です' };
   }
-  const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
-  if (!res.ok) {
-    console.error(`[inbound-email] 受信メール取得失敗: ${res.status} ${await res.text()}`);
-    return null;
+  // ドキュメント上は /emails/receiving/{id}。旧パス表記の可能性に備え /emails/received/{id} も試す
+  const paths = [
+    `https://api.resend.com/emails/receiving/${emailId}`,
+    `https://api.resend.com/emails/received/${emailId}`,
+  ];
+  let lastDetail = '';
+  for (const url of paths) {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        ok: true,
+        from: data.from || '',
+        to: Array.isArray(data.to) ? data.to : [data.to].filter(Boolean),
+        subject: data.subject || '',
+        text: data.text || '',
+        html: data.html || '',
+      };
+    }
+    const bodyText = (await res.text()).slice(0, 300);
+    lastDetail = `${res.status} ${bodyText}`;
+    console.error(`[inbound-email] 受信メール取得失敗: ${url} → ${lastDetail}`);
+    if (res.status !== 404) break; // 404 のときだけ別パスを試す
   }
-  const data = await res.json();
-  return {
-    from: data.from || '',
-    to: Array.isArray(data.to) ? data.to : [data.to].filter(Boolean),
-    subject: data.subject || '',
-    text: data.text || '',
-    html: data.html || '',
-  };
+  return { ok: false, detail: lastDetail };
 }
 
 // HTMLメールしか無い場合の簡易テキスト化
@@ -214,8 +226,11 @@ export async function POST(request: Request) {
 
     // 3. 本文を取得
     const mail = await fetchReceivedEmail(emailId);
-    if (!mail) {
-      return NextResponse.json({ error: '受信メールの取得に失敗しました' }, { status: 500 });
+    if (!mail.ok) {
+      return NextResponse.json(
+        { error: '受信メールの取得に失敗しました', detail: mail.detail },
+        { status: 500 }
+      );
     }
     const bodyText = mail.text || htmlToText(mail.html || '');
 
