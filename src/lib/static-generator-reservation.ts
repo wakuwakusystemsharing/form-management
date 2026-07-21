@@ -1338,7 +1338,7 @@ class BookingForm {
             .filter(Boolean));
 
         const rawInterval = this.config?.calendar_settings?.time_interval;
-        const timeInterval = (rawInterval === 10 || rawInterval === 15 || rawInterval === 30 || rawInterval === 60) ? rawInterval : 30;
+        const timeInterval = (rawInterval === 10 || rawInterval === 15 || rawInterval === 20 || rawInterval === 30 || rawInterval === 45 || rawInterval === 60 || rawInterval === 120) ? rawInterval : 30;
         const timeSlots = [];
         for (let m = earliestOpen; m < latestClose; m += timeInterval) {
             const hh = String(Math.floor(m / 60)).padStart(2, '0');

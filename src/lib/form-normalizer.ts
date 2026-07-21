@@ -295,8 +295,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         time_interval: (() => {
           const v = existingConfig?.calendar_settings?.time_interval
             ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.time_interval;
-          return v === 10 || v === 15 || v === 30 || v === 60 ? v : 30;
-        })() as 10 | 15 | 30 | 60,
+          return v === 10 || v === 15 || v === 20 || v === 30 || v === 45 || v === 60 || v === 120 ? v : 30;
+        })() as 10 | 15 | 20 | 30 | 45 | 60 | 120,
         blocked_times: (() => {
           const v = existingConfig?.calendar_settings?.blocked_times
             ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.blocked_times;

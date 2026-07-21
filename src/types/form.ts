@@ -165,7 +165,7 @@ export interface FormConfig {
     // 予約イベントの色（Google Calendar の colorId '1'〜'11'。空/未設定 = カレンダーの既定色）
     event_color_id?: string;
     // カレンダー表示モードの時間間隔（分）。デフォルト 30
-    time_interval?: 10 | 15 | 30 | 60;
+    time_interval?: 10 | 15 | 20 | 30 | 45 | 60 | 120;
     // デフォルトで✕にする時間帯（"HH:MM"）。カレンダー表示モードで該当スロットを常に✕にする
     blocked_times?: string[];
     // 祝日を予約不可（✕）にする（false / 未設定 = OFF、既存挙動）
@@ -174,7 +174,7 @@ export interface FormConfig {
     excluded_holiday_types?: string[];
     // 第三希望日時モード用設定
     multiple_dates_settings?: {
-      time_interval: 10 | 15 | 30 | 60;   // 時間間隔（分）
+      time_interval: 10 | 15 | 20 | 30 | 45 | 60 | 120;   // 時間間隔（分）
       blocked_times?: string[];           // デフォルトで✕にする時間帯（"HH:MM"）。時間選択の選択肢から除外
       date_range_days: number;            // 選択可能日数（本日から何日後まで）
       required_choices?: number[];        // 必須にする希望日時（1〜3）。未設定 = [1,2,3]（全て必須）。第一希望(1)は常に必須
