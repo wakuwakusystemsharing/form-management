@@ -50,6 +50,7 @@ const DEFAULT_HIDDEN_CUSTOMER_NAMES = [
   '羽楽',
 ];
 const HIDDEN_NAMES_STORAGE_KEY = 'allReservations_hiddenCustomerNames_v1';
+const HIDDEN_STORES_STORAGE_KEY = 'allReservations_hiddenStoreIds_v1';
 
 // 全角スペース・全角括弧を半角に揃え、連続空白を1つにして比較する
 function normalizeCustomerName(name: string): string {
@@ -111,6 +112,37 @@ export default function AllReservationsPage() {
     }
     saveHiddenNames([...hiddenNames, name]);
     setNewHiddenName('');
+  };
+
+  // 店舗の非表示（除外する店舗IDのリスト。localStorage に保存）
+  const [hideTestStores, setHideTestStores] = useState<boolean>(true);
+  const [hiddenStoreIds, setHiddenStoreIds] = useState<string[]>([]);
+  const [editingHiddenStores, setEditingHiddenStores] = useState<boolean>(false);
+  const [newHiddenStoreId, setNewHiddenStoreId] = useState<string>('');
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(HIDDEN_STORES_STORAGE_KEY);
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr) && arr.every((x) => typeof x === 'string')) {
+          setHiddenStoreIds(arr);
+        }
+      }
+    } catch { /* 破損時は空のまま */ }
+  }, []);
+
+  const saveHiddenStoreIds = (ids: string[]) => {
+    setHiddenStoreIds(ids);
+    try { localStorage.setItem(HIDDEN_STORES_STORAGE_KEY, JSON.stringify(ids)); } catch { /* ignore */ }
+  };
+
+  const addHiddenStore = () => {
+    if (!newHiddenStoreId || hiddenStoreIds.includes(newHiddenStoreId)) return;
+    saveHiddenStoreIds([...hiddenStoreIds, newHiddenStoreId]);
+    // 除外した店舗が絞り込み中だったら「全店舗」に戻す
+    if (filterStoreId === newHiddenStoreId) setFilterStoreId('all');
+    setNewHiddenStoreId('');
   };
 
   useEffect(() => {
@@ -177,9 +209,14 @@ export default function AllReservationsPage() {
   };
 
   const hiddenNameSet = new Set(hiddenNames.map(normalizeCustomerName));
-  const filteredReservations = hideTestCustomers
-    ? reservations.filter((r) => !hiddenNameSet.has(normalizeCustomerName(r.customer_name)))
-    : reservations;
+  const hiddenStoreIdSet = new Set(hiddenStoreIds);
+  const filteredReservations = reservations.filter((r) => {
+    if (hideTestCustomers && hiddenNameSet.has(normalizeCustomerName(r.customer_name))) return false;
+    if (hideTestStores && hiddenStoreIdSet.has(r.store_id)) return false;
+    return true;
+  });
+  // 店舗絞り込みプルダウンからも除外店舗を隠す（選択中の店舗は残す）
+  const visibleStores = stores.filter((st) => !hideTestStores || !hiddenStoreIdSet.has(st.id) || st.id === filterStoreId);
 
   // 集計ダウンロード: 現在のフィルター結果を Excel（.xlsx）で出力。
   // Googleスプレッドシートへのインポート想定: A列=店舗ID / B列=店舗名 / C列以降=年月の横並びマトリクス。
@@ -222,6 +259,7 @@ export default function AllReservationsPage() {
         if (res.ok) {
           const data = await res.json();
           (data.stats || []).forEach((e: { store_id: string; month: string; count: number }) => {
+            if (hideTestStores && hiddenStoreIdSet.has(e.store_id)) return;
             surveyCounts.set(`${e.store_id}\t${e.month}`, e.count);
             monthSet.add(e.month);
             storeSet.add(e.store_id);
@@ -338,6 +376,7 @@ export default function AllReservationsPage() {
         ['ステータス', statusLabel],
         ['店舗', storeLabel],
         ['テスト用顧客', hideTestCustomers ? '非表示（除外して集計）' : '含む'],
+        ['テスト用店舗', hideTestStores ? `非表示（${hiddenStoreIds.length}店舗を除外）` : '含む'],
         ['備考', '「予約数」はキャンセルを除いた件数です。キャンセルは「キャンセル数」シートを参照。'],
       ].forEach(([k, v], i) => {
         infoSheet.getCell(i + 1, 1).value = k;
@@ -464,7 +503,7 @@ export default function AllReservationsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">全店舗</SelectItem>
-                        {stores.map((store) => (
+                        {visibleStores.map((store) => (
                           <SelectItem key={store.id} value={store.id}>
                             {store.name}
                           </SelectItem>
@@ -494,6 +533,34 @@ export default function AllReservationsPage() {
                         onClick={() => setEditingHiddenNames(!editingHiddenNames)}
                         className="h-10 px-2 text-muted-foreground"
                         title="非表示にする顧客名を編集"
+                      >
+                        <Pencil className="h-3.5 w-3.5 mr-1" />
+                        編集
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2 flex-1">
+                    <Label htmlFor="hide-test-stores">店舗の非表示</Label>
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="hide-test-stores"
+                        className="flex items-center gap-2 h-10 px-3 rounded-md border border-input bg-background cursor-pointer w-fit"
+                      >
+                        <input
+                          id="hide-test-stores"
+                          type="checkbox"
+                          checked={hideTestStores}
+                          onChange={(e) => setHideTestStores(e.target.checked)}
+                          className="h-4 w-4 rounded"
+                        />
+                        <span className="text-sm whitespace-nowrap">除外店舗を非表示</span>
+                      </label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingHiddenStores(!editingHiddenStores)}
+                        className="h-10 px-2 text-muted-foreground"
+                        title="除外する店舗を編集"
                       >
                         <Pencil className="h-3.5 w-3.5 mr-1" />
                         編集
@@ -551,6 +618,60 @@ export default function AllReservationsPage() {
                         className="w-full sm:w-80"
                       />
                       <Button variant="outline" size="sm" onClick={addHiddenName} disabled={!newHiddenName.trim()}>
+                        追加
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 除外する店舗の編集パネル */}
+                {editingHiddenStores && (
+                  <div className="mt-4 p-4 rounded-md border bg-muted/40 space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      ここに登録した店舗の予約は、「除外店舗を非表示」がONのとき一覧・集計・店舗絞り込みから除外されます（このブラウザに保存されます）
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {hiddenStoreIds.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">除外する店舗はありません</span>
+                      ) : (
+                        hiddenStoreIds.map((id) => {
+                          const st = stores.find((x) => x.id === id);
+                          return (
+                            <span
+                              key={id}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-background border text-sm"
+                            >
+                              {st ? st.name : id}
+                              <span className="text-xs text-muted-foreground font-mono">{id}</span>
+                              <button
+                                type="button"
+                                onClick={() => saveHiddenStoreIds(hiddenStoreIds.filter((x) => x !== id))}
+                                className="text-muted-foreground hover:text-red-500"
+                                title="除外リストから削除"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Select value={newHiddenStoreId} onValueChange={setNewHiddenStoreId}>
+                        <SelectTrigger className="w-full sm:w-80">
+                          <SelectValue placeholder="除外する店舗を選択" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {stores
+                            .filter((st) => !hiddenStoreIds.includes(st.id))
+                            .map((st) => (
+                              <SelectItem key={st.id} value={st.id}>
+                                {st.name}（{st.id}）
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      <Button variant="outline" size="sm" onClick={addHiddenStore} disabled={!newHiddenStoreId}>
                         追加
                       </Button>
                     </div>
