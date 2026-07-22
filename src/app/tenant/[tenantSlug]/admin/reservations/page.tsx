@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Calendar, BarChart3, Download } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { ArrowLeft, Calendar, BarChart3, Download, X, Pencil } from 'lucide-react';
 
 interface Reservation {
   id: string;
@@ -37,8 +38,8 @@ const SOURCE_MEDIUM_LABELS: Record<string, string> = {
   direct: '直接アクセス',
 };
 
-// 「顧客名の非表示」で除外するテスト用顧客名（完全一致。空白・括弧は正規化して比較）
-const HIDDEN_CUSTOMER_NAMES = [
+// 「顧客名の非表示」のデフォルト除外リスト（画面から追加・削除でき、localStorage に保存される）
+const DEFAULT_HIDDEN_CUSTOMER_NAMES = [
   'テスト',
   '合同会社わくわく動作確認2号',
   'M',
@@ -48,6 +49,7 @@ const HIDDEN_CUSTOMER_NAMES = [
   '動作確認用02',
   '羽楽',
 ];
+const HIDDEN_NAMES_STORAGE_KEY = 'allReservations_hiddenCustomerNames_v1';
 
 // 全角スペース・全角括弧を半角に揃え、連続空白を1つにして比較する
 function normalizeCustomerName(name: string): string {
@@ -58,7 +60,7 @@ function normalizeCustomerName(name: string): string {
     .replace(/\s+/g, ' ')
     .trim();
 }
-const HIDDEN_CUSTOMER_SET = new Set(HIDDEN_CUSTOMER_NAMES.map(normalizeCustomerName));
+
 
 // CSV用: カンマ・引用符・改行を含むフィールドをエスケープ
 function csvField(value: string | number): string {
@@ -76,7 +78,40 @@ export default function AllReservationsPage() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterStoreId, setFilterStoreId] = useState<string>('all');
   const [hideTestCustomers, setHideTestCustomers] = useState<boolean>(true);
+  const [hiddenNames, setHiddenNames] = useState<string[]>(DEFAULT_HIDDEN_CUSTOMER_NAMES);
+  const [editingHiddenNames, setEditingHiddenNames] = useState<boolean>(false);
+  const [newHiddenName, setNewHiddenName] = useState<string>('');
+  const [exporting, setExporting] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
+
+  // 非表示リストを localStorage から復元
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(HIDDEN_NAMES_STORAGE_KEY);
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr) && arr.every((x) => typeof x === 'string')) {
+          setHiddenNames(arr);
+        }
+      }
+    } catch { /* 破損時はデフォルトのまま */ }
+  }, []);
+
+  const saveHiddenNames = (names: string[]) => {
+    setHiddenNames(names);
+    try { localStorage.setItem(HIDDEN_NAMES_STORAGE_KEY, JSON.stringify(names)); } catch { /* ignore */ }
+  };
+
+  const addHiddenName = () => {
+    const name = newHiddenName.trim();
+    if (!name) return;
+    if (hiddenNames.some((n) => normalizeCustomerName(n) === normalizeCustomerName(name))) {
+      setNewHiddenName('');
+      return;
+    }
+    saveHiddenNames([...hiddenNames, name]);
+    setNewHiddenName('');
+  };
 
   useEffect(() => {
     fetchStores();
@@ -141,93 +176,192 @@ export default function AllReservationsPage() {
     return `${dateStr} ${time}`;
   };
 
+  const hiddenNameSet = new Set(hiddenNames.map(normalizeCustomerName));
   const filteredReservations = hideTestCustomers
-    ? reservations.filter((r) => !HIDDEN_CUSTOMER_SET.has(normalizeCustomerName(r.customer_name)))
+    ? reservations.filter((r) => !hiddenNameSet.has(normalizeCustomerName(r.customer_name)))
     : reservations;
 
-  // CSVダウンロード: 現在のフィルター結果を「店舗×月別」「店舗別合計」「月別合計」に集計して出力
-  const handleDownloadCsv = () => {
-    const storeNameMap = new Map(stores.map((s) => [s.id, s.name]));
-    const monthOf = (r: Reservation) => (r.reservation_date || '').slice(0, 7); // YYYY-MM
+  // 集計ダウンロード: 現在のフィルター結果を Excel（.xlsx）で出力。
+  // Googleスプレッドシートへのインポート想定: A列=店舗ID / B列=店舗名 / C列以降=年月の横並びマトリクス。
+  // シート1=予約数（キャンセル除く）、シート2=キャンセル数、シート3=アンケート回答数
+  const handleDownloadExcel = async () => {
+    setExporting(true);
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const storeNameMap = new Map(stores.map((st) => [st.id, st.name]));
+      const storeName = (id: string) => storeNameMap.get(id) || id;
+      const fmtMonth = (m: string) => {
+        const [y, mm] = m.split('-');
+        return `${y}年${parseInt(mm, 10)}月`;
+      };
 
-    // 店舗×月別の集計（キャンセルの内数も持つ）
-    const byStoreMonth = new Map<string, { storeId: string; month: string; total: number; cancelled: number }>();
-    const byStore = new Map<string, { total: number; cancelled: number }>();
-    const byMonth = new Map<string, { total: number; cancelled: number }>();
-    let grandTotal = 0;
-    let grandCancelled = 0;
+      // ---- 予約の集計（store×month） ----
+      const resCounts = new Map<string, number>();       // キャンセル除く
+      const cancelCounts = new Map<string, number>();    // キャンセルのみ
+      const monthSet = new Set<string>();
+      const storeSet = new Set<string>();
+      for (const r of filteredReservations) {
+        const month = (r.reservation_date || '').slice(0, 7);
+        if (!/^\d{4}-\d{2}$/.test(month)) continue;
+        monthSet.add(month);
+        storeSet.add(r.store_id);
+        const key = `${r.store_id}\t${month}`;
+        if (r.status === 'cancelled') {
+          cancelCounts.set(key, (cancelCounts.get(key) || 0) + 1);
+        } else {
+          resCounts.set(key, (resCounts.get(key) || 0) + 1);
+        }
+      }
 
-    for (const r of filteredReservations) {
-      const month = monthOf(r);
-      if (!month) continue;
-      const isCancelled = r.status === 'cancelled' ? 1 : 0;
+      // ---- アンケート回答数の取得（store×month） ----
+      const surveyCounts = new Map<string, number>();
+      try {
+        const params = new URLSearchParams();
+        if (filterStoreId !== 'all') params.append('store_id', filterStoreId);
+        const res = await fetch(`/api/surveys/stats?${params.toString()}`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          (data.stats || []).forEach((e: { store_id: string; month: string; count: number }) => {
+            surveyCounts.set(`${e.store_id}\t${e.month}`, e.count);
+            monthSet.add(e.month);
+            storeSet.add(e.store_id);
+          });
+        }
+      } catch (e) {
+        console.error('アンケート回答数の取得に失敗:', e);
+      }
 
-      const key = `${r.store_id}\t${month}`;
-      const sm = byStoreMonth.get(key) || { storeId: r.store_id, month, total: 0, cancelled: 0 };
-      sm.total += 1; sm.cancelled += isCancelled;
-      byStoreMonth.set(key, sm);
+      const months = [...monthSet].sort();
+      const storeIds = [...storeSet].sort((a, b) => storeName(a).localeCompare(storeName(b), 'ja'));
 
-      const st = byStore.get(r.store_id) || { total: 0, cancelled: 0 };
-      st.total += 1; st.cancelled += isCancelled;
-      byStore.set(r.store_id, st);
+      const workbook = new ExcelJS.Workbook();
 
-      const mo = byMonth.get(month) || { total: 0, cancelled: 0 };
-      mo.total += 1; mo.cancelled += isCancelled;
-      byMonth.set(month, mo);
+      // スタイル定義
+      const HEADER_BG = 'FF1B2A4E';   // 濃紺
+      const TOTAL_BG = 'FFFDF3E3';    // 薄いゴールド
+      const BORDER: import('exceljs').Borders = {
+        top: { style: 'thin', color: { argb: 'FFB8BCC6' } },
+        left: { style: 'thin', color: { argb: 'FFB8BCC6' } },
+        bottom: { style: 'thin', color: { argb: 'FFB8BCC6' } },
+        right: { style: 'thin', color: { argb: 'FFB8BCC6' } },
+        diagonal: {},
+      };
 
-      grandTotal += 1; grandCancelled += isCancelled;
+      const buildSheet = (
+        title: string,
+        counts: Map<string, number>
+      ) => {
+        const sheet = workbook.addWorksheet(title, { views: [{ state: 'frozen', xSplit: 2, ySplit: 2 }] });
+
+        // タイトル行
+        const titleCell = sheet.getCell(1, 1);
+        titleCell.value = `${title}（店舗×月別）`;
+        titleCell.font = { size: 14, bold: true, color: { argb: 'FF1B2A4E' } };
+        sheet.getRow(1).height = 24;
+
+        // ヘッダー行（2行目）: A=店舗ID, B=店舗名, C..=年月, 最後=合計
+        const header = ['店舗ID', '店舗名', ...months.map(fmtMonth), '合計'];
+        const headerRow = sheet.getRow(2);
+        header.forEach((text, i) => {
+          const cell = headerRow.getCell(i + 1);
+          cell.value = text;
+          cell.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: HEADER_BG } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          cell.border = BORDER;
+        });
+        headerRow.height = 20;
+
+        // データ行（店舗ごと）
+        const colTotals = new Array(months.length).fill(0);
+        let grand = 0;
+        storeIds.forEach((sid, rowIndex) => {
+          const row = sheet.getRow(3 + rowIndex);
+          row.getCell(1).value = sid;
+          const nameCell = row.getCell(2);
+          nameCell.value = storeName(sid);
+          nameCell.font = { bold: true, size: 11 };
+          let rowTotal = 0;
+          months.forEach((m, mi) => {
+            const v = counts.get(`${sid}\t${m}`) || 0;
+            const cell = row.getCell(3 + mi);
+            cell.value = v;
+            cell.alignment = { horizontal: 'center' };
+            if (v === 0) cell.font = { size: 11, color: { argb: 'FFB0B4BC' } };
+            rowTotal += v;
+            colTotals[mi] += v;
+          });
+          const totalCell = row.getCell(3 + months.length);
+          totalCell.value = rowTotal;
+          totalCell.font = { bold: true, size: 11 };
+          totalCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TOTAL_BG } };
+          totalCell.alignment = { horizontal: 'center' };
+          grand += rowTotal;
+          for (let c = 1; c <= 3 + months.length; c++) row.getCell(c).border = BORDER;
+        });
+
+        // 合計行
+        const totalRow = sheet.getRow(3 + storeIds.length);
+        totalRow.getCell(1).value = '';
+        totalRow.getCell(2).value = '合計';
+        months.forEach((m, mi) => {
+          totalRow.getCell(3 + mi).value = colTotals[mi];
+          totalRow.getCell(3 + mi).alignment = { horizontal: 'center' };
+        });
+        totalRow.getCell(3 + months.length).value = grand;
+        totalRow.getCell(3 + months.length).alignment = { horizontal: 'center' };
+        for (let c = 1; c <= 3 + months.length; c++) {
+          const cell = totalRow.getCell(c);
+          cell.font = { bold: true, size: 11 };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TOTAL_BG } };
+          cell.border = BORDER;
+        }
+
+        // 列幅
+        sheet.getColumn(1).width = 10;
+        sheet.getColumn(2).width = 30;
+        for (let c = 3; c <= 3 + months.length; c++) sheet.getColumn(c).width = 12;
+      };
+
+      buildSheet('予約数', resCounts);
+      buildSheet('キャンセル数', cancelCounts);
+      buildSheet('アンケート回答数', surveyCounts);
+
+      // 出力条件シート
+      const infoSheet = workbook.addWorksheet('出力条件');
+      const statusLabel = filterStatus === 'all' ? '全て' : filterStatus;
+      const storeLabel = filterStoreId === 'all' ? '全店舗' : storeName(filterStoreId);
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      [
+        ['出力日時', `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`],
+        ['ステータス', statusLabel],
+        ['店舗', storeLabel],
+        ['テスト用顧客', hideTestCustomers ? '非表示（除外して集計）' : '含む'],
+        ['備考', '「予約数」はキャンセルを除いた件数です。キャンセルは「キャンセル数」シートを参照。'],
+      ].forEach(([k, v], i) => {
+        infoSheet.getCell(i + 1, 1).value = k;
+        infoSheet.getCell(i + 1, 1).font = { bold: true };
+        infoSheet.getCell(i + 1, 2).value = v;
+      });
+      infoSheet.getColumn(1).width = 16;
+      infoSheet.getColumn(2).width = 70;
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `予約集計_${stamp}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('集計ダウンロードに失敗:', e);
+      alert('集計ダウンロードに失敗しました');
+    } finally {
+      setExporting(false);
     }
-
-    const storeName = (id: string) => storeNameMap.get(id) || id;
-    const fmtMonth = (m: string) => {
-      const [y, mm] = m.split('-');
-      return `${y}年${parseInt(mm, 10)}月`;
-    };
-
-    const lines: string[] = [];
-    lines.push('【店舗別×月別 予約数】');
-    lines.push(['店舗ID', '店舗名', '年月', '予約数', 'うちキャンセル'].join(','));
-    [...byStoreMonth.values()]
-      .sort((a, b) => storeName(a.storeId).localeCompare(storeName(b.storeId), 'ja') || a.month.localeCompare(b.month))
-      .forEach((e) => {
-        lines.push([csvField(e.storeId), csvField(storeName(e.storeId)), fmtMonth(e.month), e.total, e.cancelled].join(','));
-      });
-
-    lines.push('');
-    lines.push('【店舗別 合計】');
-    lines.push(['店舗ID', '店舗名', '予約数合計', 'うちキャンセル'].join(','));
-    [...byStore.entries()]
-      .sort((a, b) => storeName(a[0]).localeCompare(storeName(b[0]), 'ja'))
-      .forEach(([id, e]) => {
-        lines.push([csvField(id), csvField(storeName(id)), e.total, e.cancelled].join(','));
-      });
-
-    lines.push('');
-    lines.push('【月別 合計（全店舗）】');
-    lines.push(['年月', '予約数合計', 'うちキャンセル'].join(','));
-    [...byMonth.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .forEach(([m, e]) => {
-        lines.push([fmtMonth(m), e.total, e.cancelled].join(','));
-      });
-
-    lines.push('');
-    lines.push(['総予約数', grandTotal, `うちキャンセル ${grandCancelled}`].map(csvField).join(','));
-    const statusLabel = filterStatus === 'all' ? '全て' : filterStatus;
-    const storeLabel = filterStoreId === 'all' ? '全店舗' : storeName(filterStoreId);
-    lines.push([csvField('出力条件'), csvField(`ステータス=${statusLabel} / 店舗=${storeLabel} / テスト用顧客=${hideTestCustomers ? '非表示' : '含む'}`)].join(','));
-
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-    // UTF-8 BOM 付き（Excel で日本語が文字化けしないように）
-    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `予約集計_${stamp}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -338,35 +472,90 @@ export default function AllReservationsPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="space-y-2 flex-1">
+                    <Label htmlFor="hide-test-customers">顧客名の非表示</Label>
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="hide-test-customers"
+                        className="flex items-center gap-2 h-10 px-3 rounded-md border border-input bg-background cursor-pointer w-fit"
+                      >
+                        <input
+                          id="hide-test-customers"
+                          type="checkbox"
+                          checked={hideTestCustomers}
+                          onChange={(e) => setHideTestCustomers(e.target.checked)}
+                          className="h-4 w-4 rounded"
+                        />
+                        <span className="text-sm whitespace-nowrap">テスト用顧客を非表示</span>
+                      </label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditingHiddenNames(!editingHiddenNames)}
+                        className="h-10 px-2 text-muted-foreground"
+                        title="非表示にする顧客名を編集"
+                      >
+                        <Pencil className="h-3.5 w-3.5 mr-1" />
+                        編集
+                      </Button>
+                    </div>
+                  </div>
                   <div className="space-y-2">
-                    <Label className="opacity-0 hidden sm:block">CSV</Label>
+                    <Label className="opacity-0 hidden sm:block">DL</Label>
                     <Button
                       variant="outline"
-                      onClick={handleDownloadCsv}
-                      disabled={loading || filteredReservations.length === 0}
+                      onClick={handleDownloadExcel}
+                      disabled={loading || exporting || filteredReservations.length === 0}
                       className="w-full sm:w-auto"
                     >
                       <Download className="mr-2 h-4 w-4" />
-                      CSVダウンロード
+                      {exporting ? '作成中...' : '集計ダウンロード'}
                     </Button>
                   </div>
-                  <div className="space-y-2 flex-1">
-                    <Label htmlFor="hide-test-customers">顧客名の非表示</Label>
-                    <label
-                      htmlFor="hide-test-customers"
-                      className="flex items-center gap-2 h-10 px-3 rounded-md border border-input bg-background cursor-pointer w-full sm:w-fit"
-                    >
-                      <input
-                        id="hide-test-customers"
-                        type="checkbox"
-                        checked={hideTestCustomers}
-                        onChange={(e) => setHideTestCustomers(e.target.checked)}
-                        className="h-4 w-4 rounded"
-                      />
-                      <span className="text-sm whitespace-nowrap">テスト用顧客を非表示</span>
-                    </label>
-                  </div>
                 </div>
+
+                {/* 非表示にする顧客名の編集パネル */}
+                {editingHiddenNames && (
+                  <div className="mt-4 p-4 rounded-md border bg-muted/40 space-y-3">
+                    <p className="text-xs text-muted-foreground">
+                      ここに登録した顧客名の予約は、「テスト用顧客を非表示」がONのとき一覧と集計から除外されます（このブラウザに保存されます）
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {hiddenNames.length === 0 ? (
+                        <span className="text-sm text-muted-foreground">登録された顧客名はありません</span>
+                      ) : (
+                        hiddenNames.map((name) => (
+                          <span
+                            key={name}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-background border text-sm"
+                          >
+                            {name}
+                            <button
+                              type="button"
+                              onClick={() => saveHiddenNames(hiddenNames.filter((n) => n !== name))}
+                              className="text-muted-foreground hover:text-red-500"
+                              title={`${name} を非表示リストから削除`}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </span>
+                        ))
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={newHiddenName}
+                        onChange={(e) => setNewHiddenName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addHiddenName(); } }}
+                        placeholder="非表示にする顧客名を入力（完全一致）"
+                        className="w-full sm:w-80"
+                      />
+                      <Button variant="outline" size="sm" onClick={addHiddenName} disabled={!newHiddenName.trim()}>
+                        追加
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
