@@ -2479,70 +2479,101 @@ class BookingForm {
         const hiddenOptions = new Set(member && Array.isArray(member.hidden_option_ids) ? member.hidden_option_ids : []);
         let selectionChanged = false;
 
+        // ① 状態側の選択解除を DOM に依存せず先に実施（要素が取得できないケースでも確実に解除する）
+        if (this.state.selectedMenu && hiddenMenus.has(this.state.selectedMenu.id)) {
+            const mid = this.state.selectedMenu.id;
+            this.state.selectedMenu = null;
+            this.state.selectedSubmenu = null;
+            if (this.state.selectedOptions) delete this.state.selectedOptions[mid];
+            this.hideSubmenu();
+            selectionChanged = true;
+        }
+        if (this.state.selectedMenus) {
+            Object.keys(this.state.selectedMenus).forEach(catId => {
+                const list = this.state.selectedMenus[catId] || [];
+                const removed = list.filter(id => hiddenMenus.has(id));
+                if (removed.length === 0) return;
+                removed.forEach(mid => {
+                    if (this.state.selectedSubMenus) delete this.state.selectedSubMenus[mid];
+                    if (this.state.selectedOptions) delete this.state.selectedOptions[mid];
+                });
+                const kept = list.filter(id => !hiddenMenus.has(id));
+                if (kept.length > 0) this.state.selectedMenus[catId] = kept;
+                else delete this.state.selectedMenus[catId];
+                selectionChanged = true;
+            });
+        }
+        if (this.state.selectedOptions) {
+            Object.keys(this.state.selectedOptions).forEach(mid => {
+                const cur = this.state.selectedOptions[mid] || [];
+                const kept = cur.filter(id => !hiddenOptions.has(id));
+                if (kept.length !== cur.length) {
+                    this.state.selectedOptions[mid] = kept;
+                    selectionChanged = true;
+                }
+            });
+        }
+        if (this.state.selectedCategoryOptions) {
+            Object.keys(this.state.selectedCategoryOptions).forEach(catId => {
+                const cur = this.state.selectedCategoryOptions[catId] || [];
+                const kept = cur.filter(id => !hiddenOptions.has(id));
+                if (kept.length !== cur.length) {
+                    this.state.selectedCategoryOptions[catId] = kept;
+                    selectionChanged = true;
+                }
+            });
+        }
+
+        // ② DOM の表示/選択見た目を同期
         document.querySelectorAll('.menu-item').forEach(item => {
             const menuId = item.dataset.menuId;
             const hidden = hiddenMenus.has(menuId);
             item.style.display = hidden ? 'none' : '';
             if (!hidden) return;
-            // 単一選択の解除
-            if (this.state.selectedMenu && this.state.selectedMenu.id === menuId) {
-                item.classList.remove('selected', 'has-submenu');
-                this.state.selectedMenu = null;
-                this.state.selectedSubmenu = null;
-                if (this.state.selectedOptions) delete this.state.selectedOptions[menuId];
-                this.hideSubmenu();
-                const optContainer = document.getElementById('options-' + menuId);
-                if (optContainer) optContainer.style.display = 'none';
-                selectionChanged = true;
-            }
-            // カテゴリー横断選択の解除
-            if (this.state.selectedMenus) {
-                Object.keys(this.state.selectedMenus).forEach(catId => {
-                    const list = this.state.selectedMenus[catId] || [];
-                    if (list.includes(menuId)) {
-                        const next = list.filter(id => id !== menuId);
-                        if (next.length > 0) this.state.selectedMenus[catId] = next;
-                        else delete this.state.selectedMenus[catId];
-                        if (this.state.selectedSubMenus) delete this.state.selectedSubMenus[menuId];
-                        if (this.state.selectedOptions) delete this.state.selectedOptions[menuId];
-                        item.classList.remove('selected', 'has-submenu');
-                        const optContainer = document.getElementById('options-' + menuId);
-                        if (optContainer) optContainer.style.display = 'none';
-                        selectionChanged = true;
-                    }
-                });
-            }
+            item.classList.remove('selected', 'has-submenu');
+            const optContainer = document.getElementById('options-' + menuId);
+            if (optContainer) optContainer.style.display = 'none';
         });
 
         document.querySelectorAll('.menu-option-item').forEach(item => {
-            const optionId = item.dataset.optionId;
-            const menuId = item.dataset.menuId;
-            const hidden = hiddenOptions.has(optionId);
+            const hidden = hiddenOptions.has(item.dataset.optionId);
             item.style.display = hidden ? 'none' : 'flex';
-            if (!hidden) return;
-            const current = (this.state.selectedOptions && this.state.selectedOptions[menuId]) || [];
-            if (current.includes(optionId)) {
-                this.state.selectedOptions[menuId] = current.filter(id => id !== optionId);
+            if (hidden) {
                 item.style.borderColor = '#d1d5db';
                 item.style.backgroundColor = 'white';
                 item.style.color = '#1b2a4e';
-                selectionChanged = true;
             }
         });
 
         document.querySelectorAll('.category-option-item').forEach(item => {
-            const optionId = item.dataset.optionId;
-            const categoryId = item.dataset.categoryId;
-            const hidden = hiddenOptions.has(optionId);
+            const hidden = hiddenOptions.has(item.dataset.optionId);
             item.style.display = hidden ? 'none' : 'flex';
-            if (!hidden) return;
-            const current = (this.state.selectedCategoryOptions && this.state.selectedCategoryOptions[categoryId]) || [];
-            if (current.includes(optionId)) {
-                this.state.selectedCategoryOptions[categoryId] = current.filter(id => id !== optionId);
+            if (hidden) {
                 item.style.borderColor = '#d1d5db';
                 item.style.backgroundColor = 'white';
                 item.style.color = '#1b2a4e';
-                selectionChanged = true;
+            }
+        });
+
+        // ③ 全メニューが非表示になったカテゴリは、カテゴリごと（ヘッダー含めて）非表示にする
+        const cats = this.config.menu_structure?.categories || [];
+        cats.forEach(cat => {
+            const menus = cat.menus || [];
+            const allHidden = menus.length > 0 && menus.every(m => hiddenMenus.has(m.id));
+            const header = document.querySelector('.category-header[data-category-id="' + cat.id + '"]');
+            const section = document.getElementById('category-section-' + cat.id);
+            if (allHidden) {
+                if (header) header.style.display = 'none';
+                if (section) section.style.display = 'none';
+            } else {
+                if (header) {
+                    header.style.display = '';
+                    // セクションの開閉はヘッダーの open 状態に従って復元（閉じていたカテゴリは閉じたまま）
+                    if (section) section.style.display = header.classList.contains('open') ? '' : 'none';
+                } else if (section) {
+                    // ヘッダーなし（単一カテゴリ等）の場合はそのまま表示
+                    section.style.display = '';
+                }
             }
         });
 
