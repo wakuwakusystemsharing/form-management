@@ -1355,6 +1355,60 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     }
     setCategoryModalOpen(false);
   };
+  // カテゴリーの並び替え（上下ボタン / ドラッグ&ドロップ）。配列順 = 予約フォーム上の表示順
+  const moveCategory = (index: number, direction: 'up' | 'down') => {
+    const next = [...categories];
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    updateCategories(next);
+  };
+
+  const [dragCategoryIndex, setDragCategoryIndex] = useState<number | null>(null);
+  const [dragOverCategoryIndex, setDragOverCategoryIndex] = useState<number | null>(null);
+  const handleCategoryDrop = (dropIndex: number) => {
+    if (dragCategoryIndex === null || dragCategoryIndex === dropIndex) {
+      setDragCategoryIndex(null);
+      setDragOverCategoryIndex(null);
+      return;
+    }
+    const next = [...categories];
+    const [moved] = next.splice(dragCategoryIndex, 1);
+    next.splice(dropIndex, 0, moved);
+    updateCategories(next);
+    setDragCategoryIndex(null);
+    setDragOverCategoryIndex(null);
+  };
+
+  // カテゴリーの複製（メニュー・オプション・サブメニューごと。IDはすべて新規発行）
+  const duplicateCategory = (index: number) => {
+    const src = categories[index];
+    if (!src) return;
+    const newId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const newCatId = newId('cat');
+    const cloneMenuItem = (m: MenuItem): MenuItem => ({
+      ...m,
+      id: newId('menu'),
+      category_id: newCatId,
+      options: m.options ? m.options.map((op) => ({ ...op, id: newId('option') })) : undefined,
+      sub_menu_items: m.sub_menu_items ? m.sub_menu_items.map((sm) => ({ ...sm, id: newId('submenu') })) : undefined,
+    });
+    const copy: MenuCategory = {
+      ...src,
+      id: newCatId,
+      name: `${src.name}のコピー`,
+      display_name: src.display_name && src.display_name !== src.name
+        ? `${src.display_name}のコピー`
+        : `${src.name}のコピー`,
+      menus: (src.menus || []).map(cloneMenuItem),
+      options: (src.options || []).map(cloneMenuItem),
+    };
+    const next = [...categories];
+    next.splice(index + 1, 0, copy);
+    updateCategories(next);
+    setOpenCategories(prev => new Set([...prev, copy.id]));
+  };
+
   const handleDeleteCategory = (id: string) => {
     if (categories.length <= 1) { alert('カテゴリーは最低1つ必要です'); return; }
     if (window.confirm('このカテゴリーとその中のメニュー・オプションをすべて削除しますか？')) {
@@ -3118,14 +3172,24 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
 
       {/* カテゴリーアコーディオン */}
       <div className="space-y-3">
-        {categories.map((category) => {
+        {categories.map((category, categoryIndex) => {
           const isOpen = openCategories.has(category.id);
+          const isDragOver = dragOverCategoryIndex === categoryIndex && dragCategoryIndex !== null && dragCategoryIndex !== categoryIndex;
           return (
-            <div key={category.id} className={`${themeClasses.card} rounded-lg overflow-hidden`}>
-              {/* カテゴリーヘッダー */}
+            <div
+              key={category.id}
+              className={`${themeClasses.card} rounded-lg overflow-hidden transition-shadow ${isDragOver ? (theme === 'light' ? 'ring-2 ring-[rgb(244,144,49)]' : 'ring-2 ring-cyan-400') : ''} ${dragCategoryIndex === categoryIndex ? 'opacity-60' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setDragOverCategoryIndex(categoryIndex); }}
+              onDrop={(e) => { e.preventDefault(); handleCategoryDrop(categoryIndex); }}
+            >
+              {/* カテゴリーヘッダー（掴んで上下に移動で並び替え可能） */}
               <div
                 className={`flex items-center justify-between p-4 cursor-pointer ${theme === 'light' ? 'hover:bg-gray-50' : 'hover:bg-gray-700/50'}`}
                 onClick={() => toggleCategory(category.id)}
+                draggable
+                onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setDragCategoryIndex(categoryIndex); }}
+                onDragEnd={() => { setDragCategoryIndex(null); setDragOverCategoryIndex(null); }}
+                title="ドラッグでカテゴリーを並び替え"
               >
                 <div className="flex items-center space-x-2 flex-1 min-w-0">
                   <span className={`text-xs ${themeClasses.text.secondary}`}>{isOpen ? '▼' : '▶'}</span>
@@ -3143,6 +3207,35 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                   )}
                 </div>
                 <div className="flex space-x-1 ml-2" onClick={e => e.stopPropagation()}>
+                  <button
+                    onClick={() => duplicateCategory(categoryIndex)}
+                    className={`p-1.5 rounded ${themeClasses.text.secondary} ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+                    title="カテゴリーを複製（メニュー・オプションごと）"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => moveCategory(categoryIndex, 'up')}
+                    disabled={categoryIndex === 0}
+                    className={`p-1.5 rounded ${categoryIndex === 0 ? 'opacity-30 cursor-not-allowed' : ''} ${themeClasses.text.secondary} ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+                    title="上へ移動"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => moveCategory(categoryIndex, 'down')}
+                    disabled={categoryIndex === categories.length - 1}
+                    className={`p-1.5 rounded ${categoryIndex === categories.length - 1 ? 'opacity-30 cursor-not-allowed' : ''} ${themeClasses.text.secondary} ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+                    title="下へ移動"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
                   <button
                     onClick={() => handleOpenEditCategory(category)}
                     className={`p-1.5 rounded ${theme === 'light' ? 'text-[rgb(244,144,49)] hover:text-[rgb(220,125,35)] hover:bg-gray-100' : 'text-cyan-400 hover:text-cyan-300 hover:bg-gray-700'}`}
