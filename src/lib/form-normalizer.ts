@@ -99,6 +99,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         sunday: { open: '09:00', close: '18:00', closed: true }
       },
       min_advance_days: 0,
+      min_advance_hours: 0,
       advance_booking_days: 30,
       max_concurrent_events: 1,
       max_concurrent_reservations_per_user: 0,
@@ -197,10 +198,30 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       visit_count_selection: {
         enabled: existingConfig?.visit_count_selection?.enabled ?? (typedConfig?.visit_count_selection as Form['config']['visit_count_selection'])?.enabled ?? ((typedConfig?.ui_settings as Record<string, unknown>)?.show_visit_count as boolean) ?? ((typedUiSettings?.show_visit_count as boolean) ?? false),
         required: existingConfig?.visit_count_selection?.required ?? false,
-        options: (existingConfig?.visit_count_selection?.options || (typedConfig?.visit_count_selection as Form['config']['visit_count_selection'])?.options || [
-          { value: 'first', label: '初回' },
-          { value: 'repeat', label: '2回目以降' }
-        ]) as Form['config']['visit_count_selection']['options']
+        options: (() => {
+          const raw = existingConfig?.visit_count_selection?.options
+            || (typedConfig?.visit_count_selection as Form['config']['visit_count_selection'])?.options;
+          const arr = Array.isArray(raw) ? raw : [];
+          const cleaned = arr
+            .filter((op) => op && typeof op.value === 'string' && op.value && typeof op.label === 'string')
+            .map((op) => ({
+              value: op.value,
+              label: op.label,
+              duration: typeof op.duration === 'number' && Number.isFinite(op.duration) && op.duration > 0
+                ? Math.floor(op.duration)
+                : undefined,
+              hidden_menu_ids: Array.isArray(op.hidden_menu_ids)
+                ? op.hidden_menu_ids.filter((x): x is string => typeof x === 'string')
+                : [],
+              hidden_option_ids: Array.isArray(op.hidden_option_ids)
+                ? op.hidden_option_ids.filter((x): x is string => typeof x === 'string')
+                : []
+            }));
+          return cleaned.length > 0 ? cleaned : [
+            { value: 'first', label: '初回', hidden_menu_ids: [], hidden_option_ids: [] },
+            { value: 'repeat', label: '2回目以降', hidden_menu_ids: [], hidden_option_ids: [] }
+          ];
+        })() as Form['config']['visit_count_selection']['options']
       },
       coupon_selection: {
         enabled: existingConfig?.coupon_selection?.enabled ?? (typedConfig?.coupon_selection as Form['config']['coupon_selection'])?.enabled ?? ((typedConfig?.ui_settings as Record<string, unknown>)?.show_coupon_selection as boolean) ?? ((typedUiSettings?.show_coupon_selection as boolean) ?? false),
@@ -229,6 +250,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.min_advance_days;
           const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 0;
           return n >= 0 ? n : 0;
+        })(),
+        min_advance_hours: (() => {
+          const v = existingConfig?.calendar_settings?.min_advance_hours
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.min_advance_hours;
+          const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 0;
+          return n >= 0 && n <= 168 ? n : 0;
         })(),
         advance_booking_days: (existingConfig?.calendar_settings?.advance_booking_days || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.advance_booking_days || (typedBusinessRules?.advance_booking_days as number) || 30) as number,
         google_calendar_url: (existingConfig?.calendar_settings?.google_calendar_url || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.google_calendar_url) as string | undefined,

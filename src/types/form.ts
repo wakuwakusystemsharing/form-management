@@ -113,8 +113,10 @@ export interface FormConfig {
     required: boolean;          // ご来店回数選択を必須にするか
     options: Array<{
       value: string;            // "first", "repeat"
-      label: string;            // "初回", "2回目以降"
-      duration?: number;        // 所要時間（分単位）
+      label: string;            // "初回", "2回目以降"（編集可能）
+      duration?: number;        // 追加所要時間（分）。選択時に合計時間・カレンダーイベントの長さへ加算
+      hidden_menu_ids?: string[];   // この選択肢のとき非表示にするメニューID（空 = 全表示）
+      hidden_option_ids?: string[]; // この選択肢のとき非表示にするオプションID
     }>;
   };
   
@@ -158,6 +160,8 @@ export interface FormConfig {
     business_hours: BusinessHours;
     // 予約受付開始日: 何日後から予約可能か（0 = 当日から、1 = 翌日から。未設定 = 0）。カレンダー/第三希望日時の両モードに適用
     min_advance_days?: number;
+    // 予約受付開始時間: 現在時刻から何時間後以降のみ予約可能か（0 = 制限なし）。両モードに適用
+    min_advance_hours?: number;
     advance_booking_days: number;
     google_calendar_url?: string;
     // 日時選択モード
