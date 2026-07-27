@@ -1629,6 +1629,50 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     updateStaffMember(index, { [key]: next });
   };
 
+  // ご来店回数の選択肢編集
+  const [visitMenuModalIndex, setVisitMenuModalIndex] = useState<number | null>(null);
+  const currentVisitOptions = () => form.config?.visit_count_selection?.options || [];
+  const updateVisitOptions = (options: NonNullable<Form['config']['visit_count_selection']>['options']) => {
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        visit_count_selection: {
+          ...form.config?.visit_count_selection,
+          enabled: form.config?.visit_count_selection?.enabled || false,
+          required: form.config?.visit_count_selection?.required || false,
+          options,
+        },
+      },
+    });
+  };
+  const updateVisitOption = (index: number, patch: Partial<NonNullable<Form['config']['visit_count_selection']>['options'][number]>) => {
+    const next = [...currentVisitOptions()];
+    if (!next[index]) return;
+    next[index] = { ...next[index], ...patch };
+    updateVisitOptions(next);
+  };
+  const moveVisitOption = (index: number, direction: 'up' | 'down') => {
+    const next = [...currentVisitOptions()];
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    updateVisitOptions(next);
+  };
+  const isVisitItemHidden = (index: number, kind: 'menu' | 'option', id: string) => {
+    const opt = currentVisitOptions()[index];
+    const list = kind === 'menu' ? opt?.hidden_menu_ids : opt?.hidden_option_ids;
+    return Array.isArray(list) && list.includes(id);
+  };
+  const toggleVisitHiddenItem = (index: number, kind: 'menu' | 'option', id: string, visible: boolean) => {
+    const opt = currentVisitOptions()[index];
+    if (!opt) return;
+    const key = kind === 'menu' ? 'hidden_menu_ids' : 'hidden_option_ids';
+    const current = Array.isArray(opt[key]) ? (opt[key] as string[]) : [];
+    const next = visible ? current.filter(x => x !== id) : (current.includes(id) ? current : [...current, id]);
+    updateVisitOption(index, { [key]: next });
+  };
+
   return (
     <div className="space-y-4">
       {/* ページヘッダー */}
@@ -1980,6 +2024,79 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
           )}
           <DialogFooter>
             <Button onClick={() => setStaffMenuModalIndex(null)}>閉じる</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ご来店回数の選択肢ごとのメニュー/オプション表示設定モーダル */}
+      <Dialog open={visitMenuModalIndex !== null} onOpenChange={(open) => { if (!open) setVisitMenuModalIndex(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              メニューオプション設定
+              {visitMenuModalIndex !== null && currentVisitOptions()[visitMenuModalIndex]
+                ? `（${currentVisitOptions()[visitMenuModalIndex].label || '選択肢'}）`
+                : ''}
+            </DialogTitle>
+            <DialogDescription>
+              チェックを外したメニュー・オプションは、この選択肢が選ばれているときに予約フォームへ表示されません（デフォルトはすべて表示）。
+            </DialogDescription>
+          </DialogHeader>
+          {visitMenuModalIndex !== null && (
+            <div className="space-y-4">
+              {(form.config?.menu_structure?.categories || []).length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">メニューがまだ登録されていません。先にカテゴリー・メニューを作成してください。</p>
+              ) : (
+                (form.config?.menu_structure?.categories || []).map(category => (
+                  <div key={category.id} className="space-y-2 border rounded-md p-3">
+                    <h4 className="text-sm font-semibold">{category.display_name || category.name}</h4>
+                    {category.menus.map(menu => (
+                      <div key={menu.id} className="ml-1 space-y-1">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!isVisitItemHidden(visitMenuModalIndex, 'menu', menu.id)}
+                            onChange={(e) => toggleVisitHiddenItem(visitMenuModalIndex, 'menu', menu.id, e.target.checked)}
+                            className="h-4 w-4 rounded"
+                          />
+                          <span className="text-sm">{menu.name}</span>
+                        </label>
+                        {(menu.options || []).map(mo => (
+                          <label key={mo.id} className="flex items-center gap-2 cursor-pointer ml-6">
+                            <input
+                              type="checkbox"
+                              checked={!isVisitItemHidden(visitMenuModalIndex, 'option', mo.id)}
+                              onChange={(e) => toggleVisitHiddenItem(visitMenuModalIndex, 'option', mo.id, e.target.checked)}
+                              className="h-4 w-4 rounded"
+                            />
+                            <span className="text-xs text-muted-foreground">{mo.name}（オプション）</span>
+                          </label>
+                        ))}
+                      </div>
+                    ))}
+                    {(category.options || []).length > 0 && (
+                      <div className="ml-1 space-y-1 pt-1">
+                        <p className="text-xs text-muted-foreground">カテゴリー共通オプション</p>
+                        {(category.options || []).map(co => (
+                          <label key={co.id} className="flex items-center gap-2 cursor-pointer ml-2">
+                            <input
+                              type="checkbox"
+                              checked={!isVisitItemHidden(visitMenuModalIndex, 'option', co.id)}
+                              onChange={(e) => toggleVisitHiddenItem(visitMenuModalIndex, 'option', co.id, e.target.checked)}
+                              className="h-4 w-4 rounded"
+                            />
+                            <span className="text-xs">{co.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setVisitMenuModalIndex(null)}>閉じる</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2473,6 +2590,100 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
               />
               <span className={themeClasses.text.secondary}>来店回数選択を必須にする</span>
             </label>
+
+            {/* 選択肢の編集（ボタン名・追加時間・メニュー表示設定） */}
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className={`text-xs ${themeClasses.text.secondary}`}>
+                  選択肢（ボタン名 / 追加時間 / 選択時のメニュー表示）
+                </p>
+                <button
+                  type="button"
+                  onClick={() => updateVisitOptions([
+                    ...currentVisitOptions(),
+                    { value: `visit_${Math.random().toString(36).slice(2, 9)}`, label: '', hidden_menu_ids: [], hidden_option_ids: [] }
+                  ])}
+                  className={`px-2 py-1 text-xs rounded-md shrink-0 ${themeClasses.button.secondary}`}
+                >
+                  ＋ 選択肢を追加
+                </button>
+              </div>
+              {currentVisitOptions().map((opt, index, arr) => (
+                <div key={opt.value} className={`p-3 rounded-md ${themeClasses.highlight}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <input
+                      type="text"
+                      value={opt.label}
+                      onChange={(e) => updateVisitOption(index, { label: e.target.value })}
+                      placeholder="ボタン名（例: 初回）"
+                      className={`${themeClasses.input} text-sm flex-1 min-w-0`}
+                    />
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className={`text-xs ${themeClasses.text.secondary}`}>追加時間 ＋</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={600}
+                        step={5}
+                        value={opt.duration ?? 0}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value);
+                          updateVisitOption(index, { duration: Number.isFinite(v) && v > 0 ? v : undefined });
+                        }}
+                        className={`${themeClasses.input} text-sm w-20`}
+                      />
+                      <span className={`text-xs ${themeClasses.text.secondary}`}>分</span>
+                    </div>
+                    <div className="flex space-x-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => moveVisitOption(index, 'up')}
+                        disabled={index === 0}
+                        title="上へ"
+                        className={`p-1.5 rounded ${index === 0 ? 'opacity-30 cursor-not-allowed' : ''} ${themeClasses.text.secondary} ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveVisitOption(index, 'down')}
+                        disabled={index === arr.length - 1}
+                        title="下へ"
+                        className={`p-1.5 rounded ${index === arr.length - 1 ? 'opacity-30 cursor-not-allowed' : ''} ${themeClasses.text.secondary} ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateVisitOptions(currentVisitOptions().filter((_, i) => i !== index))}
+                        disabled={arr.length <= 1}
+                        title="削除"
+                        className={`p-1.5 rounded text-red-400 hover:text-red-300 ${arr.length <= 1 ? 'opacity-30 cursor-not-allowed' : ''} ${theme === 'light' ? 'hover:bg-white' : 'hover:bg-gray-700'}`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setVisitMenuModalIndex(index)}
+                      className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
+                    >
+                      メニューオプション設定
+                      {((opt.hidden_menu_ids?.length || 0) + (opt.hidden_option_ids?.length || 0)) > 0
+                        ? `（${(opt.hidden_menu_ids?.length || 0) + (opt.hidden_option_ids?.length || 0)}件 非表示中）`
+                        : ''}
+                    </button>
+                    {(opt.duration ?? 0) > 0 && (
+                      <span className={`text-xs ${themeClasses.text.tertiary}`}>
+                        選択時に所要時間へ ＋{opt.duration}分（カレンダーの予定の長さに反映）
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

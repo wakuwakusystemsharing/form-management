@@ -62,6 +62,10 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     form.config?.calendar_settings?.min_advance_days ?? 0
   );
 
+  const [minAdvanceHours, setMinAdvanceHours] = useState(
+    form.config?.calendar_settings?.min_advance_hours ?? 0
+  );
+
   const [maxConcurrentEvents, setMaxConcurrentEvents] = useState(
     form.config?.calendar_settings?.max_concurrent_events || 1
   );
@@ -191,6 +195,23 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         calendar_settings: {
           ...form.config?.calendar_settings,
           min_advance_days: safeValue
+        }
+      }
+    };
+    onUpdate(updatedForm);
+  };
+
+  const handleMinAdvanceHoursChange = (hours: number) => {
+    const safeValue = Number.isFinite(hours) && hours >= 0 && hours <= 168 ? Math.floor(hours) : 0;
+    setMinAdvanceHours(safeValue);
+
+    const updatedForm = {
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          min_advance_hours: safeValue
         }
       }
     };
@@ -981,6 +1002,29 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               />
               <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
                 {minAdvanceDays === 0 ? '当日から予約可能' : `${minAdvanceDays}日後から予約可能`}
+              </p>
+            </div>
+
+            <div className="max-w-xs">
+              <div className="flex items-center gap-1.5 mb-2">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  予約受付開始時間
+                </label>
+                <InfoTooltip
+                  theme={theme}
+                  text={'現在時刻から何時間後以降の枠を予約可能にするかを設定します。\n\n「0」= 制限なし（直前でも予約可能）\n「1」= 1時間後以降の枠のみ予約可能\n「2」= 2時間後以降の枠のみ予約可能\n\n例: 今が14:00で「2」の場合、16:00より前の枠は✕になります。\nカレンダー表示・第三希望日時選択の両モードに適用されます。'}
+                />
+              </div>
+              <input
+                type="number"
+                min="0"
+                max="168"
+                value={minAdvanceHours}
+                onChange={(e) => handleMinAdvanceHoursChange(parseInt(e.target.value) || 0)}
+                className={themeClasses.input}
+              />
+              <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
+                {minAdvanceHours === 0 ? '制限なし（直前でも予約可能）' : `現在時刻の${minAdvanceHours}時間後から予約可能`}
               </p>
             </div>
 

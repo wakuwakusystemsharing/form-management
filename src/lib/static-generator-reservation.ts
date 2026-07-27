@@ -610,6 +610,10 @@ class BookingForm {
                 document.querySelectorAll('.visit-count-button').forEach(b => b.classList.remove('selected'));
                 btn.classList.add('selected');
                 this.state.visitCount = btn.dataset.value;
+                // 選択肢ごとのメニュー表示設定を適用（非表示対象の選択は解除される）
+                this.applyStaffMenuVisibility();
+                // 追加所要時間で予約枠の長さが変わるためカレンダーを再判定
+                this.toggleCalendarVisibility();
                 this.updateSummary();
             });
         });
@@ -1161,6 +1165,13 @@ class BookingForm {
             }).join('\\n\\n');
         }
         const summaryHtml = summaryLines.map((line, i) => i === 0 ? \`<div style="margin-bottom:0.5rem;">\${line}</div>\` : \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">\${line}</div>\`).join('');
+        // ご来店回数の追加所要時間（＋◯◯分）を合計時間に加算（カレンダーイベントの長さにも反映される）
+        if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
+            const visitOptForDuration = this.config.visit_count_selection.options?.find(o => o.value === this.state.visitCount);
+            if (visitOptForDuration && visitOptForDuration.duration) {
+                totalDuration += visitOptForDuration.duration;
+            }
+        }
         return { selectedMenus, selectedOptions, totalPrice, totalDuration, summaryHtml, menuTextForMessage, menuTextGrouped };
     }
     
@@ -1332,6 +1343,10 @@ class BookingForm {
         // 選択中メニュー/オプションの対応時間設定（セルごとの判定用に1回だけ計算）
         const menuTimeWindows = this.getActiveTimeWindows();
 
+        // 予約受付開始時間: 現在時刻から N 時間後より前のスロットは✕（0 = 制限なし）
+        const minAdvanceHoursRaw = this.config.calendar_settings?.min_advance_hours;
+        const minAdvanceMs = (typeof minAdvanceHoursRaw === 'number' && minAdvanceHoursRaw > 0 ? minAdvanceHoursRaw : 0) * 3600000;
+
         // デフォルトで✕にする時間帯（設定された時刻のスロットは常に✕。"9:00" → "09:00" に正規化）
         const blockedTimesSet = new Set((this.config.calendar_settings?.blocked_times || [])
             .map(t => { const m = /^([0-9]{1,2}):([0-9]{2})/.exec(t || ''); return m ? String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2] : ''; })
@@ -1424,7 +1439,7 @@ class BookingForm {
             parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
         
         // ミリ秒で比較してタイムゾーンの問題を回避
-        const isPast = slotStart.getTime() < now.getTime();
+        const isPast = slotStart.getTime() < now.getTime() + minAdvanceMs;
         
         // メニュー＋オプション時間は共通ヘルパーで取得
         const { menuDuration, optionsDuration } = this.getDurations();
@@ -2473,10 +2488,20 @@ class BookingForm {
     // 非表示対象がすでに選択されていた場合は選択を解除する（スタッフ切替時の整合性維持）
     applyStaffMenuVisibility() {
         const ss = this.config.staff_selection;
-        if (!ss || ss.enabled !== true) return;
-        const member = (ss.staff || []).find(m => m && m.id === this.state.selectedStaffId);
+        const staffEnabled = !!(ss && ss.enabled === true);
+        const visitEnabled = this.config.visit_count_selection?.enabled === true;
+        if (!staffEnabled && !visitEnabled) return;
+        const member = staffEnabled ? (ss.staff || []).find(m => m && m.id === this.state.selectedStaffId) : null;
         const hiddenMenus = new Set(member && Array.isArray(member.hidden_menu_ids) ? member.hidden_menu_ids : []);
         const hiddenOptions = new Set(member && Array.isArray(member.hidden_option_ids) ? member.hidden_option_ids : []);
+        // ご来店回数の選択肢ごとの非表示設定も合算（スタッフと両方ある場合は和集合 = どちらかで非表示なら非表示）
+        if (visitEnabled && this.state.visitCount) {
+            const visitOpt = (this.config.visit_count_selection.options || []).find(o => o.value === this.state.visitCount);
+            if (visitOpt) {
+                (Array.isArray(visitOpt.hidden_menu_ids) ? visitOpt.hidden_menu_ids : []).forEach(id => hiddenMenus.add(id));
+                (Array.isArray(visitOpt.hidden_option_ids) ? visitOpt.hidden_option_ids : []).forEach(id => hiddenOptions.add(id));
+            }
+        }
         let selectionChanged = false;
 
         // ① 状態側の選択解除を DOM に依存せず先に実施（要素が取得できないケースでも確実に解除する）
@@ -2789,8 +2814,18 @@ class BookingForm {
             .map(t => { const m = /^([0-9]{1,2}):([0-9]{2})/.exec(t || ''); return m ? String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2] : ''; })
             .filter(Boolean));
 
+        // 予約受付開始時間: 現在時刻から N 時間後より前の時間は選択肢に出さない（0 = 制限なし）
+        const minAdvHoursRaw = this.config.calendar_settings?.min_advance_hours;
+        const minAdvThreshold = (typeof minAdvHoursRaw === 'number' && minAdvHoursRaw > 0)
+            ? Date.now() + minAdvHoursRaw * 3600000
+            : 0;
+
         timeSlots.forEach(time => {
             if (blockedTimes.has(time)) return;
+            if (minAdvThreshold && selectedDateStr) {
+                const slotMs = new Date(selectedDateStr + 'T' + time + ':00').getTime();
+                if (Number.isFinite(slotMs) && slotMs < minAdvThreshold) return;
+            }
             const option = document.createElement('option');
             option.value = time;
             option.textContent = time;

@@ -327,6 +327,8 @@ export async function createReservationEvent(
     eventColorId?: string | null;
     // 担当スタッフ名（スタッフ選択機能。イベントタイトルと説明文に含める）
     staffName?: string | null;
+    // 追加所要時間（分）。ご来店回数の「＋◯◯分」などをイベントの長さに加算する
+    extraDurationMinutes?: number | null;
   },
   storeId?: string
 ) {
@@ -335,7 +337,10 @@ export async function createReservationEvent(
     throw new Error('Google Calendar APIの認証情報が設定されていません');
   }
 
-  const durationMinutes = calculateDurationMinutes(params.selectedMenus, params.selectedOptions);
+  const extraMinutes = typeof params.extraDurationMinutes === 'number' && params.extraDurationMinutes > 0
+    ? Math.floor(params.extraDurationMinutes)
+    : 0;
+  const durationMinutes = calculateDurationMinutes(params.selectedMenus, params.selectedOptions) + extraMinutes;
   const totalPrice = calculateTotalPrice(params.selectedMenus, params.selectedOptions);
   const startDate = new Date(`${params.reservationDate}T${params.reservationTime}:00+09:00`);
   const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000);

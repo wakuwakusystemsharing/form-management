@@ -921,14 +921,24 @@ export async function POST(request: Request) {
       if (storeError) {
         console.error('[API] Store calendar lookup error:', storeError);
       } else if (targetCalendarId) {
-        // フォーム設定の予約イベント色（'1'〜'11' 以外は既定色扱い）
+        // フォーム設定の予約イベント色（'1'〜'11' 以外は既定色扱い）と
+        // ご来店回数の追加所要時間（選択肢の duration をイベントの長さに加算）
         let eventColorId: string | null = null;
+        let visitExtraMinutes = 0;
         try {
           const formConfigForColor = await getFormConfig(body.form_id);
           const v = formConfigForColor?.calendar_settings?.event_color_id;
           if (typeof v === 'string' && /^([1-9]|1[01])$/.test(v)) eventColorId = v;
+          const visitValue = customerInfo.visit_count;
+          const visitOptions = formConfigForColor?.visit_count_selection?.options;
+          if (visitValue && Array.isArray(visitOptions)) {
+            const vo = visitOptions.find((op: any) => op && op.value === visitValue);
+            if (vo && typeof vo.duration === 'number' && vo.duration > 0) {
+              visitExtraMinutes = Math.floor(vo.duration);
+            }
+          }
         } catch {
-          // 色設定の取得失敗は既定色で続行
+          // 設定の取得失敗は既定色・加算なしで続行
         }
         const eventId = await createReservationEvent(
           {
@@ -952,7 +962,8 @@ export async function POST(request: Request) {
             customFields: customerInfo.custom_fields_labeled || null,
             // スタッフのカレンダーに作成する場合はスタッフごとの色設定を使用（フォームの色設定は不使用）
             eventColorId: staffCalendarIdForEvent ? staffEventColorId : eventColorId,
-            staffName: staffNameForEvent
+            staffName: staffNameForEvent,
+            extraDurationMinutes: visitExtraMinutes
           },
           body.store_id
         );
