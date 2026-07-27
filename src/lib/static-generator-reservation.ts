@@ -833,11 +833,8 @@ class BookingForm {
                 } else {
                     this.closeDetailPopup();
                 }
-                // 対応時間設定のあるオプション、または指名なしのスタッフモード（対応可能スタッフが変わる）は再描画
-                if ((popupOpt && popupOpt.time_window_enabled === true)
-                    || (this.isStaffCalendarMode() && (!this.state.selectedStaffId || this.state.selectedStaffId === 'none'))) {
-                    this.toggleCalendarVisibility();
-                }
+                // オプションの所要時間で予約枠の長さが変わるため、カレンダーの〇×を再判定
+                this.toggleCalendarVisibility();
 
                 this.updateSummary();
             });
@@ -870,11 +867,8 @@ class BookingForm {
                 } else {
                     this.closeDetailPopup();
                 }
-                // 対応時間設定のあるオプション、または指名なしのスタッフモード（対応可能スタッフが変わる）は再描画
-                if ((popupOpt && popupOpt.time_window_enabled === true)
-                    || (this.isStaffCalendarMode() && (!this.state.selectedStaffId || this.state.selectedStaffId === 'none'))) {
-                    this.toggleCalendarVisibility();
-                }
+                // オプションの所要時間で予約枠の長さが変わるため、カレンダーの〇×を再判定
+                this.toggleCalendarVisibility();
                 this.updateSummary();
             });
         });
@@ -1013,6 +1007,16 @@ class BookingForm {
             (this.state.selectedOptions?.[menuId] || []).forEach(optionId => {
                 const option = this.state.selectedMenu.options?.find(o => o.id === optionId);
                 if (option) optionsDuration += option.duration || 0;
+            });
+        }
+        // カテゴリー共通オプションの所要時間も加算（合計時間・カレンダーイベントと同じ扱いに揃える）
+        if (this.state.selectedCategoryOptions && Object.keys(this.state.selectedCategoryOptions).length > 0) {
+            Object.entries(this.state.selectedCategoryOptions).forEach(([categoryId, optionIds]) => {
+                const category = this.config.menu_structure?.categories?.find(c => c.id === categoryId);
+                (optionIds || []).forEach(optId => {
+                    const option = category?.options?.find(o => o.id === optId);
+                    if (option) optionsDuration += option.duration || 0;
+                });
             });
         }
         return { menuDuration, optionsDuration };
