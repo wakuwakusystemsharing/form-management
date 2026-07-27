@@ -1356,6 +1356,39 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     setCategoryModalOpen(false);
   };
   // カテゴリーの並び替え（上下ボタン / ドラッグ&ドロップ）。配列順 = 予約フォーム上の表示順
+  // メニュー / カテゴリー共通オプションのドラッグ&ドロップ並び替え（同一カテゴリー内のみ）
+  const [dragMenuInfo, setDragMenuInfo] = useState<{ catId: string; index: number } | null>(null);
+  const [dragOverMenuInfo, setDragOverMenuInfo] = useState<{ catId: string; index: number } | null>(null);
+  const handleMenuRowDrop = (catId: string, dropIndex: number) => {
+    if (dragMenuInfo && dragMenuInfo.catId === catId && dragMenuInfo.index !== dropIndex) {
+      updateCategories(categories.map(c => {
+        if (c.id !== catId) return c;
+        const menus = [...c.menus];
+        const [moved] = menus.splice(dragMenuInfo.index, 1);
+        menus.splice(dropIndex, 0, moved);
+        return { ...c, menus };
+      }));
+    }
+    setDragMenuInfo(null);
+    setDragOverMenuInfo(null);
+  };
+
+  const [dragCatOptInfo, setDragCatOptInfo] = useState<{ catId: string; index: number } | null>(null);
+  const [dragOverCatOptInfo, setDragOverCatOptInfo] = useState<{ catId: string; index: number } | null>(null);
+  const handleCatOptRowDrop = (catId: string, dropIndex: number) => {
+    if (dragCatOptInfo && dragCatOptInfo.catId === catId && dragCatOptInfo.index !== dropIndex) {
+      updateCategories(categories.map(c => {
+        if (c.id !== catId) return c;
+        const options = [...(c.options || [])];
+        const [moved] = options.splice(dragCatOptInfo.index, 1);
+        options.splice(dropIndex, 0, moved);
+        return { ...c, options };
+      }));
+    }
+    setDragCatOptInfo(null);
+    setDragOverCatOptInfo(null);
+  };
+
   const moveCategory = (index: number, direction: 'up' | 'down') => {
     const next = [...categories];
     const target = direction === 'up' ? index - 1 : index + 1;
@@ -3179,8 +3212,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             <div
               key={category.id}
               className={`${themeClasses.card} rounded-lg overflow-hidden transition-shadow ${isDragOver ? (theme === 'light' ? 'ring-2 ring-[rgb(244,144,49)]' : 'ring-2 ring-cyan-400') : ''} ${dragCategoryIndex === categoryIndex ? 'opacity-60' : ''}`}
-              onDragOver={(e) => { e.preventDefault(); setDragOverCategoryIndex(categoryIndex); }}
-              onDrop={(e) => { e.preventDefault(); handleCategoryDrop(categoryIndex); }}
+              onDragOver={(e) => { if (dragCategoryIndex !== null) { e.preventDefault(); setDragOverCategoryIndex(categoryIndex); } }}
+              onDrop={(e) => { if (dragCategoryIndex !== null) { e.preventDefault(); handleCategoryDrop(categoryIndex); } }}
             >
               {/* カテゴリーヘッダー（掴んで上下に移動で並び替え可能） */}
               <div
@@ -3281,7 +3314,16 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     ) : (
                       <div className="space-y-2">
                         {category.menus.map((menu, menuIndex) => (
-                          <div key={menu.id} className={`flex items-center justify-between p-3 rounded-md ${themeClasses.highlight}`}>
+                          <div
+                            key={menu.id}
+                            className={`flex items-center justify-between p-3 rounded-md ${themeClasses.highlight} ${dragOverMenuInfo?.catId === category.id && dragOverMenuInfo?.index === menuIndex && dragMenuInfo && dragMenuInfo.index !== menuIndex ? (theme === 'light' ? 'ring-2 ring-[rgb(244,144,49)]' : 'ring-2 ring-cyan-400') : ''} ${dragMenuInfo?.catId === category.id && dragMenuInfo?.index === menuIndex ? 'opacity-60' : ''}`}
+                            draggable
+                            title="ドラッグでメニューを並び替え"
+                            onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'move'; setDragMenuInfo({ catId: category.id, index: menuIndex }); }}
+                            onDragEnd={() => { setDragMenuInfo(null); setDragOverMenuInfo(null); }}
+                            onDragOver={(e) => { if (dragMenuInfo?.catId === category.id) { e.preventDefault(); e.stopPropagation(); setDragOverMenuInfo({ catId: category.id, index: menuIndex }); } }}
+                            onDrop={(e) => { if (dragMenuInfo?.catId === category.id) { e.preventDefault(); e.stopPropagation(); handleMenuRowDrop(category.id, menuIndex); } }}
+                          >
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center space-x-2 flex-wrap gap-1">
                                 <span className={`font-medium text-sm ${themeClasses.text.primary}`}>{menu.name}</span>
@@ -3365,7 +3407,16 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     ) : (
                       <div className="space-y-2">
                         {(category.options || []).map((opt, optIndex) => (
-                          <div key={opt.id} className={`flex items-center justify-between p-2 rounded-md ${themeClasses.highlight}`}>
+                          <div
+                            key={opt.id}
+                            className={`flex items-center justify-between p-2 rounded-md ${themeClasses.highlight} ${dragOverCatOptInfo?.catId === category.id && dragOverCatOptInfo?.index === optIndex && dragCatOptInfo && dragCatOptInfo.index !== optIndex ? (theme === 'light' ? 'ring-2 ring-[rgb(244,144,49)]' : 'ring-2 ring-cyan-400') : ''} ${dragCatOptInfo?.catId === category.id && dragCatOptInfo?.index === optIndex ? 'opacity-60' : ''}`}
+                            draggable
+                            title="ドラッグでオプションを並び替え"
+                            onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'move'; setDragCatOptInfo({ catId: category.id, index: optIndex }); }}
+                            onDragEnd={() => { setDragCatOptInfo(null); setDragOverCatOptInfo(null); }}
+                            onDragOver={(e) => { if (dragCatOptInfo?.catId === category.id) { e.preventDefault(); e.stopPropagation(); setDragOverCatOptInfo({ catId: category.id, index: optIndex }); } }}
+                            onDrop={(e) => { if (dragCatOptInfo?.catId === category.id) { e.preventDefault(); e.stopPropagation(); handleCatOptRowDrop(category.id, optIndex); } }}
+                          >
                             <div>
                               <span className={`text-sm ${themeClasses.text.primary}`}>{opt.name}</span>
                               <p className={`text-xs ${themeClasses.text.secondary}`}>
