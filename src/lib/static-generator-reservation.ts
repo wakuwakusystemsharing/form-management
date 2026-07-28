@@ -3038,10 +3038,7 @@ if (document.readyState === 'loading') {
             </div>`;
   }
 
-  private renderCustomFields(config: FormConfig): string {
-    const fields = config.custom_fields || [];
-    if (fields.length === 0) return '';
-    const renderField = (field: NonNullable<FormConfig['custom_fields']>[number]): string => {
+  private renderCustomFieldItem(field: NonNullable<FormConfig['custom_fields']>[number]): string {
       const label = `${this.escapeHtml(field.title)}${field.required ? ' <span class="required">*</span>' : ''}`;
       const id = `custom-field-${field.id}`;
       if (field.type === 'text') {
@@ -3103,7 +3100,22 @@ if (document.readyState === 'loading') {
             </div>`;
       }
       return '';
-    };
+  }
+
+  // 表示位置が変更されているカスタムフィールドか（セクションアンカーのみ有効）
+  private customFieldHasPlacement(field: NonNullable<FormConfig['custom_fields']>[number]): boolean {
+    return !!(field.placement
+      && typeof field.placement.anchor === 'string'
+      && field.placement.anchor
+      && !field.placement.anchor.startsWith('custom_'));
+  }
+
+  private renderCustomFields(config: FormConfig): string {
+    // 表示位置を変更したフィールドは renderContentBlocksAt 側で描画するため、標準位置のフィールドのみ
+    const fields = (config.custom_fields || []).filter(f => !this.customFieldHasPlacement(f));
+    if (fields.length === 0) return '';
+    const renderField = (field: NonNullable<FormConfig['custom_fields']>[number]): string => this.renderCustomFieldItem(field);
+
     // 各カスタムフィールドの上下に「画像orテキスト設置」ブロックを挿入できるようにする
     return fields
       .map(field =>
@@ -3317,7 +3329,7 @@ if (document.readyState === 'loading') {
       .join('\n');
   }
 
-  // 指定セクションの上/下に表示する画像・テキストブロックを描画
+  // 指定セクションの上/下に表示する画像・テキストブロック + 表示位置を変更したカスタムフィールドを描画
   private renderContentBlocksAt(config: FormConfig, anchor: string, position: 'above' | 'below'): string {
     const blocks = (config.content_blocks || []).filter(b => {
       if (!b || b.anchor !== anchor || (b.position || 'above') !== position) return false;
@@ -3325,7 +3337,12 @@ if (document.readyState === 'loading') {
       if (b.type === 'image') return !!(b.image_url && /^https?:/i.test(b.image_url.trim()));
       return false;
     });
-    if (blocks.length === 0) return '';
+    const placedFields = (config.custom_fields || []).filter(f =>
+      this.customFieldHasPlacement(f)
+      && f.placement!.anchor === anchor
+      && (f.placement!.position || 'above') === position);
+    const placedFieldsHtml = placedFields.map(f => this.renderCustomFieldItem(f)).join('\n            ');
+    if (blocks.length === 0) return placedFieldsHtml;
     const items = blocks.map(b => {
       if (b.type === 'image') {
         return `<div class="content-block content-block-image"><img src="${this.escapeHtml((b.image_url || '').trim())}" alt="" loading="lazy"></div>`;
@@ -3337,7 +3354,7 @@ if (document.readyState === 'loading') {
         .replace(/\n/g, '<br>');
       return `<div class="content-block content-block-text">${textHtml}</div>`;
     }).join('');
-    return items;
+    return items + placedFieldsHtml;
   }
 
   private renderNoticeButtons(config: FormConfig): string {

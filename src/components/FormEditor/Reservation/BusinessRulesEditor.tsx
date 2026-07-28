@@ -170,6 +170,27 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     onUpdate(updatedForm);
   };
 
+  // 月曜日の営業時間設定をすべての曜日にコピー
+  const copyMondayHoursToAll = () => {
+    if (!window.confirm('月曜日の設定（営業/時間）をすべての曜日にコピーしますか？')) return;
+    const monday = businessHours['monday'] || { open: '09:00', close: '18:00', closed: false };
+    const updatedHours: BusinessHours = { ...businessHours };
+    Object.keys(dayLabels).forEach((day) => {
+      updatedHours[day] = { ...monday };
+    });
+    setBusinessHours(updatedHours);
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          business_hours: updatedHours
+        }
+      }
+    });
+  };
+
   const handleAdvanceBookingDaysChange = (days: number) => {
     setAdvanceBookingDays(days);
 
@@ -744,6 +765,21 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                         定休日
                       </span>
                     )}
+
+                    {day === 'monday' && (
+                      <button
+                        type="button"
+                        onClick={copyMondayHoursToAll}
+                        title="月曜日の設定を他のすべての曜日にコピー"
+                        className={`px-2 py-1 text-xs rounded-md flex-shrink-0 ml-auto ${
+                          theme === 'light'
+                            ? 'border border-[rgb(244,144,49)]/40 text-[rgb(200,100,10)] hover:bg-[rgb(244,144,49)] hover:text-white'
+                            : 'border border-cyan-500/40 text-cyan-300 hover:bg-cyan-600 hover:text-white'
+                        }`}
+                      >
+                        時間設定コピー
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -939,7 +975,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     曜日別の受付時間
                   </label>
                   <div className="space-y-2">
-                    {weekdayLabels.map((dayLabel, index) => {
+                    {[1, 2, 3, 4, 5, 6, 0].map((index) => {
+                      const dayLabel = weekdayLabels[index];
                       const dayKey = String(index);
                       const hours = (multipleDatesSettings.weekday_hours || defaultWeekdayHours)[dayKey] || { open: '09:00', close: '18:00', closed: false };
                       return (

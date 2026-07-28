@@ -1624,6 +1624,16 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     return anchors;
   })();
 
+  // カスタムフィールドの表示位置変更（セクションのみ指定可。カスタム項目同士の入れ子は不可）
+  const placementAnchors = contentBlockAnchors.filter(a => !a.value.startsWith('custom_'));
+  const [placementEditFieldId, setPlacementEditFieldId] = useState<string | null>(null);
+  const updateCustomFieldPlacement = (index: number, placement?: { anchor: string; position: 'above' | 'below' }) => {
+    const currentFields = [...(form.config?.custom_fields || [])];
+    if (!currentFields[index]) return;
+    currentFields[index] = { ...currentFields[index], placement };
+    onUpdate({ ...form, config: { ...form.config, custom_fields: currentFields } });
+  };
+
   const currentContentBlocks = () => form.config?.content_blocks || [];
   const updateContentBlocks = (blocks: NonNullable<Form['config']['content_blocks']>) => {
     onUpdate({ ...form, config: { ...form.config, content_blocks: blocks } });
@@ -3003,6 +3013,56 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     ×
                   </button>
                 </div>
+              </div>
+
+              {/* 表示位置の変更 */}
+              <div className="mb-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setPlacementEditFieldId(placementEditFieldId === field.id ? null : field.id)}
+                    className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
+                  >
+                    表示位置を変える
+                  </button>
+                  <span className={`text-xs ${themeClasses.text.tertiary}`}>
+                    {field.placement
+                      ? `現在: ${(placementAnchors.find(a => a.value === field.placement?.anchor)?.label) || field.placement.anchor} の${field.placement.position === 'below' ? '下' : '上'}`
+                      : '現在: 標準の位置（メニューの前）'}
+                  </span>
+                </div>
+                {placementEditFieldId === field.id && (
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <select
+                      value={field.placement?.anchor || ''}
+                      onChange={(e) => updateCustomFieldPlacement(
+                        index,
+                        e.target.value
+                          ? { anchor: e.target.value, position: field.placement?.position || 'above' }
+                          : undefined
+                      )}
+                      className={`${themeClasses.input} text-sm`}
+                    >
+                      <option value="">標準の位置</option>
+                      {placementAnchors.map(a => (
+                        <option key={a.value} value={a.value}>{a.label}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={field.placement?.position || 'above'}
+                      disabled={!field.placement}
+                      onChange={(e) => {
+                        if (field.placement) {
+                          updateCustomFieldPlacement(index, { anchor: field.placement.anchor, position: e.target.value as 'above' | 'below' });
+                        }
+                      }}
+                      className={`${themeClasses.input} text-sm`}
+                    >
+                      <option value="above">の上</option>
+                      <option value="below">の下</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
