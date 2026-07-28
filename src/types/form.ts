@@ -190,8 +190,12 @@ export interface FormConfig {
           open: string;                   // "09:00"
           close: string;                  // "18:00"
           closed: boolean;                // 定休日
+          custom?: boolean;               // カスタム受付時間（自由入力の時間帯を選択肢にする）
+          custom_slots?: string[];        // 例: ["10:00~12:00", "16:00以降"]
         };
       };
+      // 表示する希望日時（1〜3）。未設定 = 全て表示。非表示の希望は必須選択でも送信時に無視される
+      visible_choices?: number[];
     };
     allow_exceed_business_hours?: boolean;  // 営業時間超過の予約を許可
     // 同時刻に何件のイベントがあれば予約不可にするか（1以上）。デフォルト1（1件で埋まる）

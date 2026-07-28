@@ -297,6 +297,14 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             if (!rc.includes(1)) rc.unshift(1);
             base.required_choices = [...new Set(rc)].sort();
           }
+          // 表示する希望日時（未設定 = 全て表示。最低1つは表示）
+          {
+            const vcRaw = (base as { visible_choices?: unknown }).visible_choices;
+            const vc = Array.isArray(vcRaw)
+              ? vcRaw.filter((n): n is number => n === 1 || n === 2 || n === 3)
+              : [1, 2, 3];
+            base.visible_choices = vc.length > 0 ? [...new Set(vc)].sort() : [1, 2, 3];
+          }
           // デフォルトで✕にする時間帯（"HH:MM" のみ保持）
           {
             const btRaw = (base as { blocked_times?: unknown }).blocked_times;

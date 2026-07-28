@@ -91,7 +91,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     (form.config?.calendar_settings?.time_interval as 10 | 15 | 20 | 30 | 45 | 60 | 120) || 30
   );
 
-  const defaultWeekdayHours: { [key: string]: { open: string; close: string; closed: boolean } } = {
+  const defaultWeekdayHours: { [key: string]: { open: string; close: string; closed: boolean; custom?: boolean; custom_slots?: string[] } } = {
     '0': { open: '09:00', close: '18:00', closed: true },
     '1': { open: '09:00', close: '18:00', closed: false },
     '2': { open: '09:00', close: '18:00', closed: false },
@@ -107,8 +107,9 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     exclude_weekdays: number[];
     start_time: string;
     end_time: string;
-    weekday_hours?: { [key: string]: { open: string; close: string; closed: boolean } };
+    weekday_hours?: { [key: string]: { open: string; close: string; closed: boolean; custom?: boolean; custom_slots?: string[] } };
     required_choices?: number[];
+    visible_choices?: number[];
     blocked_times?: string[];
   }>(
     (() => {
@@ -121,6 +122,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         end_time: existing?.end_time || '18:00',
         weekday_hours: existing?.weekday_hours || defaultWeekdayHours,
         required_choices: existing?.required_choices || [1, 2, 3],
+        visible_choices: existing?.visible_choices || [1, 2, 3],
         blocked_times: existing?.blocked_times || [],
       };
     })()
@@ -390,7 +392,17 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     handleMultipleDatesSettingsChange('required_choices', next);
   };
 
-  const handleWeekdayHoursChange = (dayIndex: string, field: 'open' | 'close' | 'closed', value: string | boolean) => {
+  const toggleVisibleChoice = (idx: number) => {
+    const current = multipleDatesSettings.visible_choices || [1, 2, 3];
+    const next = current.includes(idx) ? current.filter(n => n !== idx) : [...new Set([...current, idx])].sort();
+    if (next.length === 0) {
+      alert('少なくとも1つの希望日時は表示する必要があります');
+      return;
+    }
+    handleMultipleDatesSettingsChange('visible_choices', next);
+  };
+
+  const handleWeekdayHoursChange = (dayIndex: string, field: 'open' | 'close' | 'closed' | 'custom' | 'custom_slots', value: string | boolean | string[]) => {
     const currentHours = multipleDatesSettings.weekday_hours || defaultWeekdayHours;
     const updatedHours = {
       ...currentHours,
@@ -885,6 +897,42 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   </div>
                 </div>
 
+                {/* 非表示設定 */}
+                <div className="mb-4">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                      非表示設定
+                    </label>
+                    <InfoTooltip
+                      theme={theme}
+                      text={'チェックを外した希望日時は予約フォームに表示されません。\n非表示の希望は「必須選択」で必須になっていても、送信時のチェック対象になりません。\n\n※ 少なくとも1つは表示が必要です。'}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-4">
+                    {[1, 2, 3].map((idx) => {
+                      const labels: { [key: number]: string } = { 1: '第一希望', 2: '第二希望', 3: '第三希望' };
+                      const visibleChecked = (multipleDatesSettings.visible_choices || [1, 2, 3]).includes(idx);
+                      return (
+                        <label key={idx} className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={visibleChecked}
+                            onChange={() => toggleVisibleChoice(idx)}
+                            className={`rounded ${accentClasses} ${
+                              theme === 'light'
+                                ? 'border-gray-300 bg-gray-100'
+                                : 'border-gray-600 bg-gray-700'
+                            }`}
+                          />
+                          <span className={`text-sm ${themeClasses.text.secondary}`}>
+                            {labels[idx]}を表示
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* 曜日別時間設定 */}
                 <div>
                   <label className={`block text-sm font-medium ${themeClasses.text.secondary} mb-2`}>
@@ -905,21 +953,38 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                               {dayLabel}
                             </div>
 
-                            <label className="flex items-center space-x-2 flex-shrink-0">
-                              <input
-                                type="checkbox"
-                                checked={!hours.closed}
-                                onChange={(e) => handleWeekdayHoursChange(dayKey, 'closed', !e.target.checked)}
-                                className={`rounded ${accentClasses} ${
-                                  theme === 'light'
-                                    ? 'border-gray-300 bg-gray-100'
-                                    : 'border-gray-600 bg-gray-700'
-                                }`}
-                              />
-                              <span className={`text-sm ${themeClasses.text.secondary}`}>受付</span>
-                            </label>
+                            <div className="flex flex-col gap-1 flex-shrink-0">
+                              <label className="flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  checked={!hours.closed}
+                                  onChange={(e) => handleWeekdayHoursChange(dayKey, 'closed', !e.target.checked)}
+                                  className={`rounded ${accentClasses} ${
+                                    theme === 'light'
+                                      ? 'border-gray-300 bg-gray-100'
+                                      : 'border-gray-600 bg-gray-700'
+                                  }`}
+                                />
+                                <span className={`text-sm ${themeClasses.text.secondary}`}>受付</span>
+                              </label>
+                              {!hours.closed && (
+                                <label className="flex items-center space-x-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!hours.custom}
+                                    onChange={(e) => handleWeekdayHoursChange(dayKey, 'custom', e.target.checked)}
+                                    className={`rounded ${accentClasses} ${
+                                      theme === 'light'
+                                        ? 'border-gray-300 bg-gray-100'
+                                        : 'border-gray-600 bg-gray-700'
+                                    }`}
+                                  />
+                                  <span className={`text-sm ${themeClasses.text.secondary}`}>カスタム</span>
+                                </label>
+                              )}
+                            </div>
 
-                            {!hours.closed && (
+                            {!hours.closed && !hours.custom && (
                               <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-1">
                                 <input
                                   type="time"
@@ -934,6 +999,44 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                                   onChange={(e) => handleWeekdayHoursChange(dayKey, 'close', e.target.value)}
                                   className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
                                 />
+                              </div>
+                            )}
+
+                            {!hours.closed && hours.custom && (
+                              <div className="flex-1 space-y-1 min-w-0">
+                                {(hours.custom_slots || []).map((slot, slotIndex) => (
+                                  <div key={slotIndex} className="flex items-center gap-2">
+                                    <input
+                                      type="text"
+                                      value={slot}
+                                      onChange={(ev) => {
+                                        const next = [...(hours.custom_slots || [])];
+                                        next[slotIndex] = ev.target.value;
+                                        handleWeekdayHoursChange(dayKey, 'custom_slots', next);
+                                      }}
+                                      placeholder="例: 10:00~12:00 / 16:00以降"
+                                      className={`${themeClasses.input} text-sm flex-1 min-w-0`}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleWeekdayHoursChange(dayKey, 'custom_slots', (hours.custom_slots || []).filter((_, i) => i !== slotIndex))}
+                                      title="削除"
+                                      className={`p-1.5 rounded text-red-400 hover:text-red-300 flex-shrink-0 ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => handleWeekdayHoursChange(dayKey, 'custom_slots', [...(hours.custom_slots || []), ''])}
+                                  className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
+                                >
+                                  ＋ 時間帯を追加
+                                </button>
+                                <p className={`text-xs ${themeClasses.text.tertiary}`}>
+                                  入力したテキストがそのまま「時間を選択」の選択肢になります
+                                </p>
                               </div>
                             )}
 
