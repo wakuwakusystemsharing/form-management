@@ -458,6 +458,42 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     onUpdate(updatedForm);
   };
 
+  // 月曜日の曜日別受付時間（受付/時間/カスタム）をすべての曜日にコピー（日時選択モード用）
+  const copyMondayWeekdayHoursToAll = () => {
+    if (!window.confirm('月曜日の設定（受付/時間）をすべての曜日にコピーしますか？')) return;
+    const currentHours = multipleDatesSettings.weekday_hours || defaultWeekdayHours;
+    const monday = currentHours['1'] || { open: '09:00', close: '18:00', closed: false };
+    const updatedHours = { ...currentHours };
+    [0, 1, 2, 3, 4, 5, 6].forEach((i) => {
+      updatedHours[String(i)] = {
+        ...monday,
+        custom_slots: monday.custom_slots ? [...monday.custom_slots] : undefined,
+      };
+    });
+
+    // レガシーフィールドも同期（exclude_weekdays）
+    const excludeWeekdays = Object.entries(updatedHours)
+      .filter(([, h]) => h.closed)
+      .map(([k]) => parseInt(k));
+
+    const updatedSettings = {
+      ...multipleDatesSettings,
+      weekday_hours: updatedHours,
+      exclude_weekdays: excludeWeekdays,
+    };
+    setMultipleDatesSettings(updatedSettings);
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          multiple_dates_settings: updatedSettings
+        }
+      }
+    });
+  };
+
   const toggleSection = (section: 'businessHours' | 'bookingRules' | 'dateTimeMode' | 'reservationSummary') => {
     setExpandedSections(prev => ({
       ...prev,
@@ -986,8 +1022,22 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                             : 'border border-gray-700 bg-gray-900/50'
                         }`}>
                           <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-                            <div className={`w-full sm:w-16 text-sm font-medium ${themeClasses.text.secondary} flex-shrink-0`}>
-                              {dayLabel}
+                            <div className={`w-full sm:w-16 text-sm font-medium ${themeClasses.text.secondary} flex-shrink-0 flex items-center justify-between sm:block`}>
+                              <span>{dayLabel}</span>
+                              {index === 1 && (
+                                <button
+                                  type="button"
+                                  onClick={copyMondayWeekdayHoursToAll}
+                                  title="月曜日の設定を他のすべての曜日にコピー"
+                                  className={`px-2 py-1 text-xs rounded-md flex-shrink-0 sm:hidden ${
+                                    theme === 'light'
+                                      ? 'border border-[rgb(244,144,49)]/40 text-[rgb(200,100,10)] hover:bg-[rgb(244,144,49)] hover:text-white'
+                                      : 'border border-cyan-500/40 text-cyan-300 hover:bg-cyan-600 hover:text-white'
+                                  }`}
+                                >
+                                  時間設定コピー
+                                </button>
+                              )}
                             </div>
 
                             <div className="flex flex-col gap-1 flex-shrink-0">
@@ -1085,6 +1135,21 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                               }`}>
                                 定休日
                               </span>
+                            )}
+
+                            {index === 1 && (
+                              <button
+                                type="button"
+                                onClick={copyMondayWeekdayHoursToAll}
+                                title="月曜日の設定を他のすべての曜日にコピー"
+                                className={`px-2 py-1 text-xs rounded-md flex-shrink-0 sm:ml-auto hidden sm:block ${
+                                  theme === 'light'
+                                    ? 'border border-[rgb(244,144,49)]/40 text-[rgb(200,100,10)] hover:bg-[rgb(244,144,49)] hover:text-white'
+                                    : 'border border-cyan-500/40 text-cyan-300 hover:bg-cyan-600 hover:text-white'
+                                }`}
+                              >
+                                時間設定コピー
+                              </button>
                             )}
                           </div>
                         </div>

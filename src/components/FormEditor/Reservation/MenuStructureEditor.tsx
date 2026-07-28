@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Form, MenuCategory, MenuItem, MenuOption, SubMenuItem } from '@/types/form';
+import { AdditionalQuestion, Form, MenuCategory, MenuItem, MenuOption, SubMenuItem } from '@/types/form';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
 
 // テキストブロックの文字色プリセット
@@ -81,6 +81,197 @@ const formatPrice = (value: string): string => {
 const parsePrice = (value: string): string => {
   // カンマを除去して数値のみ返す
   return value.replace(/,/g, '');
+};
+
+// メニュー / オプション選択時に表示される「追加質問」の編集 UI（メニュー編集・オプション編集モーダルで共用）
+const AdditionalQuestionsEditor: React.FC<{
+  questions: AdditionalQuestion[];
+  onChange: (questions: AdditionalQuestion[]) => void;
+  theme?: 'light' | 'dark';
+}> = ({ questions, onChange, theme = 'dark' }) => {
+  const themeClasses = getThemeClasses(theme);
+
+  const updateQuestion = (index: number, patch: Partial<AdditionalQuestion>) => {
+    const next = [...questions];
+    next[index] = { ...next[index], ...patch };
+    onChange(next);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <h4 className={`text-md font-medium ${themeClasses.text.primary} border-b ${themeClasses.divider} pb-2`}>
+            追加質問
+          </h4>
+          <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+            予約フォームでこの項目が選択されたときに表示される質問です
+          </p>
+        </div>
+        <button
+          onClick={() => onChange([
+            ...questions,
+            { id: `aq_${Math.random().toString(36).substr(2, 9)}`, type: 'text', title: '新しい質問', required: false },
+          ])}
+          className={`px-3 py-1 text-sm rounded-md ${themeClasses.button.primary} ml-2 shrink-0`}
+        >
+          質問を追加
+        </button>
+      </div>
+
+      {questions.length === 0 ? (
+        <p className={`text-sm py-4 text-center rounded-md ${themeClasses.emptyState}`}>
+          まだ追加質問がありません
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {questions.map((q, index) => (
+            <div key={q.id} className={`${themeClasses.card} border rounded-lg p-3`}>
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex items-center space-x-2 flex-1">
+                  <span className={`${themeClasses.badge} px-2 py-1 rounded text-xs`}>{index + 1}</span>
+                  <input
+                    type="text"
+                    value={q.title}
+                    onChange={(e) => updateQuestion(index, { title: e.target.value })}
+                    className={`flex-1 ${themeClasses.input} text-sm`}
+                    placeholder="質問名"
+                  />
+                </div>
+                <div className="flex items-center space-x-1 ml-2">
+                  <button
+                    onClick={() => {
+                      if (index > 0) {
+                        const next = [...questions];
+                        [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                        onChange(next);
+                      }
+                    }}
+                    disabled={index === 0}
+                    className={`${themeClasses.text.secondary} disabled:opacity-30`}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (index < questions.length - 1) {
+                        const next = [...questions];
+                        [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                        onChange(next);
+                      }
+                    }}
+                    disabled={index === questions.length - 1}
+                    className={`${themeClasses.text.secondary} disabled:opacity-30`}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('この質問を削除してもよろしいですか？')) {
+                        onChange(questions.filter((_, i) => i !== index));
+                      }
+                    }}
+                    className="text-red-400 hover:text-red-300 ml-2"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>回答タイプ</label>
+                  <select
+                    value={q.type}
+                    onChange={(e) => {
+                      const newType = e.target.value as AdditionalQuestion['type'];
+                      const needsOptions = newType === 'radio' || newType === 'checkbox' || newType === 'select';
+                      updateQuestion(index, {
+                        type: newType,
+                        options: needsOptions ? (q.options || [{ label: '', value: '' }]) : undefined,
+                      });
+                    }}
+                    className={`w-full ${themeClasses.input} text-sm`}
+                  >
+                    <option value="text">テキスト入力 (1行)</option>
+                    <option value="textarea">テキスト入力 (複数行)</option>
+                    <option value="date">日付選択</option>
+                    <option value="datetime">日時選択</option>
+                    <option value="select">ドロップダウン選択</option>
+                    <option value="radio">単一選択 (ボタン)</option>
+                    <option value="checkbox">複数選択 (ボタン)</option>
+                  </select>
+                </div>
+                <div className="flex items-center mt-6">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={q.required}
+                      onChange={(e) => updateQuestion(index, { required: e.target.checked })}
+                      className="h-4 w-4 rounded"
+                    />
+                    <span className={`text-sm ${themeClasses.text.secondary}`}>必須項目にする</span>
+                  </label>
+                </div>
+              </div>
+
+              {(q.type === 'text' || q.type === 'textarea') && (
+                <div className="mb-1">
+                  <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>プレースホルダー（任意）</label>
+                  <input
+                    type="text"
+                    value={q.placeholder || ''}
+                    onChange={(e) => updateQuestion(index, { placeholder: e.target.value })}
+                    className={`w-full ${themeClasses.input} text-sm`}
+                    placeholder="例: ご希望の内容を入力してください"
+                  />
+                </div>
+              )}
+
+              {(q.type === 'radio' || q.type === 'checkbox' || q.type === 'select') && (
+                <div className={`${theme === 'light' ? 'bg-gray-50' : 'bg-gray-900/50'} p-3 rounded border ${theme === 'light' ? 'border-gray-200' : 'border-gray-700'}`}>
+                  <label className={`block text-xs ${themeClasses.text.secondary} mb-2`}>選択肢</label>
+                  <div className="space-y-2">
+                    {(q.options || []).map((opt, optIndex) => (
+                      <div key={optIndex} className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={opt.label}
+                          onChange={(e) => {
+                            const newOptions = [...(q.options || [])];
+                            newOptions[optIndex] = { label: e.target.value, value: e.target.value };
+                            updateQuestion(index, { options: newOptions });
+                          }}
+                          className={`flex-1 ${themeClasses.input} text-sm`}
+                          placeholder={`選択肢 ${optIndex + 1}`}
+                        />
+                        <button
+                          onClick={() => {
+                            const newOptions = [...(q.options || [])];
+                            newOptions.splice(optIndex, 1);
+                            updateQuestion(index, { options: newOptions });
+                          }}
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => updateQuestion(index, { options: [...(q.options || []), { label: '', value: '' }] })}
+                      className={`text-sm ${theme === 'light' ? 'text-[rgb(244,144,49)] hover:text-[rgb(220,125,35)]' : 'text-cyan-400 hover:text-cyan-300'}`}
+                    >
+                      + 選択肢を追加
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
@@ -381,6 +572,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
   const [timeWindowEnabled, setTimeWindowEnabled] = useState(false);
   const [timeWindowStart, setTimeWindowStart] = useState('09:00');
   const [timeWindowEnd, setTimeWindowEnd] = useState('18:00');
+  const [additionalQuestions, setAdditionalQuestions] = useState<AdditionalQuestion[]>([]);
 
   React.useEffect(() => {
     if (option) {
@@ -394,6 +586,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       setTimeWindowEnabled(option.time_window_enabled === true);
       setTimeWindowStart(option.time_window_start || '09:00');
       setTimeWindowEnd(option.time_window_end || '18:00');
+      setAdditionalQuestions(option.additional_questions || []);
     } else {
       setName('');
       setPrice('');
@@ -405,6 +598,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       setTimeWindowEnabled(false);
       setTimeWindowStart('09:00');
       setTimeWindowEnd('18:00');
+      setAdditionalQuestions([]);
     }
   }, [option]);
 
@@ -420,7 +614,8 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       hide_duration: hideDuration || undefined,
       time_window_enabled: timeWindowEnabled || undefined,
       time_window_start: timeWindowEnabled ? timeWindowStart : undefined,
-      time_window_end: timeWindowEnabled ? timeWindowEnd : undefined
+      time_window_end: timeWindowEnabled ? timeWindowEnd : undefined,
+      additional_questions: additionalQuestions.length > 0 ? additionalQuestions : undefined
     };
     onSave(newOption);
     onClose();
@@ -430,7 +625,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
 
   return (
     <div className={`fixed inset-0 flex items-center justify-center z-50 ${themeClasses.modalOverlay}`}>
-      <div className={`rounded-lg shadow-xl max-w-md w-full mx-4 ${themeClasses.modal}`}>
+      <div className={`rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto ${themeClasses.modal}`}>
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className={`text-lg font-semibold ${themeClasses.text.primary}`}>
@@ -583,6 +778,13 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
                 </div>
               )}
             </div>
+
+            {/* 追加質問（このオプション選択時に表示される質問） */}
+            <AdditionalQuestionsEditor
+              questions={additionalQuestions}
+              onChange={setAdditionalQuestions}
+              theme={theme}
+            />
           </div>
 
           <div className={`flex justify-end space-x-3 mt-6 pt-4 border-t ${themeClasses.divider}`}>
@@ -636,6 +838,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   const [timeWindowEnabled, setTimeWindowEnabled] = useState(false);
   const [timeWindowStart, setTimeWindowStart] = useState('09:00');
   const [timeWindowEnd, setTimeWindowEnd] = useState('18:00');
+  const [additionalQuestions, setAdditionalQuestions] = useState<AdditionalQuestion[]>([]);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -654,6 +857,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setTimeWindowEnabled(menuItem.time_window_enabled === true);
         setTimeWindowStart(menuItem.time_window_start || '09:00');
         setTimeWindowEnd(menuItem.time_window_end || '18:00');
+        setAdditionalQuestions(menuItem.additional_questions || []);
       } else {
         setName('');
         setPrice('');
@@ -669,6 +873,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setTimeWindowEnabled(false);
         setTimeWindowStart('09:00');
         setTimeWindowEnd('18:00');
+        setAdditionalQuestions([]);
       }
     }
   }, [menuItem, isOpen]);
@@ -690,7 +895,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       hide_duration: hideDuration || undefined,
       time_window_enabled: timeWindowEnabled || undefined,
       time_window_start: timeWindowEnabled ? timeWindowStart : undefined,
-      time_window_end: timeWindowEnabled ? timeWindowEnd : undefined
+      time_window_end: timeWindowEnabled ? timeWindowEnd : undefined,
+      additional_questions: additionalQuestions.length > 0 ? additionalQuestions : undefined
     };
     onSave(newMenuItem);
     onClose();
@@ -1184,6 +1390,13 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                 )}
               </div>
               )}
+
+              {/* 追加質問（このメニュー選択時に表示される質問） */}
+              <AdditionalQuestionsEditor
+                questions={additionalQuestions}
+                onChange={setAdditionalQuestions}
+                theme={theme}
+              />
             </div>
 
             <div className={`flex justify-end space-x-3 mt-6 pt-4 border-t ${themeClasses.divider}`}>
