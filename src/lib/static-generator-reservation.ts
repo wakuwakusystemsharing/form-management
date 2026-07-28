@@ -2336,6 +2336,7 @@ class BookingForm {
             // /api/reservationsにPOSTリクエストを送信
             let apiSuccess = false;
             let blockReason = null;
+            let assignedStaffName = null;
             try {
                 const apiUrl = window.location.origin + '/api/reservations';
                 const response = await fetch(apiUrl, {
@@ -2349,11 +2350,12 @@ class BookingForm {
                 if (response.ok) {
                     apiSuccess = true;
                     console.log('予約データをデータベースに保存しました');
-                    // 指名なしの場合、サーバーで割り当てられた担当スタッフをメッセージに反映
+                    // 指名なしの場合、サーバーで割り当てられた担当スタッフ名を控えておき、
+                    // メッセージ本文の組み立て後に反映する（本文はこの後で構築される）
                     try {
                         const created = await response.json();
                         if (created && created.staff_name && this.state.selectedStaffId === 'none') {
-                            messageText = messageText.replace('《担当スタッフ》\\n指名なし\\n', \`《担当スタッフ》\\n指名なし（担当: \${created.staff_name}）\\n\`);
+                            assignedStaffName = created.staff_name;
                         }
                     } catch (parseError) {
                         // レスポンス解析失敗は無視（メッセージは「指名なし」のまま送信）
@@ -2403,24 +2405,21 @@ class BookingForm {
             // メッセージ本文を構築（《ラベル》\\n値 形式）
             // 送信時の項目編集: LINE メッセージに含める項目（false = 非表示）。
             // 表示のみの制御で、DB保存・Googleカレンダー・メール送信の内容には影響しない
+            // 項目の並び順は予約フォームの表示順（上から下）に合わせる
             const lineItems = this.config.line_message_items || {};
             const showLineItem = (key) => lineItems[key] !== false;
             const formName = this.config.basic_info?.form_name || '予約フォーム';
-            let messageText = '【' + formName + '】\\n';
+
+            // フォームの表示順にセグメントを組み立てる（block = 前後に空行を入れる項目）
+            const msgSegments = [];
+            const addMsgSegment = (anchor, text, block) => { msgSegments.push({ anchor: anchor, text: text, block: !!block, placed: false }); };
 
             // お名前 / 電話番号（表示設定が有効な場合のみ LINE メッセージに含める）
             if (showNameField && showLineItem('name')) {
-                messageText += \`《お名前》\\n\${this.state.name || ''}\\n\`;
+                addMsgSegment('name', '《お名前》\\n' + (this.state.name || ''));
             }
             if (showPhoneField && showLineItem('phone')) {
-                messageText += \`《電話番号》\\n\${this.state.phone || ''}\\n\`;
-            }
-
-            // ご来店回数（有効時のみ表示）
-            if (this.config.visit_count_selection?.enabled && this.state.visitCount && showLineItem('visit_count')) {
-                const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
-                const visitCountText = visitLabel || this.state.visitCount || '';
-                messageText += \`《ご来店回数》\\n\${visitCountText}\\n\`;
+                addMsgSegment('phone', '《電話番号》\\n' + (this.state.phone || ''));
             }
 
             // 担当スタッフ（スタッフ選択が有効で選択されている場合）
@@ -2429,80 +2428,138 @@ class BookingForm {
                     ? '指名なし'
                     : ((this.config.staff_selection.staff || []).find(m => m.id === this.state.selectedStaffId)?.name || '');
                 if (staffMsgLabel) {
-                    messageText += \`《担当スタッフ》\\n\${staffMsgLabel}\\n\`;
+                    addMsgSegment('staff', '《担当スタッフ》\\n' + staffMsgLabel);
                 }
+            }
+
+            // 性別（有効時のみ表示）
+            if (this.config.gender_selection?.enabled && this.state.gender && showLineItem('gender')) {
+                const genderLabel = this.config.gender_selection.options.find(o => o.value === this.state.gender)?.label;
+                if (genderLabel) {
+                    addMsgSegment('gender', '《性別》\\n' + genderLabel);
+                }
+            }
+
+            // ご来店回数（有効時のみ表示）
+            if (this.config.visit_count_selection?.enabled && this.state.visitCount && showLineItem('visit_count')) {
+                const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
+                addMsgSegment('visit_count', '《ご来店回数》\\n' + (visitLabel || this.state.visitCount || ''));
+            }
+
+            // クーポン（有効時のみ表示）
+            if (this.config.coupon_selection?.enabled && this.state.coupon && showLineItem('coupon')) {
+                const couponLabel = this.config.coupon_selection.options.find(o => o.value === this.state.coupon)?.label;
+                if (couponLabel) {
+                    addMsgSegment('coupon', '《クーポン》\\n' + couponLabel);
+                }
+            }
+
+            // カスタムフィールドの表示値（未入力なら null）
+            const customFieldDisplayValue = (field) => {
+                const value = this.state.customFields?.[field.id];
+                if (!value) return null;
+                return (field.type === 'date' || field.type === 'datetime') ? formatDateTimeForDisplay(value) : value;
+            };
+            const msgFieldHasPlacement = (field) => !!(field.placement
+                && typeof field.placement.anchor === 'string'
+                && field.placement.anchor
+                && field.placement.anchor.indexOf('custom_') !== 0);
+
+            // カスタムフィールド（標準位置のもの。表示位置を変更したフィールドは後で対応位置に挿入）
+            if (showLineItem('custom_fields')) {
+                (this.config.custom_fields || []).forEach(field => {
+                    if (msgFieldHasPlacement(field)) return;
+                    const display = customFieldDisplayValue(field);
+                    if (display !== null) addMsgSegment('custom_fields', '《' + field.title + '》\\n' + display);
+                });
             }
 
             // メニュー（希望日時式はカテゴリーごとに改行表示）
             const bookingModeForMenu = this.config.calendar_settings?.booking_mode || 'calendar';
-            if (!showLineItem('menu')) {
-                // 《メニュー》を送信テキストから除外（表示のみの制御）
-            } else if (bookingModeForMenu === 'multiple_dates' && menuTextGrouped) {
-                messageText += \`\\n《メニュー》\\n\${menuTextGrouped}\\n\`;
-            } else {
-                messageText += \`\\n《メニュー》\\n\${menuTextForMessage || ''}\\n\`;
+            if (showLineItem('menu')) {
+                if (bookingModeForMenu === 'multiple_dates' && menuTextGrouped) {
+                    addMsgSegment('menu', '《メニュー》\\n' + menuTextGrouped, true);
+                } else {
+                    addMsgSegment('menu', '《メニュー》\\n' + (menuTextForMessage || ''), true);
+                }
             }
 
             // オプション（メニュー個別 / カテゴリー共通の両方を統合表示）
             if (selectedOptions && selectedOptions.length > 0 && showLineItem('options')) {
                 const optionLines = selectedOptions.map(opt => {
                     const name = opt.option_name || '';
-                    const priceText = (opt.price || 0) > 0 ? \` ¥\${Number(opt.price).toLocaleString()}\` : '';
-                    const durationText = (opt.duration || 0) > 0 ? \` (\${opt.duration}分)\` : '';
-                    return \`・\${name}\${priceText}\${durationText}\`;
+                    const priceText = (opt.price || 0) > 0 ? ' ¥' + Number(opt.price).toLocaleString() : '';
+                    const durationText = (opt.duration || 0) > 0 ? ' (' + opt.duration + '分)' : '';
+                    return '・' + name + priceText + durationText;
                 }).join('\\n');
-                messageText += \`\\n《オプション》\\n\${optionLines}\\n\`;
+                addMsgSegment('menu', '《オプション》\\n' + optionLines, true);
             }
 
-            if (totalPrice > 0 || totalDuration > 0) {
-                if (totalPrice > 0 && showLineItem('total_price')) messageText += \`\\n《合計金額》\\n¥\${totalPrice.toLocaleString()}\\n\`;
-                if (totalDuration > 0 && showLineItem('total_duration')) messageText += \`\\n《合計時間》\\n\${totalDuration}分\\n\`;
+            if (totalPrice > 0 && showLineItem('total_price')) addMsgSegment('menu', '《合計金額》\\n¥' + totalPrice.toLocaleString(), true);
+            if (totalDuration > 0 && showLineItem('total_duration')) addMsgSegment('menu', '《合計時間》\\n' + totalDuration + '分', true);
+
+            // メニュー/オプションの追加質問（フォーム上はメニュー欄の直後に表示される）
+            if (showLineItem('custom_fields')) {
+                this.getAdditionalQuestionEntries().forEach(entry => {
+                    const display = customFieldDisplayValue(entry.field);
+                    if (display !== null) addMsgSegment('menu', '《' + entry.field.title + '》\\n' + display);
+                });
             }
 
             // 希望日時（送信時の項目編集で非表示にできる）
             if (showLineItem('datetime')) {
-                const bookingModeForMsg = this.config.calendar_settings?.booking_mode || 'calendar';
-                messageText += \`\\n【希望日時】\\n\`;
-                if (bookingModeForMsg === 'multiple_dates') {
-                    messageText += \`《第一希望日》\\n\${formattedDate}\\n\`;
-                    if (formattedDate2) messageText += \`《第二希望日》\\n\${formattedDate2}\\n\`;
-                    if (formattedDate3) messageText += \`《第三希望日》\\n\${formattedDate3}\\n\`;
+                let datetimeText = '【希望日時】\\n';
+                if (bookingModeForMenu === 'multiple_dates') {
+                    datetimeText += '《第一希望日》\\n' + formattedDate;
+                    if (formattedDate2) datetimeText += '\\n《第二希望日》\\n' + formattedDate2;
+                    if (formattedDate3) datetimeText += '\\n《第三希望日》\\n' + formattedDate3;
                 } else {
-                    messageText += \`《希望日》\\n\${formattedDate}\\n\`;
+                    datetimeText += '《希望日》\\n' + formattedDate;
                 }
+                addMsgSegment('datetime', datetimeText, true);
             }
 
             // メッセージ
             if (showLineItem('message')) {
-                messageText += \`\\n《メッセージ》\\n\${this.state.message || 'なし'}\`;
+                addMsgSegment('message', '《メッセージ》\\n' + (this.state.message || 'なし'), true);
             }
 
-            // 性別（オプション）
-            if (this.config.gender_selection?.enabled && this.state.gender && showLineItem('gender')) {
-                const genderLabel = this.config.gender_selection.options.find(o => o.value === this.state.gender)?.label;
-                if (genderLabel) {
-                    messageText += \`\\n\\n《性別》\\n\${genderLabel}\`;
-                }
-            }
-
-            // クーポン（オプション）
-            if (this.config.coupon_selection?.enabled && this.state.coupon && showLineItem('coupon')) {
-                const couponLabel = this.config.coupon_selection.options.find(o => o.value === this.state.coupon)?.label;
-                if (couponLabel) {
-                    messageText += \`\\n\\n《クーポン》\\n\${couponLabel}\`;
-                }
-            }
-
-            // カスタムフィールド（メニュー/オプションの追加質問の回答も含む）
-            const messageFields = (this.config.custom_fields || []).concat(this.getAdditionalQuestionEntries().map(e => e.field));
-            if (messageFields.length > 0 && showLineItem('custom_fields')) {
-                messageFields.forEach(field => {
-                    const value = this.state.customFields?.[field.id];
-                    if (value) {
-                        const display = (field.type === 'date' || field.type === 'datetime') ? formatDateTimeForDisplay(value) : value;
-                        messageText += \`\\n\\n《\${field.title}》\\n\${display}\`;
+            // 表示位置を変更したカスタムフィールドを、フォーム上の位置に対応する場所へ挿入
+            if (showLineItem('custom_fields')) {
+                (this.config.custom_fields || []).forEach(field => {
+                    if (!msgFieldHasPlacement(field)) return;
+                    const display = customFieldDisplayValue(field);
+                    if (display === null) return;
+                    let anchor = field.placement.anchor;
+                    if (anchor.indexOf('datetime') === 0) anchor = 'datetime';
+                    if (anchor === 'email') anchor = 'phone';  // メールはメッセージに含まれないため電話番号の位置に寄せる
+                    const seg = { anchor: anchor, text: '《' + field.title + '》\\n' + display, block: false, placed: true };
+                    let firstOwn = -1, last = -1;
+                    for (let i = 0; i < msgSegments.length; i++) {
+                        if (msgSegments[i].anchor !== anchor) continue;
+                        if (firstOwn === -1 && !msgSegments[i].placed) firstOwn = i;
+                        last = i;
+                    }
+                    if (field.placement.position === 'above' && firstOwn !== -1) {
+                        msgSegments.splice(firstOwn, 0, seg);
+                    } else if (last !== -1) {
+                        msgSegments.splice(last + 1, 0, seg);
+                    } else {
+                        // 対応するセクションがメッセージに無い場合は末尾（summary/submit アンカー等）
+                        msgSegments.push(seg);
                     }
                 });
+            }
+
+            let messageText = '【' + formName + '】\\n';
+            for (let i = 0; i < msgSegments.length; i++) {
+                if (i > 0) messageText += (msgSegments[i].block || msgSegments[i - 1].block) ? '\\n\\n' : '\\n';
+                messageText += msgSegments[i].text;
+            }
+
+            // 指名なしの場合、サーバーで割り当てられた担当スタッフをメッセージに反映
+            if (assignedStaffName) {
+                messageText = messageText.replace('《担当スタッフ》\\n指名なし', '《担当スタッフ》\\n指名なし（担当: ' + assignedStaffName + '）');
             }
 
             // 予約完了後に選択内容をlocalStorageへ保存（前回と同じメニューで予約する機能用）
