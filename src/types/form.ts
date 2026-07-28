@@ -1,3 +1,17 @@
+// メニュー / オプションが選択されたときにフォーム上へ表示される追加質問
+// （詳細設定のカスタムフィールドと同じ回答タイプをサポート）
+export interface AdditionalQuestion {
+  id: string;
+  type: 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select';
+  title: string;
+  required: boolean;
+  options?: Array<{
+    label: string;
+    value: string;
+  }>;
+  placeholder?: string;
+}
+
 // メニューオプションの型定義
 export interface MenuOption {
   id: string;
@@ -12,6 +26,7 @@ export interface MenuOption {
   time_window_enabled?: boolean;
   time_window_start?: string;   // "09:00"
   time_window_end?: string;     // "15:00"
+  additional_questions?: AdditionalQuestion[];  // 選択時に表示される追加質問
 }
 
 // サブメニューの型定義
@@ -48,6 +63,7 @@ export interface MenuItem {
   time_window_enabled?: boolean;
   time_window_start?: string;   // "09:00"
   time_window_end?: string;     // "15:00"
+  additional_questions?: AdditionalQuestion[];  // 選択時に表示される追加質問
 }
 
 export interface MenuCategory {

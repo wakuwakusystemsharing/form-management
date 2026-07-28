@@ -191,6 +191,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
             ${safeConfig.custom_fields?.length ? this.renderCustomFields(safeConfig) : ''}
             ${this.renderContentBlocksAt(safeConfig, 'menu', 'above')}
             ${this.renderMenuField(safeConfig)}
+            ${this.renderAdditionalQuestionFields(safeConfig)}
             ${this.renderContentBlocksAt(safeConfig, 'menu', 'below')}
             ${this.renderContentBlocksAt(safeConfig, 'datetime', 'above')}
             ${this.renderDateTimeFields(safeConfig)}
@@ -410,6 +411,8 @@ class BookingForm {
         } finally {
             // エラーが発生してもイベントリスナーは必ず設定する
             this.attachEventListeners();
+            // デフォルト選択状態（is_default オプション等）に応じた追加質問の初期表示
+            this.updateAdditionalQuestionsVisibility();
         }
     }
     
@@ -550,6 +553,89 @@ class BookingForm {
         }
     }
 
+    // メニュー / オプションの追加質問一覧（{ field, ownerType, ownerId } の配列）
+    getAdditionalQuestionEntries() {
+        if (this._aqEntries) return this._aqEntries;
+        const entries = [];
+        const pushQuestions = (list, ownerType, ownerId) => {
+            (list || []).forEach(q => {
+                if (q && q.id && q.title) entries.push({ field: q, ownerType: ownerType, ownerId: ownerId });
+            });
+        };
+        const processMenu = (menu) => {
+            pushQuestions(menu.additional_questions, 'menu', menu.id);
+            (menu.options || []).forEach(opt => pushQuestions(opt.additional_questions, 'option', opt.id));
+        };
+        (this.config.menu_structure?.categories || []).forEach(cat => {
+            (cat.menus || []).forEach(processMenu);
+            (cat.options || []).forEach(opt => pushQuestions(opt.additional_questions, 'option', opt.id));
+        });
+        (this.config.menu_structure?.menus || []).forEach(processMenu);
+        this._aqEntries = entries;
+        return entries;
+    }
+
+    // 現在選択中のメニューID / オプションID の一覧
+    getSelectedOwnerIds() {
+        const menuIds = [];
+        const optionIds = [];
+        if (this.state.selectedMenu && this.state.selectedMenu.id) menuIds.push(this.state.selectedMenu.id);
+        Object.values(this.state.selectedMenus || {}).forEach(ids => {
+            (ids || []).forEach(id => { if (menuIds.indexOf(id) === -1) menuIds.push(id); });
+        });
+        Object.values(this.state.selectedOptions || {}).forEach(ids => {
+            (ids || []).forEach(id => { if (optionIds.indexOf(id) === -1) optionIds.push(id); });
+        });
+        Object.values(this.state.selectedCategoryOptions || {}).forEach(ids => {
+            (ids || []).forEach(id => { if (optionIds.indexOf(id) === -1) optionIds.push(id); });
+        });
+        return { menuIds: menuIds, optionIds: optionIds };
+    }
+
+    isAdditionalQuestionVisible(entry, sel) {
+        return entry.ownerType === 'menu'
+            ? sel.menuIds.indexOf(entry.ownerId) !== -1
+            : sel.optionIds.indexOf(entry.ownerId) !== -1;
+    }
+
+    // 追加質問の表示/非表示をメニュー・オプションの選択状態に同期。非表示になった質問の回答はクリア
+    updateAdditionalQuestionsVisibility() {
+        const entries = this.getAdditionalQuestionEntries();
+        if (entries.length === 0) return;
+        const sel = this.getSelectedOwnerIds();
+        entries.forEach(entry => {
+            const visible = this.isAdditionalQuestionVisible(entry, sel);
+            const wrap = document.getElementById('aq-wrap-' + entry.field.id);
+            if (wrap) wrap.style.display = visible ? '' : 'none';
+            if (!visible && this.state.customFields[entry.field.id] !== undefined) {
+                delete this.state.customFields[entry.field.id];
+                this.clearAdditionalQuestionInputs(entry.field);
+            }
+        });
+    }
+
+    // 非表示になった追加質問の入力欄をリセットする
+    clearAdditionalQuestionInputs(field) {
+        const el = document.getElementById('custom-field-' + field.id);
+        if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime' || field.type === 'select')) {
+            el.value = '';
+        }
+        if (field.type === 'radio') {
+            document.querySelectorAll('input[name="custom-field-' + field.id + '"]').forEach(radio => {
+                radio.checked = false;
+                const lbl = radio.closest('.choice-label');
+                if (lbl) lbl.classList.remove('selected');
+            });
+        }
+        if (field.type === 'checkbox') {
+            document.querySelectorAll('input[data-field-id="' + field.id + '"][data-field-type="checkbox"]').forEach(cb => {
+                cb.checked = false;
+                const lbl = cb.closest('.choice-label');
+                if (lbl) lbl.classList.remove('selected');
+            });
+        }
+    }
+
     attachEventListeners() {
         // 名前・電話番号（非表示設定時は要素が存在しないのでガード）
         const nameInput = document.getElementById('customer-name');
@@ -649,10 +735,11 @@ class BookingForm {
             });
         });
         
-        // カスタムフィールド
-        if (this.config.custom_fields && this.config.custom_fields.length > 0) {
+        // カスタムフィールド（メニュー/オプションの追加質問も同じ仕組みで値を保持する）
+        const listenerFields = (this.config.custom_fields || []).concat(this.getAdditionalQuestionEntries().map(function(e) { return e.field; }));
+        if (listenerFields.length > 0) {
             const self = this;
-            this.config.custom_fields.forEach(function(field) {
+            listenerFields.forEach(function(field) {
                 const el = document.getElementById('custom-field-' + field.id);
                 if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime')) {
                     el.addEventListener('input', function() {
@@ -1894,8 +1981,11 @@ class BookingForm {
     }
     
     updateSummary() {
+        // メニュー/オプションの選択状態に応じて追加質問の表示を同期
+        // （updateSummary は選択変更のたびに呼ばれるためここでまとめて処理する）
+        this.updateAdditionalQuestionsVisibility();
         const items = [];
-        
+
         const summaryShowName = this.config.calendar_settings?.show_customer_name !== false;
         const summaryShowPhone = this.config.calendar_settings?.show_customer_phone !== false;
         if (summaryShowName && this.state.name) {
@@ -2116,6 +2206,23 @@ class BookingForm {
                 }
             }
         }
+        // 追加質問の必須チェック（対応するメニュー/オプションが選択されて表示中のもののみ）
+        const aqEntries = this.getAdditionalQuestionEntries();
+        if (aqEntries.length > 0) {
+            const aqSel = this.getSelectedOwnerIds();
+            for (let i = 0; i < aqEntries.length; i++) {
+                const entry = aqEntries[i];
+                if (!entry.field.required || !this.isAdditionalQuestionVisible(entry, aqSel)) continue;
+                const val = this.state.customFields[entry.field.id];
+                if (val === undefined || val === null || (typeof val === 'string' && val.trim() === '') || (Array.isArray(val) && val.length === 0)) {
+                    alert(entry.field.title + 'を入力・選択してください');
+                    const wrap = document.getElementById('aq-wrap-' + entry.field.id);
+                    if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    resetSubmitState();
+                    return;
+                }
+            }
+        }
         // 同意事項の必須チェック（「同意する」ボタンが表示されている場合のみ。
         // ボタン非表示時は同意操作ができないためチェックしない）
         const agreementCfg = this.config.reservation_summary?.agreement;
@@ -2154,15 +2261,14 @@ class BookingForm {
                 customerInfo.custom_fields = this.state.customFields;
                 // ラベル付きのカスタムフィールド（Googleカレンダー説明文用）
                 const labeledFields = {};
-                if (this.config.custom_fields) {
-                    this.config.custom_fields.forEach(field => {
-                        const val = this.state.customFields[field.id];
-                        if (val) {
-                            const display = (field.type === 'date' || field.type === 'datetime') ? formatDateTimeForDisplay(val) : val;
-                            labeledFields[field.title] = display;
-                        }
-                    });
-                }
+                const allLabeledFields = (this.config.custom_fields || []).concat(this.getAdditionalQuestionEntries().map(e => e.field));
+                allLabeledFields.forEach(field => {
+                    const val = this.state.customFields[field.id];
+                    if (val) {
+                        const display = (field.type === 'date' || field.type === 'datetime') ? formatDateTimeForDisplay(val) : val;
+                        labeledFields[field.title] = display;
+                    }
+                });
                 customerInfo.custom_fields_labeled = labeledFields;
             }
             customerInfo.total_price = totalPrice;
@@ -2387,9 +2493,10 @@ class BookingForm {
                 }
             }
 
-            // カスタムフィールド
-            if (this.config.custom_fields && this.config.custom_fields.length > 0 && showLineItem('custom_fields')) {
-                this.config.custom_fields.forEach(field => {
+            // カスタムフィールド（メニュー/オプションの追加質問の回答も含む）
+            const messageFields = (this.config.custom_fields || []).concat(this.getAdditionalQuestionEntries().map(e => e.field));
+            if (messageFields.length > 0 && showLineItem('custom_fields')) {
+                messageFields.forEach(field => {
                     const value = this.state.customFields?.[field.id];
                     if (value) {
                         const display = (field.type === 'date' || field.type === 'datetime') ? formatDateTimeForDisplay(value) : value;
@@ -3100,6 +3207,35 @@ if (document.readyState === 'loading') {
             </div>`;
       }
       return '';
+  }
+
+  // メニュー / オプションの追加質問を全件収集する（表示制御はクライアント側で行う）
+  private collectAdditionalQuestions(config: FormConfig): Array<{ field: import('@/types/form').AdditionalQuestion; ownerType: 'menu' | 'option'; ownerId: string }> {
+    const entries: Array<{ field: import('@/types/form').AdditionalQuestion; ownerType: 'menu' | 'option'; ownerId: string }> = [];
+    const pushQuestions = (list: import('@/types/form').AdditionalQuestion[] | undefined, ownerType: 'menu' | 'option', ownerId: string) => {
+      (list || []).forEach(q => {
+        if (q && q.id && q.title) entries.push({ field: q, ownerType, ownerId });
+      });
+    };
+    const processMenu = (menu: import('@/types/form').MenuItem) => {
+      pushQuestions(menu.additional_questions, 'menu', menu.id);
+      (menu.options || []).forEach(opt => pushQuestions(opt.additional_questions, 'option', opt.id));
+    };
+    (config.menu_structure?.categories || []).forEach(cat => {
+      (cat.menus || []).forEach(processMenu);
+      (cat.options || []).forEach(opt => pushQuestions(opt.additional_questions, 'option', opt.id));
+    });
+    (config.menu_structure?.menus || []).forEach(processMenu);
+    return entries;
+  }
+
+  // 追加質問フィールド（初期状態は非表示。対応するメニュー/オプション選択時にクライアント側で表示）
+  private renderAdditionalQuestionFields(config: FormConfig): string {
+    const entries = this.collectAdditionalQuestions(config);
+    if (entries.length === 0) return '';
+    return entries.map(e =>
+      `<div class="aq-field" id="aq-wrap-${e.field.id}" style="display:none;">${this.renderCustomFieldItem(e.field)}</div>`
+    ).join('\n            ');
   }
 
   // 表示位置が変更されているカスタムフィールドか（セクションアンカーのみ有効）
