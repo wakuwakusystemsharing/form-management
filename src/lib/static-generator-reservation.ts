@@ -2057,8 +2057,13 @@ class BookingForm {
             return;
         }
         if ((this.config.calendar_settings?.booking_mode || 'calendar') === 'multiple_dates') {
-            // 第三希望日時モード: 必須選択（required_choices）に応じてチェック
-            const requiredChoices = this.getRequiredDateChoices();
+            // 第三希望日時モード: 必須選択（required_choices）に応じてチェック。
+            // 非表示設定（visible_choices）で非表示の希望は必須でも検証しない
+            const visibleRaw = this.config.calendar_settings?.multiple_dates_settings?.visible_choices;
+            const visibleChoices = Array.isArray(visibleRaw) && visibleRaw.length > 0
+                ? visibleRaw.filter(n => n === 1 || n === 2 || n === 3)
+                : [1, 2, 3];
+            const requiredChoices = this.getRequiredDateChoices().filter(n => visibleChoices.includes(n));
             const choiceValues = {
                 1: [this.state.selectedDate, this.state.selectedTime],
                 2: [this.state.selectedDate2, this.state.selectedTime2],
@@ -2074,6 +2079,23 @@ class BookingForm {
                     return;
                 }
             }
+            // 非表示設定で第一希望が無い構成に備え、入力済みの希望を前詰めして送信する
+            const filledPairs = [
+                [this.state.selectedDate, this.state.selectedTime],
+                [this.state.selectedDate2, this.state.selectedTime2],
+                [this.state.selectedDate3, this.state.selectedTime3]
+            ].filter(pair => pair[0] && pair[1]);
+            if (filledPairs.length === 0) {
+                alert('希望日時を選択してください');
+                resetSubmitState();
+                return;
+            }
+            this.state.selectedDate = filledPairs[0][0];
+            this.state.selectedTime = filledPairs[0][1];
+            this.state.selectedDate2 = filledPairs[1] ? filledPairs[1][0] : '';
+            this.state.selectedTime2 = filledPairs[1] ? filledPairs[1][1] : '';
+            this.state.selectedDate3 = filledPairs[2] ? filledPairs[2][0] : '';
+            this.state.selectedTime3 = filledPairs[2] ? filledPairs[2][1] : '';
         } else if (!this.state.selectedDate || !this.state.selectedTime) {
             alert('予約日時を選択してください');
             resetSubmitState();
@@ -2736,13 +2758,21 @@ class BookingForm {
         // weekday_hours がある場合はそちらを優先
         if (settings.weekday_hours && settings.weekday_hours[String(dayOfWeek)]) {
             const wh = settings.weekday_hours[String(dayOfWeek)];
-            return { open: wh.open, close: wh.close, closed: wh.closed };
+            return {
+                open: wh.open,
+                close: wh.close,
+                closed: wh.closed,
+                custom: wh.custom === true,
+                custom_slots: Array.isArray(wh.custom_slots) ? wh.custom_slots : []
+            };
         }
         // レガシー互換: exclude_weekdays + start_time/end_time
         return {
             open: settings.start_time || '09:00',
             close: settings.end_time || '18:00',
-            closed: (settings.exclude_weekdays || []).includes(dayOfWeek)
+            closed: (settings.exclude_weekdays || []).includes(dayOfWeek),
+            custom: false,
+            custom_slots: []
         };
     }
 
@@ -2808,6 +2838,20 @@ class BookingForm {
             const hours = this.getWeekdayHours(settings, dayOfWeek);
             startTime = hours.open;
             endTime = hours.close;
+            // カスタム受付時間: 自由入力の時間帯テキストをそのまま選択肢にする
+            // （時間の解釈ができないため、✕時間帯・予約受付開始時間のフィルタは適用しない）
+            if (hours.custom && hours.custom_slots.length > 0) {
+                hours.custom_slots
+                    .map(t => String(t).trim())
+                    .filter(Boolean)
+                    .forEach(text => {
+                        const option = document.createElement('option');
+                        option.value = text;
+                        option.textContent = text;
+                        select.appendChild(option);
+                    });
+                return;
+            }
         }
 
         // 時間スロット生成
@@ -2997,7 +3041,7 @@ if (document.readyState === 'loading') {
   private renderCustomFields(config: FormConfig): string {
     const fields = config.custom_fields || [];
     if (fields.length === 0) return '';
-    return fields.map(field => {
+    const renderField = (field: NonNullable<FormConfig['custom_fields']>[number]): string => {
       const label = `${this.escapeHtml(field.title)}${field.required ? ' <span class="required">*</span>' : ''}`;
       const id = `custom-field-${field.id}`;
       if (field.type === 'text') {
@@ -3059,7 +3103,15 @@ if (document.readyState === 'loading') {
             </div>`;
       }
       return '';
-    }).filter(Boolean).join('\n            ');
+    };
+    // 各カスタムフィールドの上下に「画像orテキスト設置」ブロックを挿入できるようにする
+    return fields
+      .map(field =>
+        this.renderContentBlocksAt(config, `custom_${field.id}`, 'above')
+        + renderField(field)
+        + this.renderContentBlocksAt(config, `custom_${field.id}`, 'below'))
+      .filter(Boolean)
+      .join('\n            ');
   }
 
   private renderMenuField(config: FormConfig): string {
@@ -3180,6 +3232,13 @@ if (document.readyState === 'loading') {
     return [...new Set(rc)].sort();
   }
 
+  // 第三希望日時モードで表示する希望（1〜3）。未設定 = 全て表示。最低1つは表示
+  private getVisibleDateChoices(config: FormConfig): number[] {
+    const raw = config.calendar_settings?.multiple_dates_settings?.visible_choices;
+    const vc = Array.isArray(raw) ? raw.filter((n) => n === 1 || n === 2 || n === 3) : [1, 2, 3];
+    return vc.length > 0 ? [...new Set(vc)].sort() : [1, 2, 3];
+  }
+
   private renderDateTimeField(initiallyHidden: boolean): string {
     return `${this.renderCalendarField(initiallyHidden)}`;
   }
@@ -3230,48 +3289,32 @@ if (document.readyState === 'loading') {
   private renderMultipleDatesField(config: FormConfig, initiallyHidden: boolean): string {
     const hiddenStyle = initiallyHidden ? ' style="display:none;"' : '';
     const required = this.getRequiredDateChoices(config);
+    const visible = this.getVisibleDateChoices(config);
     const mark = (idx: number) => required.includes(idx)
       ? '<span class="required">*</span>'
       : '<span style="color:#6b7280;font-weight:normal;font-size:0.75rem;">（任意）</span>';
-    return `
-            <!-- 第一希望日時 -->
-            <div class="field" id="datetime-field-1"${hiddenStyle}>
-                <label class="field-label">第一希望日時 ${mark(1)}</label>
+    const labels: Record<number, string> = { 1: '第一希望日時', 2: '第二希望日時', 3: '第三希望日時' };
+    const block = (idx: number) => `
+            <!-- ${labels[idx]} -->
+            <div class="field" id="datetime-field-${idx}"${hiddenStyle}>
+                <label class="field-label">${labels[idx]} ${mark(idx)}</label>
                 <div class="datetime-wrapper" style="text-align: center;">
-                    <span class="placeholder" id="placeholder1" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
-                    <input type="hidden" id="date1" name="date1">
+                    <span class="placeholder" id="placeholder${idx}" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
+                    <input type="hidden" id="date${idx}" name="date${idx}">
                     <div class="dt-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
-                        <select id="date1_day" class="datetime-input" aria-label="日付を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
-                        <select id="date1_time" class="datetime-input" aria-label="時間を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 第二希望日時 -->
-            <div class="field" id="datetime-field-2"${hiddenStyle}>
-                <label class="field-label">第二希望日時 ${mark(2)}</label>
-                <div class="datetime-wrapper" style="text-align: center;">
-                    <span class="placeholder" id="placeholder2" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
-                    <input type="hidden" id="date2" name="date2">
-                    <div class="dt-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
-                        <select id="date2_day" class="datetime-input" aria-label="日付を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
-                        <select id="date2_time" class="datetime-input" aria-label="時間を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 第三希望日時 -->
-            <div class="field" id="datetime-field-3"${hiddenStyle}>
-                <label class="field-label">第三希望日時 ${mark(3)}</label>
-                <div class="datetime-wrapper" style="text-align: center;">
-                    <span class="placeholder" id="placeholder3" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
-                    <input type="hidden" id="date3" name="date3">
-                    <div class="dt-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
-                        <select id="date3_day" class="datetime-input" aria-label="日付を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
-                        <select id="date3_time" class="datetime-input" aria-label="時間を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
+                        <select id="date${idx}_day" class="datetime-input" aria-label="日付を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
+                        <select id="date${idx}_time" class="datetime-input" aria-label="時間を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
                     </div>
                 </div>
             </div>`;
+    // 非表示設定（visible_choices）に含まれる希望だけを描画する
+    return [1, 2, 3]
+      .filter((idx) => visible.includes(idx))
+      .map((idx) =>
+        this.renderContentBlocksAt(config, `datetime_${idx}`, 'above')
+        + block(idx)
+        + this.renderContentBlocksAt(config, `datetime_${idx}`, 'below'))
+      .join('\n');
   }
 
   // 指定セクションの上/下に表示する画像・テキストブロックを描画

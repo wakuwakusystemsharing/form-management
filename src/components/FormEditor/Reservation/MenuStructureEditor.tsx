@@ -22,18 +22,7 @@ function renderContentTextPreview(text: string): string {
     .replace(/\n/g, '<br>');
 }
 
-// 画像orテキスト設置ブロックの表示位置（フォーム上のセクション）
-const CONTENT_BLOCK_ANCHORS: Array<{ value: string; label: string }> = [
-  { value: 'name', label: 'お名前' },
-  { value: 'phone', label: '電話番号' },
-  { value: 'email', label: 'メールアドレス' },
-  { value: 'staff', label: '担当スタッフ' },
-  { value: 'menu', label: 'メニュー' },
-  { value: 'datetime', label: '希望日時' },
-  { value: 'message', label: 'メッセージ' },
-  { value: 'summary', label: 'ご予約内容' },
-  { value: 'submit', label: '送信ボタン' },
-];
+
 import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 import ImageCropperModal from './ImageCropperModal';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -1608,6 +1597,33 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
 
   // 画像orテキスト設置ブロック
   const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
+  // 画像orテキスト設置ブロックの表示位置。フォームの実際の並び順に合わせて動的に生成する
+  // （カスタムフィールドは項目ごと、第三希望日時モードは各希望ごとに選択可能）
+  const contentBlockAnchors = (() => {
+    const anchors: Array<{ value: string; label: string }> = [
+      { value: 'name', label: 'お名前' },
+      { value: 'phone', label: '電話番号' },
+      { value: 'email', label: 'メールアドレス' },
+      { value: 'staff', label: '担当スタッフ' },
+    ];
+    (form.config?.custom_fields || []).forEach((f) => {
+      anchors.push({ value: `custom_${f.id}`, label: `カスタム: ${f.title || '項目'}` });
+    });
+    anchors.push({ value: 'menu', label: 'メニュー' });
+    if (form.config?.calendar_settings?.booking_mode === 'multiple_dates') {
+      anchors.push({ value: 'datetime', label: '希望日時（全体）' });
+      anchors.push({ value: 'datetime_1', label: '第一希望日時' });
+      anchors.push({ value: 'datetime_2', label: '第二希望日時' });
+      anchors.push({ value: 'datetime_3', label: '第三希望日時' });
+    } else {
+      anchors.push({ value: 'datetime', label: '希望日時' });
+    }
+    anchors.push({ value: 'message', label: 'メッセージ' });
+    anchors.push({ value: 'summary', label: 'ご予約内容' });
+    anchors.push({ value: 'submit', label: '送信ボタン' });
+    return anchors;
+  })();
+
   const currentContentBlocks = () => form.config?.content_blocks || [];
   const updateContentBlocks = (blocks: NonNullable<Form['config']['content_blocks']>) => {
     onUpdate({ ...form, config: { ...form.config, content_blocks: blocks } });
@@ -2334,7 +2350,10 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     onChange={(e) => updateContentBlock(index, { anchor: e.target.value })}
                     className={`${themeClasses.input} text-sm`}
                   >
-                    {CONTENT_BLOCK_ANCHORS.map(a => (
+                    {(contentBlockAnchors.some(a => a.value === block.anchor)
+                      ? contentBlockAnchors
+                      : [{ value: block.anchor, label: `（現在は存在しない項目: ${block.anchor}）` }, ...contentBlockAnchors]
+                    ).map(a => (
                       <option key={a.value} value={a.value}>{a.label}</option>
                     ))}
                   </select>
