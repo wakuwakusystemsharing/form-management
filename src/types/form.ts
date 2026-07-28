@@ -141,6 +141,8 @@ export interface FormConfig {
     placeholder?: string;
     // 入力/選択内容を端末の localStorage に保存し、再訪時に復元する（他ユーザーには共有されない）
     restore_enabled?: boolean;
+    // 表示位置の変更（未設定 = 標準の位置。anchor は画像orテキスト設置と同じセクション指定）
+    placement?: { anchor: string; position: 'above' | 'below' };
   }>;
   
   menu_structure: {
