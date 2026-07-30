@@ -367,6 +367,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           enabled: ss?.enabled === true,
           required: ss?.required === true,
           allow_no_preference: ss?.allow_no_preference !== false,
+          max_staff_concurrent_enabled: ss?.max_staff_concurrent_enabled === true,
+          max_staff_concurrent_events: (typeof ss?.max_staff_concurrent_events === 'number'
+            && Number.isFinite(ss.max_staff_concurrent_events)
+            && ss.max_staff_concurrent_events >= 1)
+            ? Math.floor(ss.max_staff_concurrent_events)
+            : 1,
           staff: staffRaw
             .filter((m) => m && typeof m.id === 'string' && m.id && typeof m.name === 'string')
             .map((m) => ({
