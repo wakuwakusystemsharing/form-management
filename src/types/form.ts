@@ -238,6 +238,10 @@ export interface FormConfig {
     enabled: boolean;
     required?: boolean;             // 必須にするか（未選択だと予約送信不可）
     allow_no_preference?: boolean;  // 「指名なし」ボタンを表示するか（未設定 = true）
+    // スタッフ同時刻に埋まるイベント数: ON のとき、同時刻に埋まっているスタッフ数が
+    // max_staff_concurrent_events に達した時間帯は空いているスタッフも含め全員 ✕ になる
+    max_staff_concurrent_enabled?: boolean;
+    max_staff_concurrent_events?: number;   // 1 以上（デフォルト 1）
     staff: Array<{
       id: string;                   // スタッフID（ランダム生成）
       name: string;                 // 表示名

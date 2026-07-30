@@ -2146,6 +2146,43 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
               </label>
             </div>
 
+            {/* スタッフ同時刻に埋まるイベント数 */}
+            <div className={`p-3 rounded-md ${themeClasses.card}`}>
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.config?.staff_selection?.max_staff_concurrent_enabled === true}
+                  onChange={(e) => updateStaffSelection({ max_staff_concurrent_enabled: e.target.checked })}
+                  className={`h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${
+                    theme === 'light' ? 'bg-gray-100 border-gray-300' : 'bg-gray-700 border-gray-600'
+                  }`}
+                />
+                <span className={`text-sm font-medium ${themeClasses.text.primary}`}>スタッフ同時刻に埋まるイベント数</span>
+              </label>
+              <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                ONにすると、同時刻に予定が埋まっているスタッフ数が設定数に達した時間帯は、空いているスタッフも含めて全員✕になります。
+                OFFの場合は各スタッフ自身の予定だけで〇✕を判定します（現状どおり）。
+              </p>
+              {form.config?.staff_selection?.max_staff_concurrent_enabled === true && (
+                <div className="flex items-center gap-2 mt-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={form.config?.staff_selection?.max_staff_concurrent_events ?? 1}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      updateStaffSelection({ max_staff_concurrent_events: Number.isFinite(v) && v >= 1 ? Math.min(v, 99) : 1 });
+                    }}
+                    className={`w-20 px-3 py-2 rounded-md ${themeClasses.input}`}
+                  />
+                  <span className={`text-sm ${themeClasses.text.secondary}`}>
+                    人埋まったら全スタッフを✕にする
+                  </span>
+                </div>
+              )}
+            </div>
+
             {/* スタッフ一覧 */}
             <div className="space-y-2">
               {(form.config?.staff_selection?.staff || []).length === 0 ? (

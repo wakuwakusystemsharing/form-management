@@ -1348,8 +1348,12 @@ class BookingForm {
         endTime.setHours(23, 59, 59, 999);
         
         // スタッフ選択モードでは選択中スタッフごとに空き状況が異なるためキーを分ける
+        // スタッフ同時刻上限が ON のときは、指名時でも全スタッフの埋まり数を数える必要が
+        // あるため常に全スタッフのカレンダーを取得する
         const staffParam = this.isStaffCalendarMode()
-            ? (this.state.selectedStaffId && this.state.selectedStaffId !== 'none' ? this.state.selectedStaffId : 'all')
+            ? ((this.state.selectedStaffId && this.state.selectedStaffId !== 'none' && this.getStaffConcurrentCap() === null)
+                ? this.state.selectedStaffId
+                : 'all')
             : '';
         const cacheKey = startTime.toISOString() + endTime.toISOString() + ':' + staffParam;
         
@@ -1623,12 +1627,16 @@ class BookingForm {
                         busyByStaff[slot.staff_id] = true;
                     }
                 });
+                // スタッフ同時刻上限: 埋まっているスタッフ数が上限に達した時間帯は全員 ✕
+                // （上限 ON のときは fetchAvailability が常に全スタッフ分を取得している）
+                const staffCap = this.getStaffConcurrentCap();
+                const capReached = staffCap !== null && Object.keys(busyByStaff).length >= staffCap;
                 if (this.state.selectedStaffId && this.state.selectedStaffId !== 'none') {
-                    // スタッフ指名あり: そのスタッフが空いていれば〇
-                    isAvailable = !busyByStaff[this.state.selectedStaffId];
+                    // スタッフ指名あり: そのスタッフが空いていれば〇（上限到達時は✕）
+                    isAvailable = !capReached && !busyByStaff[this.state.selectedStaffId];
                 } else {
-                    // 指名なし/未選択: 誰か1人でも空いていれば〇
-                    isAvailable = this.getCapableCalendarStaff().some(m => !busyByStaff[m.id]);
+                    // 指名なし/未選択: 誰か1人でも空いていれば〇（上限到達時は✕）
+                    isAvailable = !capReached && this.getCapableCalendarStaff().some(m => !busyByStaff[m.id]);
                 }
             } else if (isBusinessEventTime && count >= maxConcurrent) {
                 // 営業日のイベント時間内で同時刻に閾値以上のイベントがある場合
@@ -2879,6 +2887,15 @@ class BookingForm {
         if (!ss || ss.enabled !== true) return false;
         if ((this.config.calendar_settings?.booking_mode || 'calendar') !== 'calendar') return false;
         return this.getCalendarStaff().length > 0;
+    }
+
+    // スタッフ同時刻に埋まるイベント数の上限（機能OFFなら null）。
+    // 同時刻に埋まっているスタッフ数がこの値に達した時間帯は全スタッフ ✕ になる
+    getStaffConcurrentCap() {
+        const ss = this.config.staff_selection;
+        if (!ss || ss.enabled !== true || ss.max_staff_concurrent_enabled !== true) return null;
+        const v = ss.max_staff_concurrent_events;
+        return (typeof v === 'number' && isFinite(v) && v >= 1) ? Math.floor(v) : 1;
     }
 
     // 第三希望日時モードの必須選択（1〜3）。未設定 = 全て必須。第一希望は常に必須
