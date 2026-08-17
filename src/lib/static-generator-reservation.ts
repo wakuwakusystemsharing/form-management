@@ -1435,6 +1435,16 @@ class BookingForm {
                 }
             });
         }
+        // 祝日の営業時間が設定されている場合はスロット範囲にも含める
+        const holidayHoursCfg = this.config?.calendar_settings?.holiday_hours;
+        if (holidayHoursCfg && holidayHoursCfg.enabled === true) {
+            const ho = holidayHoursCfg.open || '09:00';
+            const hc = holidayHoursCfg.close || '18:00';
+            const hOpenM = parseInt(ho.split(':')[0]) * 60 + parseInt(ho.split(':')[1]);
+            const hCloseM = parseInt(hc.split(':')[0]) * 60 + parseInt(hc.split(':')[1]);
+            if (isFinite(hOpenM) && hOpenM < earliestOpen) earliestOpen = hOpenM;
+            if (isFinite(hCloseM) && hCloseM > latestClose) latestClose = hCloseM;
+        }
         // 選択中メニュー/オプションの対応時間設定（セルごとの判定用に1回だけ計算）
         const menuTimeWindows = this.getActiveTimeWindows();
 
@@ -1490,9 +1500,9 @@ class BookingForm {
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayName = dayNames[dayOfWeek];
         
-        // 営業時間設定を取得
+        // 営業時間設定を取得（祝日の営業時間が ON かつ当日が祝日なら曜日設定より優先）
         const businessHours = this.config?.calendar_settings?.business_hours;
-        const dayHours = businessHours?.[dayName];
+        const dayHours = this.getHolidayBusinessHours(date) || businessHours?.[dayName];
         
         // 定休日チェック
         const isClosed = dayHours?.closed === true;
@@ -2889,6 +2899,16 @@ class BookingForm {
         return this.getCalendarStaff().length > 0;
     }
 
+    // 祝日の営業時間（カレンダーモード）: 設定 ON かつ当日が祝日なら曜日設定より優先して返す。
+    // OFF または祝日でない日は null（= 曜日の設定に従う）。
+    // 「祝日を予約不可にする」とは独立で、そちらが ON の場合は後段の shouldBlockAsHoliday が✕にする
+    getHolidayBusinessHours(date) {
+        const hh = this.config?.calendar_settings?.holiday_hours;
+        if (!hh || hh.enabled !== true) return null;
+        if (!getEffectiveHolidayType(date)) return null;
+        return { open: hh.open || '09:00', close: hh.close || '18:00', closed: false };
+    }
+
     // スタッフ同時刻に埋まるイベント数の上限（機能OFFなら null）。
     // 同時刻に埋まっているスタッフ数がこの値に達した時間帯は全スタッフ ✕ になる
     getStaffConcurrentCap() {
@@ -2935,7 +2955,19 @@ class BookingForm {
         }
     }
 
-    getWeekdayHours(settings, dayOfWeek) {
+    getWeekdayHours(settings, dayOfWeek, date) {
+        // 祝日の受付時間: 設定 ON かつ当日が祝日なら曜日設定より優先
+        // （「祝日を予約不可にする」が ON の場合は呼び出し元の shouldBlockAsHoliday が優先して除外する）
+        const hh = settings.holiday_hours;
+        if (date && hh && hh.enabled === true && getEffectiveHolidayType(date)) {
+            return {
+                open: hh.open || '09:00',
+                close: hh.close || '18:00',
+                closed: false,
+                custom: hh.custom === true,
+                custom_slots: Array.isArray(hh.custom_slots) ? hh.custom_slots : []
+            };
+        }
         // weekday_hours がある場合はそちらを優先
         if (settings.weekday_hours && settings.weekday_hours[String(dayOfWeek)]) {
             const wh = settings.weekday_hours[String(dayOfWeek)];
@@ -2974,8 +3006,8 @@ class BookingForm {
             const date = new Date(today);
             date.setDate(today.getDate() + i);
 
-            // 曜日別の定休日チェック
-            const hours = this.getWeekdayHours(settings, date.getDay());
+            // 曜日別の定休日チェック（祝日の受付時間が ON の祝日は定休曜日でも受付）
+            const hours = this.getWeekdayHours(settings, date.getDay(), date);
             if (hours.closed) {
                 continue;
             }
@@ -3016,7 +3048,7 @@ class BookingForm {
         if (selectedDateStr) {
             const selectedDate = new Date(selectedDateStr + 'T00:00:00');
             const dayOfWeek = selectedDate.getDay();
-            const hours = this.getWeekdayHours(settings, dayOfWeek);
+            const hours = this.getWeekdayHours(settings, dayOfWeek, selectedDate);
             startTime = hours.open;
             endTime = hours.close;
             // カスタム受付時間: 自由入力の時間帯テキストをそのまま選択肢にする

@@ -108,6 +108,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     start_time: string;
     end_time: string;
     weekday_hours?: { [key: string]: { open: string; close: string; closed: boolean; custom?: boolean; custom_slots?: string[] } };
+    holiday_hours?: { enabled: boolean; open: string; close: string; custom?: boolean; custom_slots?: string[] };
     required_choices?: number[];
     visible_choices?: number[];
     blocked_times?: string[];
@@ -124,6 +125,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         required_choices: existing?.required_choices || [1, 2, 3],
         visible_choices: existing?.visible_choices || [1, 2, 3],
         blocked_times: existing?.blocked_times || [],
+        holiday_hours: existing?.holiday_hours || { enabled: false, open: '09:00', close: '18:00', custom: false, custom_slots: [] },
       };
     })()
   );
@@ -456,6 +458,41 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
       }
     };
     onUpdate(updatedForm);
+  };
+
+  // 祝日の営業時間（カレンダー表示モード）。OFF = 曜日の設定に従う（既存挙動）
+  const handleHolidayHoursChange = (patch: Partial<{ enabled: boolean; open: string; close: string }>) => {
+    const current = form.config?.calendar_settings?.holiday_hours || { enabled: false, open: '09:00', close: '18:00' };
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          holiday_hours: { ...current, ...patch }
+        }
+      }
+    });
+  };
+
+  // 祝日の受付時間（日時選択モード）。OFF = 曜日の設定に従う（既存挙動）
+  const handleMdHolidayHoursChange = (patch: Partial<{ enabled: boolean; open: string; close: string; custom: boolean; custom_slots: string[] }>) => {
+    const current = multipleDatesSettings.holiday_hours || { enabled: false, open: '09:00', close: '18:00', custom: false, custom_slots: [] };
+    const updatedSettings = {
+      ...multipleDatesSettings,
+      holiday_hours: { ...current, ...patch },
+    };
+    setMultipleDatesSettings(updatedSettings);
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          multiple_dates_settings: updatedSettings
+        }
+      }
+    });
   };
 
   // 月曜日の曜日別受付時間（受付/時間/カスタム）をすべての曜日にコピー（日時選択モード用）
@@ -819,6 +856,63 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   </div>
                 </div>
               ))}
+
+              {/* 祝日の営業時間（ONのとき祝日は曜日設定より優先） */}
+              <div className={`rounded-lg p-3 ${
+                theme === 'light'
+                  ? 'border border-gray-300 bg-gray-50'
+                  : 'border border-gray-700 bg-gray-900/50'
+              }`}>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                  <div className={`w-full sm:w-16 text-sm font-medium ${themeClasses.text.secondary} flex-shrink-0`}>
+                    祝日
+                  </div>
+
+                  <label className="flex items-center space-x-2 flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={form.config?.calendar_settings?.holiday_hours?.enabled === true}
+                      onChange={(e) => handleHolidayHoursChange({ enabled: e.target.checked })}
+                      className={`rounded ${accentClasses} ${
+                        theme === 'light'
+                          ? 'border-gray-300 bg-gray-100'
+                          : 'border-gray-600 bg-gray-700'
+                      }`}
+                    />
+                    <span className={`text-sm ${themeClasses.text.secondary}`}>祝日設定を使う</span>
+                  </label>
+
+                  {form.config?.calendar_settings?.holiday_hours?.enabled === true ? (
+                    <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-1">
+                      <input
+                        type="time"
+                        value={form.config?.calendar_settings?.holiday_hours?.open || '09:00'}
+                        onChange={(e) => handleHolidayHoursChange({ open: e.target.value })}
+                        className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
+                      />
+                      <span className={`text-sm ${themeClasses.text.secondary} hidden sm:inline`}>〜</span>
+                      <input
+                        type="time"
+                        value={form.config?.calendar_settings?.holiday_hours?.close || '18:00'}
+                        onChange={(e) => handleHolidayHoursChange({ close: e.target.value })}
+                        className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
+                      />
+                    </div>
+                  ) : (
+                    <span className={`px-2 py-1 text-xs rounded ${
+                      theme === 'light'
+                        ? 'bg-gray-200 text-gray-600 border border-gray-300'
+                        : 'bg-gray-700 text-gray-400 border border-gray-600'
+                    }`}>
+                      曜日の設定に従う
+                    </span>
+                  )}
+                </div>
+                <p className={`text-xs ${themeClasses.text.tertiary} mt-2`}>
+                  ONにすると、祝日（振替休日含む）は曜日の設定より優先してこの時間で受付します。
+                  予約ルール設定の「祝日を予約不可にする」がONの祝日はそちらが優先され✕になります。
+                </p>
+              </div>
             </div>
                 </div>
               </div>
@@ -1155,6 +1249,125 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                         </div>
                       );
                     })}
+
+                    {/* 祝日の受付時間（ONのとき祝日は曜日設定より優先） */}
+                    {(() => {
+                      const holidayHours = multipleDatesSettings.holiday_hours || { enabled: false, open: '09:00', close: '18:00', custom: false, custom_slots: [] };
+                      return (
+                        <div className={`rounded-lg p-3 ${
+                          theme === 'light'
+                            ? 'border border-gray-300 bg-white'
+                            : 'border border-gray-700 bg-gray-900/50'
+                        }`}>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                            <div className={`w-full sm:w-16 text-sm font-medium ${themeClasses.text.secondary} flex-shrink-0`}>
+                              祝日
+                            </div>
+
+                            <div className="flex flex-col gap-1 flex-shrink-0">
+                              <label className="flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  checked={holidayHours.enabled === true}
+                                  onChange={(e) => handleMdHolidayHoursChange({ enabled: e.target.checked })}
+                                  className={`rounded ${accentClasses} ${
+                                    theme === 'light'
+                                      ? 'border-gray-300 bg-gray-100'
+                                      : 'border-gray-600 bg-gray-700'
+                                  }`}
+                                />
+                                <span className={`text-sm ${themeClasses.text.secondary}`}>祝日設定を使う</span>
+                              </label>
+                              {holidayHours.enabled === true && (
+                                <label className="flex items-center space-x-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!holidayHours.custom}
+                                    onChange={(e) => handleMdHolidayHoursChange({ custom: e.target.checked })}
+                                    className={`rounded ${accentClasses} ${
+                                      theme === 'light'
+                                        ? 'border-gray-300 bg-gray-100'
+                                        : 'border-gray-600 bg-gray-700'
+                                    }`}
+                                  />
+                                  <span className={`text-sm ${themeClasses.text.secondary}`}>カスタム</span>
+                                </label>
+                              )}
+                            </div>
+
+                            {holidayHours.enabled !== true && (
+                              <span className={`px-2 py-1 text-xs rounded ${
+                                theme === 'light'
+                                  ? 'bg-gray-200 text-gray-600 border border-gray-300'
+                                  : 'bg-gray-700 text-gray-400 border border-gray-600'
+                              }`}>
+                                曜日の設定に従う
+                              </span>
+                            )}
+
+                            {holidayHours.enabled === true && !holidayHours.custom && (
+                              <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-1">
+                                <input
+                                  type="time"
+                                  value={holidayHours.open || '09:00'}
+                                  onChange={(e) => handleMdHolidayHoursChange({ open: e.target.value })}
+                                  className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
+                                />
+                                <span className={`text-sm ${themeClasses.text.secondary} hidden sm:inline`}>〜</span>
+                                <input
+                                  type="time"
+                                  value={holidayHours.close || '18:00'}
+                                  onChange={(e) => handleMdHolidayHoursChange({ close: e.target.value })}
+                                  className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
+                                />
+                              </div>
+                            )}
+
+                            {holidayHours.enabled === true && holidayHours.custom === true && (
+                              <div className="flex-1 space-y-1 min-w-0">
+                                {(holidayHours.custom_slots || []).map((slot, slotIndex) => (
+                                  <div key={slotIndex} className="flex items-center gap-2">
+                                    <input
+                                      type="text"
+                                      value={slot}
+                                      onChange={(ev) => {
+                                        const next = [...(holidayHours.custom_slots || [])];
+                                        next[slotIndex] = ev.target.value;
+                                        handleMdHolidayHoursChange({ custom_slots: next });
+                                      }}
+                                      placeholder="例: 10:00~12:00 / 16:00以降"
+                                      className={`${themeClasses.input} text-sm flex-1 min-w-0`}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMdHolidayHoursChange({ custom_slots: (holidayHours.custom_slots || []).filter((_, i) => i !== slotIndex) })}
+                                      title="削除"
+                                      className={`p-1.5 rounded text-red-400 hover:text-red-300 flex-shrink-0 ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+                                    >
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => handleMdHolidayHoursChange({ custom_slots: [...(holidayHours.custom_slots || []), ''] })}
+                                  className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
+                                >
+                                  ＋ 時間帯を追加
+                                </button>
+                                <p className={`text-xs ${themeClasses.text.tertiary}`}>
+                                  入力したテキストがそのまま「時間を選択」の選択肢になります
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                          <p className={`text-xs ${themeClasses.text.tertiary} mt-2`}>
+                            ONにすると、祝日（振替休日含む）は曜日の設定より優先してこの時間で受付します。
+                            予約ルール設定の「祝日を予約不可にする」がONの祝日はそちらが優先されます。
+                          </p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
