@@ -194,6 +194,14 @@ export interface FormConfig {
     holidays_as_closed?: boolean;
     // マスタートグル ON 時に ✕ にしない祝日タイプの ID 配列（空配列 = 全祝日 ✕）
     excluded_holiday_types?: string[];
+    // 祝日の営業時間（カレンダー表示モード）。enabled のとき祝日は曜日設定より優先して
+    // この時間で受付する。OFF = 曜日の設定に従う（既存挙動）。
+    // 「祝日を予約不可にする」とは独立の機能で、予約不可設定が優先される
+    holiday_hours?: {
+      enabled: boolean;
+      open: string;    // "09:00"
+      close: string;   // "18:00"
+    };
     // 第三希望日時モード用設定
     multiple_dates_settings?: {
       time_interval: 10 | 15 | 20 | 30 | 45 | 60 | 120;   // 時間間隔（分）
@@ -211,6 +219,15 @@ export interface FormConfig {
           custom?: boolean;               // カスタム受付時間（自由入力の時間帯を選択肢にする）
           custom_slots?: string[];        // 例: ["10:00~12:00", "16:00以降"]
         };
+      };
+      // 祝日の受付時間。enabled のとき祝日は曜日設定より優先してこの時間で受付する
+      // （OFF = 曜日の設定に従う。「祝日を予約不可にする」が ON の場合はそちらが優先）
+      holiday_hours?: {
+        enabled: boolean;
+        open: string;                     // "09:00"
+        close: string;                    // "18:00"
+        custom?: boolean;                 // カスタム受付時間（自由入力の時間帯を選択肢にする）
+        custom_slots?: string[];          // 例: ["10:00~12:00", "16:00以降"]
       };
       // 表示する希望日時（1〜3）。未設定 = 全て表示。非表示の希望は必須選択でも送信時に無視される
       visible_choices?: number[];

@@ -297,6 +297,19 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             if (!rc.includes(1)) rc.unshift(1);
             base.required_choices = [...new Set(rc)].sort();
           }
+          // 祝日の受付時間（未設定 = OFF、曜日の設定に従う）
+          {
+            const hh = (base as { holiday_hours?: { enabled?: unknown; open?: unknown; close?: unknown; custom?: unknown; custom_slots?: unknown } }).holiday_hours;
+            (base as Record<string, unknown>).holiday_hours = {
+              enabled: hh?.enabled === true,
+              open: typeof hh?.open === 'string' && hh.open ? hh.open : '09:00',
+              close: typeof hh?.close === 'string' && hh.close ? hh.close : '18:00',
+              custom: hh?.custom === true,
+              custom_slots: Array.isArray(hh?.custom_slots)
+                ? hh.custom_slots.filter((x): x is string => typeof x === 'string')
+                : []
+            };
+          }
           // 表示する希望日時（未設定 = 全て表示。最低1つは表示）
           {
             const vcRaw = (base as { visible_choices?: unknown }).visible_choices;
@@ -357,6 +370,15 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           const v = existingConfig?.calendar_settings?.excluded_holiday_types
             ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.excluded_holiday_types;
           return Array.isArray(v) ? v.filter((s) => typeof s === 'string') : [];
+        })(),
+        holiday_hours: (() => {
+          const v = existingConfig?.calendar_settings?.holiday_hours
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.holiday_hours;
+          return {
+            enabled: v?.enabled === true,
+            open: typeof v?.open === 'string' && v.open ? v.open : '09:00',
+            close: typeof v?.close === 'string' && v.close ? v.close : '18:00'
+          };
         })()
       },
       staff_selection: (() => {
