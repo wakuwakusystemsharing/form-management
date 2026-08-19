@@ -192,6 +192,9 @@ export class StaticSurveyGenerator {
                     }
 
                     console.log('LIFF初期化成功');
+
+                    // アクセストークン失効による再ログインから復帰した場合、未送信の確認メッセージを自動再送
+                    await trySendPendingSurveyMessage();
                 }
             } catch (err) {
                 console.error('LIFF初期化失敗', err);
@@ -245,7 +248,7 @@ export class StaticSurveyGenerator {
             return value;
         }
 
-        function submitForm() {
+        async function submitForm() {
             const formData = {};
             const formDataDisplay = {};
             const questions = SURVEY_QUESTIONS;
@@ -299,22 +302,25 @@ export class StaticSurveyGenerator {
             
             if (surveyFormId && storeId) {
                 // 現在のURLからベースパスを取得
+                // （アクセストークン失効時は再ログインでページを離脱するため、保存完了を待ってから進む）
                 const baseUrl = window.location.origin;
-                fetch(\`\${baseUrl}/api/surveys/submit\`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        survey_form_id: surveyFormId,
-                        store_id: storeId,
-                        responses: formData,
-                        line_user_id: lineUserId || null, // LINEユーザーID
-                        line_friend_flag: lineFriendFlag // 友だち追加状態
-                    })
-                }).catch((err) => {
+                try {
+                    await fetch(\`\${baseUrl}/api/surveys/submit\`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            survey_form_id: surveyFormId,
+                            store_id: storeId,
+                            responses: formData,
+                            line_user_id: lineUserId || null, // LINEユーザーID
+                            line_friend_flag: lineFriendFlag // 友だち追加状態
+                        })
+                    });
+                } catch (err) {
                     console.error('データベースへの保存に失敗しました', err);
-                });
+                }
             }
 
             // LINEトークにメッセージを送信
@@ -328,13 +334,52 @@ export class StaticSurveyGenerator {
                 ? `\n            surveyMessages.push({ type: 'text', text: ${JSON.stringify(safeConfig.basic_info.second_message.text.trim())} });`
                 : ''
             }
-            liff.sendMessages(surveyMessages).then(() => {
+            try {
+                await liff.sendMessages(surveyMessages);
                 alert('ご記入ありがとうございます。');
                 liff.closeWindow();
-            }).catch((err) => {
+            } catch (err) {
                 console.error('メッセージの送信に失敗しました', err);
-                alert('メッセージの送信に失敗しました: ' + err);
-            });
+                const errText = String((err && err.message) || err);
+                if (/access[_ ]?token|login first|expired|unauthorized|401|403/i.test(errText)) {
+                    // アクセストークン失効: 送信内容を保存して LINE に再ログイン → 復帰後に自動再送
+                    // （回答自体は上で保存済み。再送するのはトークへの確認メッセージのみ）
+                    try {
+                        localStorage.setItem(SURVEY_STORAGE_KEY + '_pendingMessage', JSON.stringify({ messages: surveyMessages, savedAt: Date.now() }));
+                    } catch (e) {}
+                    try { liff.logout(); } catch (e) {}
+                    liff.login({ redirectUri: window.location.href });
+                    return;
+                }
+                // その他のエラー: 回答は保存済みなので生のエラーは表示しない
+                alert('アンケートの回答は送信されました。\\n（LINEトークへの確認メッセージの表示に失敗しました）');
+                liff.closeWindow();
+            }
+        }
+
+        // アクセストークン失効 → 再ログインから復帰した後、未送信の確認メッセージを自動再送する
+        async function trySendPendingSurveyMessage() {
+            const pendingKey = SURVEY_STORAGE_KEY + '_pendingMessage';
+            let pending = null;
+            try {
+                const raw = localStorage.getItem(pendingKey);
+                if (raw) pending = JSON.parse(raw);
+            } catch (e) { return; }
+            if (!pending || !Array.isArray(pending.messages) || pending.messages.length === 0) return;
+            // 再送は1回だけ（無限ループ防止のため送信前に削除する）
+            try { localStorage.removeItem(pendingKey); } catch (e) {}
+            // 15分以上前のものは破棄（古い持ち越しの誤送信防止）
+            if (typeof pending.savedAt !== 'number' || Date.now() - pending.savedAt > 15 * 60 * 1000) return;
+            if (!liff.isInClient()) return;
+            try {
+                await liff.sendMessages(pending.messages);
+                alert('ご記入ありがとうございます。');
+                liff.closeWindow();
+            } catch (err) {
+                console.error('確認メッセージの再送信に失敗しました', err);
+                alert('アンケートの回答は送信されました。\\n（LINEトークへの確認メッセージの表示に失敗しました）');
+                liff.closeWindow();
+            }
         }
     </script>
 </body>
