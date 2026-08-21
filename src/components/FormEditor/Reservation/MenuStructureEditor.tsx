@@ -1493,6 +1493,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [catName, setCatName] = useState('');
   const [catDisplayName, setCatDisplayName] = useState('');
+  const [catImage, setCatImage] = useState('');
+  const [catImageUploading, setCatImageUploading] = useState(false);
 
   // メニューモーダル
   const [menuModalOpen, setMenuModalOpen] = useState(false);
@@ -1537,25 +1539,52 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     setEditingCategory(null);
     setCatName('');
     setCatDisplayName('');
+    setCatImage('');
     setCategoryModalOpen(true);
   };
   const handleOpenEditCategory = (cat: MenuCategory) => {
     setEditingCategory(cat);
     setCatName(cat.name);
     setCatDisplayName(cat.display_name || cat.name);
+    setCatImage(cat.image || '');
     setCategoryModalOpen(true);
   };
   const handleSaveCategory = () => {
     const name = catName.trim() || 'カテゴリー';
     const displayName = catDisplayName.trim() || name;
     if (editingCategory) {
-      updateCategories(categories.map(c => c.id === editingCategory.id ? { ...c, name, display_name: displayName } : c));
+      updateCategories(categories.map(c => c.id === editingCategory.id ? { ...c, name, display_name: displayName, image: catImage || undefined } : c));
     } else {
-      const newCat: MenuCategory = { id: `cat_${Date.now()}`, name, display_name: displayName, menus: [], options: [], selection_mode: 'single', gender_condition: 'all' };
+      const newCat: MenuCategory = { id: `cat_${Date.now()}`, name, display_name: displayName, image: catImage || undefined, menus: [], options: [], selection_mode: 'single', gender_condition: 'all' };
       updateCategories([...categories, newCat]);
       setOpenCategories(prev => new Set([...prev, newCat.id]));
     }
     setCategoryModalOpen(false);
+  };
+
+  // カテゴリー画像のアップロード（メニュー画像と同じアップロード API を使用）
+  const handleCategoryImageUpload = async (file: File) => {
+    setCatImageUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      formData.append('storeId', form.store_id);
+      formData.append('menuId', `category_${editingCategory?.id || Date.now()}`);
+      if (catImage) formData.append('oldImageUrl', catImage);
+      const response = await fetch('/api/upload/menu-image', { method: 'POST', body: formData });
+      if (response.ok) {
+        const { url } = await response.json();
+        setCatImage(url);
+      } else {
+        const error = await response.json().catch(() => ({}));
+        alert(`アップロードに失敗しました: ${error.error || ''}`);
+      }
+    } catch (e) {
+      console.error('Category image upload error:', e);
+      alert('アップロードに失敗しました');
+    } finally {
+      setCatImageUploading(false);
+    }
   };
   // カテゴリーの並び替え（上下ボタン / ドラッグ&ドロップ）。配列順 = 予約フォーム上の表示順
   // メニュー / カテゴリー共通オプションのドラッグ&ドロップ並び替え（同一カテゴリー内のみ）
@@ -1865,6 +1894,33 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     updateContentBlocks(next);
   };
   // テキストブロック: textarea の選択範囲に色タグを適用
+  // カスタムフィールドの部分更新ヘルパー（説明テキスト・リンクボタン編集用）
+  const updateCustomFieldAt = (index: number, patch: Partial<NonNullable<Form['config']['custom_fields']>[number]>) => {
+    const currentFields = [...(form.config?.custom_fields || [])];
+    currentFields[index] = { ...currentFields[index], ...patch };
+    onUpdate({ ...form, config: { ...form.config, custom_fields: currentFields } });
+  };
+  const fieldDescTextareaRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const applyColorToFieldDesc = (index: number, fieldId: string, color: string) => {
+    const ta = fieldDescTextareaRefs.current[fieldId];
+    const text = (form.config?.custom_fields || [])[index]?.description || '';
+    if (!ta) return;
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? 0;
+    if (start === end) {
+      alert('色を付けたい部分をテキスト内でドラッグして選択してから、色を選んでください');
+      return;
+    }
+    const next = text.slice(0, start) + `[color=${color}]` + text.slice(start, end) + '[/color]' + text.slice(end);
+    updateCustomFieldAt(index, { description: next });
+  };
+  const clearFieldDescColors = (index: number) => {
+    const text = (form.config?.custom_fields || [])[index]?.description || '';
+    updateCustomFieldAt(index, {
+      description: text.replace(/\[color=#[0-9a-fA-F]{3,8}\]/g, '').replace(/\[\/color\]/g, '')
+    });
+  };
+
   const blockTextareaRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
   const applyColorToBlockSelection = (index: number, blockId: string, color: string) => {
     const ta = blockTextareaRefs.current[blockId];
@@ -3315,6 +3371,123 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                 )}
               </div>
 
+              {/* 説明テキスト（フォーム上では質問名の下に表示） */}
+              <div className="mb-3 space-y-2">
+                <label className={`block text-xs ${themeClasses.text.secondary}`}>説明テキスト（任意・質問名の下に表示されます）</label>
+                <textarea
+                  ref={(el) => { fieldDescTextareaRefs.current[field.id] = el; }}
+                  value={field.description || ''}
+                  onChange={(e) => updateCustomFieldAt(index, { description: e.target.value })}
+                  placeholder="例: 当てはまるものをお選びください"
+                  rows={2}
+                  className={`w-full text-sm rounded-md border px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
+                    theme === 'light'
+                      ? 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                      : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
+                  }`}
+                />
+                {(field.description || '').trim() && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className={`text-xs ${themeClasses.text.secondary} mr-1`}>文字色:</span>
+                    {CONTENT_TEXT_COLORS.map((c) => (
+                      <button
+                        key={c.hex}
+                        type="button"
+                        title={c.label}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => applyColorToFieldDesc(index, field.id, c.hex)}
+                        className="w-5 h-5 rounded-full hover:scale-110 transition-transform"
+                        style={{ backgroundColor: c.hex }}
+                      />
+                    ))}
+                    <label
+                      title="好きな色を選ぶ"
+                      onMouseDown={(e) => e.preventDefault()}
+                      className={`w-5 h-5 rounded-full cursor-pointer overflow-hidden border ${theme === 'light' ? 'border-gray-300' : 'border-gray-500'}`}
+                      style={{ background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)' }}
+                    >
+                      <input
+                        type="color"
+                        className="opacity-0 w-full h-full cursor-pointer"
+                        onChange={(e) => applyColorToFieldDesc(index, field.id, e.target.value)}
+                      />
+                    </label>
+                    {(field.description || '').includes('[color=') && (
+                      <button
+                        type="button"
+                        onClick={() => clearFieldDescColors(index)}
+                        className={`px-2 py-0.5 text-xs rounded-md ${themeClasses.button.secondary}`}
+                      >
+                        色をすべて解除
+                      </button>
+                    )}
+                    <span className={`text-[10px] ${themeClasses.text.tertiary} w-full`}>
+                      色を変えたい部分をテキスト内で選択してから色を押してください
+                    </span>
+                  </div>
+                )}
+                {(field.description || '').trim() && (
+                  <div>
+                    <p className={`text-[10px] ${themeClasses.text.tertiary} mb-1`}>フォーム上の表示イメージ:</p>
+                    <div
+                      className="text-sm rounded border p-3 leading-relaxed"
+                      style={{ backgroundColor: '#f7f8fa', color: '#333' }}
+                      dangerouslySetInnerHTML={{ __html: renderContentTextPreview(field.description || '') }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* リンクボタン（フォーム上では回答欄の下に表示） */}
+              <div className="mb-3">
+                <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>リンクボタン（任意・回答欄の下に表示されます）</label>
+                {(field.link_buttons || []).map((btn, btnIndex) => (
+                  <div key={btn.id || btnIndex} className="flex items-center gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={btn.label}
+                      onChange={(e) => {
+                        const next = [...(field.link_buttons || [])];
+                        next[btnIndex] = { ...next[btnIndex], label: e.target.value };
+                        updateCustomFieldAt(index, { link_buttons: next });
+                      }}
+                      placeholder="ボタン名"
+                      className={`${themeClasses.input} text-sm w-1/3 min-w-0`}
+                    />
+                    <input
+                      type="text"
+                      value={btn.url}
+                      onChange={(e) => {
+                        const next = [...(field.link_buttons || [])];
+                        next[btnIndex] = { ...next[btnIndex], url: e.target.value };
+                        updateCustomFieldAt(index, { link_buttons: next });
+                      }}
+                      placeholder="https://example.com または tel:0312345678"
+                      className={`${themeClasses.input} text-sm flex-1 min-w-0`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updateCustomFieldAt(index, { link_buttons: (field.link_buttons || []).filter((_, i) => i !== btnIndex) })}
+                      className="text-red-400 hover:text-red-300 flex-shrink-0"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => updateCustomFieldAt(index, {
+                    link_buttons: [...(field.link_buttons || []), { id: `cflink_${Date.now()}`, label: '', url: '' }]
+                  })}
+                  className={`text-sm ${theme === 'light' ? 'text-[rgb(244,144,49)] hover:text-[rgb(220,125,35)]' : 'text-cyan-400 hover:text-cyan-300'}`}
+                >
+                  + ボタンを追加
+                </button>
+                <p className={`text-[10px] ${themeClasses.text.tertiary} mt-1`}>
+                  リンク先は https:// / tel: / mailto: で始まるものが使えます
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                 <div>
                   <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>回答タイプ</label>
@@ -3816,6 +3989,43 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                   placeholder="例：◆ブライダルコース◆"
                   className={themeClasses.input}
                 />
+              </div>
+              <div>
+                <label className={`block text-sm ${themeClasses.label} mb-1`}>カテゴリー画像（任意）</label>
+                {catImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={catImage} alt="カテゴリー画像プレビュー" className="max-h-32 rounded-md border mb-2" />
+                ) : (
+                  <p className={`text-xs ${themeClasses.text.tertiary} mb-2`}>画像が未設定です</p>
+                )}
+                <div className="flex items-center gap-2">
+                  <label className={`px-3 py-1.5 text-sm rounded-md cursor-pointer ${themeClasses.button.secondary}`}>
+                    {catImageUploading ? 'アップロード中...' : '画像を選択'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={catImageUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleCategoryImageUpload(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
+                  {catImage && (
+                    <button
+                      type="button"
+                      onClick={() => setCatImage('')}
+                      className="px-3 py-1.5 text-sm rounded-md text-red-400 hover:text-red-300"
+                    >
+                      画像を削除
+                    </button>
+                  )}
+                </div>
+                <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                  予約フォームのカテゴリー見出しの下に表示されます
+                </p>
               </div>
             </div>
             <div className="flex space-x-3 justify-end">

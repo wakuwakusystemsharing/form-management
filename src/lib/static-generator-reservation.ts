@@ -3252,6 +3252,24 @@ if (document.readyState === 'loading') {
   }
 
   private renderCustomFieldItem(field: NonNullable<FormConfig['custom_fields']>[number]): string {
+      const core = this.renderCustomFieldControl(field);
+      if (!core) return '';
+      let html = core;
+      // 説明テキスト（[color] タグ対応）を質問名ラベルの直下に挿入
+      if (field.description && field.description.trim()) {
+        html = html.replace('</label>', `</label>\n                <div class="custom-field-desc">${this.renderColoredTextHtml(field.description)}</div>`);
+      }
+      // リンクボタンを回答欄の下に追加（注意書きのリンクボタンと同じ見た目）
+      const buttonItems = this.renderLinkButtonsHtml(field.link_buttons);
+      if (buttonItems) {
+        const buttonsHtml = `<div class="notice-link-buttons custom-field-link-buttons">${buttonItems}</div>`;
+        const lastDiv = html.lastIndexOf('</div>');
+        html = lastDiv >= 0 ? html.slice(0, lastDiv) + buttonsHtml + '</div>' : html + buttonsHtml;
+      }
+      return html;
+  }
+
+  private renderCustomFieldControl(field: NonNullable<FormConfig['custom_fields']>[number]): string {
       const label = `${this.escapeHtml(field.title)}${field.required ? ' <span class="required">*</span>' : ''}`;
       const id = `custom-field-${field.id}`;
       if (field.type === 'text') {
@@ -3452,6 +3470,8 @@ if (document.readyState === 'loading') {
                     </button>
                     ` : ''}
                     <div id="category-section-${category.id}" class="category-section" style="${multiCat && idx > 0 ? 'display:none;' : ''}">
+                        ${category.image && /^https?:/i.test(category.image.trim()) ? `
+                        <div class="category-image"><img src="${this.escapeHtml(category.image.trim())}" alt="${this.escapeHtml(category.display_name || category.name)}" loading="lazy"></div>` : ''}
                         <div class="menu-list">
                             ${category.menus.map(menu => renderMenuButton(menu, category.id)).join('')}
                         </div>
@@ -3589,28 +3609,34 @@ if (document.readyState === 'loading') {
       if (b.type === 'image') {
         return `<div class="content-block content-block-image"><img src="${this.escapeHtml((b.image_url || '').trim())}" alt="" loading="lazy"></div>`;
       }
-      // [color=#rrggbb]〜[/color] を <span style="color:..."> に変換（hex のみ許可 = CSSインジェクション防止）
-      const textHtml = this.escapeHtml(b.text || '')
-        .replace(/\[color=(#[0-9a-fA-F]{3,8})\]/g, '<span style="color:$1">')
-        .replace(/\[\/color\]/g, '</span>')
-        .replace(/\n/g, '<br>');
-      return `<div class="content-block content-block-text">${textHtml}</div>`;
+      return `<div class="content-block content-block-text">${this.renderColoredTextHtml(b.text || '')}</div>`;
     }).join('');
     return items + placedFieldsHtml;
   }
 
-  private renderNoticeButtons(config: FormConfig): string {
-    const buttons = (config.basic_info?.notice_buttons || []).filter(b =>
-      b && b.label && b.url
-      // 安全なスキームのみ許可（javascript: 等のインジェクション防止）
-      && /^(https?:|tel:|mailto:|sms:|line:)/i.test(b.url.trim())
-    );
-    if (buttons.length === 0) return '';
-    const items = buttons.map(b => {
+  // [color=#rrggbb]〜[/color] を <span style="color:..."> に変換（hex のみ許可 = CSSインジェクション防止）
+  private renderColoredTextHtml(text: string): string {
+    return this.escapeHtml(text || '')
+      .replace(/\[color=(#[0-9a-fA-F]{3,8})\]/g, '<span style="color:$1">')
+      .replace(/\[\/color\]/g, '</span>')
+      .replace(/\n/g, '<br>');
+  }
+
+  // リンクボタン群の HTML（注意書き / カスタムフィールドで共用。安全なスキームのみ許可）
+  private renderLinkButtonsHtml(buttons: Array<{ label: string; url: string }> | undefined): string {
+    const valid = (buttons || []).filter(b =>
+      b && b.label && b.url && /^(https?:|tel:|mailto:|sms:|line:)/i.test(b.url.trim()));
+    if (valid.length === 0) return '';
+    return valid.map(b => {
       const url = b.url.trim();
       const isWebLink = /^https?:/i.test(url);
       return `<a class="notice-link-button" href="${this.escapeHtml(url)}"${isWebLink ? ' target="_blank" rel="noopener noreferrer"' : ''}>${this.escapeHtml(b.label)}</a>`;
     }).join('\n                ');
+  }
+
+  private renderNoticeButtons(config: FormConfig): string {
+    const items = this.renderLinkButtonsHtml(config.basic_info?.notice_buttons);
+    if (!items) return '';
     return `
             <!-- 注意書きリンクボタン -->
             <div class="notice-link-buttons">
@@ -3901,6 +3927,26 @@ if (document.readyState === 'loading') {
             max-width: 100%;
             margin: 0 auto;
             border-radius: 4px;
+        }
+        /* カテゴリー画像（カテゴリー見出し下に表示） */
+        .category-image img {
+            display: block;
+            width: 100%;
+            max-height: 240px;
+            object-fit: cover;
+            border-radius: 6px;
+            margin: 4px 0 12px;
+        }
+        /* カスタムフィールドの説明テキスト・リンクボタン */
+        .custom-field-desc {
+            font-size: 13px;
+            color: var(--text-dark, #333);
+            line-height: 1.7;
+            margin: 4px 0 10px;
+        }
+        .custom-field-link-buttons {
+            margin-top: 10px;
+            margin-bottom: 4px;
         }
         /* 注意書きの下のリンクボタン */
         .notice-link-buttons {

@@ -70,6 +70,7 @@ export interface MenuCategory {
   id: string;
   name: string;
   display_name: string;      // ◆ブライダルコース◆形式
+  image?: string;            // カテゴリー画像URL（予約フォームのカテゴリー見出し下に表示）
   menus: MenuItem[];
   options: MenuItem[];       // オプションメニュー
   selection_mode: 'single' | 'multiple';
@@ -159,6 +160,14 @@ export interface FormConfig {
     restore_enabled?: boolean;
     // 表示位置の変更（未設定 = 標準の位置。anchor は画像orテキスト設置と同じセクション指定）
     placement?: { anchor: string; position: 'above' | 'below' };
+    // 質問名の下に表示する説明テキスト（[color=#xxxxxx]〜[/color] タグで部分文字色に対応）
+    description?: string;
+    // 回答欄の下に表示するリンクボタン（注意書きのリンクボタンと同じ見た目）
+    link_buttons?: Array<{
+      id: string;
+      label: string;   // ボタン名
+      url: string;     // リンク先（https:// / tel: / mailto: など）
+    }>;
   }>;
   
   menu_structure: {
