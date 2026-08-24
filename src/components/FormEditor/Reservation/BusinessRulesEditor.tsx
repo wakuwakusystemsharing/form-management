@@ -112,6 +112,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     required_choices?: number[];
     visible_choices?: number[];
     blocked_times?: string[];
+    blocked_time_weekdays?: { [time: string]: number[] };
   }>(
     (() => {
       const existing = form.config?.calendar_settings?.multiple_dates_settings;
@@ -125,6 +126,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         required_choices: existing?.required_choices || [1, 2, 3],
         visible_choices: existing?.visible_choices || [1, 2, 3],
         blocked_times: existing?.blocked_times || [],
+        blocked_time_weekdays: existing?.blocked_time_weekdays || {},
         holiday_hours: existing?.holiday_hours || { enabled: false, open: '09:00', close: '18:00', custom: false, custom_slots: [] },
       };
     })()
@@ -148,6 +150,54 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
   };
 
   const weekdayLabels = ['日曜', '月曜', '火曜', '水曜', '木曜', '金曜', '土曜'];
+
+  // ✕にする時間帯の曜日指定ヘルパー（エントリ無し = 全曜日✕）
+  const blockedWeekdayOrder = [1, 2, 3, 4, 5, 6, 0];  // 月〜日の表示順
+  const blockedWeekdayShort = ['日', '月', '火', '水', '木', '金', '土'];
+  const getBlockedWeekdaysFor = (map: { [time: string]: number[] } | undefined, time: string): number[] => {
+    const arr = map?.[time];
+    return Array.isArray(arr) && arr.length > 0 ? arr : [0, 1, 2, 3, 4, 5, 6];
+  };
+  // 曜日トグル後の新しいマップを返す（最低1曜日は必須。全曜日選択はエントリ削除 = 従来挙動）
+  const toggleBlockedWeekday = (
+    map: { [time: string]: number[] } | undefined,
+    time: string,
+    day: number
+  ): { [time: string]: number[] } | null => {
+    const cur = getBlockedWeekdaysFor(map, time);
+    const next = cur.includes(day) ? cur.filter(d => d !== day) : [...cur, day];
+    if (next.length === 0) {
+      alert('少なくとも1つの曜日を選択してください（✕にしない場合はこの時間帯を削除してください）');
+      return null;
+    }
+    const newMap = { ...(map || {}) };
+    if (next.length === 7) delete newMap[time];
+    else newMap[time] = next.sort((a, b) => a - b);
+    return newMap;
+  };
+  // 時刻の変更・削除に曜日指定のキーを追随させる
+  const renameBlockedWeekdayKey = (
+    map: { [time: string]: number[] } | undefined,
+    oldTime: string,
+    newTime: string
+  ): { [time: string]: number[] } => {
+    const newMap = { ...(map || {}) };
+    if (newMap[oldTime]) {
+      newMap[newTime] = newMap[oldTime];
+      delete newMap[oldTime];
+    }
+    return newMap;
+  };
+  const removeBlockedWeekdayKey = (
+    map: { [time: string]: number[] } | undefined,
+    time: string,
+    remainingTimes: string[]
+  ): { [time: string]: number[] } => {
+    const newMap = { ...(map || {}) };
+    // 同じ時刻の行が他に残っていない場合のみキーを削除
+    if (!remainingTimes.includes(time)) delete newMap[time];
+    return newMap;
+  };
 
   const handleBusinessHoursChange = (day: string, field: 'open' | 'close' | 'closed', value: string | boolean) => {
     const updatedHours = {
@@ -383,6 +433,25 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
       }
     };
     onUpdate(updatedForm);
+  };
+
+  // 複数キーを同時に更新する版（✕時間帯 + 曜日指定の同時更新用。逐次呼び出しは古い state を上書きするため）
+  const patchMultipleDatesSettings = (patch: Record<string, unknown>) => {
+    const updatedSettings = {
+      ...multipleDatesSettings,
+      ...patch
+    };
+    setMultipleDatesSettings(updatedSettings as typeof multipleDatesSettings);
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          multiple_dates_settings: updatedSettings
+        }
+      }
+    });
   };
 
   // 時間間隔 × 営業時間から、フォームに表示される時間スロット一覧を生成
@@ -775,18 +844,20 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     </label>
                     <InfoTooltip
                       theme={theme}
-                      text={'設定した時刻のスロットは、予約フォームのカレンダーで常に✕になります。\n例: 13:00 を追加 → 毎日 13:00 の枠が✕'}
+                      text={'設定した時刻のスロットは、予約フォームのカレンダーで✕になります。\n例: 13:00 を追加 → 毎日 13:00 の枠が✕\n曜日ボタンで✕にする曜日を絞れます（例: 月〜金のみ✕、土日は〇）'}
                     />
                   </div>
                   <div className="space-y-2">
                     {(form.config?.calendar_settings?.blocked_times || []).map((t, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
+                      <div key={idx} className="space-y-1">
+                        <div className="flex items-center gap-2">
                         <select
                           value={t}
                           onChange={(e) => {
                             const next = [...(form.config?.calendar_settings?.blocked_times || [])];
                             next[idx] = e.target.value;
-                            onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, blocked_times: next } } });
+                            const nextMap = renameBlockedWeekdayKey(form.config?.calendar_settings?.blocked_time_weekdays, t, e.target.value);
+                            onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, blocked_times: next, blocked_time_weekdays: nextMap } } });
                           }}
                           className={themeClasses.input}
                         >
@@ -803,13 +874,39 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                           type="button"
                           onClick={() => {
                             const next = (form.config?.calendar_settings?.blocked_times || []).filter((_, i) => i !== idx);
-                            onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, blocked_times: next } } });
+                            const nextMap = removeBlockedWeekdayKey(form.config?.calendar_settings?.blocked_time_weekdays, t, next);
+                            onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, blocked_times: next, blocked_time_weekdays: nextMap } } });
                           }}
                           title="削除"
                           className={`p-1.5 rounded text-red-400 hover:text-red-300 ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
                         >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
+                        </div>
+                        {/* ✕にする曜日（全選択 = 毎日✕、既存挙動） */}
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {blockedWeekdayOrder.map((day) => {
+                            const selected = getBlockedWeekdaysFor(form.config?.calendar_settings?.blocked_time_weekdays, t).includes(day);
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                onClick={() => {
+                                  const nextMap = toggleBlockedWeekday(form.config?.calendar_settings?.blocked_time_weekdays, t, day);
+                                  if (nextMap) onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, blocked_time_weekdays: nextMap } } });
+                                }}
+                                title={`${blockedWeekdayShort[day]}曜日を✕にする`}
+                                className={`w-7 h-7 text-xs rounded-full border transition-colors ${
+                                  selected
+                                    ? (theme === 'light' ? 'bg-[rgb(244,144,49)] border-[rgb(244,144,49)] text-white' : 'bg-cyan-600 border-cyan-600 text-white')
+                                    : (theme === 'light' ? 'bg-white border-gray-300 text-gray-400' : 'bg-gray-800 border-gray-600 text-gray-500')
+                                }`}
+                              >
+                                {blockedWeekdayShort[day]}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     ))}
                     <button
@@ -1081,18 +1178,22 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                       </label>
                       <InfoTooltip
                         theme={theme}
-                        text={'設定した時刻は、希望日時の時間選択の選択肢に表示されなくなります。\n例: 13:00 を追加 → どの日でも 13:00 は選べない'}
+                        text={'設定した時刻は、希望日時の時間選択の選択肢に表示されなくなります。\n例: 13:00 を追加 → どの日でも 13:00 は選べない\n曜日ボタンで✕にする曜日を絞れます（例: 月〜金のみ✕、土日は〇）'}
                       />
                     </div>
                     <div className="space-y-2">
                       {(multipleDatesSettings.blocked_times || []).map((t, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
+                        <div key={idx} className="space-y-1">
+                          <div className="flex items-center gap-2">
                           <select
                             value={t}
                             onChange={(e) => {
                               const next = [...(multipleDatesSettings.blocked_times || [])];
                               next[idx] = e.target.value;
-                              handleMultipleDatesSettingsChange('blocked_times', next);
+                              patchMultipleDatesSettings({
+                                blocked_times: next,
+                                blocked_time_weekdays: renameBlockedWeekdayKey(multipleDatesSettings.blocked_time_weekdays, t, e.target.value),
+                              });
                             }}
                             className={themeClasses.input}
                           >
@@ -1109,12 +1210,43 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                           </select>
                           <button
                             type="button"
-                            onClick={() => handleMultipleDatesSettingsChange('blocked_times', (multipleDatesSettings.blocked_times || []).filter((_, i) => i !== idx))}
+                            onClick={() => {
+                              const next = (multipleDatesSettings.blocked_times || []).filter((_, i) => i !== idx);
+                              patchMultipleDatesSettings({
+                                blocked_times: next,
+                                blocked_time_weekdays: removeBlockedWeekdayKey(multipleDatesSettings.blocked_time_weekdays, t, next),
+                              });
+                            }}
                             title="削除"
                             className={`p-1.5 rounded text-red-400 hover:text-red-300 ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                           </button>
+                          </div>
+                          {/* ✕にする曜日（全選択 = 毎日✕、既存挙動） */}
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {blockedWeekdayOrder.map((day) => {
+                              const selected = getBlockedWeekdaysFor(multipleDatesSettings.blocked_time_weekdays, t).includes(day);
+                              return (
+                                <button
+                                  key={day}
+                                  type="button"
+                                  onClick={() => {
+                                    const nextMap = toggleBlockedWeekday(multipleDatesSettings.blocked_time_weekdays, t, day);
+                                    if (nextMap) patchMultipleDatesSettings({ blocked_time_weekdays: nextMap });
+                                  }}
+                                  title={`${blockedWeekdayShort[day]}曜日を✕にする`}
+                                  className={`w-7 h-7 text-xs rounded-full border transition-colors ${
+                                    selected
+                                      ? (theme === 'light' ? 'bg-[rgb(244,144,49)] border-[rgb(244,144,49)] text-white' : 'bg-cyan-600 border-cyan-600 text-white')
+                                      : (theme === 'light' ? 'bg-white border-gray-300 text-gray-400' : 'bg-gray-800 border-gray-600 text-gray-500')
+                                  }`}
+                                >
+                                  {blockedWeekdayShort[day]}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       ))}
                       <button

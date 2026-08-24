@@ -1452,10 +1452,22 @@ class BookingForm {
         const minAdvanceHoursRaw = this.config.calendar_settings?.min_advance_hours;
         const minAdvanceMs = (typeof minAdvanceHoursRaw === 'number' && minAdvanceHoursRaw > 0 ? minAdvanceHoursRaw : 0) * 3600000;
 
-        // デフォルトで✕にする時間帯（設定された時刻のスロットは常に✕。"9:00" → "09:00" に正規化）
+        // デフォルトで✕にする時間帯（設定された時刻のスロットは✕。"9:00" → "09:00" に正規化）
+        // 曜日指定がある時刻は指定曜日のみ✕（指定なし = 全曜日✕の既存挙動）
+        const normalizeBlockedTime = (t) => { const m = /^([0-9]{1,2}):([0-9]{2})/.exec(t || ''); return m ? String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2] : ''; };
         const blockedTimesSet = new Set((this.config.calendar_settings?.blocked_times || [])
-            .map(t => { const m = /^([0-9]{1,2}):([0-9]{2})/.exec(t || ''); return m ? String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2] : ''; })
+            .map(normalizeBlockedTime)
             .filter(Boolean));
+        const blockedTimeWeekdays = {};
+        Object.entries(this.config.calendar_settings?.blocked_time_weekdays || {}).forEach(([t, days]) => {
+            const key = normalizeBlockedTime(t);
+            if (key && Array.isArray(days) && days.length > 0) blockedTimeWeekdays[key] = days;
+        });
+        const isBlockedTimeSlot = (time, dayOfWeek) => {
+            if (!blockedTimesSet.has(time)) return false;
+            const days = blockedTimeWeekdays[time];
+            return !days || days.indexOf(dayOfWeek) !== -1;
+        };
 
         const rawInterval = this.config?.calendar_settings?.time_interval;
         const timeInterval = (rawInterval === 10 || rawInterval === 15 || rawInterval === 20 || rawInterval === 30 || rawInterval === 45 || rawInterval === 60 || rawInterval === 120) ? rawInterval : 30;
@@ -1582,7 +1594,7 @@ class BookingForm {
         // 空き状況の判定
         let isAvailable = false;
 
-        if (isPast || isNextDay || endsAfterClose || !withinWindow || isClosed || !isWithinBusinessHours || !isWithinMenuWindows || blockedTimesSet.has(time)) {
+        if (isPast || isNextDay || endsAfterClose || !withinWindow || isClosed || !isWithinBusinessHours || !isWithinMenuWindows || isBlockedTimeSlot(time, dayOfWeek)) {
             isAvailable = false;
         } else if (this.availabilityData && this.availabilityData.length > 0) {
             // カレンダーAPIから取得したデータがある場合
@@ -3071,9 +3083,24 @@ class BookingForm {
         const timeSlots = this.generateTimeSlots(startTime, endTime, settings.time_interval);
 
         // デフォルトで✕にする時間帯は選択肢から除外（"9:00" → "09:00" に正規化）
+        // 曜日指定がある時刻は選択日の曜日が対象のときのみ除外（指定なし = 全曜日除外の既存挙動）
+        const normalizeBlocked = (t) => { const m = /^([0-9]{1,2}):([0-9]{2})/.exec(t || ''); return m ? String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2] : ''; };
         const blockedTimes = new Set((settings.blocked_times || [])
-            .map(t => { const m = /^([0-9]{1,2}):([0-9]{2})/.exec(t || ''); return m ? String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2] : ''; })
+            .map(normalizeBlocked)
             .filter(Boolean));
+        const blockedWeekdaysMap = {};
+        Object.entries(settings.blocked_time_weekdays || {}).forEach(([t, days]) => {
+            const key = normalizeBlocked(t);
+            if (key && Array.isArray(days) && days.length > 0) blockedWeekdaysMap[key] = days;
+        });
+        const selectedDayOfWeek = selectedDateStr ? new Date(selectedDateStr + 'T00:00:00').getDay() : null;
+        const isBlockedForSelectedDay = (time) => {
+            if (!blockedTimes.has(time)) return false;
+            const days = blockedWeekdaysMap[time];
+            if (!days) return true;
+            // 日付未選択の段階では曜日が確定しないため、曜日指定のある時刻は除外しない
+            return selectedDayOfWeek !== null && days.indexOf(selectedDayOfWeek) !== -1;
+        };
 
         // 予約受付開始時間: 現在時刻から N 時間後より前の時間は選択肢に出さない（0 = 制限なし）
         const minAdvHoursRaw = this.config.calendar_settings?.min_advance_hours;
@@ -3082,7 +3109,7 @@ class BookingForm {
             : 0;
 
         timeSlots.forEach(time => {
-            if (blockedTimes.has(time)) return;
+            if (isBlockedForSelectedDay(time)) return;
             if (minAdvThreshold && selectedDateStr) {
                 const slotMs = new Date(selectedDateStr + 'T' + time + ':00').getTime();
                 if (Number.isFinite(slotMs) && slotMs < minAdvThreshold) return;
