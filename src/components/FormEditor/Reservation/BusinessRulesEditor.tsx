@@ -538,6 +538,24 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     }));
   };
 
+  // 通知編集: LINE 自動応答メッセージの文言（空欄 = デフォルト文言）
+  const [notifModalOpen, setNotifModalOpen] = useState(false);
+  const handleNotificationMessageChange = (
+    key: 'confirmation_heading' | 'confirmation_footer' | 'cancel_select_prompt' | 'cancel_done_heading',
+    value: string
+  ) => {
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        notification_messages: {
+          ...(form.config?.notification_messages || {}),
+          [key]: value
+        }
+      }
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center space-x-2 mb-6">
@@ -546,6 +564,117 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         </svg>
         <h2 className={`text-xl font-semibold ${themeClasses.text.primary}`}>営業時間・ルール設定</h2>
       </div>
+
+      {/* 通知編集（LINE 自動応答メッセージの文言カスタマイズ） */}
+      <div className={themeClasses.card}>
+        <div className="flex items-center justify-between p-4 gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center space-x-2">
+              <svg className={`w-5 h-5 ${themeClasses.text.primary} flex-shrink-0`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              <h3 className={`text-lg font-medium ${themeClasses.text.primary}`}>通知メッセージ</h3>
+            </div>
+            <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+              予約時に LINE で自動応答する【ご予約確認】【予約キャンセル】内の文言をこのフォーム専用にカスタマイズできます
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setNotifModalOpen(true)}
+            className={`px-4 py-2 rounded-md text-sm flex-shrink-0 ${themeClasses.button.primary}`}
+          >
+            通知編集
+          </button>
+        </div>
+      </div>
+
+      {/* 通知編集モーダル */}
+      {notifModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className={`w-full max-w-lg mx-4 p-6 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto ${theme === 'light' ? 'bg-white' : 'bg-gray-800'}`}>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className={`text-lg font-semibold ${themeClasses.text.primary}`}>通知編集</h3>
+              <button onClick={() => setNotifModalOpen(false)} className={themeClasses.text.tertiary}>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className={`text-xs ${themeClasses.text.tertiary} mb-4`}>
+              空欄の項目は標準の文言が使われます。保存するだけで反映されます（フォームの「更新」は不要）。
+            </p>
+
+            <div className="space-y-5">
+              <div>
+                <h4 className={`text-sm font-semibold ${themeClasses.text.primary} border-b ${themeClasses.divider} pb-1 mb-3`}>
+                  【ご予約確認】（予約完了時の自動応答）
+                </h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>見出し</label>
+                    <input
+                      type="text"
+                      value={form.config?.notification_messages?.confirmation_heading || ''}
+                      onChange={(e) => handleNotificationMessageChange('confirmation_heading', e.target.value)}
+                      placeholder="ご予約を承りました"
+                      className={`w-full ${themeClasses.input} text-sm`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>フッターメッセージ</label>
+                    <textarea
+                      value={form.config?.notification_messages?.confirmation_footer || ''}
+                      onChange={(e) => handleNotificationMessageChange('confirmation_footer', e.target.value)}
+                      placeholder={'予約完了いたしました。\nご来店心よりお待ちしております。'}
+                      rows={3}
+                      className={`w-full ${themeClasses.textarea} text-sm`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className={`text-sm font-semibold ${themeClasses.text.primary} border-b ${themeClasses.divider} pb-1 mb-3`}>
+                  【予約キャンセル】（「予約をキャンセル」への自動応答）
+                </h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>キャンセル選択の案内文</label>
+                    <input
+                      type="text"
+                      value={form.config?.notification_messages?.cancel_select_prompt || ''}
+                      onChange={(e) => handleNotificationMessageChange('cancel_select_prompt', e.target.value)}
+                      placeholder="キャンセルする予約を選択してください"
+                      className={`w-full ${themeClasses.input} text-sm`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>キャンセル完了メッセージ</label>
+                    <input
+                      type="text"
+                      value={form.config?.notification_messages?.cancel_done_heading || ''}
+                      onChange={(e) => handleNotificationMessageChange('cancel_done_heading', e.target.value)}
+                      placeholder="予約をキャンセルしました"
+                      className={`w-full ${themeClasses.input} text-sm`}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-6">
+              <button
+                type="button"
+                onClick={() => setNotifModalOpen(false)}
+                className={`px-4 py-2 rounded-md text-sm ${themeClasses.button.primary}`}
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* 日時選択モード設定 */}
       <div className={themeClasses.card}>

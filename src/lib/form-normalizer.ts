@@ -414,6 +414,17 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             }))
         };
       })(),
+      notification_messages: (() => {
+        const raw = existingConfig?.notification_messages
+          ?? (typedConfig as Form['config'])?.notification_messages;
+        const pick = (v: unknown) => (typeof v === 'string' && v.trim() ? v : undefined);
+        return {
+          confirmation_heading: pick(raw?.confirmation_heading),
+          confirmation_footer: pick(raw?.confirmation_footer),
+          cancel_select_prompt: pick(raw?.cancel_select_prompt),
+          cancel_done_heading: pick(raw?.cancel_done_heading)
+        };
+      })(),
       content_blocks: (() => {
         const raw = existingConfig?.content_blocks
           ?? (typedConfig as Form['config'])?.content_blocks;
