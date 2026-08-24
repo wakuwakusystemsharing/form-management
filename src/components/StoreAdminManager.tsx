@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Trash2, Search, UserPlus, Copy, Pencil } from 'lucide-react';
+import { Plus, Trash2, Search, UserPlus, Copy, Pencil, Eye } from 'lucide-react';
 import { getBaseUrl } from '@/lib/env';
 
 interface StoreAdmin {
@@ -38,6 +38,9 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
   const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // ログイン情報確認（確認ボタン）
+  const [viewingCredentials, setViewingCredentials] = useState<{ email: string | null; password: string | null } | null>(null);
+  const [loadingCredentialsId, setLoadingCredentialsId] = useState<string | null>(null);
 
   const fetchAdmins = useCallback(async () => {
     try {
@@ -154,6 +157,44 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
         description: 'URLのコピーに失敗しました',
         variant: 'destructive',
       });
+    }
+  };
+
+  // ログイン情報（メールアドレス + このシステムで設定されたパスワード）を取得して表示
+  const handleViewCredentials = async (admin: StoreAdmin) => {
+    try {
+      setLoadingCredentialsId(admin.user_id);
+      const response = await fetch(`/api/stores/${storeId}/admins/${admin.user_id}/credentials`, {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setViewingCredentials({ email: data.email ?? admin.email, password: data.password ?? null });
+      } else {
+        const error = await response.json().catch(() => ({}));
+        toast({
+          title: 'エラー',
+          description: error.error || 'ログイン情報の取得に失敗しました',
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: 'エラー',
+        description: 'ログイン情報の取得に失敗しました',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingCredentialsId(null);
+    }
+  };
+
+  const handleCopyText = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast({ title: `${label}をコピーしました` });
+    } catch {
+      toast({ title: 'エラー', description: 'コピーに失敗しました', variant: 'destructive' });
     }
   };
 
@@ -330,6 +371,16 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => handleViewCredentials(admin)}
+                          disabled={loadingCredentialsId === admin.user_id}
+                          aria-label="ログイン情報を確認"
+                          title="ログイン情報を確認"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleOpenEditDialog(admin)}
                           aria-label="ユーザーを編集"
                         >
@@ -422,6 +473,66 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
             <Button onClick={handleAddAdmin} disabled={isAdding}>
               {isAdding ? '追加中...' : '追加'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ログイン情報確認ダイアログ */}
+      <Dialog open={!!viewingCredentials} onOpenChange={(open) => { if (!open) setViewingCredentials(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>ログイン情報の確認</DialogTitle>
+            <DialogDescription>
+              店舗管理者に共有するログイン情報です。取り扱いにご注意ください。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-1">
+              <Label>メールアドレス</Label>
+              <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-3 py-2">
+                <code className="text-sm flex-1 min-w-0 break-all">{viewingCredentials?.email || '不明'}</code>
+                {viewingCredentials?.email && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 shrink-0"
+                    onClick={() => handleCopyText('メールアドレス', viewingCredentials.email!)}
+                    title="コピー"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>パスワード</Label>
+              {viewingCredentials?.password ? (
+                <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-3 py-2">
+                  <code className="text-sm flex-1 min-w-0 break-all">{viewingCredentials.password}</code>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 shrink-0"
+                    onClick={() => handleCopyText('パスワード', viewingCredentials.password!)}
+                    title="コピー"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="rounded-md bg-muted/50 px-3 py-2">
+                  <p className="text-sm text-muted-foreground">
+                    不明（この画面で設定・変更されたパスワードのみ表示できます）
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    「編集」（ペンのアイコン）から新しいパスワードを設定すると、以後ここに表示されるようになります。
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setViewingCredentials(null)}>閉じる</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
