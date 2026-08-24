@@ -279,6 +279,15 @@ export interface FormConfig {
     }>;
   };
 
+  // 通知編集: LINE 自動応答メッセージ内のテキストカスタマイズ（未設定/空 = デフォルト文言）
+  // Webhook がサーバー側で参照するため、保存のみで反映される（フォームの再デプロイ不要）
+  notification_messages?: {
+    confirmation_heading?: string;   // 【ご予約確認】内の見出し（デフォルト: ご予約を承りました）
+    confirmation_footer?: string;    // 【ご予約確認】内のフッター（デフォルト: 予約完了いたしました。\nご来店心よりお待ちしております。）
+    cancel_select_prompt?: string;   // 【予約キャンセル】内の案内文（デフォルト: キャンセルする予約を選択してください）
+    cancel_done_heading?: string;    // 【キャンセル完了】内の見出し（デフォルト: 予約をキャンセルしました）
+  };
+
   // フォーム上の任意の位置に表示する画像/テキストブロック（詳細設定 → 画像orテキスト設置）
   content_blocks?: Array<{
     id: string;

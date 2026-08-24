@@ -251,6 +251,75 @@ function makeSimpleBubble(title: string, body: string, storeName?: string, theme
   };
 }
 
+// 通知編集: フォームごとにカスタマイズ可能な自動応答文言（未設定時のデフォルト）
+const DEFAULT_NOTIFICATION_MESSAGES = {
+  confirmation_heading: 'ご予約を承りました',
+  confirmation_footer: '予約完了いたしました。\nご来店心よりお待ちしております。',
+  cancel_select_prompt: 'キャンセルする予約を選択してください',
+  cancel_done_heading: '予約をキャンセルしました',
+};
+type NotificationMessages = typeof DEFAULT_NOTIFICATION_MESSAGES;
+
+function resolveNotificationMessages(config: any): NotificationMessages {
+  const nm = config?.notification_messages || {};
+  const pick = (v: unknown, def: string) => (typeof v === 'string' && v.trim() ? v.trim() : def);
+  return {
+    confirmation_heading: pick(nm.confirmation_heading, DEFAULT_NOTIFICATION_MESSAGES.confirmation_heading),
+    confirmation_footer: pick(nm.confirmation_footer, DEFAULT_NOTIFICATION_MESSAGES.confirmation_footer),
+    cancel_select_prompt: pick(nm.cancel_select_prompt, DEFAULT_NOTIFICATION_MESSAGES.cancel_select_prompt),
+    cancel_done_heading: pick(nm.cancel_done_heading, DEFAULT_NOTIFICATION_MESSAGES.cancel_done_heading),
+  };
+}
+
+// 予約レコードの form_id からフォームの通知文言を取得（取得失敗時はデフォルト）
+async function getNotificationMessagesByFormId(
+  adminClient: any,
+  storeId: string,
+  formId: string | null | undefined
+): Promise<NotificationMessages> {
+  if (!adminClient || !formId) return DEFAULT_NOTIFICATION_MESSAGES;
+  try {
+    const { data } = await adminClient
+      .from('reservation_forms')
+      .select('id, config, draft_config')
+      .eq('store_id', storeId)
+      .eq('id', formId)
+      .single();
+    if (!data) return DEFAULT_NOTIFICATION_MESSAGES;
+    return resolveNotificationMessages(normalizeForm(data).config);
+  } catch {
+    return DEFAULT_NOTIFICATION_MESSAGES;
+  }
+}
+
+// 送信テキスト1行目の【フォーム名】からフォームの通知文言を取得（一致なしはデフォルト）
+async function getNotificationMessagesByFormName(
+  adminClient: any,
+  storeId: string,
+  formName: string
+): Promise<NotificationMessages> {
+  if (!adminClient || !formName.trim()) return DEFAULT_NOTIFICATION_MESSAGES;
+  try {
+    const { data } = await adminClient
+      .from('reservation_forms')
+      .select('id, config, draft_config')
+      .eq('store_id', storeId);
+    for (const row of Array.isArray(data) ? data : []) {
+      try {
+        const normalized = normalizeForm(row);
+        if ((normalized.config?.basic_info?.form_name || '').trim() === formName.trim()) {
+          return resolveNotificationMessages(normalized.config);
+        }
+      } catch {
+        /* ignore single-form errors */
+      }
+    }
+  } catch {
+    /* fall through to defaults */
+  }
+  return DEFAULT_NOTIFICATION_MESSAGES;
+}
+
 /**
  * 店舗内の全フォームの max_concurrent_reservations_per_user の最大値を返す。
  * どのフォームも 0 または未設定なら 0。
@@ -451,7 +520,7 @@ export async function POST(req: NextRequest) {
     const todayStr = today.toISOString().split('T')[0];
     const { data: reservations } = await (adminClient as any)
       .from('reservations')
-      .select('reservation_date,reservation_time,menu_name,submenu_name,staff_name,staff_no_preference')
+      .select('reservation_date,reservation_time,menu_name,submenu_name,staff_name,staff_no_preference,form_id')
       .eq('store_id', storeId)
       .eq('line_user_id', userId)
       .neq('status', 'cancelled')
@@ -500,6 +569,13 @@ export async function POST(req: NextRequest) {
       );
     });
 
+    // 通知編集: 一覧先頭の予約のフォーム設定から案内文を取得
+    const cancelListMessages = await getNotificationMessagesByFormId(
+      adminClient,
+      storeId,
+      reservations[0]?.form_id
+    );
+
     await replyFlexMessage(replyToken, accessToken, '予約をキャンセル', [{
       type: 'bubble',
       size: 'mega',
@@ -508,7 +584,7 @@ export async function POST(req: NextRequest) {
         type: 'box',
         layout: 'vertical',
         contents: [
-          { type: 'text', text: 'キャンセルする予約を選択してください', size: 'sm', align: 'center', margin: 'md', color: '#555555' },
+          { type: 'text', text: cancelListMessages.cancel_select_prompt, size: 'sm', align: 'center', margin: 'md', color: '#555555' },
           { type: 'box', layout: 'vertical', spacing: 'sm', contents: eventList }
         ],
         paddingAll: '20px'
@@ -606,6 +682,13 @@ export async function POST(req: NextRequest) {
     const cancelTimeText = ch && cm ? `${parseInt(ch)}時${parseInt(cm)}分` : cancelTimeStr;
     const cancelDateText = `${formatDate(target.reservation_date)} ${cancelTimeText}`;
 
+    // 通知編集: キャンセルした予約のフォーム設定から完了文言を取得
+    const cancelDoneMessages = await getNotificationMessagesByFormId(
+      adminClient,
+      storeId,
+      (target as { form_id?: string | null }).form_id
+    );
+
     await replyFlexMessage(replyToken, accessToken, 'キャンセル完了', [{
       type: 'bubble',
       size: 'mega',
@@ -614,7 +697,7 @@ export async function POST(req: NextRequest) {
         type: 'box',
         layout: 'vertical',
         contents: [
-          { type: 'text', text: '予約をキャンセルしました', weight: 'bold', size: 'md', align: 'center', margin: 'lg' },
+          { type: 'text', text: cancelDoneMessages.cancel_done_heading, weight: 'bold', size: 'md', align: 'center', margin: 'lg' },
           { type: 'separator', margin: 'lg' },
           {
             type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
@@ -678,12 +761,20 @@ export async function POST(req: NextRequest) {
     const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
     const fmtDt = (dt: Date) => `${dt.getFullYear()}年${String(dt.getMonth() + 1).padStart(2, '0')}月${String(dt.getDate()).padStart(2, '0')}日（${weekdays[dt.getDay()]}）${dt.getHours()}時${String(dt.getMinutes()).padStart(2, '0')}分`;
 
+    // 通知編集: 送信テキスト1行目の【フォーム名】から該当フォームのカスタム文言を取得
+    const formNameMatch = /^【(.+?)】/.exec(messageText);
+    const notifMessages = await getNotificationMessagesByFormName(
+      adminClient,
+      storeId,
+      formNameMatch ? formNameMatch[1] : ''
+    );
+
     const bodyContents: object[] = [];
 
     // タイトル
     bodyContents.push({
       type: 'text',
-      text: 'ご予約を承りました',
+      text: notifMessages.confirmation_heading,
       weight: 'bold',
       size: 'md',
       align: 'center',
@@ -736,7 +827,7 @@ export async function POST(req: NextRequest) {
     // フッターメッセージ
     bodyContents.push({
       type: 'text',
-      text: '予約完了いたしました。\nご来店心よりお待ちしております。',
+      text: notifMessages.confirmation_footer,
       size: 'sm',
       align: 'center',
       margin: 'lg',
