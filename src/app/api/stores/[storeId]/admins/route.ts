@@ -217,10 +217,19 @@ export async function POST(
 
       user = newUserData.user;
       userCreated = true;
-      
+
       // パスワードが自動生成された場合は、ログに記録
       if (!password) {
         console.log(`[API] User created with auto-generated password. Email: ${email}`);
+      }
+
+      // 確認ボタン用にパスワードを保存（テーブル未作成などで失敗してもユーザー追加は続行）
+      try {
+        await adminClient
+          .from('admin_login_credentials')
+          .upsert({ user_id: user.id, password: userPassword, updated_at: new Date().toISOString() } as never);
+      } catch (credError) {
+        console.error('[API] admin_login_credentials upsert error:', credError);
       }
     }
 

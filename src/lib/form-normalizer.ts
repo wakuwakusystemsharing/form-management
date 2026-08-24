@@ -6,6 +6,24 @@
 import { Form } from '@/types/form';
 
 /**
+ * ✕にする時間帯の曜日指定を検証する。
+ * 値: 時刻("HH:MM") → 曜日(0〜6)配列。不正キー・不正値・空配列のエントリは除去
+ * （エントリ無し = 全曜日✕ という既存挙動に戻る）
+ */
+function sanitizeBlockedTimeWeekdays(raw: unknown): { [time: string]: number[] } {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: { [time: string]: number[] } = {};
+  for (const [time, days] of Object.entries(raw as Record<string, unknown>)) {
+    if (!/^\d{1,2}:\d{2}$/.test(time) || !Array.isArray(days)) continue;
+    const valid = [...new Set(days.filter((d): d is number => typeof d === 'number' && Number.isInteger(d) && d >= 0 && d <= 6))]
+      .sort((a, b) => a - b);
+    // 空 = 意味を持たないので除去。7曜日すべて = エントリ無しと同義だが保存値は尊重して保持
+    if (valid.length > 0) out[time] = valid;
+  }
+  return out;
+}
+
+/**
  * フォーム構造を正規化する関数
  * 旧「フラット形式」(top-level form_name 等) と新 config.* 形式を統一
  */
@@ -297,6 +315,11 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             if (!rc.includes(1)) rc.unshift(1);
             base.required_choices = [...new Set(rc)].sort();
           }
+          // ✕にする時間帯の曜日指定（不正エントリは除去 = 全曜日✕の既存挙動に戻る）
+          {
+            const btwRaw = (base as { blocked_time_weekdays?: unknown }).blocked_time_weekdays;
+            (base as Record<string, unknown>).blocked_time_weekdays = sanitizeBlockedTimeWeekdays(btwRaw);
+          }
           // 祝日の受付時間（未設定 = OFF、曜日の設定に従う）
           {
             const hh = (base as { holiday_hours?: { enabled?: unknown; open?: unknown; close?: unknown; custom?: unknown; custom_slots?: unknown } }).holiday_hours;
@@ -351,6 +374,11 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           return Array.isArray(v)
             ? v.filter((x): x is string => typeof x === 'string' && /^\d{1,2}:\d{2}$/.test(x))
             : [];
+        })(),
+        blocked_time_weekdays: (() => {
+          const v = existingConfig?.calendar_settings?.blocked_time_weekdays
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.blocked_time_weekdays;
+          return sanitizeBlockedTimeWeekdays(v);
         })(),
         show_customer_name: existingConfig?.calendar_settings?.show_customer_name ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_name ?? true,
         show_customer_phone: existingConfig?.calendar_settings?.show_customer_phone ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_phone ?? true,

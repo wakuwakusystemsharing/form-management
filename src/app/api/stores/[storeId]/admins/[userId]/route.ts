@@ -202,6 +202,17 @@ export async function PATCH(
       );
     }
 
+    // 確認ボタン用にパスワードを保存（テーブル未作成などで失敗しても更新自体は成功扱い）
+    if (password) {
+      try {
+        await adminClient
+          .from('admin_login_credentials')
+          .upsert({ user_id: userId, password, updated_at: new Date().toISOString() } as never);
+      } catch (credError) {
+        console.error('[API] admin_login_credentials upsert error:', credError);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       email: updatedUser.user?.email,
