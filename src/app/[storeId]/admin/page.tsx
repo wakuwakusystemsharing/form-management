@@ -405,6 +405,20 @@ export default function StoreAdminPage() {
     });
   }, [toast]);
 
+  // コピー用URL: LINEフォーム（LIFF ID設定済み）は公式LINE設定用のLIFF URL、
+  // WebフォームやLIFF ID未設定のフォームは従来どおり公開URL（デプロイURL）
+  const getFormCopyUrl = (form: {
+    config?: { form_type?: string; basic_info?: { liff_id?: string } };
+    static_deploy?: { deploy_url?: string };
+  }) => {
+    const isLineForm = (form?.config?.form_type ?? 'line') === 'line';
+    const liffId = form?.config?.basic_info?.liff_id;
+    if (isLineForm && typeof liffId === 'string' && liffId.trim()) {
+      return `https://liff.line.me/${liffId.trim()}`;
+    }
+    return form?.static_deploy?.deploy_url || '';
+  };
+
   // フォームIDからフォーム名を取得
   const getFormName = useCallback((formId: string) => {
     const form = forms.find(f => f.id === formId);
@@ -625,7 +639,7 @@ export default function StoreAdminPage() {
                                         size="sm"
                                         variant="outline"
                                         className="flex-1"
-                                        onClick={() => copyToClipboard(form.static_deploy?.deploy_url || '')}
+                                        onClick={() => copyToClipboard(getFormCopyUrl(form))}
                                       >
                                         <Copy className="mr-2 h-4 w-4" />
                                         コピー
@@ -746,7 +760,7 @@ export default function StoreAdminPage() {
                                       <Button
                                         variant="outline"
                                         className="h-7 px-2 text-xs"
-                                        onClick={() => copyToClipboard(form.static_deploy?.deploy_url || '')}
+                                        onClick={() => copyToClipboard(getFormCopyUrl(form))}
                                       >
                                         <Copy className="h-3 w-3 mr-1" />
                                         コピー
@@ -1044,7 +1058,7 @@ export default function StoreAdminPage() {
                                       <Button
                                         variant="outline"
                                         className="h-7 px-2 text-xs"
-                                        onClick={() => copyToClipboard(survey.static_deploy?.deploy_url || '')}
+                                        onClick={() => copyToClipboard(getFormCopyUrl(survey))}
                                       >
                                         <Copy className="h-3 w-3 mr-1" />
                                         コピー

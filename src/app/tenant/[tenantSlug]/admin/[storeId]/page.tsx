@@ -1913,6 +1913,15 @@ export default function StoreDetailPage() {
                               <Copy className="h-3 w-3" />
                             </Button>
                           </div>
+                          {(form.config?.form_type ?? 'line') === 'line' && form.config?.basic_info?.liff_id && (
+                            <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1">
+                              <span className="text-[11px] text-muted-foreground shrink-0">公式LINE設定用URL</span>
+                              <code className="text-xs text-muted-foreground truncate flex-1 min-w-0">{`https://liff.line.me/${form.config.basic_info.liff_id}`}</code>
+                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => copyToClipboard(`https://liff.line.me/${form.config!.basic_info!.liff_id}`)} title="コピー">
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                 );
@@ -2082,6 +2091,15 @@ export default function StoreDetailPage() {
                               <Copy className="h-3 w-3" />
                             </Button>
                           </div>
+                          {form.config?.basic_info?.liff_id && (
+                            <div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1">
+                              <span className="text-[11px] text-muted-foreground shrink-0">公式LINE設定用URL</span>
+                              <code className="text-xs text-muted-foreground truncate flex-1 min-w-0">{`https://liff.line.me/${form.config.basic_info.liff_id}`}</code>
+                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={() => copyToClipboard(`https://liff.line.me/${form.config!.basic_info!.liff_id}`)} title="コピー">
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                 );
