@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { SurveyForm } from '@/types/survey';
 import { getAppEnvironment } from '@/lib/env';
+import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
 import { getCurrentUserId } from '@/lib/auth-helper';
 
@@ -120,6 +121,13 @@ export async function PUT(
       return NextResponse.json({ error: 'Supabase connection error' }, { status: 500 });
     }
 
+    // 操作履歴用に更新前の状態を取得
+    const { data: beforeForm } = await (adminClient as any)
+      .from('survey_forms')
+      .select('id, store_id, name, config, status')
+      .eq('id', id)
+      .single();
+
     const { data: updatedForm, error } = await adminClient
       .from('survey_forms')
       // @ts-expect-error Supabase型定義不足のため
@@ -138,6 +146,17 @@ export async function PUT(
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    const updatedRow = updatedForm as unknown as { store_id: string; name?: string; config?: { basic_info?: { title?: string } } };
+    await logFormAudit(request, {
+      storeId: updatedRow.store_id,
+      formId: id,
+      formType: 'survey',
+      action: 'update',
+      formName: updatedRow.config?.basic_info?.title || updatedRow.name || null,
+      before: beforeForm || null,
+      after: updatedForm as unknown as Record<string, unknown>,
+    });
 
     return NextResponse.json(updatedForm);
 
@@ -181,6 +200,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'Supabase connection error' }, { status: 500 });
     }
 
+    // 操作履歴用に削除前の情報を取得（store_id / 名前）
+    const { data: beforeDelete } = await (adminClient as any)
+      .from('survey_forms')
+      .select('id, store_id, name, config')
+      .eq('id', id)
+      .single();
+
     const { error } = await adminClient
       .from('survey_forms')
       .delete()
@@ -188,6 +214,16 @@ export async function DELETE(
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (beforeDelete) {
+      await logFormAudit(request, {
+        storeId: beforeDelete.store_id,
+        formId: id,
+        formType: 'survey',
+        action: 'delete',
+        formName: beforeDelete.config?.basic_info?.title || beforeDelete.name || null,
+      });
     }
 
     return NextResponse.json({ success: true });

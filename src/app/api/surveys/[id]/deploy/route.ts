@@ -6,6 +6,7 @@ import { StaticSurveyGenerator } from '@/lib/static-generator-survey';
 import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { logFormAudit } from '@/lib/form-audit';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -99,6 +100,15 @@ export async function POST(
           .eq('id', id);
       }
     }
+
+    // 操作履歴: 保存＆デプロイ
+    await logFormAudit(request, {
+      storeId: form.store_id,
+      formId: id,
+      formType: 'survey',
+      action: 'deploy',
+      formName: form.config?.basic_info?.title || (form as unknown as { name?: string }).name || null,
+    });
 
     return NextResponse.json(deployInfo);
 

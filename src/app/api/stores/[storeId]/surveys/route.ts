@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { SurveyForm, SurveyConfig, SurveyQuestion } from '@/types/survey';
 import { getAppEnvironment } from '@/lib/env';
+import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
 import { getCurrentUserId } from '@/lib/auth-helper';
 
@@ -249,6 +250,14 @@ export async function POST(
         { status: 500 }
       );
     }
+
+    await logFormAudit(request, {
+      storeId,
+      formId: (newForm as unknown as { id: string }).id,
+      formType: 'survey',
+      action: 'create',
+      formName: form_name || 'アンケートフォーム',
+    });
 
     return NextResponse.json(newForm);
 

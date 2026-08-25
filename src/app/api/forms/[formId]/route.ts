@@ -6,6 +6,7 @@ import path from 'path';
 import { Form } from '@/types/form';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { getAppEnvironment } from '@/lib/env';
+import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
 import { getCurrentUserId } from '@/lib/auth-helper';
 
@@ -186,8 +187,9 @@ export async function PUT(
         const storeFormIndex = storeFormsData.findIndex((f: Form) => f.id === formId);
         
         if (storeFormIndex !== -1) {
+          const beforeLocal = storeFormsData[storeFormIndex];
           const mergedForm = {
-            ...storeFormsData[storeFormIndex],
+            ...beforeLocal,
             ...updatedFormData,
             draft_status: 'none',
             draft_config: undefined,
@@ -197,7 +199,17 @@ export async function PUT(
 
           storeFormsData[storeFormIndex] = updatedForm;
           fs.writeFileSync(storeFormFile, JSON.stringify(storeFormsData, null, 2));
-          
+
+          await logFormAudit(request, {
+            storeId: storeForm.store_id,
+            formId,
+            formType: 'reservation',
+            action: 'update',
+            formName: updatedForm.config?.basic_info?.form_name || null,
+            before: beforeLocal,
+            after: updatedForm as unknown as Record<string, unknown>,
+          });
+
           return NextResponse.json(updatedForm);
         }
       } else {
@@ -232,7 +244,14 @@ export async function PUT(
 
     // 現在のユーザーIDを取得
     const currentUserId = await getCurrentUserId(request);
-    
+
+    // 操作履歴用に更新前の状態を取得（取得失敗は履歴の差分なしとして続行）
+    const { data: beforeForm } = await (adminClient as any)
+      .from('reservation_forms')
+      .select('id, store_id, config, status')
+      .eq('id', formId)
+      .single();
+
     const updateData = {
       ...updatedFormData,
       draft_status: 'none',
@@ -259,6 +278,16 @@ export async function PUT(
         { status: 500 }
       );
     }
+
+    await logFormAudit(request, {
+      storeId: updatedForm.store_id,
+      formId,
+      formType: 'reservation',
+      action: 'update',
+      formName: updatedForm.config?.basic_info?.form_name || null,
+      before: beforeForm || null,
+      after: updatedForm,
+    });
 
     return NextResponse.json(updatedForm);
   } catch (error) {
@@ -322,8 +351,16 @@ export async function DELETE(
           const deletedForm = storeFormsData[storeFormIndex];
           storeFormsData.splice(storeFormIndex, 1);
           fs.writeFileSync(storeFormFile, JSON.stringify(storeFormsData, null, 2));
-          
-          return NextResponse.json({ 
+
+          await logFormAudit(request, {
+            storeId: storeForm.store_id,
+            formId,
+            formType: 'reservation',
+            action: 'delete',
+            formName: (deletedForm as any).form_name || deletedForm.config?.basic_info?.form_name || null,
+          });
+
+          return NextResponse.json({
             success: true, 
             message: 'フォームを削除しました',
             deletedForm: {
@@ -378,8 +415,16 @@ export async function DELETE(
       );
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    await logFormAudit(request, {
+      storeId: form.store_id,
+      formId,
+      formType: 'reservation',
+      action: 'delete',
+      formName: (form as any).form_name || form.config?.basic_info?.form_name || null,
+    });
+
+    return NextResponse.json({
+      success: true,
       message: 'フォームを削除しました',
       deletedForm: {
         id: form.id,
