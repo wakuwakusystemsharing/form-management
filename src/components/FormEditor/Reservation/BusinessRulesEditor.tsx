@@ -2417,8 +2417,12 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               { key: 'gender', label: '《性別》' },
               { key: 'coupon', label: '《クーポン》' },
               { key: 'custom_fields', label: 'カスタム項目（追加した項目すべて）' },
-            ] as Array<{ key: keyof NonNullable<Form['config']['line_message_items']>; label: string }>).map((item) => {
-              const visible = form.config?.line_message_items?.[item.key] !== false;
+              { key: 'option_duration', label: '《オプション》の所要時間「(15分)」', defaultOn: false },
+            ] as Array<{ key: keyof NonNullable<Form['config']['line_message_items']>; label: string; defaultOn?: boolean }>).map((item) => {
+              // 通常の項目は未設定 = 表示。defaultOn: false の項目（所要時間）は明示的に ON のときだけ表示
+              const visible = item.defaultOn === false
+                ? form.config?.line_message_items?.[item.key] === true
+                : form.config?.line_message_items?.[item.key] !== false;
               return (
                 <div key={item.key} className="flex items-center justify-between gap-2">
                   <span className={`text-sm ${themeClasses.text.secondary}`}>{item.label}</span>

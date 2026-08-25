@@ -475,6 +475,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           'total_duration', 'datetime', 'message', 'gender', 'coupon', 'custom_fields'] as const;
         const out: Record<string, boolean> = {};
         keys.forEach((k) => { out[k] = raw?.[k] !== false; });
+        // オプション行の所要時間「(15分)」はデフォルト OFF（明示的に true のときだけ表示）
+        out.option_duration = raw?.option_duration === true;
         return out as Form['config']['line_message_items'];
       })(),
       reservation_summary: {

@@ -52,6 +52,12 @@ export async function findCustomerByLineOrPhone(
 ): Promise<Customer | null> {
   const env = getAppEnvironment();
 
+  // 「未記入」（電話欄非表示フォームのフォールバック値）は照合キーとして無効。
+  // これで検索すると「未記入」の別顧客に誤って紐付くため
+  if (phone === '未記入') {
+    phone = null;
+  }
+
   // ローカル環境: JSON ファイルから検索
   if (env === 'local') {
     initializeDataFiles();
