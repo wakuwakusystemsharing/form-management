@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { SurveyForm } from '@/types/survey';
 import { getAppEnvironment } from '@/lib/env';
+import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -146,6 +147,17 @@ export async function POST(
       console.error('[API] Survey duplicate error:', insertError);
       return NextResponse.json({ error: 'フォームの複製に失敗しました' }, { status: 500 });
     }
+
+    // 操作履歴: 複製元・複製先の両方に記録
+    const sourceTitle = sourceForm.config?.basic_info?.title || sourceForm.name || null;
+    await logFormAudit(request, {
+      storeId: sourceForm.store_id, formId: id, formType: 'survey', action: 'duplicate',
+      formName: sourceTitle, note: `このアンケートを複製 → 新アンケート ${newId}`,
+    });
+    await logFormAudit(request, {
+      storeId: sourceForm.store_id, formId: newId, formType: 'survey', action: 'duplicate',
+      formName: newName, note: `アンケート ${id}（${sourceTitle || '名称なし'}）から複製して作成`,
+    });
 
     return NextResponse.json(newForm, { status: 201 });
   } catch (error) {

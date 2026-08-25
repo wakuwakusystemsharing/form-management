@@ -6,6 +6,7 @@ import { Form, FormConfig } from '@/types/form';
 import { StaticReservationGenerator } from '@/lib/static-generator-reservation';
 import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import { getAppEnvironment } from '@/lib/env';
+import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
 import { getCurrentUserId } from '@/lib/auth-helper';
 
@@ -491,6 +492,14 @@ export async function POST(
         { status: 500 }
       );
     }
+
+    await logFormAudit(request, {
+      storeId,
+      formId: (newForm as Form).id,
+      formType: 'reservation',
+      action: 'create',
+      formName: supabaseConfig.basic_info?.form_name || null,
+    });
 
     // 🚀 Supabase Storageに初期テンプレートHTMLをデプロイ（staging/production）
     try {

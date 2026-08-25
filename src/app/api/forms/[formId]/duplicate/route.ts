@@ -4,6 +4,7 @@ import path from 'path';
 import { Form } from '@/types/form';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { getAppEnvironment } from '@/lib/env';
+import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -174,6 +175,17 @@ export async function POST(
       console.error('[API] Form duplicate error:', insertError);
       return NextResponse.json({ error: 'フォームの複製に失敗しました' }, { status: 500 });
     }
+
+    // 操作履歴: 複製元・複製先の両方に記録
+    const sourceName = sourceForm.config?.basic_info?.form_name || null;
+    await logFormAudit(request, {
+      storeId: sourceForm.store_id, formId, formType: 'reservation', action: 'duplicate',
+      formName: sourceName, note: `このフォームを複製 → 新フォーム ${newId}`,
+    });
+    await logFormAudit(request, {
+      storeId: sourceForm.store_id, formId: newId, formType: 'reservation', action: 'duplicate',
+      formName: config.basic_info?.form_name || null, note: `フォーム ${formId}（${sourceName || '名称なし'}）から複製して作成`,
+    });
 
     return NextResponse.json(normalizeForm(newForm as Form), { status: 201 });
   } catch (error) {

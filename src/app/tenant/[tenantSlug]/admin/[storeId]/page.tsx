@@ -8,6 +8,7 @@ import { Form } from '@/types/form';
 import { SurveyForm } from '@/types/survey';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
 import StoreAdminManager from '@/components/StoreAdminManager';
+import FormHistoryDialog from '@/components/FormHistoryDialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,7 +36,8 @@ import {
   MessageCircle,
   Info,
   HelpCircle,
-  Mail
+  Mail,
+  History
 } from 'lucide-react';
 import { getStoreSetupStatus } from '@/lib/store-setup-status';
 import { formatDateTimeForDisplay } from '@/lib/format-utils';
@@ -604,6 +606,8 @@ export default function StoreDetailPage() {
   const [editingStore, setEditingStore] = useState<Store | null>(null);
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
   const [duplicatingFormId, setDuplicatingFormId] = useState<string | null>(null);
+  // 操作履歴ダイアログ（管理者側のみ表示）
+  const [historyTarget, setHistoryTarget] = useState<{ formId: string; formType: 'reservation' | 'survey'; formName: string } | null>(null);
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
   const [duplicateTargetFormId, setDuplicateTargetFormId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -1880,6 +1884,15 @@ export default function StoreDetailPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
+                                onClick={() => setHistoryTarget({ formId: form.id, formType: 'reservation', formName: (form as any).form_name || form.config?.basic_info?.form_name || '' })}
+                                title="操作履歴（誰がいつ何を変更したか）"
+                              >
+                                <History className="mr-2 h-4 w-4" />
+                                履歴
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
                         onClick={() => handleEditForm(form)}
                               >
                                 <Edit className="mr-2 h-4 w-4" />
@@ -1932,6 +1945,16 @@ export default function StoreDetailPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* 操作履歴ダイアログ（予約フォーム / アンケート共通） */}
+          <FormHistoryDialog
+            open={!!historyTarget}
+            onOpenChange={(open) => { if (!open) setHistoryTarget(null); }}
+            storeId={storeId}
+            formId={historyTarget?.formId || null}
+            formType={historyTarget?.formType || 'reservation'}
+            formName={historyTarget?.formName}
+          />
 
           {/* アンケートタブ */}
           <TabsContent value="surveys" className="space-y-6">
@@ -2055,6 +2078,15 @@ export default function StoreDetailPage() {
                       </p>
                     </div>
                             <div className="flex gap-2 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setHistoryTarget({ formId: form.id, formType: 'survey', formName: form.config.basic_info.title || '' })}
+                                title="操作履歴（誰がいつ何を変更したか）"
+                              >
+                                <History className="mr-2 h-4 w-4" />
+                                履歴
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"

@@ -8,6 +8,7 @@ import { normalizeForm } from '@/lib/form-normalizer';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { Form, StaticDeploy } from '@/types/form';
+import { logFormAudit } from '@/lib/form-audit';
 
 export async function POST(
   request: NextRequest,
@@ -147,9 +148,18 @@ export async function POST(
       }
     }
 
+    // 操作履歴: 保存＆デプロイ（直前の PUT で config 差分は記録済みのため、ここでは操作のみ）
+    await logFormAudit(request, {
+      storeId,
+      formId,
+      formType: 'reservation',
+      action: 'deploy',
+      formName: formConfig.basic_info?.form_name || null,
+    });
+
     return NextResponse.json({
       success: true,
-      deployUrl: deployResult.storage_url || 
+      deployUrl: deployResult.storage_url ||
                  `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}${deployResult.url}`,
       deployedAt: deployInfo.deployed_at,
       environment: deployResult.environment
