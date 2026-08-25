@@ -320,6 +320,7 @@ export interface FormConfig {
     gender?: boolean;          // 《性別》
     coupon?: boolean;          // 《クーポン》
     custom_fields?: boolean;   // カスタム項目（《項目名》すべて）
+    option_duration?: boolean; // 《オプション》各行の所要時間「(15分)」（デフォルト OFF = 非表示）
   };
 
   // フォーム上の「ご予約内容」（サマリー）表示設定

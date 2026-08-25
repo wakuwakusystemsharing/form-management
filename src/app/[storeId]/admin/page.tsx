@@ -38,7 +38,8 @@ import {
   ClipboardList,
   Settings as SettingsIcon,
   LogOut,
-  Users
+  Users,
+  UserPlus
 } from 'lucide-react';
 
 interface Reservation {
@@ -69,6 +70,17 @@ function externalBadge(reservation: unknown) {
   return (
     <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-purple-50 text-purple-700 border border-purple-200 whitespace-nowrap">
       {EXTERNAL_SOURCE_LABELS[r.external_source || ''] || '外部'}予約
+    </span>
+  );
+}
+
+// 店舗側手動予約フォーム（スタッフの代理登録）で作成された予約のバッジ
+function manualEntryBadge(reservation: unknown) {
+  const r = reservation as { customer_info?: { entry_source?: string }; line_user_id?: string | null };
+  if (r.customer_info?.entry_source !== 'staff_manual') return null;
+  return (
+    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-[rgb(254,225,190)] text-[rgb(200,100,10)] border border-[rgb(244,144,49)]/40 whitespace-nowrap">
+      店舗登録{r.line_user_id ? '' : '（LINEなし）'}
     </span>
   );
 }
@@ -528,7 +540,7 @@ export default function StoreAdminPage() {
                         }}
                       >
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium">{reservation.customer_name}</p>
+                          <p className="font-medium flex items-center gap-1.5">{reservation.customer_name}{manualEntryBadge(reservation)}</p>
                           <p className="text-sm text-muted-foreground">
                             {new Intl.DateTimeFormat('ja-JP').format(new Date(reservation.reservation_date))} {reservation.reservation_time}
                           </p>
@@ -619,6 +631,19 @@ export default function StoreAdminPage() {
                         </div>
           </div>
           
+                              {/* 店舗側手動予約フォーム（LINEタイプのみ） */}
+                              {(form.config?.form_type ?? 'line') === 'line' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-full border-[rgb(244,144,49)]/60 text-[rgb(200,100,10)] hover:bg-[rgb(254,225,190)]"
+                                  onClick={() => window.open(`/api/stores/${storeId}/forms/${form.id}/manual-form`, '_blank')}
+                                >
+                                  <UserPlus className="mr-2 h-4 w-4" />
+                                  店舗側手動予約フォーム
+                                </Button>
+                              )}
+
                               {/* デプロイURL */}
                       {(form as any).static_deploy?.deploy_url ? (
                                 <div className="space-y-3">
@@ -743,6 +768,19 @@ export default function StoreAdminPage() {
                         </div>
                       </div>
                       
+                              {/* 店舗側手動予約フォーム（LINEタイプのみ） */}
+                              {(form.config?.form_type ?? 'line') === 'line' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-full h-8 text-xs border-[rgb(244,144,49)]/60 text-[rgb(200,100,10)] hover:bg-[rgb(254,225,190)]"
+                                  onClick={() => window.open(`/api/stores/${storeId}/forms/${form.id}/manual-form`, '_blank')}
+                                >
+                                  <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                                  店舗側手動予約フォーム
+                                </Button>
+                              )}
+
                               {/* 公開中URL */}
                       {(form as any).static_deploy?.deploy_url ? (
                                 <div className="space-y-2">
@@ -871,7 +909,7 @@ export default function StoreAdminPage() {
                                 }}
                               >
                                 <div className="flex items-center justify-between mb-2">
-                                  <span className="font-medium text-sm flex items-center gap-1.5">{reservation.customer_name}{externalBadge(reservation)}</span>
+                                  <span className="font-medium text-sm flex items-center gap-1.5">{reservation.customer_name}{externalBadge(reservation)}{manualEntryBadge(reservation)}</span>
                                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
                                     reservation.status === 'confirmed' ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20' :
                                     reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
@@ -927,7 +965,7 @@ export default function StoreAdminPage() {
                                       setShowReservationDetail(true);
                                     }}
                                   >
-                                    <TableCell className="font-medium">{reservation.customer_name}</TableCell>
+                                    <TableCell className="font-medium"><span className="flex items-center gap-1.5">{reservation.customer_name}{manualEntryBadge(reservation)}</span></TableCell>
                                     <TableCell>
                                       {(reservation as any).is_external ? (
                                         <div className="text-sm">

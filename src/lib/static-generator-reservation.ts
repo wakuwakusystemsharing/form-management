@@ -14,7 +14,10 @@ export class StaticReservationGenerator {
    * @param formId フォームID
    * @param storeId 店舗ID
    */
-  generateHTML(config: FormConfig, formId: string, storeId: string): string {
+  // mode 'manual': 店舗側手動予約フォーム（スタッフがお客様=LINE友だちを選択して代理登録する）。
+  // LIFF を読み込まず、LINE メッセージも送信しない。選択した友だちの userId を予約に紐付ける
+  generateHTML(config: FormConfig, formId: string, storeId: string, mode?: 'manual'): string {
+    const manualMode = mode === 'manual';
     // config は immutable に扱うため、深くコピーして修正
     const safeConfig: FormConfig = JSON.parse(JSON.stringify(config));
 
@@ -109,6 +112,18 @@ export class StaticReservationGenerator {
       };
     }
 
+    if (manualMode) {
+      // 手動モード: 電話等で確定済みの1日時を登録できるよう、希望日時は第一希望のみ必須にする
+      // （safeConfig はコピーなので元の設定は変更されない。FORM_CONFIG にも同じ値が埋め込まれる）
+      if (safeConfig.calendar_settings?.multiple_dates_settings) {
+        safeConfig.calendar_settings.multiple_dates_settings.required_choices = [1];
+      }
+      // スタッフが登録相手を記録できるよう、お名前欄は設定に関わらず表示する
+      if (safeConfig.calendar_settings) {
+        safeConfig.calendar_settings.show_customer_name = true;
+      }
+    }
+
     return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -120,7 +135,7 @@ export class StaticReservationGenerator {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
-    <script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
+    ${manualMode ? '<!-- 手動モード: LIFF は使用しない -->' : '<script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>'}
     <style>${this.generateCSS(safeConfig)}
 ${this.generateDesignOverridesCSS(safeConfig)}</style>
 </head>
@@ -143,11 +158,15 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
         </div>
 
         <div class="form-content">
+            ${manualMode ? `
+            <!-- 店舗側手動予約フォームのバナー -->
+            <div class="manual-mode-banner">🏪 店舗側手動予約フォーム（スタッフ用）<br><span>お客様の代わりに予約を登録します。お客様のLINEには通知されません。</span></div>
+            ${this.renderManualCustomerField()}` : ''}
             ${safeConfig.basic_info?.notice ? `<div class="notice-banner">${this.escapeHtml(safeConfig.basic_info.notice)}</div>` : ''}
             ${this.renderNoticeButtons(safeConfig)}
 
-            ${safeConfig.ui_settings?.show_repeat_booking ? this.renderRepeatBookingButton(safeConfig) : ''}
-            
+            ${manualMode ? '' : safeConfig.ui_settings?.show_repeat_booking ? this.renderRepeatBookingButton(safeConfig) : ''}
+
             ${this.renderContentBlocksAt(safeConfig, 'name', 'above')}
             ${safeConfig.calendar_settings?.show_customer_name === false ? '' : `
             <!-- お客様名 -->
@@ -205,7 +224,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
             ${this.renderAgreementField(safeConfig)}
 
             ${this.renderContentBlocksAt(safeConfig, 'submit', 'above')}
-            <button type="button" id="submit-button" class="submit-button">予約する</button>
+            <button type="button" id="submit-button" class="submit-button">${manualMode ? '予約を行う' : '予約する'}</button>
             ${this.renderContentBlocksAt(safeConfig, 'submit', 'below')}
         </div>
     </div>
@@ -214,6 +233,9 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
 const FORM_CONFIG = ${JSON.stringify(safeConfig, null, 2)};
 const FORM_ID = ${JSON.stringify(formId)};
 const STORE_ID = ${JSON.stringify(storeId)};
+// 店舗側手動予約フォーム（スタッフ用）モード
+const MANUAL_MODE = ${manualMode ? 'true' : 'false'};
+const SUBMIT_LABEL = ${manualMode ? "'予約を行う'" : "'予約する'"};
 
 // ========== 祝日判定ロジック（1980-2099年対応）==========
 function calcVernalEquinox(year) {
@@ -337,7 +359,10 @@ class BookingForm {
             lineEmail: null, // LINEメールアドレス
             lineLanguage: null, // LINE言語設定
             lineOs: null, // デバイスOS
-            lineFriendFlag: null // 友だち追加状態 (true/false/null=不明)
+            lineFriendFlag: null, // 友だち追加状態 (true/false/null=不明)
+            manualFriendSelected: false, // 手動モード: お客様（友だち）選択済みか
+            manualFriendCustomerName: '', // 手動モード: 突合できた顧客名（確認ダイアログ用）
+            manualNoLine: false // 手動モード: LINE紐付けなしで登録するか
         };
         this.currentDate = new Date();
         this.availabilityCache = {}; // カレンダー空き状況のキャッシュ
@@ -366,9 +391,13 @@ class BookingForm {
             // カレンダーモードは表示時に空き状況を取得 → renderCalendar。
             setTimeout(() => this.toggleCalendarVisibility(), 0);
 
-            await this.initializeLIFF();
+            if (!MANUAL_MODE) {
+                await this.initializeLIFF();
+            }
 
             // localStorageから名前・電話番号・メールアドレスを復元
+            // （手動モードはスタッフ端末に残った情報を復元しない）
+            if (MANUAL_MODE) { /* skip restore */ } else
             try {
                 const formId = this.config.basic_info?.form_name || this.config.id || 'default';
                 const saved = localStorage.getItem(\`booking_\${formId}\`);
@@ -413,6 +442,10 @@ class BookingForm {
             this.attachEventListeners();
             // デフォルト選択状態（is_default オプション等）に応じた追加質問の初期表示
             this.updateAdditionalQuestionsVisibility();
+            // 手動モード: お客様選択（LINE友だち一覧）の読み込み
+            if (MANUAL_MODE) {
+                this.initManualCustomerPicker();
+            }
         }
     }
     
@@ -480,8 +513,209 @@ class BookingForm {
         }
     }
     
+    // ========== 店舗側手動予約フォーム: お客様選択（LINE友だち一覧） ==========
+    // HTMLへ差し込むテキストのエスケープ（LINE表示名は外部入力のため必須）
+    escapeManualText(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    async initManualCustomerPicker() {
+        this.manualFriends = [];
+        this.manualFriendsSource = null;
+        const statusEl = document.getElementById('manual-customer-status');
+        const searchInput = document.getElementById('manual-customer-search');
+        // 「LINE紐付けなしで登録」は友だち一覧の取得結果に関係なく使える
+        const noLineBtn = document.getElementById('manual-no-line-button');
+        if (noLineBtn) noLineBtn.addEventListener('click', () => this.selectManualNoLine());
+        try {
+            const res = await fetch(window.location.origin + '/api/stores/' + STORE_ID + '/line-friends', { credentials: 'include' });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                if (statusEl) {
+                    if (res.status === 401 || res.status === 403) {
+                        statusEl.textContent = 'ログインの有効期限が切れています。店舗管理画面を開き直してから、もう一度このページを開いてください。';
+                    } else {
+                        statusEl.textContent = err.error || 'お客様一覧の取得に失敗しました。';
+                    }
+                    statusEl.style.color = '#dc2626';
+                }
+                return;
+            }
+            const data = await res.json();
+            this.manualFriends = Array.isArray(data.friends) ? data.friends.filter(f => f && f.line_user_id) : [];
+            this.manualFriendsSource = data.source || null;
+            if (statusEl) {
+                if (this.manualFriends.length === 0) {
+                    statusEl.textContent = '表示できるお客様がいません。お客様が公式LINEを友だち追加しているかご確認ください。';
+                    statusEl.style.color = '#dc2626';
+                } else {
+                    let note = this.manualFriends.length + '名のお客様が見つかりました。';
+                    if (data.source === 'customers') {
+                        note += '（未認証アカウントのため、過去にフォームを利用したお客様のみ表示しています）';
+                    } else if (data.truncated) {
+                        note += '（人数が多いため一部のみ表示しています）';
+                    }
+                    statusEl.textContent = note;
+                    statusEl.style.color = '#6b7280';
+                }
+            }
+            this.renderManualFriendList('');
+            if (searchInput) {
+                searchInput.addEventListener('input', () => {
+                    this.renderManualFriendList(searchInput.value || '');
+                });
+            }
+        } catch (e) {
+            console.error('お客様一覧の取得に失敗しました', e);
+            if (statusEl) {
+                statusEl.textContent = 'お客様一覧の取得に失敗しました。ページを再読み込みしてください。';
+                statusEl.style.color = '#dc2626';
+            }
+        }
+    }
+
+    renderManualFriendList(filterText) {
+        const listEl = document.getElementById('manual-customer-list');
+        if (!listEl) return;
+        const kw = (filterText || '').trim().toLowerCase();
+        const matched = this.manualFriends.filter(f => {
+            if (!kw) return true;
+            return [f.display_name, f.customer_name, f.customer_phone]
+                .some(v => v && String(v).toLowerCase().includes(kw));
+        });
+        listEl.innerHTML = '';
+        if (matched.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'manual-friend-empty';
+            empty.textContent = '該当するお客様が見つかりません';
+            listEl.appendChild(empty);
+            return;
+        }
+        // 大量でも重くならないよう表示は最大50件（検索で絞り込んでもらう）
+        matched.slice(0, 50).forEach(f => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'manual-friend-item';
+            const pic = (typeof f.picture_url === 'string' && /^https:/.test(f.picture_url))
+                ? '<img src="' + this.escapeManualText(f.picture_url) + '" alt="" loading="lazy">'
+                : '<span class="manual-friend-noimg">👤</span>';
+            const sub = f.customer_name
+                ? '顧客: ' + this.escapeManualText(f.customer_name) + (f.customer_phone ? '（' + this.escapeManualText(f.customer_phone) + '）' : '')
+                : '顧客情報なし（LINE友だち）';
+            item.innerHTML = pic
+                + '<span class="manual-friend-texts">'
+                + '<span class="manual-friend-name">' + this.escapeManualText(f.display_name || '(表示名不明)') + '</span>'
+                + '<span class="manual-friend-sub">' + sub + '</span>'
+                + '</span>';
+            item.addEventListener('click', () => this.selectManualFriend(f));
+            listEl.appendChild(item);
+        });
+        if (matched.length > 50) {
+            const more = document.createElement('div');
+            more.className = 'manual-friend-empty';
+            more.textContent = '他 ' + (matched.length - 50) + ' 名。検索で絞り込んでください';
+            listEl.appendChild(more);
+        }
+    }
+
+    selectManualFriend(friend) {
+        // 予約に紐付ける LINE 情報をセット（userId はサーバーが返した値のみを使用）
+        this.state.manualFriendSelected = true;
+        this.state.manualFriendCustomerName = friend.customer_name || '';
+        this.state.lineUserId = friend.line_user_id;
+        this.state.lineDisplayName = friend.display_name || '';
+        this.state.linePictureUrl = (typeof friend.picture_url === 'string' && /^https:/.test(friend.picture_url)) ? friend.picture_url : '';
+        // followers 由来なら確実に友だち。customers フォールバック時は不明として保持
+        this.state.lineFriendFlag = this.manualFriendsSource === 'followers' ? true : null;
+
+        // 選択中カードを表示し、候補リストを隠す
+        const selectedEl = document.getElementById('manual-customer-selected');
+        const pickerEl = document.getElementById('manual-customer-picker');
+        if (selectedEl) {
+            const pic = this.state.linePictureUrl
+                ? '<img src="' + this.escapeManualText(this.state.linePictureUrl) + '" alt="">'
+                : '<span class="manual-friend-noimg">👤</span>';
+            const sub = friend.customer_name
+                ? '顧客: ' + this.escapeManualText(friend.customer_name) + (friend.customer_phone ? '（' + this.escapeManualText(friend.customer_phone) + '）' : '')
+                : '顧客情報なし（LINE友だち）';
+            selectedEl.innerHTML = '<div class="manual-friend-selected-card">'
+                + pic
+                + '<span class="manual-friend-texts">'
+                + '<span class="manual-friend-name">' + this.escapeManualText(friend.display_name || '(表示名不明)') + '</span>'
+                + '<span class="manual-friend-sub">' + sub + '</span>'
+                + '</span>'
+                + '<button type="button" class="manual-friend-change">変更</button>'
+                + '</div>';
+            const changeBtn = selectedEl.querySelector('.manual-friend-change');
+            if (changeBtn) changeBtn.addEventListener('click', () => this.clearManualFriend());
+            selectedEl.style.display = '';
+        }
+        if (pickerEl) pickerEl.style.display = 'none';
+
+        // お名前・電話番号が空なら自動入力（顧客名 > LINE表示名。手修正可能）
+        const nameEl = document.getElementById('customer-name');
+        if (nameEl && !nameEl.value) {
+            const autoName = friend.customer_name || friend.display_name || '';
+            if (autoName) { nameEl.value = autoName; this.state.name = autoName; }
+        }
+        const phoneEl = document.getElementById('customer-phone');
+        if (phoneEl && !phoneEl.value && friend.customer_phone) {
+            phoneEl.value = friend.customer_phone;
+            this.state.phone = friend.customer_phone;
+        }
+        this.updateSummary();
+    }
+
+    // LINE紐付けなしで登録（LINEを使っていない・ブロック中のお客様の電話予約など）
+    selectManualNoLine() {
+        this.state.manualFriendSelected = true;
+        this.state.manualNoLine = true;
+        this.state.manualFriendCustomerName = '';
+        this.state.lineUserId = null;
+        this.state.lineDisplayName = '';
+        this.state.linePictureUrl = '';
+        this.state.lineFriendFlag = null;
+        const selectedEl = document.getElementById('manual-customer-selected');
+        const pickerEl = document.getElementById('manual-customer-picker');
+        if (selectedEl) {
+            selectedEl.innerHTML = '<div class="manual-friend-selected-card no-line">'
+                + '<span class="manual-friend-noimg">☎</span>'
+                + '<span class="manual-friend-texts">'
+                + '<span class="manual-friend-name">LINE紐付けなしで登録</span>'
+                + '<span class="manual-friend-sub">お名前・電話番号を下の欄に入力してください。「予約確認」の対象外になります</span>'
+                + '</span>'
+                + '<button type="button" class="manual-friend-change">変更</button>'
+                + '</div>';
+            const changeBtn = selectedEl.querySelector('.manual-friend-change');
+            if (changeBtn) changeBtn.addEventListener('click', () => this.clearManualFriend());
+            selectedEl.style.display = '';
+        }
+        if (pickerEl) pickerEl.style.display = 'none';
+        const nameEl = document.getElementById('customer-name');
+        if (nameEl && typeof nameEl.focus === 'function') nameEl.focus();
+        this.updateSummary();
+    }
+
+    clearManualFriend() {
+        this.state.manualFriendSelected = false;
+        this.state.manualNoLine = false;
+        this.state.manualFriendCustomerName = '';
+        this.state.lineUserId = null;
+        this.state.lineDisplayName = '';
+        this.state.linePictureUrl = '';
+        this.state.lineFriendFlag = null;
+        const selectedEl = document.getElementById('manual-customer-selected');
+        const pickerEl = document.getElementById('manual-customer-picker');
+        if (selectedEl) { selectedEl.style.display = 'none'; selectedEl.innerHTML = ''; }
+        if (pickerEl) pickerEl.style.display = '';
+        this.updateSummary();
+    }
+
     // お名前欄の入力値を localStorage に即時保存（未送信でも次回開いたときに復元される）
     persistCustomerName(value) {
+        if (MANUAL_MODE) return;
         try {
             const formId = this.config.basic_info?.form_name || this.config.id || 'default';
             const key = \`booking_\${formId}\`;
@@ -539,6 +773,7 @@ class BookingForm {
     // 復元機能ONのカスタムフィールドの入力値を localStorage に即時保存
     // （この端末のブラウザ内にのみ保存され、他のユーザーに共有されることはない）
     persistCustomField(field, value) {
+        if (MANUAL_MODE) return;
         if (!field || field.restore_enabled !== true) return;
         try {
             const formId = this.config.basic_info?.form_name || this.config.id || 'default';
@@ -2105,10 +2340,19 @@ class BookingForm {
             const btn = document.getElementById('submit-button');
             if (btn) {
                 btn.disabled = false;
-                btn.textContent = '予約する';
+                btn.textContent = SUBMIT_LABEL;
                 btn.style.opacity = '1';
             }
         };
+
+        // 手動モード: お客様選択は必須（LINE紐付けなし以外は userId が無い送信は不可 = 誤紐付け防止）
+        if (MANUAL_MODE && (!this.state.manualFriendSelected || (!this.state.manualNoLine && !this.state.lineUserId))) {
+            alert('お客様を選択してください');
+            const manualField = document.getElementById('manual-customer-field');
+            if (manualField) manualField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            resetSubmitState();
+            return;
+        }
 
         // バリデーション（非表示の項目はスキップし、空ならフォールバック値で埋める）
         const showNameField = this.config.calendar_settings?.show_customer_name !== false;
@@ -2265,7 +2509,26 @@ class BookingForm {
             resetSubmitState();
             return;
         }
-        
+
+        // 手動モード: 登録先のお客様を最終確認（誤紐付け防止）
+        if (MANUAL_MODE) {
+            let confirmMsg;
+            if (this.state.manualNoLine) {
+                confirmMsg = 'LINE紐付けなしで登録します。\\n\\nお客様名: ' + (this.state.name || '(未入力)')
+                    + '\\n\\n※ この予約はお客様からの「予約確認」の対象になりません。\\nよろしいですか？';
+            } else {
+                confirmMsg = '以下のお客様の予約として登録します。\\n\\nLINE表示名: ' + (this.state.lineDisplayName || '(不明)');
+                if (this.state.manualFriendCustomerName) {
+                    confirmMsg += '\\n顧客名: ' + this.state.manualFriendCustomerName;
+                }
+                confirmMsg += '\\n\\nよろしいですか？';
+            }
+            if (!window.confirm(confirmMsg)) {
+                resetSubmitState();
+                return;
+            }
+        }
+
         try {
             const payload = this.buildSelectionPayload();
             const { selectedMenus, selectedOptions, totalPrice, totalDuration, menuTextForMessage, menuTextGrouped } = payload;
@@ -2303,6 +2566,10 @@ class BookingForm {
             }
             customerInfo.total_price = totalPrice;
             customerInfo.total_duration = totalDuration;
+            // 手動モード: 後から「店舗が代理登録した予約」と識別できる印（サーバー側でも強制）
+            if (MANUAL_MODE) {
+                customerInfo.entry_source = 'staff_manual';
+            }
             // 第二・第三希望日時（multiple_datesモードのみ）
             if (this.state.selectedDate2) customerInfo.preferred_date2 = this.state.selectedDate2;
             if (this.state.selectedTime2) customerInfo.preferred_time2 = this.state.selectedTime2;
@@ -2360,7 +2627,9 @@ class BookingForm {
                 booking_mode: this.config.calendar_settings?.booking_mode || 'calendar',
                 // スタッフ選択（'none' = 指名なし → サーバー側で空きスタッフに自動割当）
                 staff_id: (this.state.selectedStaffId && this.state.selectedStaffId !== 'none') ? this.state.selectedStaffId : null,
-                staff_no_preference: this.state.selectedStaffId === 'none'
+                staff_no_preference: this.state.selectedStaffId === 'none',
+                // 店舗側手動予約フォームからの登録（サーバー側で CRM 照合・流入経路の扱いが変わる）
+                manual_entry: MANUAL_MODE
             };
             
             // /api/reservationsにPOSTリクエストを送信
@@ -2418,6 +2687,14 @@ class BookingForm {
                     formContent.insertBefore(banner, formContent.firstChild);
                     banner.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
+                resetSubmitState();
+                return;
+            }
+
+            // 手動モード: DB 登録に失敗した場合は成功画面を出さずエラーを表示
+            // （通常フォームは LINE メッセージ送信を優先する既存挙動のまま）
+            if (MANUAL_MODE && !apiSuccess) {
+                alert('予約の登録に失敗しました。時間をおいてもう一度お試しください。');
                 resetSubmitState();
                 return;
             }
@@ -2516,10 +2793,12 @@ class BookingForm {
 
             // オプション（メニュー個別 / カテゴリー共通の両方を統合表示）
             if (selectedOptions && selectedOptions.length > 0 && showLineItem('options')) {
+                // 所要時間「(15分)」は送信時の項目編集で明示的に ON のときだけ付ける（デフォルト OFF）
+                const showOptionDuration = lineItems.option_duration === true;
                 const optionLines = selectedOptions.map(opt => {
                     const name = opt.option_name || '';
                     const priceText = (opt.price || 0) > 0 ? ' ¥' + Number(opt.price).toLocaleString() : '';
-                    const durationText = (opt.duration || 0) > 0 ? ' (' + opt.duration + '分)' : '';
+                    const durationText = (showOptionDuration && (opt.duration || 0) > 0) ? ' (' + opt.duration + '分)' : '';
                     return '・' + name + priceText + durationText;
                 }).join('\\n');
                 addMsgSegment('menu', '《オプション》\\n' + optionLines, true);
@@ -2593,6 +2872,8 @@ class BookingForm {
             }
 
             // 予約完了後に選択内容をlocalStorageへ保存（前回と同じメニューで予約する機能用）
+            // 手動モードはスタッフ端末にお客様情報を残さないため保存しない
+            if (MANUAL_MODE) { /* skip save */ } else
             try {
                 const bookingKey = \`booking_\${this.config.basic_info?.form_name || this.config.id || 'default'}\`;
                 // 単一選択モードの場合、selectedMenu/selectedSubmenuからselectedMenus形式に変換
@@ -2636,13 +2917,28 @@ class BookingForm {
                 // プライベートモードなどでlocalStorageが使えない場合も継続
             }
 
-            // 成功画面を表示
+            // 成功画面を表示（手動モードは登録先のお客様名を明示して誤紐付けに気付けるようにする）
+            if (MANUAL_MODE) {
+                const doneName = this.escapeManualText(this.state.manualNoLine
+                    ? (this.state.name || '')
+                    : (this.state.manualFriendCustomerName || this.state.lineDisplayName || ''));
+                const doneNote = this.state.manualNoLine
+                    ? 'LINE紐付けなしで登録しました（お客様からの「予約確認」の対象外です）。'
+                    : 'お客様が公式LINEで「予約確認」を送信すると、この予約が表示されます。';
+                document.querySelector('.form-content').innerHTML = '<div class="success">'
+                    + '<h3>予約を登録しました</h3>'
+                    + '<p>お客様: ' + doneName + ' 様の予約として登録されました。</p>'
+                    + '<p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem;">' + doneNote + '</p>'
+                    + '<button type="button" class="submit-button" style="margin-top:1rem;" onclick="window.location.reload()">続けて別の予約を登録する</button>'
+                    + '</div>';
+            } else {
             document.querySelector('.form-content').innerHTML = \`
                 <div class="success">
                     <h3>予約が完了しました！</h3>
                     <p>ご予約ありがとうございます。</p>
                 </div>
             \`;
+            }
             
             // LIFF メッセージ送信（Web予約フォームやLIFF未初期化の場合はスキップ）
             try {
@@ -3360,6 +3656,23 @@ if (document.readyState === 'loading') {
       return '';
   }
 
+  // 店舗側手動予約フォーム: お客様選択欄（友だち一覧はクライアント側で /line-friends から取得）
+  private renderManualCustomerField(): string {
+    return `
+            <div class="field" id="manual-customer-field">
+                <label class="field-label">お客様選択 <span class="required">*</span></label>
+                <p style="font-size:0.8rem;color:#6b7280;margin:0 0 0.5rem;">この予約を紐付けるお客様（LINE友だち）を選択してください。お客様が「予約確認」を送信したときに、この予約が表示されるようになります。</p>
+                <div id="manual-customer-selected" style="display:none;"></div>
+                <div id="manual-customer-picker">
+                    <input type="text" id="manual-customer-search" class="input" placeholder="お名前で検索" autocomplete="off">
+                    <div id="manual-customer-list" class="manual-customer-list"></div>
+                    <button type="button" id="manual-no-line-button" class="manual-no-line-button">LINE紐付けなしで登録（LINEを使っていない・電話のみのお客様）</button>
+                    <p style="font-size:0.75rem;color:#6b7280;margin:0.25rem 0 0;">※ LINE紐付けなしで登録した予約は、お客様からの「予約確認」「予約をキャンセル」の対象になりません</p>
+                </div>
+                <p id="manual-customer-status" style="font-size:0.8rem;color:#6b7280;margin-top:0.35rem;">お客様一覧を読み込み中...</p>
+            </div>`;
+  }
+
   // メニュー / オプションの追加質問を全件収集する（表示制御はクライアント側で行う）
   private collectAdditionalQuestions(config: FormConfig): Array<{ field: import('@/types/form').AdditionalQuestion; ownerType: 'menu' | 'option'; ownerId: string }> {
     const entries: Array<{ field: import('@/types/form').AdditionalQuestion; ownerType: 'menu' | 'option'; ownerId: string }> = [];
@@ -3964,6 +4277,67 @@ if (document.readyState === 'loading') {
             border-radius: 6px;
             margin: 4px 0 12px;
         }
+        /* 店舗側手動予約フォーム */
+        .manual-mode-banner {
+            background: #1b2a4e;
+            color: #fff;
+            border-radius: 6px;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.6;
+        }
+        .manual-mode-banner span { font-size: 12px; font-weight: 400; color: #ffffffcc; }
+        .manual-customer-list {
+            margin-top: 8px;
+            max-height: 260px;
+            overflow-y: auto;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            background: #fff;
+        }
+        .manual-friend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 8px 10px;
+            border: none;
+            border-bottom: 1px solid #f0f0f0;
+            background: #fff;
+            cursor: pointer;
+            text-align: left;
+        }
+        .manual-friend-item:hover { background: #f7f8fa; }
+        .manual-friend-item img, .manual-friend-selected-card img {
+            width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
+        }
+        .manual-friend-noimg {
+            width: 36px; height: 36px; border-radius: 50%; background: #e5e7eb;
+            display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .manual-friend-texts { display: flex; flex-direction: column; min-width: 0; }
+        .manual-friend-name { font-size: 14px; font-weight: 600; color: #111827; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .manual-friend-sub { font-size: 12px; color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .manual-friend-empty { padding: 10px; font-size: 13px; color: #6b7280; text-align: center; }
+        .manual-friend-selected-card {
+            display: flex; align-items: center; gap: 10px;
+            border: 2px solid var(--primary-color, #1b2a4e);
+            border-radius: 6px; padding: 10px 12px; background: #fff;
+        }
+        .manual-friend-selected-card .manual-friend-texts { flex: 1; }
+        .manual-friend-change {
+            flex-shrink: 0; padding: 6px 12px; font-size: 12px;
+            border: 1px solid #d1d5db; border-radius: 4px; background: #fff; cursor: pointer;
+        }
+        .manual-no-line-button {
+            display: block; width: 100%; margin-top: 10px; padding: 10px;
+            font-size: 13px; color: #374151; background: #f3f4f6;
+            border: 1px dashed #9ca3af; border-radius: 6px; cursor: pointer;
+        }
+        .manual-no-line-button:hover { background: #e5e7eb; }
+        .manual-friend-selected-card.no-line { border-color: #9ca3af; background: #f9fafb; }
         /* カスタムフィールドの説明テキスト・リンクボタン */
         .custom-field-desc {
             font-size: 13px;

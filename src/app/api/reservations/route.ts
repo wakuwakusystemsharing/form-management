@@ -441,6 +441,17 @@ export async function POST(request: Request) {
       );
     }
 
+    // 店舗側手動予約フォーム（スタッフの代理登録）からの送信か
+    const isManualEntry = body.manual_entry === true;
+    if (isManualEntry) {
+      // 後から手動登録と識別できるよう customer_info に印を付ける（サーバー側で強制）
+      body.customer_info = { ...(body.customer_info || {}), entry_source: 'staff_manual' };
+    }
+    // CRM 顧客照合に使う電話番号。手動登録で LINE 識別 ID が指定されている場合は
+    // 電話番号での照合を行わない（電話番号の共有・入力ミスで別の顧客に紐付く事故を防ぐ）
+    const crmLookupPhone: string | null =
+      (isManualEntry && body.line_user_id) ? null : (body.customer_phone || null);
+
     // 同一ユーザーの同時予約数制限チェック（form 設定で >0 の場合のみ）
     try {
       const v = formCalendarSettings?.max_concurrent_reservations_per_user;
@@ -449,7 +460,7 @@ export async function POST(request: Request) {
         const activeCount = await countActiveReservationsForUser(
           body.store_id,
           body.line_user_id || null,
-          body.customer_phone || null
+          crmLookupPhone
         );
         if (activeCount >= limit) {
           return NextResponse.json(
@@ -479,7 +490,7 @@ export async function POST(request: Request) {
         const existingCustomer = await findCustomerByLineOrPhone(
           body.store_id,
           body.line_user_id,
-          body.customer_phone
+          crmLookupPhone
         );
 
         if (existingCustomer) {
@@ -542,7 +553,7 @@ export async function POST(request: Request) {
         reservation_time: body.reservation_time,
         customer_info: body.customer_info,
         line_user_id: body.line_user_id || null, // LINEユーザーID
-        source_medium: VALID_SOURCE_MEDIUMS.includes(body.source_medium) ? body.source_medium : null,
+        source_medium: (!isManualEntry && VALID_SOURCE_MEDIUMS.includes(body.source_medium)) ? body.source_medium : null,
         status: 'pending',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -640,7 +651,7 @@ export async function POST(request: Request) {
       const existingCustomer = await findCustomerByLineOrPhone(
         body.store_id,
         body.line_user_id,
-        body.customer_phone
+        crmLookupPhone
       );
 
       if (existingCustomer) {
@@ -684,7 +695,7 @@ export async function POST(request: Request) {
           const retryCustomer = await findCustomerByLineOrPhone(
             body.store_id,
             body.line_user_id,
-            body.customer_phone
+            crmLookupPhone
           );
           if (retryCustomer) {
             customerId = retryCustomer.id;
@@ -861,7 +872,7 @@ export async function POST(request: Request) {
       customer_info: customerInfo,
       line_user_id: body.line_user_id || null, // LINEユーザーID
       customer_id: customerId, // 顧客ID (CRM連携)
-      source_medium: VALID_SOURCE_MEDIUMS.includes(body.source_medium) ? body.source_medium : null,
+      source_medium: (!isManualEntry && VALID_SOURCE_MEDIUMS.includes(body.source_medium)) ? body.source_medium : null,
       // スタッフ選択（担当スタッフ・イベント作成先カレンダー）
       staff_id: staffFields.staff_id,
       staff_name: staffFields.staff_name,
