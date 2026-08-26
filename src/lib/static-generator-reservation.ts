@@ -442,6 +442,8 @@ class BookingForm {
             this.attachEventListeners();
             // デフォルト選択状態（is_default オプション等）に応じた追加質問の初期表示
             this.updateAdditionalQuestionsVisibility();
+            // 復元されたご来店回数に応じたカスタムフィールドの初期表示
+            this.applyVisitCustomFieldVisibility();
             // 手動モード: お客様選択（LINE友だち一覧）の読み込み
             if (MANUAL_MODE) {
                 this.initManualCustomerPicker();
@@ -933,6 +935,8 @@ class BookingForm {
                 this.state.visitCount = btn.dataset.value;
                 // 選択肢ごとのメニュー表示設定を適用（非表示対象の選択は解除される）
                 this.applyStaffMenuVisibility();
+                // 選択肢ごとのカスタムフィールド表示設定を適用（非表示になった項目の入力はクリア）
+                this.applyVisitCustomFieldVisibility();
                 // 追加所要時間で予約枠の長さが変わるためカレンダーを再判定
                 this.toggleCalendarVisibility();
                 this.updateSummary();
@@ -2465,11 +2469,13 @@ class BookingForm {
             resetSubmitState();
             return;
         }
-        // カスタムフィールドの必須チェック
+        // カスタムフィールドの必須チェック（ご来店回数の選択肢で非表示になっている項目は対象外）
         if (this.config.custom_fields && this.config.custom_fields.length > 0) {
+            const visitHiddenFieldIds = this.getVisitHiddenCustomFieldIds();
             for (let i = 0; i < this.config.custom_fields.length; i++) {
                 const field = this.config.custom_fields[i];
                 if (!field.required) continue;
+                if (visitHiddenFieldIds.indexOf(field.id) !== -1) continue;
                 const val = this.state.customFields[field.id];
                 if (val === undefined || val === null || (typeof val === 'string' && val.trim() === '') || (Array.isArray(val) && val.length === 0)) {
                     alert(field.title + 'を入力・選択してください');
@@ -3002,6 +3008,34 @@ class BookingForm {
 
     // 選択中スタッフに応じてメニュー/オプションの表示を切り替える。
     // 非表示対象がすでに選択されていた場合は選択を解除する（スタッフ切替時の整合性維持）
+    // ご来店回数の現在の選択肢で非表示にするカスタムフィールドID一覧
+    getVisitHiddenCustomFieldIds() {
+        const vc = this.config.visit_count_selection;
+        if (!vc || vc.enabled !== true || !this.state.visitCount) return [];
+        const opt = (vc.options || []).find(o => o.value === this.state.visitCount);
+        return opt && Array.isArray(opt.hidden_custom_field_ids) ? opt.hidden_custom_field_ids : [];
+    }
+
+    // ご来店回数の選択肢ごとのカスタムフィールド表示設定を DOM と state に適用する。
+    // 非表示になった項目は入力値もクリアし、必須チェック・送信内容から外れる
+    applyVisitCustomFieldVisibility() {
+        const fields = this.config.custom_fields || [];
+        if (fields.length === 0) return;
+        const vc = this.config.visit_count_selection;
+        const anyRule = !!(vc && vc.enabled === true && (vc.options || []).some(o => Array.isArray(o.hidden_custom_field_ids) && o.hidden_custom_field_ids.length > 0));
+        if (!anyRule) return;
+        const hidden = this.getVisitHiddenCustomFieldIds();
+        fields.forEach(field => {
+            const isHidden = hidden.indexOf(field.id) !== -1;
+            const wrap = document.getElementById('custom-field-wrap-' + field.id);
+            if (wrap) wrap.style.display = isHidden ? 'none' : '';
+            if (isHidden && this.state.customFields[field.id] !== undefined) {
+                delete this.state.customFields[field.id];
+                this.clearAdditionalQuestionInputs(field);
+            }
+        });
+    }
+
     applyStaffMenuVisibility() {
         const ss = this.config.staff_selection;
         const staffEnabled = !!(ss && ss.enabled === true);

@@ -2013,6 +2013,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
 
   // ご来店回数の選択肢編集
   const [visitMenuModalIndex, setVisitMenuModalIndex] = useState<number | null>(null);
+  // ご来店回数の選択肢ごとのカスタムフィールド表示設定モーダル
+  const [visitCustomFieldModalIndex, setVisitCustomFieldModalIndex] = useState<number | null>(null);
   const currentVisitOptions = () => form.config?.visit_count_selection?.options || [];
   const updateVisitOptions = (options: NonNullable<Form['config']['visit_count_selection']>['options']) => {
     onUpdate({
@@ -2053,6 +2055,18 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     const current = Array.isArray(opt[key]) ? (opt[key] as string[]) : [];
     const next = visible ? current.filter(x => x !== id) : (current.includes(id) ? current : [...current, id]);
     updateVisitOption(index, { [key]: next });
+  };
+  // ご来店回数の選択肢ごとのカスタムフィールド表示設定（チェック OFF = その選択肢のとき非表示）
+  const isVisitCustomFieldHidden = (index: number, fieldId: string) => {
+    const opt = currentVisitOptions()[index];
+    return Array.isArray(opt?.hidden_custom_field_ids) && opt.hidden_custom_field_ids.includes(fieldId);
+  };
+  const toggleVisitHiddenCustomField = (index: number, fieldId: string, visible: boolean) => {
+    const opt = currentVisitOptions()[index];
+    if (!opt) return;
+    const current = Array.isArray(opt.hidden_custom_field_ids) ? opt.hidden_custom_field_ids : [];
+    const next = visible ? current.filter(x => x !== fieldId) : (current.includes(fieldId) ? current : [...current, fieldId]);
+    updateVisitOption(index, { hidden_custom_field_ids: next });
   };
 
   return (
@@ -2443,6 +2457,46 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
           )}
           <DialogFooter>
             <Button onClick={() => setStaffMenuModalIndex(null)}>閉じる</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ご来店回数の選択肢ごとのカスタムフィールド表示設定モーダル */}
+      <Dialog open={visitCustomFieldModalIndex !== null} onOpenChange={(open) => { if (!open) setVisitCustomFieldModalIndex(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              カスタムフィールド表示設定
+              {visitCustomFieldModalIndex !== null && currentVisitOptions()[visitCustomFieldModalIndex]
+                ? `（${currentVisitOptions()[visitCustomFieldModalIndex].label || '選択肢'}）`
+                : ''}
+            </DialogTitle>
+            <DialogDescription>
+              チェックを外したカスタムフィールドは、この選択肢が選ばれているときに予約フォームへ表示されません（デフォルトはすべて表示）。非表示の項目は必須でも送信をブロックしません。
+            </DialogDescription>
+          </DialogHeader>
+          {visitCustomFieldModalIndex !== null && (
+            <div className="space-y-2">
+              {(form.config?.custom_fields || []).length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">カスタムフィールドがまだ登録されていません。先に詳細設定のカスタムフィールドで項目を追加してください。</p>
+              ) : (
+                (form.config?.custom_fields || []).map((field, fieldIndex) => (
+                  <label key={field.id} className="flex items-center gap-2 cursor-pointer border rounded-md p-2">
+                    <input
+                      type="checkbox"
+                      checked={!isVisitCustomFieldHidden(visitCustomFieldModalIndex, field.id)}
+                      onChange={(e) => toggleVisitHiddenCustomField(visitCustomFieldModalIndex, field.id, e.target.checked)}
+                      className="h-4 w-4 rounded"
+                    />
+                    <span className="text-sm">{fieldIndex + 1}. {field.title || '（項目名なし）'}</span>
+                    {field.required && <span className="text-[10px] text-red-500">必須</span>}
+                  </label>
+                ))
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setVisitCustomFieldModalIndex(null)}>閉じる</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3095,6 +3149,16 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                       メニューオプション設定
                       {((opt.hidden_menu_ids?.length || 0) + (opt.hidden_option_ids?.length || 0)) > 0
                         ? `（${(opt.hidden_menu_ids?.length || 0) + (opt.hidden_option_ids?.length || 0)}件 非表示中）`
+                        : ''}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVisitCustomFieldModalIndex(index)}
+                      className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
+                    >
+                      カスタムフィールド表示設定
+                      {(opt.hidden_custom_field_ids?.length || 0) > 0
+                        ? `（${opt.hidden_custom_field_ids!.length}件 非表示中）`
                         : ''}
                     </button>
                     {(opt.duration ?? 0) > 0 && (
