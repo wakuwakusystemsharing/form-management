@@ -1900,6 +1900,46 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     currentFields[index] = { ...currentFields[index], ...patch };
     onUpdate({ ...form, config: { ...form.config, custom_fields: currentFields } });
   };
+  // カスタムフィールドの表示トリガー: 種別ごとの選択肢（フォーム設定から動的に生成）
+  type TriggerType = 'visit_count' | 'menu' | 'option' | 'staff' | 'gender' | 'coupon';
+  const TRIGGER_TYPE_LABELS: Array<{ value: TriggerType; label: string }> = [
+    { value: 'visit_count', label: 'ご来店回数の選択肢' },
+    { value: 'menu', label: 'メニュー' },
+    { value: 'option', label: 'オプション' },
+    { value: 'staff', label: '担当スタッフ' },
+    { value: 'gender', label: '性別' },
+    { value: 'coupon', label: 'クーポン' },
+  ];
+  const getTriggerValueOptions = (type: TriggerType): Array<{ value: string; label: string }> => {
+    const cfg = form.config;
+    switch (type) {
+      case 'visit_count':
+        return (cfg?.visit_count_selection?.options || []).map(o => ({ value: o.value, label: o.label || o.value }));
+      case 'menu': {
+        const out: Array<{ value: string; label: string }> = [];
+        (cfg?.menu_structure?.categories || []).forEach(c => (c.menus || []).forEach(m => out.push({ value: m.id, label: `${c.display_name || c.name} > ${m.name}` })));
+        (cfg?.menu_structure?.menus || []).forEach(m => out.push({ value: m.id, label: m.name }));
+        return out;
+      }
+      case 'option': {
+        const out: Array<{ value: string; label: string }> = [];
+        (cfg?.menu_structure?.categories || []).forEach(c => {
+          (c.menus || []).forEach(m => (m.options || []).forEach(o => out.push({ value: o.id, label: `${m.name} > ${o.name}` })));
+          (c.options || []).forEach(o => out.push({ value: o.id, label: `${c.display_name || c.name}（共通） > ${o.name}` }));
+        });
+        return out;
+      }
+      case 'staff':
+        return (cfg?.staff_selection?.staff || []).map(s => ({ value: s.id, label: s.name }));
+      case 'gender':
+        return (cfg?.gender_selection?.options || []).map(o => ({ value: o.value, label: o.label }));
+      case 'coupon':
+        return (cfg?.coupon_selection?.options || []).map(o => ({ value: o.value, label: o.label }));
+      default:
+        return [];
+    }
+  };
+
   const fieldDescTextareaRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
   const applyColorToFieldDesc = (index: number, fieldId: string, color: string) => {
     const ta = fieldDescTextareaRefs.current[fieldId];
@@ -3639,6 +3679,82 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     <span className={`text-sm ${themeClasses.text.secondary}`}>復元機能をオンにする</span>
                   </label>
                 </div>
+              </div>
+
+              {/* フォームを開いたときは非表示 + 表示トリガー */}
+              <div className={`mb-3 p-3 rounded border ${theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-gray-900/50 border-gray-700'}`}>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={field.hidden_by_default === true}
+                    onChange={(e) => updateCustomFieldAt(index, {
+                      hidden_by_default: e.target.checked,
+                      show_triggers: e.target.checked ? (field.show_triggers || []) : undefined,
+                    })}
+                    className={`h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${theme === 'light' ? 'bg-gray-100 border-gray-300' : 'bg-gray-700 border-gray-600'}`}
+                  />
+                  <span className={`text-sm ${themeClasses.text.secondary}`}>フォームを開いたときは非表示にする</span>
+                </label>
+                {field.hidden_by_default === true && (
+                  <div className="mt-3 space-y-2">
+                    <p className={`text-xs font-medium ${themeClasses.text.primary}`}>何をトリガーにして表示されるようにしますか？</p>
+                    <p className={`text-[10px] ${themeClasses.text.tertiary}`}>
+                      いずれか1つでも選択されていれば表示されます（複数指定は OR）。ご来店回数の「カスタムフィールド表示設定」で非表示にした選択肢では表示されません。
+                    </p>
+                    {(field.show_triggers || []).map((trigger, tIndex) => {
+                      const valueOptions = getTriggerValueOptions(trigger.type);
+                      return (
+                        <div key={tIndex} className="flex items-center gap-2 flex-wrap">
+                          <select
+                            value={trigger.type}
+                            onChange={(e) => {
+                              const next = [...(field.show_triggers || [])];
+                              next[tIndex] = { type: e.target.value as TriggerType, value: '' };
+                              updateCustomFieldAt(index, { show_triggers: next });
+                            }}
+                            className={`${themeClasses.input} text-sm`}
+                          >
+                            {TRIGGER_TYPE_LABELS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                          </select>
+                          <span className={`text-xs ${themeClasses.text.secondary}`}>で</span>
+                          <select
+                            value={trigger.value}
+                            onChange={(e) => {
+                              const next = [...(field.show_triggers || [])];
+                              next[tIndex] = { ...next[tIndex], value: e.target.value };
+                              updateCustomFieldAt(index, { show_triggers: next });
+                            }}
+                            className={`${themeClasses.input} text-sm flex-1 min-w-0`}
+                          >
+                            <option value="">選択してください</option>
+                            {valueOptions.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+                          </select>
+                          <span className={`text-xs ${themeClasses.text.secondary}`}>が選択されたら表示</span>
+                          <button
+                            type="button"
+                            onClick={() => updateCustomFieldAt(index, { show_triggers: (field.show_triggers || []).filter((_, i) => i !== tIndex) })}
+                            className="text-red-400 hover:text-red-300"
+                          >
+                            ×
+                          </button>
+                          {valueOptions.length === 0 && (
+                            <span className="text-[10px] text-amber-500 w-full">この種別の選択肢がまだ設定されていません</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => updateCustomFieldAt(index, { show_triggers: [...(field.show_triggers || []), { type: 'visit_count', value: '' }] })}
+                      className={`text-sm ${theme === 'light' ? 'text-[rgb(244,144,49)] hover:text-[rgb(220,125,35)]' : 'text-cyan-400 hover:text-cyan-300'}`}
+                    >
+                      + トリガーを追加
+                    </button>
+                    {(field.show_triggers || []).length === 0 && (
+                      <p className="text-[10px] text-amber-500">トリガーが未設定のため、この項目はフォーム上で常に非表示になります</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {(field.type === 'text' || field.type === 'textarea') && (

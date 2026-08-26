@@ -2253,6 +2253,8 @@ class BookingForm {
         // メニュー/オプションの選択状態に応じて追加質問の表示を同期
         // （updateSummary は選択変更のたびに呼ばれるためここでまとめて処理する）
         this.updateAdditionalQuestionsVisibility();
+        // 表示トリガー付きカスタムフィールドの表示も同期（メニュー/スタッフ/性別/クーポン等の変更で成立が変わる）
+        this.applyCustomFieldVisibility();
         const items = [];
 
         const summaryShowName = this.config.calendar_settings?.show_customer_name !== false;
@@ -2469,9 +2471,9 @@ class BookingForm {
             resetSubmitState();
             return;
         }
-        // カスタムフィールドの必須チェック（ご来店回数の選択肢で非表示になっている項目は対象外）
+        // カスタムフィールドの必須チェック（非表示になっている項目 = ご来店回数の設定 / 表示トリガー未成立 は対象外）
         if (this.config.custom_fields && this.config.custom_fields.length > 0) {
-            const visitHiddenFieldIds = this.getVisitHiddenCustomFieldIds();
+            const visitHiddenFieldIds = this.getHiddenCustomFieldIds();
             for (let i = 0; i < this.config.custom_fields.length; i++) {
                 const field = this.config.custom_fields[i];
                 if (!field.required) continue;
@@ -3016,15 +3018,46 @@ class BookingForm {
         return opt && Array.isArray(opt.hidden_custom_field_ids) ? opt.hidden_custom_field_ids : [];
     }
 
-    // ご来店回数の選択肢ごとのカスタムフィールド表示設定を DOM と state に適用する。
+    // カスタムフィールドの表示トリガー（ご来店回数の選択肢 / メニュー / オプション / スタッフ / 性別 / クーポン）が成立しているか
+    isCustomFieldTriggerActive(trigger, selectedIds) {
+        if (!trigger || typeof trigger.value !== 'string' || !trigger.value) return false;
+        switch (trigger.type) {
+            case 'visit_count': return this.state.visitCount === trigger.value;
+            case 'menu': return selectedIds.menuIds.indexOf(trigger.value) !== -1;
+            case 'option': return selectedIds.optionIds.indexOf(trigger.value) !== -1;
+            case 'staff': return this.state.selectedStaffId === trigger.value;
+            case 'gender': return this.state.gender === trigger.value;
+            case 'coupon': return this.state.coupon === trigger.value;
+            default: return false;
+        }
+    }
+
+    // 現在の選択状態で非表示にするカスタムフィールドID一覧。
+    // ① ご来店回数の選択肢で非表示指定 → 非表示（優先）
+    // ② 「フォームを開いたときは非表示」の項目は、表示トリガーのいずれかが成立したときだけ表示
+    getHiddenCustomFieldIds() {
+        const fields = this.config.custom_fields || [];
+        if (fields.length === 0) return [];
+        const visitHidden = this.getVisitHiddenCustomFieldIds();
+        const selectedIds = this.getSelectedOwnerIds();
+        const hidden = [];
+        fields.forEach(field => {
+            if (visitHidden.indexOf(field.id) !== -1) { hidden.push(field.id); return; }
+            if (field.hidden_by_default === true) {
+                const triggers = Array.isArray(field.show_triggers) ? field.show_triggers : [];
+                const shown = triggers.some(t => this.isCustomFieldTriggerActive(t, selectedIds));
+                if (!shown) hidden.push(field.id);
+            }
+        });
+        return hidden;
+    }
+
+    // カスタムフィールドの表示/非表示を DOM と state に適用する。
     // 非表示になった項目は入力値もクリアし、必須チェック・送信内容から外れる
-    applyVisitCustomFieldVisibility() {
+    applyCustomFieldVisibility() {
         const fields = this.config.custom_fields || [];
         if (fields.length === 0) return;
-        const vc = this.config.visit_count_selection;
-        const anyRule = !!(vc && vc.enabled === true && (vc.options || []).some(o => Array.isArray(o.hidden_custom_field_ids) && o.hidden_custom_field_ids.length > 0));
-        if (!anyRule) return;
-        const hidden = this.getVisitHiddenCustomFieldIds();
+        const hidden = this.getHiddenCustomFieldIds();
         fields.forEach(field => {
             const isHidden = hidden.indexOf(field.id) !== -1;
             const wrap = document.getElementById('custom-field-wrap-' + field.id);
@@ -3034,6 +3067,11 @@ class BookingForm {
                 this.clearAdditionalQuestionInputs(field);
             }
         });
+    }
+
+    // 互換用（ご来店回数の選択時に呼ばれる）
+    applyVisitCustomFieldVisibility() {
+        this.applyCustomFieldVisibility();
     }
 
     applyStaffMenuVisibility() {
@@ -3612,6 +3650,10 @@ if (document.readyState === 'loading') {
       const core = this.renderCustomFieldControl(field);
       if (!core) return '';
       let html = core;
+      // 「フォームを開いたときは非表示」: 初期描画から隠す（JS 適用前のちらつき防止）
+      if (field.hidden_by_default === true) {
+        html = html.replace(`id="custom-field-wrap-${field.id}"`, `id="custom-field-wrap-${field.id}" style="display:none;"`);
+      }
       // 説明テキスト（[color] タグ対応）を質問名ラベルの直下に挿入
       if (field.description && field.description.trim()) {
         html = html.replace('</label>', `</label>\n                <div class="custom-field-desc">${this.renderColoredTextHtml(field.description)}</div>`);

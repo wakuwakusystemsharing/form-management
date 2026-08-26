@@ -161,6 +161,13 @@ export interface FormConfig {
     restore_enabled?: boolean;
     // 表示位置の変更（未設定 = 標準の位置。anchor は画像orテキスト設置と同じセクション指定）
     placement?: { anchor: string; position: 'above' | 'below' };
+    // フォームを開いたときは非表示にし、show_triggers のいずれかが成立したら表示する
+    hidden_by_default?: boolean;
+    // 表示トリガー（複数指定は OR）。value は対象の ID / 選択肢の value
+    show_triggers?: Array<{
+      type: 'visit_count' | 'menu' | 'option' | 'staff' | 'gender' | 'coupon';
+      value: string;
+    }>;
     // 質問名の下に表示する説明テキスト（[color=#xxxxxx]〜[/color] タグで部分文字色に対応）
     description?: string;
     // 回答欄の下に表示するリンクボタン（注意書きのリンクボタンと同じ見た目）
