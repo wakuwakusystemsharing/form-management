@@ -233,11 +233,14 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
                 : [],
               hidden_option_ids: Array.isArray(op.hidden_option_ids)
                 ? op.hidden_option_ids.filter((x): x is string => typeof x === 'string')
+                : [],
+              hidden_custom_field_ids: Array.isArray(op.hidden_custom_field_ids)
+                ? op.hidden_custom_field_ids.filter((x): x is string => typeof x === 'string')
                 : []
             }));
           return cleaned.length > 0 ? cleaned : [
-            { value: 'first', label: '初回', hidden_menu_ids: [], hidden_option_ids: [] },
-            { value: 'repeat', label: '2回目以降', hidden_menu_ids: [], hidden_option_ids: [] }
+            { value: 'first', label: '初回', hidden_menu_ids: [], hidden_option_ids: [], hidden_custom_field_ids: [] },
+            { value: 'repeat', label: '2回目以降', hidden_menu_ids: [], hidden_option_ids: [], hidden_custom_field_ids: [] }
           ];
         })() as Form['config']['visit_count_selection']['options']
       },

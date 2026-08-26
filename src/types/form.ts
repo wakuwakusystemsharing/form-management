@@ -134,6 +134,7 @@ export interface FormConfig {
       duration?: number;        // 追加所要時間（分）。選択時に合計時間・カレンダーイベントの長さへ加算
       hidden_menu_ids?: string[];   // この選択肢のとき非表示にするメニューID（空 = 全表示）
       hidden_option_ids?: string[]; // この選択肢のとき非表示にするオプションID
+      hidden_custom_field_ids?: string[]; // この選択肢のとき非表示にするカスタムフィールドID（空 = 全表示）
     }>;
   };
   
