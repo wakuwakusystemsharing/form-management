@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getAppEnvironment } from '@/lib/env';
-import { createAdminClient, createAuthenticatedClient, checkStoreAccess } from '@/lib/supabase';
-import { getCurrentUser } from '@/lib/auth-helper';
+import { createAdminClient } from '@/lib/supabase';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { StaticReservationGenerator } from '@/lib/static-generator-reservation';
+import {
+  ACCESS_COOKIE,
+  readCookie,
+  verifyStoreAdmin,
+  refreshManualSession,
+  applySessionCookies,
+  renderManualLoginPage,
+} from '@/lib/manual-form-auth';
 import fs from 'fs';
 import path from 'path';
 
@@ -12,43 +19,19 @@ export const dynamic = 'force-dynamic';
 
 // 店舗側手動予約フォーム（スタッフ用）の HTML を返す。
 // 対象フォームの設定で通常フォームと同じ UI を生成し、最上部に必須の「お客様選択」を追加した
-// 手動モード（LIFF 不使用・LINE メッセージ送信なし）で出力する。店舗管理者のみアクセス可。
+// 手動モード（LIFF 不使用・LINE メッセージ送信なし）で出力する。
+//
+// 認証:
+//  1. 管理画面のアクセストークン Cookie が有効ならそのまま表示
+//  2. 失効していても手動フォーム専用のリフレッシュ Cookie があればサーバー側で更新して表示
+//  3. どちらも無ければ専用ログイン画面（店舗ID・メール・パスワード・30日保持）を返す
 
-async function authorizeStoreAccess(
-  request: Request,
-  storeId: string
-): Promise<NextResponse | null> {
-  const env = getAppEnvironment();
-  if (env === 'local') return null;
-
-  const user = await getCurrentUser(request);
-  if (!user) {
-    return NextResponse.json({ error: '認証が必要です。店舗管理画面からアクセスしてください。' }, { status: 401 });
-  }
-
-  const token =
-    request.headers.get('cookie')
-      ?.split(';')
-      .find((c) => c.trim().startsWith('sb-access-token='))
-      ?.trim()
-      .substring('sb-access-token='.length) ||
-    request.headers.get('authorization')?.replace('Bearer ', '');
-  if (!token) {
-    return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
-  }
-
-  const authClient = createAuthenticatedClient(token);
-  if (!authClient) {
-    return NextResponse.json({ error: '認証に失敗しました' }, { status: 401 });
-  }
-
-  const hasAccess = await checkStoreAccess(user.id, storeId, user.email, authClient);
-  if (!hasAccess) {
-    return NextResponse.json({ error: 'この店舗へのアクセス権限がありません' }, { status: 403 });
-  }
-
-  return null;
-}
+const HTML_HEADERS = {
+  'Content-Type': 'text/html; charset=utf-8',
+  // 常に最新のフォーム設定で表示（認証必須ページのためキャッシュしない）
+  'Cache-Control': 'no-store',
+  'X-Robots-Tag': 'noindex',
+};
 
 export async function GET(
   request: Request,
@@ -56,15 +39,31 @@ export async function GET(
 ) {
   try {
     const { storeId, formId } = await params;
-
-    const authError = await authorizeStoreAccess(request, storeId);
-    if (authError) return authError;
-
     const env = getAppEnvironment();
+
+    // ---- 認証（local はスキップ） ----
+    let refreshed: { accessToken: string; refreshToken: string | null } | null = null;
+    if (env !== 'local') {
+      let authorized = false;
+      const accessToken = readCookie(request, ACCESS_COOKIE);
+      if (accessToken) {
+        const verified = await verifyStoreAdmin(accessToken, storeId);
+        authorized = verified.ok;
+      }
+      if (!authorized) {
+        refreshed = await refreshManualSession(request, storeId);
+        authorized = !!refreshed;
+      }
+      if (!authorized) {
+        // 未認証: 専用ログイン画面（200 で HTML。JSON を見せない）
+        return new NextResponse(renderManualLoginPage(storeId, formId), { status: 200, headers: HTML_HEADERS });
+      }
+    }
+
+    // ---- フォーム取得 ----
     let rawForm: Record<string, unknown> | null = null;
 
     if (env === 'local') {
-      // ローカル環境: JSON ファイルから取得
       const formsPath = path.join(process.cwd(), 'data', `forms_${storeId}.json`);
       if (fs.existsSync(formsPath)) {
         const forms = JSON.parse(fs.readFileSync(formsPath, 'utf-8')) as Array<Record<string, unknown>>;
@@ -101,15 +100,19 @@ export async function GET(
     const generator = new StaticReservationGenerator();
     const html = generator.generateHTML(normalized.config, formId, storeId, 'manual');
 
-    return new NextResponse(html, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        // 常に最新のフォーム設定で表示（認証必須ページのためキャッシュしない）
-        'Cache-Control': 'no-store',
-        'X-Robots-Tag': 'noindex',
-      },
-    });
+    const response = new NextResponse(html, { status: 200, headers: HTML_HEADERS });
+    // リフレッシュで更新した場合は新しいトークンを Cookie に反映
+    // （30日保持の有無はリフレッシュ Cookie の有無で判断できないため、更新時は保持ありとして再設定）
+    if (refreshed) {
+      applySessionCookies(response, {
+        storeId,
+        formId,
+        accessToken: refreshed.accessToken,
+        refreshToken: refreshed.refreshToken,
+        remember: true,
+      });
+    }
+    return response;
   } catch (error) {
     console.error('[API] manual-form error:', error);
     return NextResponse.json({ error: '手動予約フォームの生成に失敗しました' }, { status: 500 });

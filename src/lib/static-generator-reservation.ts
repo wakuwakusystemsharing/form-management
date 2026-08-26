@@ -160,7 +160,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
         <div class="form-content">
             ${manualMode ? `
             <!-- 店舗側手動予約フォームのバナー -->
-            <div class="manual-mode-banner">🏪 店舗側手動予約フォーム（スタッフ用）<br><span>お客様の代わりに予約を登録します。お客様のLINEには通知されません。</span></div>
+            <div class="manual-mode-banner">🏪 店舗側手動予約フォーム（スタッフ用）<br><span>お客様の代わりに予約を登録します。お客様のLINEには通知されません。</span><button type="button" class="manual-logout-button" onclick="(function(){ if (!window.confirm('ログアウトしますか？')) return; fetch(window.location.pathname + '/logout', { method: 'POST', credentials: 'include' }).then(function(){ window.location.reload(); }).catch(function(){ window.location.reload(); }); })()">ログアウト</button></div>
             ${this.renderManualCustomerField()}` : ''}
             ${safeConfig.basic_info?.notice ? `<div class="notice-banner">${this.escapeHtml(safeConfig.basic_info.notice)}</div>` : ''}
             ${this.renderNoticeButtons(safeConfig)}
@@ -4289,6 +4289,11 @@ if (document.readyState === 'loading') {
             line-height: 1.6;
         }
         .manual-mode-banner span { font-size: 12px; font-weight: 400; color: #ffffffcc; }
+        .manual-logout-button {
+            float: right; margin-top: 2px; padding: 4px 10px; font-size: 11px; font-weight: 400;
+            color: #fff; background: transparent; border: 1px solid #ffffff88; border-radius: 4px; cursor: pointer;
+        }
+        .manual-logout-button:hover { background: #ffffff22; }
         .manual-customer-list {
             margin-top: 8px;
             max-height: 260px;
