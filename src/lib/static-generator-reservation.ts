@@ -312,6 +312,10 @@ function formatDateTimeForDisplay(value) {
     if (date) return date[1] + '年' + date[2] + '月' + date[3] + '日';
     return value;
 }
+// 名称の改行はフォーム表示専用。送信テキスト・DB・カレンダーでは1行に正規化する
+function oneLine(s) {
+    return String(s == null ? '' : s).replace(/\\s*\\r?\\n\\s*/g, ' ').trim();
+}
 // ローカル時刻ベースで YYYY-MM-DD を生成（toISOString は UTC 変換で日付が前日にズレるため使わない）
 function formatLocalYmd(d) {
     return d.getFullYear() + '-' +
@@ -1419,17 +1423,21 @@ class BookingForm {
             const duration = submenu ? (submenu.duration || 0) : (menu.duration || 0);
             totalPrice += price;
             totalDuration += duration;
+            // 名称の改行は表示専用。送信内容では1行にする
+            const menuName = oneLine(menu.name);
+            const subName = submenu ? oneLine(submenu.name) : '';
+            const categoryName = oneLine(category?.name);
             selectedMenus.push({
                 menu_id: menu.id,
-                menu_name: menu.name || '',
-                category_name: (category?.display_name || category?.name || '').trim(),
+                menu_name: menuName,
+                category_name: oneLine(category?.display_name || category?.name),
                 price,
                 duration,
-                ...(submenu ? { submenu_id: submenu.id, submenu_name: submenu.name || '' } : {})
+                ...(submenu ? { submenu_id: submenu.id, submenu_name: subName } : {})
             });
             // ご予約内容にはメニュー名のみ表示（料金・所要時間は表示しない）
-            summaryLines.push(menu.name + (submenu ? ' &gt; ' + submenu.name : ''));
-            const msgLine = [category?.name, menu.name, submenu?.name].filter(Boolean).join(' > ');
+            summaryLines.push(menuName + (submenu ? ' &gt; ' + subName : ''));
+            const msgLine = [categoryName, menuName, subName].filter(Boolean).join(' > ');
             const optNames = [];
             const optIds = this.state.selectedOptions?.[menuId] || [];
             optIds.forEach(optionId => {
@@ -1437,15 +1445,16 @@ class BookingForm {
                 if (option) {
                     const op = option.price || 0;
                     const od = option.duration || 0;
+                    const optionName = oneLine(option.name);
                     totalPrice += op;
                     totalDuration += od;
-                    selectedOptions.push({ option_id: option.id, option_name: option.name || '', menu_id: menuId, price: op, duration: od });
-                    summaryLines.push('+ ' + option.name);
-                    optNames.push(option.name);
+                    selectedOptions.push({ option_id: option.id, option_name: optionName, menu_id: menuId, price: op, duration: od });
+                    summaryLines.push('+ ' + optionName);
+                    optNames.push(optionName);
                 }
             });
             messageParts.push(optNames.length > 0 ? msgLine + ', ' + optNames.join(', ') : msgLine);
-            menusByCategory.push({ category: category?.name || '', menu: submenu ? menu.name + ' > ' + submenu.name : menu.name, options: optNames });
+            menusByCategory.push({ category: categoryName, menu: submenu ? menuName + ' > ' + subName : menuName, options: optNames });
         };
         if (allowCross && this.state.selectedMenus && Object.keys(this.state.selectedMenus).length > 0) {
             Object.entries(this.state.selectedMenus).forEach(([categoryId, menuIds]) => {
@@ -1472,10 +1481,11 @@ class BookingForm {
                     if (!opt) return;
                     const op = opt.price || 0;
                     const od = opt.duration || 0;
+                    const catOptName = oneLine(opt.name);
                     totalPrice += op;
                     totalDuration += od;
-                    selectedOptions.push({ option_id: opt.id, option_name: opt.name || '', category_id: categoryId, price: op, duration: od });
-                    summaryLines.push('+ ' + opt.name);
+                    selectedOptions.push({ option_id: opt.id, option_name: catOptName, category_id: categoryId, price: op, duration: od });
+                    summaryLines.push('+ ' + catOptName);
                 });
             });
         }
@@ -2567,7 +2577,7 @@ class BookingForm {
                     const val = this.state.customFields[field.id];
                     if (val) {
                         const display = (field.type === 'date' || field.type === 'datetime') ? formatDateTimeForDisplay(val) : val;
-                        labeledFields[field.title] = display;
+                        labeledFields[oneLine(field.title)] = display;
                     }
                 });
                 customerInfo.custom_fields_labeled = labeledFields;
@@ -2785,7 +2795,7 @@ class BookingForm {
                 (this.config.custom_fields || []).forEach(field => {
                     if (msgFieldHasPlacement(field)) return;
                     const display = customFieldDisplayValue(field);
-                    if (display !== null) addMsgSegment('custom_fields', '《' + field.title + '》\\n' + display);
+                    if (display !== null) addMsgSegment('custom_fields', '《' + oneLine(field.title) + '》\\n' + display);
                 });
             }
 
@@ -2819,7 +2829,7 @@ class BookingForm {
             if (showLineItem('custom_fields')) {
                 this.getAdditionalQuestionEntries().forEach(entry => {
                     const display = customFieldDisplayValue(entry.field);
-                    if (display !== null) addMsgSegment('menu', '《' + entry.field.title + '》\\n' + display);
+                    if (display !== null) addMsgSegment('menu', '《' + oneLine(entry.field.title) + '》\\n' + display);
                 });
             }
 
@@ -2850,7 +2860,7 @@ class BookingForm {
                     let anchor = field.placement.anchor;
                     if (anchor.indexOf('datetime') === 0) anchor = 'datetime';
                     if (anchor === 'email') anchor = 'phone';  // メールはメッセージに含まれないため電話番号の位置に寄せる
-                    const seg = { anchor: anchor, text: '《' + field.title + '》\\n' + display, block: false, placed: true };
+                    const seg = { anchor: anchor, text: '《' + oneLine(field.title) + '》\\n' + display, block: false, placed: true };
                     let firstOwn = -1, last = -1;
                     for (let i = 0; i < msgSegments.length; i++) {
                         if (msgSegments[i].anchor !== anchor) continue;
@@ -3669,7 +3679,7 @@ if (document.readyState === 'loading') {
   }
 
   private renderCustomFieldControl(field: NonNullable<FormConfig['custom_fields']>[number]): string {
-      const label = `${this.escapeHtml(field.title)}${field.required ? ' <span class="required">*</span>' : ''}`;
+      const label = `${this.escapeHtmlWithBreaks(field.title)}${field.required ? ' <span class="required">*</span>' : ''}`;
       const id = `custom-field-${field.id}`;
       if (field.type === 'text') {
         return `
@@ -3817,11 +3827,12 @@ if (document.readyState === 'loading') {
                                     <button type="button" class="menu-item" data-menu-id="${menu.id}" data-category-id="${categoryId}">
                                         ${menu.image ? `
                                             <div class="menu-item-image">
-                                                <img src="${menu.image}" alt="${this.escapeHtml(menu.name)}" class="menu-image" loading="lazy" onerror="this.parentElement.style.display='none'">
+                                                <img src="${menu.image}" alt="${this.escapeHtml(String(menu.name || '').replace(/\r?\n/g, ' '))}" class="menu-image" loading="lazy" onerror="this.parentElement.style.display='none'">
                                             </div>
                                         ` : ''}
                                         <div class="menu-item-content">
-                                            <div class="menu-item-name">${this.escapeHtml(menu.name)}${menu.has_submenu ? ' &#x25B6;&#xFE0E;' : ''}</div>
+                                            <div class="menu-item-name">${this.escapeHtmlWithBreaks(menu.name)}${menu.has_submenu ? ' &#x25B6;&#xFE0E;' : ''}</div>
+                                            ${menu.description && config.menu_structure?.display_options?.show_description !== false ? `<div class="menu-item-desc">${this.escapeHtmlWithBreaks(menu.description)}</div>` : ''}
                                         </div>
                                         ${!menu.has_submenu && (menu.price !== undefined || menu.duration) ? `
                                             <div class="menu-item-info">
@@ -3838,9 +3849,10 @@ if (document.readyState === 'loading') {
                                                     <div style="display:flex;align-items:center;">
                                                         <div>
                                                             <div style="text-align:left;font-size:0.875rem;font-weight:500;">
-                                                                ${this.escapeHtml(option.name)}
+                                                                ${this.escapeHtmlWithBreaks(option.name)}
                                                                 ${option.is_default ? '<span style="margin-left:0.5rem;padding:0.25rem 0.5rem;font-size:0.75rem;background:#fed7aa;color:#9a3412;border-radius:0.25rem;">おすすめ</span>' : ''}
                                                             </div>
+                                                            ${option.description && config.menu_structure?.display_options?.show_description !== false ? `<div class="menu-item-desc" style="text-align:left;">${this.escapeHtmlWithBreaks(option.description)}</div>` : ''}
                                                         </div>
                                                     </div>
                                                     <div style="text-align:right;margin-left:0.5rem;">
@@ -3862,7 +3874,8 @@ if (document.readyState === 'loading') {
                                     ${category.options.map((opt, idx) => `
                                         <button type="button" class="category-option-item" data-category-id="${category.id}" data-option-id="${opt.id || `catopt-${idx}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
                                             <div>
-                                                <div style="font-size:0.875rem;font-weight:500;">${this.escapeHtml(opt.name)}</div>
+                                                <div style="font-size:0.875rem;font-weight:500;">${this.escapeHtmlWithBreaks(opt.name)}</div>
+                                                ${opt.description && config.menu_structure?.display_options?.show_description !== false ? `<div class="menu-item-desc">${this.escapeHtmlWithBreaks(opt.description)}</div>` : ''}
                                             </div>
                                             <div style="text-align:right;margin-left:0.5rem;">
                                                 ${(opt.price || 0) > 0 && !opt.hide_price ? `<div style="font-weight:500;font-size:0.875rem;">+¥${(opt.price || 0).toLocaleString()}</div>` : ''}
@@ -4028,6 +4041,11 @@ if (document.readyState === 'loading') {
       return `<div class="content-block content-block-text">${this.renderColoredTextHtml(b.text || '')}</div>`;
     }).join('');
     return items + placedFieldsHtml;
+  }
+
+  // エスケープしたうえで改行を <br> にする（メニュー名・オプション名・カスタムフィールド名の改行表示用）
+  private escapeHtmlWithBreaks(text: string | undefined | null): string {
+    return this.escapeHtml(String(text ?? '')).replace(/\r?\n/g, '<br>');
   }
 
   // [color=#rrggbb]〜[/color] を <span style="color:..."> に変換（hex のみ許可 = CSSインジェクション防止）
