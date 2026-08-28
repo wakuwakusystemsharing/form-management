@@ -2269,7 +2269,7 @@ export default function StoreDetailPage() {
 
       {/* 店舗編集モーダル */}
       <Dialog open={showStoreEditModal} onOpenChange={setShowStoreEditModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>店舗情報編集: {editingStore?.name}</DialogTitle>
           </DialogHeader>
@@ -2364,7 +2364,8 @@ export default function StoreDetailPage() {
                   </p>
                 </div>
 
-                {/* リマインダー設定 */}
+                {/* リマインダー設定（2カラムグリッドの中で横いっぱいに使う） */}
+                <div className="md:col-span-2 space-y-3 rounded-md border p-3">
                 <div className="space-y-2">
                   <Label>予約リマインダー</Label>
                   <div className="flex items-center gap-3">
@@ -2439,6 +2440,7 @@ export default function StoreDetailPage() {
                     onChange={(next) => setEditingStore({ ...editingStore, reminder_template: next })}
                   />
                 )}
+                </div>
                 </div>
               </div>
           )}
