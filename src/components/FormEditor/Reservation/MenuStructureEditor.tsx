@@ -2683,28 +2683,22 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
               </span>
             </span>
           </label>
-          <div>
-            <p className={`text-sm ${themeClasses.text.secondary} mb-1.5`}>画像（オプション）を設定したメニューの画像の表示方法</p>
-            <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-4">
-              {([
-                { value: 'large', label: 'ボタンの上に大きく表示（標準）' },
-                { value: 'thumbnail', label: 'ボタンの左側に小さく表示' },
-                { value: 'hidden', label: 'ボタンには表示しない（詳細モーダルのみ）' },
-              ] as const).map((opt) => (
-                <label key={opt.value} className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="menu-image-display"
-                    value={opt.value}
-                    checked={(displayOptions?.menu_image_display || 'large') === opt.value}
-                    onChange={() => updateDisplayOptions({ menu_image_display: opt.value })}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className={`text-sm ${themeClasses.text.secondary}`}>{opt.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
+          <label className="flex items-start space-x-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={displayOptions?.menu_image_display === 'thumbnail'}
+              onChange={(e) => updateDisplayOptions({ menu_image_display: e.target.checked ? 'thumbnail' : 'hidden' })}
+              className={`mt-0.5 h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${
+                theme === 'light' ? 'bg-gray-100 border-gray-300' : 'bg-gray-700 border-gray-600'
+              }`}
+            />
+            <span className={`text-sm ${themeClasses.text.secondary}`}>
+              画像（オプション）を設定したメニューは、ボタンの左側に画像を小さく表示する
+              <span className={`block text-xs ${themeClasses.text.secondary} opacity-80`}>
+                OFF のときはボタンに画像は出ません（詳細モーダルにのみ表示）
+              </span>
+            </span>
+          </label>
         </div>
       </div>
 

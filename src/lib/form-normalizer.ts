@@ -23,9 +23,9 @@ function sanitizeBlockedTimeWeekdays(raw: unknown): { [time: string]: number[] }
   return out;
 }
 
-/** メニュー画像の表示方法。不正値・未設定は従来どおりの「上に大きく表示」 */
-function sanitizeMenuImageDisplay(raw: unknown): 'large' | 'thumbnail' | 'hidden' {
-  return raw === 'thumbnail' || raw === 'hidden' ? raw : 'large';
+/** メニュー画像の表示方法。不正値・未設定は従来どおり「ボタンには出さない」 */
+function sanitizeMenuImageDisplay(raw: unknown): 'thumbnail' | 'hidden' {
+  return raw === 'thumbnail' ? 'thumbnail' : 'hidden';
 }
 
 /**
@@ -110,7 +110,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         show_description: true,
         show_treatment_info: false,
         hide_detail_popup: false,
-        menu_image_display: 'large' as const
+        menu_image_display: 'hidden' as const
       }
     },
     calendar_settings: {
