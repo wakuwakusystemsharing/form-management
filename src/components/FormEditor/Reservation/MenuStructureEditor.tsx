@@ -2026,6 +2026,28 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     });
   };
 
+  // メニューの詳細設定（display_options）
+  const displayOptions = form.config?.menu_structure?.display_options;
+  const updateDisplayOptions = (patch: Partial<NonNullable<Form['config']['menu_structure']>['display_options']>) => {
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        menu_structure: {
+          ...form.config?.menu_structure,
+          display_options: {
+            ...displayOptions,
+            show_price: displayOptions?.show_price ?? true,
+            show_duration: displayOptions?.show_duration ?? true,
+            show_description: displayOptions?.show_description ?? true,
+            show_treatment_info: displayOptions?.show_treatment_info ?? false,
+            ...patch,
+          },
+        },
+      },
+    });
+  };
+
   const updateStaffMember = (index: number, patch: Partial<{ name: string; calendar_id: string; calendar_name: string; event_color_id: string; hidden_menu_ids: string[]; hidden_option_ids: string[] }>) => {
     const staff = [...currentStaffSelection().staff];
     staff[index] = { ...staff[index], ...patch };
@@ -2617,6 +2639,74 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* メニューの詳細設定 */}
+      <div className={`mb-6 p-4 ${themeClasses.card} rounded-lg`}>
+        <div className="mb-3">
+          <h3 className={`text-sm font-medium ${themeClasses.text.primary}`}>
+            🍽 メニューの詳細設定
+          </h3>
+          <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
+            メニュー編集の「説明（オプション）」「画像（オプション）」を予約フォームでどう見せるかを設定します
+          </p>
+        </div>
+        <div className="space-y-3">
+          <label className="flex items-start space-x-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={displayOptions?.hide_detail_popup === true}
+              onChange={(e) => updateDisplayOptions({ hide_detail_popup: e.target.checked })}
+              className={`mt-0.5 h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${
+                theme === 'light' ? 'bg-gray-100 border-gray-300' : 'bg-gray-700 border-gray-600'
+              }`}
+            />
+            <span className={`text-sm ${themeClasses.text.secondary}`}>
+              メニューをタップしたときの詳細モーダルを表示しない
+              <span className={`block text-xs ${themeClasses.text.secondary} opacity-80`}>
+                説明や画像を設定したメニュー・サブメニュー・オプションを選んだときに出る、内容確認のポップアップを出しません
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start space-x-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={displayOptions?.show_description === false}
+              onChange={(e) => updateDisplayOptions({ show_description: !e.target.checked })}
+              className={`mt-0.5 h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${
+                theme === 'light' ? 'bg-gray-100 border-gray-300' : 'bg-gray-700 border-gray-600'
+              }`}
+            />
+            <span className={`text-sm ${themeClasses.text.secondary}`}>
+              メニュー名の下の説明文（グレー文字）を表示しない
+              <span className={`block text-xs ${themeClasses.text.secondary} opacity-80`}>
+                メニュー・オプションのボタンに出る「説明（オプション）」のテキストを非表示にします（詳細モーダル内には表示されます）
+              </span>
+            </span>
+          </label>
+          <div>
+            <p className={`text-sm ${themeClasses.text.secondary} mb-1.5`}>画像（オプション）を設定したメニューの画像の表示方法</p>
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-4">
+              {([
+                { value: 'large', label: 'ボタンの上に大きく表示（標準）' },
+                { value: 'thumbnail', label: 'ボタンの左側に小さく表示' },
+                { value: 'hidden', label: 'ボタンには表示しない（詳細モーダルのみ）' },
+              ] as const).map((opt) => (
+                <label key={opt.value} className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="menu-image-display"
+                    value={opt.value}
+                    checked={(displayOptions?.menu_image_display || 'large') === opt.value}
+                    onChange={() => updateDisplayOptions({ menu_image_display: opt.value })}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className={`text-sm ${themeClasses.text.secondary}`}>{opt.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* 注意書き */}
       <div className={`p-4 ${themeClasses.card} rounded-lg`}>

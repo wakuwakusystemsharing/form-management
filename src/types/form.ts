@@ -188,6 +188,10 @@ export interface FormConfig {
       show_duration: boolean;
       show_description: boolean;
       show_treatment_info: boolean;  // 治療説明表示
+      // メニュー/オプション/サブメニューをタップしたときの詳細モーダル（説明・画像）を出さない
+      hide_detail_popup?: boolean;
+      // メニューボタン上の画像の出し方: large=上に大きく（従来）/ thumbnail=左側に小さく / hidden=ボタンには出さない（モーダルのみ）
+      menu_image_display?: 'large' | 'thumbnail' | 'hidden';
     };
   };
   
