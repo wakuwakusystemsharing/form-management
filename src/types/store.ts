@@ -1,5 +1,16 @@
 import type { Form } from './form';
 
+// LINE リマインダーの文面カスタマイズ（未設定 = デフォルト文面）
+export interface ReminderTemplate {
+  header_title?: string;   // ヘッダーのタイトル（空 = 【予約前日メッセージ】等の自動文言）
+  header_color?: string;   // ヘッダー背景色（HEX。空 = #877059）
+  body_text?: string;      // 本文（空 = デフォルト本文）。{LINE名} {お名前} {予約日時} {メニュー名} 等を差し込める
+  text_color?: string;     // 本文の文字色（HEX。空 = #333333）
+  show_details?: boolean;  // 日時・メニュー・担当・お名前の詳細ブロックを表示するか（デフォルト true）
+  footer_text?: string;    // 末尾の一言（空 = 「心よりお待ちしております」）
+  show_footer?: boolean;   // 末尾の一言を表示するか（デフォルト true）
+}
+
 export interface Store {
   id: string;                 // 6文字のランダム文字列 (全環境共通)
   name: string;
@@ -19,6 +30,7 @@ export interface Store {
   reminder_enabled?: boolean;         // LINEリマインダー送信の有効/無効
   reminder_time?: string;             // リマインダー送信時刻（HH:00形式、デフォルト19:00）
   reminder_days_before?: number;      // リマインダーを予約の何日前に送るか（デフォルト1 = 前日）
+  reminder_template?: ReminderTemplate | null; // リマインダー文面のカスタマイズ（null = デフォルト）
   created_at: string;
   updated_at: string;
   status: 'active' | 'inactive';
