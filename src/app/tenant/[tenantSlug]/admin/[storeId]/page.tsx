@@ -9,6 +9,7 @@ import { SurveyForm } from '@/types/survey';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
 import StoreAdminManager from '@/components/StoreAdminManager';
 import FormHistoryDialog from '@/components/FormHistoryDialog';
+import ReminderTemplateEditor from '@/components/ReminderTemplateEditor';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -2429,6 +2430,14 @@ export default function StoreDetailPage() {
                       ? '翌日の予約がある顧客にリマインドが送信されます'
                       : `${editingStore.reminder_days_before}日後の予約がある顧客にリマインドが送信されます`}
                   </p>
+                )}
+                {editingStore.reminder_enabled !== false && (
+                  <ReminderTemplateEditor
+                    storeName={editingStore.name}
+                    daysBefore={editingStore.reminder_days_before || 1}
+                    value={editingStore.reminder_template}
+                    onChange={(next) => setEditingStore({ ...editingStore, reminder_template: next })}
+                  />
                 )}
                 </div>
               </div>

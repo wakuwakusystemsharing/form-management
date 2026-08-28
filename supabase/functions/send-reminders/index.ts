@@ -25,29 +25,92 @@ function normalizeDaysBefore(value: unknown): number {
   return n >= 1 && n <= 30 ? n : 1;
 }
 
-function formatDateJapanese(dateStr: string, timeStr: string): string {
+function formatDateOnlyJapanese(dateStr: string): string {
   const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
   const d = new Date(dateStr);
   const dayOfWeek = weekdays[d.getDay()];
   // dateStr: "2026-04-03" → "2026年04月03日（木）"
   const [year, month, day] = dateStr.split("-");
-  return `${year}年${month}月${day}日（${dayOfWeek}） ${timeStr}`;
+  return `${year}年${month}月${day}日（${dayOfWeek}）`;
 }
 
-function buildFlexMessage(
-  storeName: string,
-  themeColor: string,
-  dateText: string,
-  menuText: string,
-  customerName: string,
-  daysBefore: number,
-  staffName?: string | null
-) {
-  const headerLabel = daysBefore === 1 ? "【予約前日メッセージ】" : `【予約${daysBefore}日前メッセージ】`;
-  const bodyLabel = daysBefore === 1 ? "明日の予約をお知らせします" : `${daysBefore}日後の予約をお知らせします`;
+// ===== リマインダー文面テンプレート =====
+// ※ src/lib/reminder-template.ts（管理画面プレビュー）と同じロジック。変更時は両方を合わせること
+const REMINDER_DEFAULT_HEADER_COLOR = "#877059";
+const REMINDER_DEFAULT_TEXT_COLOR = "#333333";
+const REMINDER_DEFAULT_FOOTER = "心よりお待ちしております";
+
+function defaultHeaderTitle(daysBefore: number): string {
+  return daysBefore === 1 ? "【予約前日メッセージ】" : `【予約${daysBefore}日前メッセージ】`;
+}
+function defaultBodyLabel(daysBefore: number): string {
+  return daysBefore === 1 ? "明日の予約をお知らせします" : `${daysBefore}日後の予約をお知らせします`;
+}
+function isValidHex(v: unknown): boolean {
+  return typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
+}
+function applyReminderPlaceholders(text: string, ctx) {
+  return String(text || "")
+    .replace(/\{LINE名\}/g, ctx.lineDisplayName || ctx.customerName)
+    .replace(/\{お名前\}/g, ctx.customerName)
+    .replace(/\{予約日時\}/g, ctx.dateText)
+    .replace(/\{予約日\}/g, ctx.dateOnly)
+    .replace(/\{予約時間\}/g, ctx.timeOnly)
+    .replace(/\{メニュー名\}/g, ctx.menuText)
+    .replace(/\{担当スタッフ\}/g, ctx.staffName || "")
+    .replace(/\{店舗名\}/g, ctx.storeName);
+}
+function resolveReminderContent(template, ctx) {
+  const t = template && typeof template === "object" ? template : {};
+  const headerTitle = (t.header_title || "").trim() ? applyReminderPlaceholders(t.header_title, ctx) : defaultHeaderTitle(ctx.daysBefore);
+  const headerColor = isValidHex(t.header_color) ? t.header_color : REMINDER_DEFAULT_HEADER_COLOR;
+  const textColor = isValidHex(t.text_color) ? t.text_color : REMINDER_DEFAULT_TEXT_COLOR;
+  const customBody = (t.body_text || "").trim() ? applyReminderPlaceholders(t.body_text, ctx).trim() : "";
+  const bodyText = customBody || defaultBodyLabel(ctx.daysBefore);
+  const showDetails = t.show_details !== false;
+  const showFooter = t.show_footer !== false;
+  const footerText = (t.footer_text || "").trim() ? applyReminderPlaceholders(t.footer_text, ctx).trim() : REMINDER_DEFAULT_FOOTER;
+  return { headerTitle, headerColor, textColor, bodyText, isCustomBody: !!customBody, showDetails, showFooter, footerText };
+}
+
+function buildFlexMessage(template, ctx) {
+  const c = resolveReminderContent(template, ctx);
+  const detailText = (label: string, value: string, margin: string) => [
+    { type: "text", text: label, color: "#666666", size: "sm", weight: "bold", margin },
+    { type: "text", text: value || " ", wrap: true, size: "sm", color: c.textColor, margin: "xs" },
+  ];
+  const bodyContents: unknown[] = [
+    {
+      type: "text",
+      text: c.bodyText || " ",
+      wrap: true,
+      // カスタム本文は左寄せ・通常サイズ、デフォルト本文は従来どおり中央・太字
+      ...(c.isCustomBody
+        ? { size: "sm", color: c.textColor, margin: "md" }
+        : { weight: "bold", size: "lg", color: c.textColor, align: "center", margin: "md" }),
+    },
+  ];
+  if (c.showDetails) {
+    bodyContents.push({ type: "separator", margin: "lg", color: "#CCCCCC" });
+    bodyContents.push({
+      type: "box",
+      layout: "vertical",
+      contents: [
+        ...detailText("📅 日時", ctx.dateText, "md"),
+        ...detailText("📝 メニュー", ctx.menuText, "lg"),
+        ...(ctx.staffName ? detailText("👤 担当", ctx.staffName, "lg") : []),
+        ...detailText("👤 お名前", `${ctx.customerName}様`, "lg"),
+      ],
+      margin: "lg",
+    });
+  }
+  if (c.showFooter) {
+    bodyContents.push({ type: "separator", margin: "xxl", color: "#CCCCCC" });
+    bodyContents.push({ type: "text", text: c.footerText || " ", wrap: true, margin: "xl", size: "sm", align: "center", color: "#474646" });
+  }
   return {
     type: "flex",
-    altText: `${headerLabel}${bodyLabel}`,
+    altText: `${c.headerTitle}${c.isCustomBody ? "" : defaultBodyLabel(ctx.daysBefore)}`.slice(0, 400),
     contents: {
       type: "bubble",
       size: "mega",
@@ -55,131 +118,13 @@ function buildFlexMessage(
         type: "box",
         layout: "vertical",
         contents: [
-          {
-            type: "text",
-            text: storeName,
-            color: "#ffffff66",
-            size: "sm",
-          },
-          {
-            type: "text",
-            text: headerLabel,
-            color: "#ffffff",
-            size: "xl",
-            weight: "bold",
-          },
+          { type: "text", text: ctx.storeName || " ", color: "#ffffff66", size: "sm" },
+          { type: "text", text: c.headerTitle || " ", color: "#ffffff", size: "xl", weight: "bold", wrap: true },
         ],
         paddingAll: "20px",
-        backgroundColor: themeColor,
+        backgroundColor: c.headerColor,
       },
-      body: {
-        type: "box",
-        layout: "vertical",
-        contents: [
-          {
-            type: "text",
-            text: bodyLabel,
-            weight: "bold",
-            size: "lg",
-            color: "#333333",
-            wrap: true,
-            align: "center",
-            margin: "md",
-          },
-          {
-            type: "separator",
-            margin: "lg",
-            color: "#CCCCCC",
-          },
-          {
-            type: "box",
-            layout: "vertical",
-            contents: [
-              {
-                type: "text",
-                text: "📅 日時",
-                color: "#666666",
-                size: "sm",
-                weight: "bold",
-                margin: "md",
-              },
-              {
-                type: "text",
-                text: dateText,
-                wrap: true,
-                size: "sm",
-                color: "#333333",
-                margin: "xs",
-              },
-              {
-                type: "text",
-                text: "📝 メニュー",
-                color: "#666666",
-                size: "sm",
-                weight: "bold",
-                margin: "lg",
-              },
-              {
-                type: "text",
-                text: menuText,
-                wrap: true,
-                size: "sm",
-                color: "#333333",
-                margin: "xs",
-              },
-              ...(staffName ? [
-                {
-                  type: "text",
-                  text: "👤 担当",
-                  color: "#666666",
-                  size: "sm",
-                  weight: "bold",
-                  margin: "lg",
-                },
-                {
-                  type: "text",
-                  text: staffName,
-                  wrap: true,
-                  size: "sm",
-                  color: "#333333",
-                  margin: "xs",
-                },
-              ] : []),
-              {
-                type: "text",
-                text: "👤 お名前",
-                color: "#666666",
-                size: "sm",
-                weight: "bold",
-                margin: "lg",
-              },
-              {
-                type: "text",
-                text: `${customerName}様`,
-                wrap: true,
-                size: "sm",
-                color: "#333333",
-                margin: "xs",
-              },
-            ],
-            margin: "lg",
-          },
-          {
-            type: "separator",
-            margin: "xxl",
-            color: "#CCCCCC",
-          },
-          {
-            type: "text",
-            text: "心よりお待ちしております",
-            wrap: true,
-            margin: "xl",
-            size: "sm",
-            align: "center",
-            color: "#474646",
-          },
-        ],
-      },
+      body: { type: "box", layout: "vertical", contents: bodyContents },
     },
   };
 }
@@ -218,7 +163,7 @@ Deno.serve(async () => {
   // リマインダーが有効かつ送信時刻が一致する店舗のみ取得
   const { data: eligibleStores, error: storeError } = await supabase
     .from("stores")
-    .select("id,name,line_channel_access_token,reminder_days_before")
+    .select("id,name,line_channel_access_token,reminder_days_before,reminder_template")
     .eq("reminder_enabled", true)
     .eq("reminder_time", currentHour)
     .not("line_channel_access_token", "is", null);
@@ -281,20 +226,37 @@ Deno.serve(async () => {
 
   console.log(`対象予約数: ${reservations.length}件`);
 
-  const { data: stores } = { data: eligibleStores };
+  // {LINE名} 差し込み用に顧客の LINE 表示名を取得（無ければお名前にフォールバック）
+  const lineNameMap = new Map<string, string>();
+  try {
+    const lineUserIds = [...new Set(reservations.map((r) => r.line_user_id).filter(Boolean))];
+    if (lineUserIds.length > 0) {
+      const { data: customers } = await supabase
+        .from("customers")
+        .select("store_id,line_user_id,line_display_name")
+        .in("store_id", storeIds)
+        .in("line_user_id", lineUserIds);
+      (customers || []).forEach((c) => {
+        if (c.line_user_id && c.line_display_name) {
+          lineNameMap.set(`${c.store_id}:${c.line_user_id}`, c.line_display_name);
+        }
+      });
+    }
+  } catch (e) {
+    console.error("顧客取得エラー（LINE名はお名前で代替）:", e);
+  }
 
-  const DEFAULT_THEME_COLOR = "#877059";
   const storeMap = new Map<
     string,
-    { token: string; name: string; themeColor: string; daysBefore: number }
+    { token: string; name: string; daysBefore: number; template: unknown }
   >();
-  (stores || []).forEach((store) => {
+  eligibleStores.forEach((store) => {
     if (store.line_channel_access_token) {
       storeMap.set(store.id, {
         token: store.line_channel_access_token,
         name: store.name || "店舗",
-        themeColor: DEFAULT_THEME_COLOR,
         daysBefore: normalizeDaysBefore(store.reminder_days_before),
+        template: store.reminder_template || null,
       });
     }
   });
@@ -315,20 +277,21 @@ Deno.serve(async () => {
       ? `${reservation.menu_name} > ${reservation.submenu_name}`
       : reservation.menu_name || "未設定";
 
-    const dateText = formatDateJapanese(
-      reservation.reservation_date,
-      reservation.reservation_time
-    );
+    const timeOnly = String(reservation.reservation_time || "").slice(0, 5);
+    const dateOnly = formatDateOnlyJapanese(reservation.reservation_date);
+    const customerName = reservation.customer_name || "お客";
 
-    const flexMessage = buildFlexMessage(
-      storeInfo.name,
-      storeInfo.themeColor,
-      dateText,
-      menu,
-      reservation.customer_name || "お客",
-      storeInfo.daysBefore,
-      reservation.staff_name || null
-    );
+    const flexMessage = buildFlexMessage(storeInfo.template, {
+      storeName: storeInfo.name,
+      daysBefore: storeInfo.daysBefore,
+      lineDisplayName: lineNameMap.get(`${reservation.store_id}:${reservation.line_user_id}`) || customerName,
+      customerName,
+      dateText: `${dateOnly} ${timeOnly}`,
+      dateOnly,
+      timeOnly,
+      menuText: menu,
+      staffName: reservation.staff_name || "",
+    });
 
     const result = await sendLinePush(
       storeInfo.token,
