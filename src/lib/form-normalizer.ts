@@ -23,6 +23,11 @@ function sanitizeBlockedTimeWeekdays(raw: unknown): { [time: string]: number[] }
   return out;
 }
 
+/** メニュー画像の表示方法。不正値・未設定は従来どおりの「上に大きく表示」 */
+function sanitizeMenuImageDisplay(raw: unknown): 'large' | 'thumbnail' | 'hidden' {
+  return raw === 'thumbnail' || raw === 'hidden' ? raw : 'large';
+}
+
 /**
  * フォーム構造を正規化する関数
  * 旧「フラット形式」(top-level form_name 等) と新 config.* 形式を統一
@@ -103,7 +108,9 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         show_price: true,
         show_duration: true,
         show_description: true,
-        show_treatment_info: false
+        show_treatment_info: false,
+        hide_detail_popup: false,
+        menu_image_display: 'large' as const
       }
     },
     calendar_settings: {
@@ -260,7 +267,9 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           show_price: existingConfig?.menu_structure?.display_options?.show_price ?? true,
           show_duration: existingConfig?.menu_structure?.display_options?.show_duration ?? true,
           show_description: existingConfig?.menu_structure?.display_options?.show_description ?? true,
-          show_treatment_info: existingConfig?.menu_structure?.display_options?.show_treatment_info ?? false
+          show_treatment_info: existingConfig?.menu_structure?.display_options?.show_treatment_info ?? false,
+          hide_detail_popup: existingConfig?.menu_structure?.display_options?.hide_detail_popup === true,
+          menu_image_display: sanitizeMenuImageDisplay(existingConfig?.menu_structure?.display_options?.menu_image_display)
         }
       },
       custom_fields: (existingConfig?.custom_fields ?? (typedConfig as Form['config'])?.custom_fields ?? []) as Form['config']['custom_fields'],

@@ -1360,6 +1360,8 @@ class BookingForm {
     showDetailPopup(button, item) {
         const popup = document.getElementById('treatment-text');
         if (!popup || !item) return;
+        // メニューの詳細設定で「詳細モーダルを表示しない」が ON なら何も出さない
+        if (this.config.menu_structure?.display_options?.hide_detail_popup) { this.closeDetailPopup(); return; }
         const desc = (item.description || '').trim();
         const image = item.image || item.image_url || '';
         if (!desc && !image) { this.closeDetailPopup(); return; }
@@ -3822,14 +3824,22 @@ if (document.readyState === 'loading') {
     const multiCat = config.menu_structure.categories.length > 1;
     const firstCatId = config.menu_structure.categories[0]?.id || '';
 
+    // メニュー画像の出し方（large: 上に大きく / thumbnail: 左側に小さく / hidden: ボタンには出さない）
+    const imageDisplay = config.menu_structure?.display_options?.menu_image_display || 'large';
+    const renderMenuImage = (menu: import('@/types/form').MenuItem) => {
+      if (!menu.image || imageDisplay === 'hidden') return '';
+      const alt = this.escapeHtml(String(menu.name || '').replace(/\r?\n/g, ' '));
+      const wrapClass = imageDisplay === 'thumbnail' ? 'menu-item-image menu-item-thumb' : 'menu-item-image';
+      return `
+                                            <div class="${wrapClass}">
+                                                <img src="${menu.image}" alt="${alt}" class="menu-image" loading="lazy" onerror="this.parentElement.style.display='none'">
+                                            </div>`;
+    };
+    const menuItemClass = imageDisplay === 'thumbnail' ? 'menu-item menu-item--thumb' : 'menu-item';
     const renderMenuButton = (menu: import('@/types/form').MenuItem, categoryId: string) => `
                                 <div>
-                                    <button type="button" class="menu-item" data-menu-id="${menu.id}" data-category-id="${categoryId}">
-                                        ${menu.image ? `
-                                            <div class="menu-item-image">
-                                                <img src="${menu.image}" alt="${this.escapeHtml(String(menu.name || '').replace(/\r?\n/g, ' '))}" class="menu-image" loading="lazy" onerror="this.parentElement.style.display='none'">
-                                            </div>
-                                        ` : ''}
+                                    <button type="button" class="${menuItemClass}" data-menu-id="${menu.id}" data-category-id="${categoryId}">
+                                        ${renderMenuImage(menu)}
                                         <div class="menu-item-content">
                                             <div class="menu-item-name">${this.escapeHtmlWithBreaks(menu.name)}${menu.has_submenu ? ' &#x25B6;&#xFE0E;' : ''}</div>
                                             ${menu.description && config.menu_structure?.display_options?.show_description !== false ? `<div class="menu-item-desc">${this.escapeHtmlWithBreaks(menu.description)}</div>` : ''}
@@ -5183,7 +5193,32 @@ if (document.readyState === 'loading') {
         .menu-item:hover .menu-image {
             transform: scale(1.05);
         }
-        
+
+        /* 画像を左側に小さく表示するモード: 画像 | 名前・説明 | 料金・時間 を横並び */
+        .menu-item--thumb {
+            flex-direction: row;
+            align-items: center;
+            padding: 0.5rem 0.75rem 0.5rem 0.5rem;
+        }
+        .menu-item--thumb .menu-item-thumb {
+            width: 56px;
+            height: 56px;
+            padding-top: 0;
+            border-radius: 0.375rem;
+        }
+        .menu-item--thumb .menu-item-content {
+            padding: 0 0.75rem;
+            min-width: 0;
+        }
+        .menu-item--thumb .menu-item-info {
+            padding: 0;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.125rem;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+
         .menu-item-content {
             text-align: left;
             flex: 1;
