@@ -646,12 +646,13 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
               <label className={`block text-sm ${themeClasses.label} mb-1`}>
                 オプション名
               </label>
-              <input
-                type="text"
+              <textarea
+                rows={2}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
+                className={`w-full px-3 py-2 rounded-md ${themeClasses.textarea}`}
               />
+              <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>Enterで改行できます。改行はフォームの表示にそのまま反映されます（LINE送信テキストでは1行になります）</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -724,6 +725,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
                 onChange={(e) => setDescription(e.target.value)}
                 className={`w-full px-3 py-2 rounded-md ${themeClasses.textarea}`}
               />
+              <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>予約フォームのオプション名の下に表示されます（改行もそのまま反映）</p>
             </div>
 
             <div className="flex items-center">
@@ -1026,12 +1028,13 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                   <label className={`block text-sm ${themeClasses.label} mb-1`}>
                     メニュー名
                   </label>
-                  <input
-                    type="text"
+                  <textarea
+                    rows={2}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
+                    className={`w-full px-3 py-2 rounded-md ${themeClasses.textarea}`}
                   />
+                  <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>Enterで改行できます。改行はフォームの表示にそのまま反映されます（LINE送信テキストでは1行になります）</p>
                 </div>
 
                 {!hasSubmenu && (
@@ -1108,6 +1111,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                     onChange={(e) => setDescription(e.target.value)}
                     className={`w-full px-3 py-2 rounded-md ${themeClasses.textarea}`}
                   />
+                  <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>予約フォームのメニュー名の下に表示されます（改行もそのまま反映）</p>
                 </div>
 
                 {/* 画像 */}
@@ -3343,8 +3347,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                   <span className={`${themeClasses.badge} px-2 py-1 rounded text-xs`}>
                     {index + 1}
                   </span>
-                  <input
-                    type="text"
+                  <textarea
+                    rows={2}
                     value={field.title}
                     onChange={(e) => {
                       const currentFields = [...(form.config?.custom_fields || [])];
@@ -3358,8 +3362,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                       };
                       onUpdate(updatedForm);
                     }}
-                    className={`flex-1 ${themeClasses.input} text-sm`}
-                    placeholder="項目名"
+                    className={`flex-1 ${themeClasses.input} text-sm resize-y`}
+                    placeholder="項目名（Enterで改行できます。改行はフォームの表示にそのまま反映されます）"
                   />
                 </div>
                 <div className="flex items-center space-x-1 ml-2">
