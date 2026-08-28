@@ -3824,14 +3824,14 @@ if (document.readyState === 'loading') {
     const multiCat = config.menu_structure.categories.length > 1;
     const firstCatId = config.menu_structure.categories[0]?.id || '';
 
-    // メニュー画像の出し方（large: 上に大きく / thumbnail: 左側に小さく / hidden: ボタンには出さない）
-    const imageDisplay = config.menu_structure?.display_options?.menu_image_display || 'large';
+    // メニュー画像の出し方（thumbnail: ボタンの左側に小さく / hidden: ボタンには出さない＝従来。詳細モーダルのみ）
+    // ※ ボタン内の画像は CSS で display:none 固定のため、thumbnail のときだけ menu-item-thumb で例外扱いにする
+    const imageDisplay = config.menu_structure?.display_options?.menu_image_display === 'thumbnail' ? 'thumbnail' : 'hidden';
     const renderMenuImage = (menu: import('@/types/form').MenuItem) => {
-      if (!menu.image || imageDisplay === 'hidden') return '';
+      if (!menu.image || imageDisplay !== 'thumbnail') return '';
       const alt = this.escapeHtml(String(menu.name || '').replace(/\r?\n/g, ' '));
-      const wrapClass = imageDisplay === 'thumbnail' ? 'menu-item-image menu-item-thumb' : 'menu-item-image';
       return `
-                                            <div class="${wrapClass}">
+                                            <div class="menu-item-image menu-item-thumb">
                                                 <img src="${menu.image}" alt="${alt}" class="menu-image" loading="lazy" onerror="this.parentElement.style.display='none'">
                                             </div>`;
     };
@@ -4517,8 +4517,9 @@ if (document.readyState === 'loading') {
             white-space: nowrap;
         }
         .date-input-wrap input.has-value + .date-input-hint { display: none; }
-        /* メニュー/オプションボタン内の画像は非表示（画像は詳細ポップアップにのみ表示） */
-        .menu-item .menu-item-image,
+        /* メニュー/オプションボタン内の画像は非表示（画像は詳細ポップアップにのみ表示）
+           ※ 「左側に小さく表示」設定時（.menu-item-thumb）だけ例外 */
+        .menu-item .menu-item-image:not(.menu-item-thumb),
         .submenu-item .menu-item-image { display: none !important; }
         /* メニューボタン: オプション（眉カット等）と同じ「名前が左・料金/所要時間が右」の配置 */
         .menu-item {
@@ -5194,30 +5195,17 @@ if (document.readyState === 'loading') {
             transform: scale(1.05);
         }
 
-        /* 画像を左側に小さく表示するモード: 画像 | 名前・説明 | 料金・時間 を横並び */
-        .menu-item--thumb {
-            flex-direction: row;
-            align-items: center;
-            padding: 0.5rem 0.75rem 0.5rem 0.5rem;
-        }
+        /* 画像を左側に小さく表示するモード: [画像] 名前・説明 …… 料金・時間（ボタン自体はもともと横並び） */
         .menu-item--thumb .menu-item-thumb {
-            width: 56px;
+            display: block;
+            width: 56px !important;
             height: 56px;
-            padding-top: 0;
+            padding-top: 0 !important;
+            margin-right: 0.625rem;
             border-radius: 0.375rem;
-        }
-        .menu-item--thumb .menu-item-content {
-            padding: 0 0.75rem;
-            min-width: 0;
-        }
-        .menu-item--thumb .menu-item-info {
-            padding: 0;
-            flex-direction: column;
-            align-items: flex-end;
-            gap: 0.125rem;
             flex-shrink: 0;
-            white-space: nowrap;
         }
+        .menu-item--thumb.selected .menu-item-thumb { order: 0; }
 
         .menu-item-content {
             text-align: left;
