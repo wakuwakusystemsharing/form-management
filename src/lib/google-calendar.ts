@@ -303,44 +303,46 @@ export async function getBusyCalendars(
   return busy;
 }
 
-export async function createReservationEvent(
-  params: {
-    calendarId: string;
-    reservationDate: string;
-    reservationTime: string;
-    customerName: string;
-    customerPhone: string;
-    lineUserId?: string | null;
-    lineDisplayName?: string | null;
-    message?: string | null;
-    visitCount?: string | null;
-    preferredDate2?: string | null;
-    preferredTime2?: string | null;
-    preferredDate3?: string | null;
-    preferredTime3?: string | null;
-    selectedMenus?: Array<Record<string, any>>;
-    selectedOptions?: Array<Record<string, any>>;
-    gender?: string | null;
-    coupon?: string | null;
-    customFields?: Record<string, string> | null;
-    // Google Calendar の colorId '1'〜'11'。未指定はカレンダーの既定色
-    eventColorId?: string | null;
-    // 担当スタッフ名（スタッフ選択機能。イベントタイトルと説明文に含める）
-    staffName?: string | null;
-    // 追加所要時間（分）。ご来店回数の「＋◯◯分」などをイベントの長さに加算する
-    extraDurationMinutes?: number | null;
-  },
-  storeId?: string
-) {
-  const calendar = await getCalendarClient(storeId);
-  if (!calendar) {
-    throw new Error('Google Calendar APIの認証情報が設定されていません');
-  }
+export interface ReservationEventParams {
+  calendarId: string;
+  reservationDate: string;
+  reservationTime: string;
+  customerName: string;
+  customerPhone: string;
+  lineUserId?: string | null;
+  lineDisplayName?: string | null;
+  message?: string | null;
+  visitCount?: string | null;
+  preferredDate2?: string | null;
+  preferredTime2?: string | null;
+  preferredDate3?: string | null;
+  preferredTime3?: string | null;
+  selectedMenus?: Array<Record<string, any>>;
+  selectedOptions?: Array<Record<string, any>>;
+  gender?: string | null;
+  coupon?: string | null;
+  customFields?: Record<string, string> | null;
+  // Google Calendar の colorId '1'〜'11'。未指定はカレンダーの既定色
+  eventColorId?: string | null;
+  // 担当スタッフ名（スタッフ選択機能。イベントタイトルと説明文に含める）
+  staffName?: string | null;
+  // 追加所要時間（分）。ご来店回数の「＋◯◯分」などをイベントの長さに加算する
+  extraDurationMinutes?: number | null;
+  // 所要時間（分）を直接指定する（管理画面からの予約内容編集で終了時刻を指定したとき）
+  durationMinutesOverride?: number | null;
+}
 
+/**
+ * 予約イベントの本文（タイトル・開始/終了・説明文）を組み立てる。
+ * 作成（insert）と更新（patch）で同じ内容になるよう共通化
+ */
+function buildReservationEventBody(params: ReservationEventParams) {
   const extraMinutes = typeof params.extraDurationMinutes === 'number' && params.extraDurationMinutes > 0
     ? Math.floor(params.extraDurationMinutes)
     : 0;
-  const durationMinutes = calculateDurationMinutes(params.selectedMenus, params.selectedOptions) + extraMinutes;
+  const durationMinutes = (typeof params.durationMinutesOverride === 'number' && params.durationMinutesOverride > 0)
+    ? Math.floor(params.durationMinutesOverride)
+    : calculateDurationMinutes(params.selectedMenus, params.selectedOptions) + extraMinutes;
   const totalPrice = calculateTotalPrice(params.selectedMenus, params.selectedOptions);
   const startDate = new Date(`${params.reservationDate}T${params.reservationTime}:00+09:00`);
   const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000);
@@ -408,25 +410,58 @@ export async function createReservationEvent(
 
   const description = sections.join('\n\n');
 
+  return {
+    summary: `予約: ${params.customerName}${params.staffName ? `（担当: ${params.staffName}）` : ''}`,
+    start: {
+      dateTime: startDate.toISOString(),
+      timeZone: 'Asia/Tokyo'
+    },
+    end: {
+      dateTime: endDate.toISOString(),
+      timeZone: 'Asia/Tokyo'
+    },
+    description,
+    location: params.lineUserId || undefined,
+    colorId: params.eventColorId || undefined
+  };
+}
+
+export async function createReservationEvent(
+  params: ReservationEventParams,
+  storeId?: string
+) {
+  const calendar = await getCalendarClient(storeId);
+  if (!calendar) {
+    throw new Error('Google Calendar APIの認証情報が設定されていません');
+  }
+
   const response = await calendar.events.insert({
     calendarId: params.calendarId,
-    requestBody: {
-      summary: `予約: ${params.customerName}${params.staffName ? `（担当: ${params.staffName}）` : ''}`,
-      start: {
-        dateTime: startDate.toISOString(),
-        timeZone: 'Asia/Tokyo'
-      },
-      end: {
-        dateTime: endDate.toISOString(),
-        timeZone: 'Asia/Tokyo'
-      },
-      description,
-      location: params.lineUserId || undefined,
-      colorId: params.eventColorId || undefined
-    }
+    requestBody: buildReservationEventBody(params)
   });
 
   return response.data.id || null;
+}
+
+/**
+ * 既存の予約イベントを更新する（予約内容の編集用）。
+ * タイトル・開始/終了時刻・説明文を作成時と同じ形式で作り直して patch する
+ */
+export async function updateReservationEvent(
+  eventId: string,
+  params: ReservationEventParams,
+  storeId?: string
+) {
+  const calendar = await getCalendarClient(storeId);
+  if (!calendar) {
+    throw new Error('Google Calendar APIの認証情報が設定されていません');
+  }
+
+  await calendar.events.patch({
+    calendarId: params.calendarId,
+    eventId,
+    requestBody: buildReservationEventBody(params)
+  });
 }
 
 export async function deleteCalendarEvent(
