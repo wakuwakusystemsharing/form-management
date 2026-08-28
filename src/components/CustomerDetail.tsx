@@ -30,6 +30,8 @@ interface CustomerDetailProps {
   onClose: () => void;
   onUpdated?: () => void;
   onDeleted?: () => void;
+  // 予約履歴の予約をタップしたときに予約詳細モーダルを開く（店舗管理者ページから渡される）
+  onOpenReservation?: (reservation: any) => void;
 }
 
 interface CustomerDetailData {
@@ -38,7 +40,7 @@ interface CustomerDetailData {
   visits: CustomerVisit[];
 }
 
-export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated, onDeleted }: CustomerDetailProps) {
+export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated, onDeleted, onOpenReservation }: CustomerDetailProps) {
   const [data, setData] = useState<CustomerDetailData | null>(null);
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -343,7 +345,15 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                     ) : (
                       <div className="space-y-4">
                         {reservations.slice(0, 10).map((reservation: any) => (
-                          <div key={reservation.id} className="border rounded-lg p-4">
+                          <div
+                            key={reservation.id}
+                            role={onOpenReservation ? 'button' : undefined}
+                            tabIndex={onOpenReservation ? 0 : undefined}
+                            onClick={() => onOpenReservation?.(reservation)}
+                            onKeyDown={(e) => { if (onOpenReservation && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpenReservation(reservation); } }}
+                            className={`border rounded-lg p-4 ${onOpenReservation ? 'cursor-pointer hover:bg-muted/50 transition-colors' : ''}`}
+                            title={onOpenReservation ? '予約詳細を開く' : undefined}
+                          >
                             <div className="flex justify-between items-start mb-2">
                               <div>
                                 <p className="font-medium">
@@ -357,6 +367,9 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                                 {getStatusLabel(reservation.status)}
                               </Badge>
                             </div>
+                            {onOpenReservation && (
+                              <p className="text-xs text-muted-foreground">タップして予約詳細を開く</p>
+                            )}
                           </div>
                         ))}
                       </div>

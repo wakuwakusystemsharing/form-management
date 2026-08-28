@@ -15,6 +15,7 @@ import ReservationAnalytics from '@/components/ReservationAnalytics';
 import CustomerList from '@/components/CustomerList';
 import CustomerDetail from '@/components/CustomerDetail';
 import CustomerAnalytics from '@/components/CustomerAnalytics';
+import ReservationEditForm from '@/components/ReservationEditForm';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -103,6 +104,8 @@ export default function StoreAdminPage() {
   const [editingForm, setEditingForm] = useState<Form | SurveyForm | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
+  // 予約詳細モーダルの「予約内容を編集」モード
+  const [isEditingReservation, setIsEditingReservation] = useState(false);
   const [showReservationDetail, setShowReservationDetail] = useState(false);
 
   // ログイン関連
@@ -1525,17 +1528,30 @@ export default function StoreAdminPage() {
       )}
 
       {/* 予約詳細モーダル */}
-      <Dialog open={showReservationDetail} onOpenChange={setShowReservationDetail}>
+      <Dialog open={showReservationDetail} onOpenChange={(open) => { setShowReservationDetail(open); if (!open) setIsEditingReservation(false); }}>
         <DialogContent className="store-admin-bg max-w-2xl max-h-[90vh] overflow-y-auto bg-gray-50">
           <DialogHeader>
-            <DialogTitle>予約詳細</DialogTitle>
+            <DialogTitle>{isEditingReservation ? '予約内容を編集' : '予約詳細'}</DialogTitle>
             <DialogDescription>
               {selectedReservation && (
                 <>予約ID: {selectedReservation.id}</>
               )}
             </DialogDescription>
           </DialogHeader>
-          {selectedReservation && (
+          {selectedReservation && isEditingReservation && (
+            <ReservationEditForm
+              reservation={selectedReservation}
+              formConfig={forms.find(f => f.id === selectedReservation.form_id)?.config}
+              onCancel={() => setIsEditingReservation(false)}
+              onSaved={(updated) => {
+                const merged = { ...selectedReservation, ...updated } as Reservation;
+                setSelectedReservation(merged);
+                setReservations(prev => prev.map(r => r.id === merged.id ? { ...r, ...updated } : r));
+                setIsEditingReservation(false);
+              }}
+            />
+          )}
+          {selectedReservation && !isEditingReservation && (
             <div className="space-y-4">
               {/* 基本情報 */}
               <Card>
@@ -1753,7 +1769,17 @@ export default function StoreAdminPage() {
 
               {/* ステータス変更ボタン */}
               {selectedReservation.status !== 'cancelled' && (
-                <div className="flex gap-2 pt-2 border-t">
+                <div className="flex gap-2 pt-2 border-t flex-wrap">
+                  {!(selectedReservation as any).is_external && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsEditingReservation(true)}
+                    >
+                      <Edit className="mr-2 h-4 w-4" />
+                      予約内容を編集
+                    </Button>
+                  )}
                   {selectedReservation.status !== 'confirmed' && !(selectedReservation as any).is_external && (
                     <Button
                       size="sm"
@@ -1833,6 +1859,13 @@ export default function StoreAdminPage() {
         }}
         onDeleted={() => {
           setCustomersRefreshKey((k) => k + 1);
+        }}
+        onOpenReservation={(reservation) => {
+          // 一覧に同じ予約があればそちら（最新の編集状態）を優先
+          const fromList = reservations.find(r => r.id === reservation.id);
+          setSelectedReservation((fromList || reservation) as Reservation);
+          setIsEditingReservation(false);
+          setShowReservationDetail(true);
         }}
       />
     </StoreAdminLayout>
