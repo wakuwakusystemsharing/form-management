@@ -806,7 +806,15 @@ export async function POST(req: NextRequest) {
         type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
         contents: [
           { type: 'text', text: '📋 メニュー', size: 'sm', color: themeColor, weight: 'bold' },
-          ...details.menus.map(m => ({ type: 'text', text: `・${m}`, size: 'sm', wrap: true }))
+          // 送信テキストの《メニュー》は既に「・」「　└」「-（カテゴリー）-」付きの整形済み行のため、
+          // 未整形の行にだけ「・」を付ける（「・・メニューA」のような二重付与を防ぐ）
+          ...details.menus.map(m => {
+            const t = m.trim();
+            const isFormatted = t.startsWith('・') || t.startsWith('└') || t.startsWith('-（') || t.startsWith('-(');
+            // 「└」はテキスト側の全角スペースインデントが trim で落ちるため付け直す
+            const text = t.startsWith('└') ? `　${t}` : (isFormatted ? t : `・${t}`);
+            return { type: 'text', text, size: 'sm', wrap: true };
+          })
         ]
       });
     }
