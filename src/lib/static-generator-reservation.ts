@@ -1417,8 +1417,13 @@ class BookingForm {
         let totalPrice = 0;
         let totalDuration = 0;
         const summaryLines = [];
-        const messageParts = [];
-        const menusByCategory = [];
+        // 《メニュー》テキスト用: カテゴリーごとのグループ { category, items:[{label, options:[]}], catOptions:[] }
+        const menuGroups = [];
+        const getMenuGroup = (categoryName) => {
+            let g = menuGroups.find(x => x.category === categoryName);
+            if (!g) { g = { category: categoryName, items: [], catOptions: [] }; menuGroups.push(g); }
+            return g;
+        };
         const allowCross = this.config.menu_structure?.allow_cross_category_selection || false;
         const processMenu = (category, menu, submenu, menuId) => {
             const price = submenu ? (submenu.price || 0) : (menu.price || 0);
@@ -1439,8 +1444,7 @@ class BookingForm {
             });
             // ご予約内容にはメニュー名のみ表示（料金・所要時間は表示しない）
             summaryLines.push(menuName + (submenu ? ' &gt; ' + subName : ''));
-            const msgLine = [categoryName, menuName, subName].filter(Boolean).join(' > ');
-            const optNames = [];
+            const optObjs = [];
             const optIds = this.state.selectedOptions?.[menuId] || [];
             optIds.forEach(optionId => {
                 const option = menu.options?.find(o => o.id === optionId);
@@ -1452,11 +1456,10 @@ class BookingForm {
                     totalDuration += od;
                     selectedOptions.push({ option_id: option.id, option_name: optionName, menu_id: menuId, price: op, duration: od });
                     summaryLines.push('+ ' + optionName);
-                    optNames.push(optionName);
+                    optObjs.push({ name: optionName, price: op, duration: od });
                 }
             });
-            messageParts.push(optNames.length > 0 ? msgLine + ', ' + optNames.join(', ') : msgLine);
-            menusByCategory.push({ category: categoryName, menu: submenu ? menuName + ' > ' + subName : menuName, options: optNames });
+            getMenuGroup(categoryName).items.push({ label: submenu ? menuName + ' > ' + subName : menuName, options: optObjs });
         };
         if (allowCross && this.state.selectedMenus && Object.keys(this.state.selectedMenus).length > 0) {
             Object.entries(this.state.selectedMenus).forEach(([categoryId, menuIds]) => {
@@ -1488,24 +1491,31 @@ class BookingForm {
                     totalDuration += od;
                     selectedOptions.push({ option_id: opt.id, option_name: catOptName, category_id: categoryId, price: op, duration: od });
                     summaryLines.push('+ ' + catOptName);
+                    // カテゴリー共通オプションはそのカテゴリーブロックの末尾に「└」でぶら下げる
+                    getMenuGroup(oneLine(category?.name)).catOptions.push({ name: catOptName, price: op, duration: od });
                 });
             });
         }
-        const menuTextForMessage = messageParts.length > 0 ? messageParts.join(' / ') : '';
-        // 希望日時式用: カテゴリーごとにグループ化した改行フォーマット
-        let menuTextGrouped = '';
-        if (menusByCategory.length > 0) {
-            const grouped = {};
-            menusByCategory.forEach(item => {
-                const cat = item.category || '未分類';
-                if (!grouped[cat]) grouped[cat] = [];
-                const line = item.options.length > 0 ? item.menu + '（' + item.options.join(', ') + '）' : item.menu;
-                grouped[cat].push(line);
+        // 《メニュー》テキスト: ・メニュー名（＋「　└ オプション名 ¥価格」）の箇条書き。
+        // カテゴリー名見出し -（カテゴリー名）- は設定に応じて表示（auto = 複数カテゴリーから選んだときだけ）
+        const lineItemsCfg = this.config.line_message_items || {};
+        const catDisplayMode = lineItemsCfg.menu_category_display || 'auto';
+        const showCategoryNames = catDisplayMode === 'show' || (catDisplayMode === 'auto' && menuGroups.length > 1);
+        const showOptionLines = lineItemsCfg.options !== false;
+        const showOptDuration = lineItemsCfg.option_duration === true;
+        const formatOptionLine = (o) => '　└ ' + o.name
+            + ((o.price || 0) > 0 ? ' ¥' + Number(o.price).toLocaleString() : '')
+            + ((showOptDuration && (o.duration || 0) > 0) ? ' (' + o.duration + '分)' : '');
+        const menuMessageText = menuGroups.map(g => {
+            const lines = [];
+            if (showCategoryNames) lines.push('-（' + (g.category || '未分類') + '）-');
+            g.items.forEach(it => {
+                lines.push('・' + it.label);
+                if (showOptionLines) it.options.forEach(o => lines.push(formatOptionLine(o)));
             });
-            menuTextGrouped = Object.entries(grouped).map(([cat, menus]) => {
-                return '-（' + cat + '）-\\n' + menus.map(m => '・' + m).join('\\n');
-            }).join('\\n\\n');
-        }
+            if (showOptionLines) g.catOptions.forEach(o => lines.push(formatOptionLine(o)));
+            return lines.join('\\n');
+        }).join('\\n');
         const summaryHtml = summaryLines.map((line, i) => i === 0 ? \`<div style="margin-bottom:0.5rem;">\${line}</div>\` : \`<div style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">\${line}</div>\`).join('');
         // ご来店回数の追加所要時間（＋◯◯分）を合計時間に加算（カレンダーイベントの長さにも反映される）
         if (this.config.visit_count_selection?.enabled && this.state.visitCount) {
@@ -1514,7 +1524,7 @@ class BookingForm {
                 totalDuration += visitOptForDuration.duration;
             }
         }
-        return { selectedMenus, selectedOptions, totalPrice, totalDuration, summaryHtml, menuTextForMessage, menuTextGrouped };
+        return { selectedMenus, selectedOptions, totalPrice, totalDuration, summaryHtml, menuMessageText };
     }
     
     showSubmenu(categoryId, menuId) {
@@ -2551,7 +2561,7 @@ class BookingForm {
 
         try {
             const payload = this.buildSelectionPayload();
-            const { selectedMenus, selectedOptions, totalPrice, totalDuration, menuTextForMessage, menuTextGrouped } = payload;
+            const { selectedMenus, selectedOptions, totalPrice, totalDuration, menuMessageText } = payload;
             
             // 顧客属性情報を構築
             const customerInfo = {};
@@ -2801,27 +2811,10 @@ class BookingForm {
                 });
             }
 
-            // メニュー（希望日時式はカテゴリーごとに改行表示）
-            const bookingModeForMenu = this.config.calendar_settings?.booking_mode || 'calendar';
+            // メニュー（両予約モード共通: ・メニュー名 + 「　└ オプション」の箇条書き。
+            // カテゴリー名見出しやオプション行の表示は buildSelectionPayload 側で設定に応じて制御）
             if (showLineItem('menu')) {
-                if (bookingModeForMenu === 'multiple_dates' && menuTextGrouped) {
-                    addMsgSegment('menu', '《メニュー》\\n' + menuTextGrouped, true);
-                } else {
-                    addMsgSegment('menu', '《メニュー》\\n' + (menuTextForMessage || ''), true);
-                }
-            }
-
-            // オプション（メニュー個別 / カテゴリー共通の両方を統合表示）
-            if (selectedOptions && selectedOptions.length > 0 && showLineItem('options')) {
-                // 所要時間「(15分)」は送信時の項目編集で明示的に ON のときだけ付ける（デフォルト OFF）
-                const showOptionDuration = lineItems.option_duration === true;
-                const optionLines = selectedOptions.map(opt => {
-                    const name = opt.option_name || '';
-                    const priceText = (opt.price || 0) > 0 ? ' ¥' + Number(opt.price).toLocaleString() : '';
-                    const durationText = (showOptionDuration && (opt.duration || 0) > 0) ? ' (' + opt.duration + '分)' : '';
-                    return '・' + name + priceText + durationText;
-                }).join('\\n');
-                addMsgSegment('menu', '《オプション》\\n' + optionLines, true);
+                addMsgSegment('menu', '《メニュー》\\n' + (menuMessageText || ''), true);
             }
 
             if (totalPrice > 0 && showLineItem('total_price')) addMsgSegment('menu', '《合計金額》\\n¥' + totalPrice.toLocaleString(), true);
@@ -2837,8 +2830,9 @@ class BookingForm {
 
             // 希望日時（送信時の項目編集で非表示にできる）
             if (showLineItem('datetime')) {
+                const bookingModeForDatetime = this.config.calendar_settings?.booking_mode || 'calendar';
                 let datetimeText = '【希望日時】\\n';
-                if (bookingModeForMenu === 'multiple_dates') {
+                if (bookingModeForDatetime === 'multiple_dates') {
                     datetimeText += '《第一希望日》\\n' + formattedDate;
                     if (formattedDate2) datetimeText += '\\n《第二希望日》\\n' + formattedDate2;
                     if (formattedDate3) datetimeText += '\\n《第三希望日》\\n' + formattedDate3;

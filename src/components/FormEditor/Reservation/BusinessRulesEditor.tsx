@@ -2409,7 +2409,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               { key: 'visit_count', label: '《ご来店回数》' },
               { key: 'staff', label: '《担当スタッフ》' },
               { key: 'menu', label: '《メニュー》' },
-              { key: 'options', label: '《オプション》' },
+              { key: 'options', label: 'オプション（メニュー直下の「└」行）' },
               { key: 'total_price', label: '《合計金額》' },
               { key: 'total_duration', label: '《合計時間》' },
               { key: 'datetime', label: '【希望日時】（希望日/第一〜第三希望日）' },
@@ -2417,7 +2417,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               { key: 'gender', label: '《性別》' },
               { key: 'coupon', label: '《クーポン》' },
               { key: 'custom_fields', label: 'カスタム項目（追加した項目すべて）' },
-              { key: 'option_duration', label: '《オプション》の所要時間「(15分)」', defaultOn: false },
+              { key: 'option_duration', label: 'オプション行の所要時間「(15分)」', defaultOn: false },
             ] as Array<{ key: keyof NonNullable<Form['config']['line_message_items']>; label: string; defaultOn?: boolean }>).map((item) => {
               // 通常の項目は未設定 = 表示。defaultOn: false の項目（所要時間）は明示的に ON のときだけ表示
               const visible = item.defaultOn === false
@@ -2449,6 +2449,32 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 </div>
               );
             })}
+          </div>
+          <div className={`mt-4 pt-3 border-t ${theme === 'light' ? 'border-gray-200' : 'border-gray-700'} flex items-center justify-between gap-3 flex-wrap`}>
+            <div>
+              <span className={`text-sm ${themeClasses.text.secondary}`}>《メニュー》のカテゴリー名見出し「-（カテゴリー名）-」</span>
+              <p className={`text-xs ${themeClasses.text.secondary} opacity-80 mt-0.5`}>
+                「自動」は 2 つ以上のカテゴリーからメニューを選んだ予約のときだけ表示します
+              </p>
+            </div>
+            <select
+              value={form.config?.line_message_items?.menu_category_display || 'auto'}
+              onChange={(e) => onUpdate({
+                ...form,
+                config: {
+                  ...form.config,
+                  line_message_items: {
+                    ...form.config?.line_message_items,
+                    menu_category_display: e.target.value as 'auto' | 'show' | 'hide'
+                  }
+                }
+              })}
+              className={`text-sm border rounded-md px-2 py-1.5 shrink-0 ${theme === 'light' ? 'bg-white border-gray-300 text-gray-800' : 'bg-gray-700 border-gray-600 text-white'}`}
+            >
+              <option value="auto">自動</option>
+              <option value="show">常に表示</option>
+              <option value="hide">常に非表示</option>
+            </select>
           </div>
         </div>
       </div>
