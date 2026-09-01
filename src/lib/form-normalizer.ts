@@ -485,10 +485,13 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           ?? (typedConfig as Form['config'])?.line_message_items) as Record<string, unknown> | undefined;
         const keys = ['name', 'phone', 'visit_count', 'staff', 'menu', 'options', 'total_price',
           'total_duration', 'datetime', 'message', 'gender', 'coupon', 'custom_fields'] as const;
-        const out: Record<string, boolean> = {};
+        const out: Record<string, unknown> = {};
         keys.forEach((k) => { out[k] = raw?.[k] !== false; });
         // オプション行の所要時間「(15分)」はデフォルト OFF（明示的に true のときだけ表示）
         out.option_duration = raw?.option_duration === true;
+        // カテゴリー名見出しはデフォルト auto（複数カテゴリーから選んだときだけ表示）
+        const mcd = raw?.menu_category_display;
+        out.menu_category_display = mcd === 'show' || mcd === 'hide' ? mcd : 'auto';
         return out as Form['config']['line_message_items'];
       })(),
       reservation_summary: {

@@ -324,7 +324,7 @@ export interface FormConfig {
     visit_count?: boolean;     // 《ご来店回数》
     staff?: boolean;           // 《担当スタッフ》
     menu?: boolean;            // 《メニュー》
-    options?: boolean;         // 《オプション》
+    options?: boolean;         // 《メニュー》内のオプション「　└ 名前 ¥価格」行
     total_price?: boolean;     // 《合計金額》
     total_duration?: boolean;  // 《合計時間》
     datetime?: boolean;        // 【希望日時】《希望日》/《第一〜第三希望日》
@@ -332,7 +332,9 @@ export interface FormConfig {
     gender?: boolean;          // 《性別》
     coupon?: boolean;          // 《クーポン》
     custom_fields?: boolean;   // カスタム項目（《項目名》すべて）
-    option_duration?: boolean; // 《オプション》各行の所要時間「(15分)」（デフォルト OFF = 非表示）
+    option_duration?: boolean; // オプション行の所要時間「(15分)」（デフォルト OFF = 非表示）
+    // 《メニュー》のカテゴリー名見出し: auto = 2カテゴリー以上から選んだときだけ表示 / show = 常に表示 / hide = 常に非表示
+    menu_category_display?: 'auto' | 'show' | 'hide';
   };
 
   // フォーム上の「ご予約内容」（サマリー）表示設定
