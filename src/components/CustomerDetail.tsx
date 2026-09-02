@@ -172,14 +172,14 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="store-admin-bg max-w-4xl max-h-[90vh] overflow-y-auto overscroll-contain bg-gray-50">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="min-w-0 pr-8 sm:pr-0">
               <DialogTitle>顧客詳細</DialogTitle>
               <DialogDescription>
                 {isEditing ? '顧客情報を編集しています' : '顧客情報、予約履歴、来店履歴を確認できます'}
               </DialogDescription>
             </div>
-            <div className="mr-8 flex items-center gap-2">
+            <div className="sm:mr-8 flex flex-wrap items-center gap-2">
               {!isEditing && !loading && data && (
                 <>
                   <Button
@@ -240,7 +240,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                 <CardTitle>基本情報</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-start gap-6">
+                <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
                   <Avatar className="h-20 w-20">
                     {customer.line_picture_url && (
                       <AvatarImage src={customer.line_picture_url} alt={customer.name} />
@@ -248,7 +248,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                     <AvatarFallback className="text-2xl">{customer.name.charAt(0)}</AvatarFallback>
                   </Avatar>
 
-                  <div className="flex-1 space-y-4">
+                  <div className="flex-1 min-w-0 w-full space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-muted-foreground">顧客名</p>
@@ -262,17 +262,17 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {customer.phone && (
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                          <span>{customer.phone}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Phone className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                          <span className="truncate">{customer.phone}</span>
                         </div>
                       )}
                       {customer.email && (
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                          <span>{customer.email}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Mail className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                          <span className="truncate">{customer.email}</span>
                         </div>
                       )}
                     </div>
@@ -303,7 +303,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                 <CardTitle>統計情報</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="text-center">
                     <p className="text-2xl font-bold tabular-nums">{customer.total_visits}回</p>
                     <p className="text-sm text-muted-foreground">来店回数</p>

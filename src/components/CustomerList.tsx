@@ -158,8 +158,8 @@ export default function CustomerList({ storeId, onCustomerClick }: CustomerListP
         </CardHeader>
         <CardContent>
           {/* 検索・フィルター */}
-          <div className="flex gap-4 mb-6">
-            <div className="flex-1 relative">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-6">
+            <div className="flex-1 min-w-0 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <Input
                 placeholder="顧客名、電話番号、メールで検索…"
@@ -171,7 +171,7 @@ export default function CustomerList({ storeId, onCustomerClick }: CustomerListP
               />
             </div>
             <Select value={segmentFilter} onValueChange={setSegmentFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]" aria-label="セグメントで絞り込み">
                 <SelectValue placeholder="セグメント" />
               </SelectTrigger>
               <SelectContent>
@@ -195,7 +195,48 @@ export default function CustomerList({ storeId, onCustomerClick }: CustomerListP
               <p className="text-muted-foreground">顧客が見つかりませんでした</p>
             </div>
           ) : (
-            <div className="rounded-md border">
+            <>
+            {/* スマホ: カード一覧（テーブルは横幅に収まらないため） */}
+            <div className="space-y-2 md:hidden">
+              {customers.map((customer) => {
+                const segment = determineSegment(customer);
+                return (
+                  <button
+                    type="button"
+                    key={customer.id}
+                    data-slot="list-item"
+                    onClick={() => onCustomerClick?.(customer)}
+                    className="w-full text-left border rounded-lg p-3 hover:bg-[rgb(244,144,49)]/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10 shrink-0">
+                        {customer.line_picture_url && (
+                          <AvatarImage src={customer.line_picture_url} alt={customer.name} />
+                        )}
+                        <AvatarFallback>{customer.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-medium truncate">{customer.name}</p>
+                          <Badge variant={getSegmentBadgeVariant(segment)} className="shrink-0">
+                            {getSegmentLabel(segment)}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">{customer.phone || '電話番号なし'}</p>
+                      </div>
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                      <div><span className="block text-[11px]">来店回数</span><span className="text-foreground tabular-nums">{customer.total_visits}回</span></div>
+                      <div><span className="block text-[11px]">総利用金額</span><span className="text-foreground tabular-nums">{formatCurrency(customer.total_spent)}</span></div>
+                      <div><span className="block text-[11px]">最終来店日</span><span className="text-foreground">{formatDate(customer.last_visit_date)}</span></div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* PC: テーブル */}
+            <div className="rounded-md border hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -243,6 +284,7 @@ export default function CustomerList({ storeId, onCustomerClick }: CustomerListP
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>
