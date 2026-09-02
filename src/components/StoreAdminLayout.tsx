@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import {
@@ -19,6 +19,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import { applyUiStyle, applyM3Palette, clearUiStyle, UI_STYLE_CHANGE_EVENT } from '@/lib/ui-style';
 
 interface StoreAdminLayoutProps {
   children: React.ReactNode;
@@ -26,6 +27,8 @@ interface StoreAdminLayoutProps {
   storeName?: string;
   userEmail?: string;
   onLogout?: () => void;
+  /** 店舗テーマカラー（HEX）。Material スタイル時のダイナミックカラーのシードに使う */
+  themeColor?: string | null;
 }
 
 const menuItems = [
@@ -123,11 +126,32 @@ export default function StoreAdminLayout({
   storeName,
   userEmail,
   onLogout,
+  themeColor,
 }: StoreAdminLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  // 表示スタイル（標準 / Material）を <html data-ui> に反映。画面幅の変化・設定変更にも追従し、離脱時に解除
+  useEffect(() => {
+    applyUiStyle();
+    const onResize = () => applyUiStyle();
+    const onChange = () => applyUiStyle();
+    window.addEventListener('resize', onResize);
+    window.addEventListener(UI_STYLE_CHANGE_EVENT, onChange);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener(UI_STYLE_CHANGE_EVENT, onChange);
+      clearUiStyle();
+    };
+  }, []);
+
+  // ダイナミックカラー: 店舗テーマカラーに合わせてパレットを差し替え（離脱時に既定へ戻す）
+  useEffect(() => {
+    applyM3Palette(themeColor);
+    return () => applyM3Palette(null);
+  }, [themeColor]);
   
   // 現在のアクティブなタブを判定
   const activeTab = searchParams.get('tab') || 'dashboard';
@@ -138,7 +162,7 @@ export default function StoreAdminLayout({
   };
 
   return (
-    <div className="store-admin-bg flex h-screen bg-background">
+    <div className="store-admin-bg flex h-dvh bg-background" data-slot="store-admin-root">
       {/* デスクトップサイドバー */}
       <aside className={cn(
         "hidden lg:flex lg:flex-col lg:border-r transition-[width] duration-300 relative bg-white",
@@ -176,7 +200,7 @@ export default function StoreAdminLayout({
       {/* メインコンテンツ */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* モバイルヘッダー */}
-        <header className="lg:hidden border-b bg-white shadow-sm">
+        <header className="lg:hidden border-b bg-white shadow-sm" data-slot="mobile-header">
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center space-x-3">
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
@@ -208,9 +232,46 @@ export default function StoreAdminLayout({
         </header>
 
         {/* コンテンツエリア */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto overscroll-y-contain">
           {children}
         </main>
+
+        {/* モバイル下部ナビゲーション（片手操作用。PC はサイドバー） */}
+        <nav
+          className="lg:hidden shrink-0 border-t bg-white pb-[env(safe-area-inset-bottom)]"
+          aria-label="主要メニュー"
+          data-slot="mobile-nav"
+        >
+          <ul className="grid grid-cols-5">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange(item.id)}
+                    aria-current={isActive ? 'page' : undefined}
+                    data-slot="mobile-nav-item"
+                    data-active={isActive ? 'true' : undefined}
+                    className={cn(
+                      "w-full min-h-14 flex flex-col items-center justify-center gap-0.5 px-1 py-2 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                      isActive ? "text-primary" : "text-muted-foreground"
+                    )}
+                  >
+                    <span data-slot="mobile-nav-indicator" className={cn(
+                      "flex items-center justify-center h-7 w-12 rounded-full transition-colors",
+                      isActive && "bg-primary/15"
+                    )}>
+                      <Icon className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <span className="truncate max-w-full">{item.label.replace(' β', '')}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
       </div>
     </div>
   );

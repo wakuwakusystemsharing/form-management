@@ -91,8 +91,345 @@
   border-color: hsl(var(--border));
 }
 
+/* スマホ: ダブルタップズームによる画面のガタつきを防ぐ（ピンチズームは許可） */
+button,
+[role="button"],
+a,
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
+}
+
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+
+/* ============================================================
+   Material 3 Expressive 風スタイル（店舗管理画面のみ）
+   - <html data-ui="m3e"> が付いているときだけ有効（src/lib/ui-style.ts）
+   - 既存の shadcn トークン（--primary 等）へ M3 のカラーロールをマッピングし、
+     data-slot 属性でコンポーネントの形状だけを上書きする（DOM・ロジックは不変）
+   - 色は店舗テーマカラー（オレンジ rgb(244,144,49)）をシードにした M3 トーナルパレット
+   ============================================================ */
+html[data-ui="m3e"] {
+  /* --- M3 color roles（HSL）。店舗テーマカラーがある場合は applyM3Palette() がインラインスタイルで上書き --- */
+  --md-primary: 33 100% 27%;                 /* #8a4f00 */
+  --md-on-primary: 0 0% 100%;
+  --md-primary-container: 30 100% 87%;       /* #ffdcbe */
+  --md-on-primary-container: 30 100% 9%;     /* #2c1600 */
+  --md-secondary-container: 26 100% 88%;     /* #ffdcc1 */
+  --md-on-secondary-container: 22 62% 10%;   /* #2b160a */
+  --md-surface: 20 100% 98%;                 /* #fff8f5 */
+  --md-surface-container-lowest: 0 0% 100%;
+  --md-surface-container-low: 24 100% 95%;   /* #fff1e8 */
+  --md-surface-container: 25 67% 93%;        /* #f9ebe1 */
+  --md-surface-container-high: 25 50% 90%;   /* #f3e5db */
+  --md-surface-container-highest: 25 40% 88%;/* #eddfd5 */
+  --md-on-surface: 20 15% 11%;               /* #201a17 */
+  --md-on-surface-variant: 23 17% 28%;       /* #52443b */
+  --md-outline: 18 11% 47%;                  /* #85736b */
+  --md-outline-variant: 24 29% 78%;          /* #d7c3b6 */
+  --md-error: 0 75% 42%;                     /* #ba1a1a */
+
+  /* --- shape scale --- */
+  --md-shape-sm: 0.5rem;
+  --md-shape-md: 0.75rem;
+  --md-shape-lg: 1rem;
+  --md-shape-xl: 1.75rem;
+  --md-shape-full: 9999px;
+
+  /* --- motion: バネ挙動を CSS linear() で近似（Expressive の "spatial" イージング） --- */
+  --md-motion-spring: linear(0, 0.45 14%, 0.92 30%, 1.06 44%, 0.99 60%, 1);
+  --md-motion-duration: 380ms;
+  --md-motion-fast: 180ms;
+}
+
+/* .store-admin-bg 自身が --primary 等を定義しているため、同じ場所で M3 の値に差し替える */
+html[data-ui="m3e"],
+html[data-ui="m3e"] .store-admin-bg {
+  /* --- shadcn トークンへマッピング --- */
+  --background: var(--md-surface);
+  --foreground: var(--md-on-surface);
+  --card: var(--md-surface-container-lowest);
+  --card-foreground: var(--md-on-surface);
+  --popover: var(--md-surface-container-low);
+  --popover-foreground: var(--md-on-surface);
+  --primary: var(--md-primary);
+  --primary-foreground: var(--md-on-primary);
+  --secondary: var(--md-secondary-container);
+  --secondary-foreground: var(--md-on-secondary-container);
+  --muted: var(--md-surface-container-high);
+  --muted-foreground: var(--md-on-surface-variant);
+  --accent: var(--md-secondary-container);
+  --accent-foreground: var(--md-on-secondary-container);
+  --destructive: var(--md-error);
+  --destructive-foreground: 0 0% 100%;
+  --border: var(--md-outline-variant);
+  --input: var(--md-outline);
+  --ring: var(--md-primary);
+  --radius: var(--md-shape-lg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui="m3e"] {
+    --md-motion-spring: ease-out;
+    --md-motion-duration: 1ms;
+    --md-motion-fast: 1ms;
+  }
+}
+
+/* ---------- ボタン: Filled / Tonal / Outlined、pill 形状。押下時に形状が変わる（shape morph） ---------- */
+html[data-ui="m3e"] [data-slot="button"] {
+  border-radius: var(--md-shape-full);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition:
+    background-color var(--md-motion-fast) ease,
+    color var(--md-motion-fast) ease,
+    border-color var(--md-motion-fast) ease,
+    border-radius var(--md-motion-duration) var(--md-motion-spring),
+    transform var(--md-motion-duration) var(--md-motion-spring);
+}
+html[data-ui="m3e"] [data-slot="button"]:active:not(:disabled) {
+  border-radius: var(--md-shape-md);
+  transform: scale(0.97);
+}
+html[data-ui="m3e"] [data-slot="button"][data-size="default"] { min-height: 2.75rem; padding-left: 1.5rem; padding-right: 1.5rem; }
+html[data-ui="m3e"] [data-slot="button"][data-size="sm"] { min-height: 2.5rem; padding-left: 1.125rem; padding-right: 1.125rem; }
+html[data-ui="m3e"] [data-slot="button"][data-size="lg"] { min-height: 3.5rem; padding-left: 2rem; padding-right: 2rem; }
+html[data-ui="m3e"] [data-slot="button"][data-size="icon"] { border-radius: var(--md-shape-full); }
+html[data-ui="m3e"] [data-slot="button"][data-variant="secondary"] {
+  background-color: hsl(var(--md-secondary-container));
+  color: hsl(var(--md-on-secondary-container));
+}
+html[data-ui="m3e"] [data-slot="button"][data-variant="outline"] {
+  border-color: hsl(var(--md-outline));
+  background-color: transparent;
+  color: hsl(var(--md-primary));
+}
+html[data-ui="m3e"] [data-slot="button"][data-variant="outline"]:hover {
+  background-color: hsl(var(--md-primary) / 0.08);
+  color: hsl(var(--md-primary));
+  border-color: hsl(var(--md-outline));
+}
+html[data-ui="m3e"] [data-slot="button"][data-variant="ghost"]:hover {
+  background-color: hsl(var(--md-on-surface) / 0.08);
+  color: hsl(var(--md-on-surface));
+}
+
+/* ---------- カード: 大きめの角丸、影なし、surface の階調で奥行き ---------- */
+html[data-ui="m3e"] [data-slot="card"] {
+  border-radius: var(--md-shape-xl);
+  border-color: transparent;
+  box-shadow: none;
+  background-color: hsl(var(--md-surface-container-lowest));
+}
+html[data-ui="m3e"] [data-slot="card-title"] {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- テキストフィールド: Outlined text field（高さ 56px、16px 文字） ---------- */
+html[data-ui="m3e"] [data-slot="input"],
+html[data-ui="m3e"] [data-slot="select-trigger"] {
+  min-height: 3.25rem;
+  border-radius: var(--md-shape-sm);
+  border: 1px solid hsl(var(--md-outline));
+  background-color: transparent;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  transition: border-color var(--md-motion-fast) ease, box-shadow var(--md-motion-fast) ease;
+}
+html[data-ui="m3e"] [data-slot="textarea"] {
+  border-radius: var(--md-shape-sm);
+  border: 1px solid hsl(var(--md-outline));
+  background-color: transparent;
+  padding: 0.875rem 1rem;
+}
+html[data-ui="m3e"] [data-slot="input"]:focus-visible,
+html[data-ui="m3e"] [data-slot="select-trigger"]:focus,
+html[data-ui="m3e"] [data-slot="textarea"]:focus-visible {
+  border-color: hsl(var(--md-primary));
+  box-shadow: inset 0 0 0 1px hsl(var(--md-primary));
+  --tw-ring-offset-width: 0px;
+  --tw-ring-shadow: 0 0 #0000;
+}
+html[data-ui="m3e"] input[type="date"],
+html[data-ui="m3e"] input[type="time"],
+html[data-ui="m3e"] input[type="datetime-local"] {
+  min-height: 3.25rem;
+}
+
+/* ---------- バッジ: Assist chip 風 ---------- */
+html[data-ui="m3e"] [data-slot="badge"] {
+  border-radius: var(--md-shape-sm);
+  padding: 0.25rem 0.625rem;
+  font-weight: 500;
+}
+
+/* ---------- ダイアログ: 角丸 28px。スマホでは全画面 ---------- */
+html[data-ui="m3e"] [data-slot="dialog-content"] {
+  border-radius: var(--md-shape-xl);
+  border: none;
+  background-color: hsl(var(--md-surface-container-low));
+  box-shadow: 0 8px 32px hsl(var(--md-on-surface) / 0.16);
+}
+@media (max-width: 639px) {
+  html[data-ui="m3e"] [data-slot="dialog-content"] {
+    inset: 0;
+    top: 0;
+    left: 0;
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    transform: none;
+    border-radius: 0;
+    overflow-y: auto;
+    padding-top: calc(1.5rem + env(safe-area-inset-top));
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* ---------- ポップオーバー / セレクトのメニュー ---------- */
+html[data-ui="m3e"] [data-radix-popper-content-wrapper] > * {
+  border-radius: var(--md-shape-md);
+  border-color: transparent;
+  box-shadow: 0 4px 16px hsl(var(--md-on-surface) / 0.14);
+  background-color: hsl(var(--md-surface-container-low));
+}
+
+/* ---------- 店舗管理レイアウト: Top app bar / Navigation bar ---------- */
+html[data-ui="m3e"] [data-slot="store-admin-root"] {
+  background-color: hsl(var(--md-surface));
+}
+html[data-ui="m3e"] [data-slot="mobile-header"] {
+  background-color: hsl(var(--md-surface));
+  border-bottom: none;
+  box-shadow: none;
+}
+html[data-ui="m3e"] [data-slot="mobile-header"] h1 {
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+html[data-ui="m3e"] [data-slot="mobile-nav"] {
+  background-color: hsl(var(--md-surface-container));
+  border-top: none;
+}
+html[data-ui="m3e"] [data-slot="mobile-nav-item"] {
+  min-height: 5rem;
+  font-size: 0.75rem;
+  color: hsl(var(--md-on-surface-variant));
+}
+html[data-ui="m3e"] [data-slot="mobile-nav-item"][data-active="true"] {
+  color: hsl(var(--md-on-surface));
+  font-weight: 700;
+}
+html[data-ui="m3e"] [data-slot="mobile-nav-indicator"] {
+  height: 2rem;
+  width: 4rem;
+  border-radius: var(--md-shape-full);
+  transition: background-color var(--md-motion-fast) ease, transform var(--md-motion-duration) var(--md-motion-spring);
+}
+html[data-ui="m3e"] [data-slot="mobile-nav-item"][data-active="true"] [data-slot="mobile-nav-indicator"] {
+  background-color: hsl(var(--md-secondary-container));
+  color: hsl(var(--md-on-secondary-container));
+  transform: scale(1.06);
+}
+html[data-ui="m3e"] [data-slot="mobile-nav-item"]:active [data-slot="mobile-nav-indicator"] {
+  transform: scale(0.92);
+}
+/* PC サイドバー（設定で「Material スタイル」を選んだ場合のみ） */
+html[data-ui="m3e"] [data-slot="store-admin-root"] > aside {
+  background-color: hsl(var(--md-surface-container-low));
+  border-right: none;
+}
+html[data-ui="m3e"] [data-slot="store-admin-root"] > aside nav button {
+  border-radius: var(--md-shape-full);
+}
+
+/* ---------- 表示設定カードの選択肢 ---------- */
+html[data-ui="m3e"] [data-slot="ui-style-option"] {
+  border-radius: var(--md-shape-lg);
+}
+
+/* ---------- Phase 3: タブ / リスト項目 / チップ / ローディング ---------- */
+/* タブ: M3 Segmented button 風（pill、選択中は secondary-container） */
+html[data-ui="m3e"] [data-slot="tabs-list"] {
+  height: auto;
+  background: transparent;
+  padding: 0;
+  gap: 0.25rem;
+  border-radius: var(--md-shape-full);
+  border: 1px solid hsl(var(--md-outline-variant));
+}
+html[data-ui="m3e"] [data-slot="tabs-trigger"] {
+  min-height: 2.5rem;
+  padding: 0.5rem 1.125rem;
+  border-radius: var(--md-shape-full);
+  color: hsl(var(--md-on-surface-variant));
+  transition:
+    background-color var(--md-motion-fast) ease,
+    color var(--md-motion-fast) ease,
+    transform var(--md-motion-duration) var(--md-motion-spring);
+}
+html[data-ui="m3e"] [data-slot="tabs-trigger"][data-state="active"] {
+  background-color: hsl(var(--md-secondary-container));
+  color: hsl(var(--md-on-secondary-container));
+  box-shadow: none;
+  font-weight: 700;
+}
+html[data-ui="m3e"] [data-slot="tabs-trigger"]:active {
+  transform: scale(0.96);
+}
+
+/* リスト項目（スマホの予約カードなど）: 角丸 16px、枠線なし、surface 階調で区切る */
+html[data-ui="m3e"] [data-slot="list-item"] {
+  border-radius: var(--md-shape-lg);
+  border-color: transparent;
+  background-color: hsl(var(--md-surface-container-low));
+  padding: 1rem;
+  min-height: 4.5rem;
+  transition: background-color var(--md-motion-fast) ease, transform var(--md-motion-duration) var(--md-motion-spring);
+}
+html[data-ui="m3e"] [data-slot="list-item"]:hover {
+  background-color: hsl(var(--md-surface-container));
+}
+html[data-ui="m3e"] [data-slot="list-item"]:active {
+  transform: scale(0.985);
+}
+html[data-ui="m3e"] [data-slot="list-item"] .text-xs {
+  font-size: 0.8125rem;
+}
+
+/* ステータスチップ: Assist chip 風（角丸 8px） */
+html[data-ui="m3e"] [data-slot="status-chip"] {
+  border-radius: var(--md-shape-sm);
+  padding: 0.25rem 0.625rem;
+}
+
+/* ローディング: M3E Loading indicator 風（形状が伸縮しながら回転） */
+html[data-ui="m3e"] [data-slot="loading"] {
+  border-width: 4px;
+  border-style: solid;
+  border-color: hsl(var(--md-primary-container));
+  border-top-color: hsl(var(--md-primary));
+  border-right-color: hsl(var(--md-primary));
+  animation: md-loading-spin 1.2s var(--md-motion-spring) infinite, md-loading-morph 1.2s ease-in-out infinite;
+}
+@keyframes md-loading-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes md-loading-morph {
+  0%, 100% { border-radius: 50%; }
+  50% { border-radius: 35%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui="m3e"] [data-slot="loading"] { animation: md-loading-spin 1.2s linear infinite; }
 }

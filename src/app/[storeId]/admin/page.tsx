@@ -11,6 +11,7 @@ import { Form } from '@/types/form';
 import { SurveyForm } from '@/types/survey';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
 import StoreAdminLayout from '@/components/StoreAdminLayout';
+import UiStyleSettings from '@/components/UiStyleSettings';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
 import CustomerList from '@/components/CustomerList';
 import CustomerDetail from '@/components/CustomerDetail';
@@ -548,7 +549,7 @@ export default function StoreAdminPage() {
                             {new Intl.DateTimeFormat('ja-JP').format(new Date(reservation.reservation_date))} {reservation.reservation_time}
                           </p>
       </div>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                        <span data-slot="status-chip" className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
                           reservation.status === 'confirmed' ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20' :
                           reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                           reservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
@@ -905,6 +906,7 @@ export default function StoreAdminPage() {
                             {filteredReservations.map((reservation) => (
                               <div
                                 key={reservation.id}
+                                data-slot="list-item"
                                 className="border rounded-lg p-3 cursor-pointer hover:bg-[rgb(244,144,49)]/10 transition-colors"
                                 onClick={() => {
                                   setSelectedReservation(reservation);
@@ -913,7 +915,7 @@ export default function StoreAdminPage() {
                               >
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="font-medium text-sm flex items-center gap-1.5">{reservation.customer_name}{externalBadge(reservation)}{manualEntryBadge(reservation)}</span>
-                                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                                  <span data-slot="status-chip" className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
                                     reservation.status === 'confirmed' ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20' :
                                     reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                                     reservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
@@ -993,7 +995,7 @@ export default function StoreAdminPage() {
                                       {(reservation as any).submenu_name && ` - ${(reservation as any).submenu_name}`}
                                     </TableCell>
                                     <TableCell>
-                                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                                      <span data-slot="status-chip" className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
                                         reservation.status === 'confirmed' ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20' :
                                         reservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                                         reservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
@@ -1307,6 +1309,7 @@ export default function StoreAdminPage() {
       case 'settings':
         return (
           <div className="space-y-4 p-4 lg:p-6">
+            <UiStyleSettings />
             <Card className="shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle className="text-base">店舗設定</CardTitle>
@@ -1346,7 +1349,7 @@ export default function StoreAdminPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <div data-slot="loading" className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
           <p className="mt-4 text-muted-foreground">読み込み中…</p>
       </div>
       </div>
@@ -1373,6 +1376,7 @@ export default function StoreAdminPage() {
                   alt={store.name || '店舗ロゴ'}
                   width={80}
                   height={80}
+                  unoptimized
                   className="max-w-full max-h-full object-contain"
                 />
               </div>
@@ -1443,10 +1447,11 @@ export default function StoreAdminPage() {
         storeName={store?.name}
         userEmail={user.email}
         onLogout={handleSignOut}
+        themeColor={store?.theme_color}
       >
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            <div data-slot="loading" className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
             <p className="mt-4 text-muted-foreground">読み込み中…</p>
           </div>
         </div>
@@ -1462,6 +1467,7 @@ export default function StoreAdminPage() {
         storeName={store?.name}
         userEmail={user.email}
         onLogout={handleSignOut}
+        themeColor={store?.theme_color}
       >
         <div className="flex items-center justify-center h-full p-4">
           <Card className="w-full max-w-md">
@@ -1583,7 +1589,7 @@ export default function StoreAdminPage() {
                     <div>
                       <Label className="text-sm text-muted-foreground">ステータス</Label>
                       <div className="mt-1">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                        <span data-slot="status-chip" className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
                           selectedReservation.status === 'confirmed' ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20' :
                           selectedReservation.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                           selectedReservation.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
