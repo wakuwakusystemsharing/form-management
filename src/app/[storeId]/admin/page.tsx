@@ -156,6 +156,20 @@ export default function StoreAdminPage() {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session?.user) {
+          // サーバー API はクッキー（sb-access-token）を最優先で認証するため、
+          // 同じブラウザで別アカウント（テナント管理者など）のクッキーが残っていると
+          // ロール判定やアクセス権限チェックが別人の結果になる。
+          // 復元したセッションのトークンでクッキーを同期してから API を呼ぶ。
+          try {
+            await fetch('/api/auth/set-cookie', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ accessToken: session.access_token }),
+            });
+          } catch (err) {
+            console.warn('[Auth] Failed to sync cookie:', err);
+          }
           setUser(session.user);
         } else {
           setUser(null);
@@ -316,7 +330,13 @@ export default function StoreAdminPage() {
           const roleRes = await fetch('/api/auth/role', { credentials: 'include' });
           if (roleRes.ok) {
             const roleData = await roleRes.json();
-            isUpperAdmin = roleData.role === 'master' || roleData.role === 'system';
+            // ロール判定が「今ログインしているユーザー本人」の結果であることを確認する
+            // （クッキーが別アカウントのままだと別人のロールが返るため）
+            const sameUser = !roleData.userId || roleData.userId === user.id;
+            if (!sameUser) {
+              console.warn('[Auth] role API user mismatch; treating as store admin', { roleUser: roleData.userId, sessionUser: user.id });
+            }
+            isUpperAdmin = sameUser && (roleData.role === 'master' || roleData.role === 'system');
           }
         } catch {}
         setIsUpperAdminUser(isUpperAdmin);
