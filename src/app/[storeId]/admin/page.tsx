@@ -12,6 +12,7 @@ import { SurveyForm } from '@/types/survey';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
 import StoreAdminLayout from '@/components/StoreAdminLayout';
 import UiStyleSettings from '@/components/UiStyleSettings';
+import { resolveVisibleTabs } from '@/lib/store-admin-tabs';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
 import CustomerList from '@/components/CustomerList';
 import CustomerDetail from '@/components/CustomerDetail';
@@ -116,7 +117,7 @@ export default function StoreAdminPage() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   
   // タブとフィルター
-  const activeTab = searchParams.get('tab') || 'dashboard';
+  const requestedTab = searchParams.get('tab') || 'dashboard';
   const [formSearchQuery, setFormSearchQuery] = useState('');
   const [reservationFilterStatus, setReservationFilterStatus] = useState<string>('all');
   const [reservationSearchQuery, setReservationSearchQuery] = useState<string>('');
@@ -133,6 +134,14 @@ export default function StoreAdminPage() {
   const [showCustomerDetail, setShowCustomerDetail] = useState(false);
   const [customersRefreshKey, setCustomersRefreshKey] = useState(0);
   const customersView = searchParams.get('customersView') || 'list';
+
+  // マスター/システム管理者として開いているか（店舗ごとのタブ表示制御を受けない）
+  const [isUpperAdminUser, setIsUpperAdminUser] = useState(false);
+
+  // 店舗設定（admin_visible_tabs）で非表示のタブは描画しない（レイアウト側で先頭の表示タブへ移動する）
+  const visibleTabsForUser = isUpperAdminUser ? null : (store?.admin_visible_tabs ?? null);
+  const visibleTabIds = resolveVisibleTabs(visibleTabsForUser);
+  const activeTab = visibleTabIds.includes(requestedTab as (typeof visibleTabIds)[number]) ? requestedTab : visibleTabIds[0];
 
   // 認証チェック
   useEffect(() => {
@@ -310,6 +319,7 @@ export default function StoreAdminPage() {
             isUpperAdmin = roleData.role === 'master' || roleData.role === 'system';
           }
         } catch {}
+        setIsUpperAdminUser(isUpperAdmin);
 
         if (!isUpperAdmin) {
           // 店舗管理者の場合、アクセス権限をチェック
@@ -1448,6 +1458,7 @@ export default function StoreAdminPage() {
         userEmail={user.email}
         onLogout={handleSignOut}
         themeColor={store?.theme_color}
+        visibleTabs={visibleTabsForUser}
       >
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
@@ -1468,6 +1479,7 @@ export default function StoreAdminPage() {
         userEmail={user.email}
         onLogout={handleSignOut}
         themeColor={store?.theme_color}
+        visibleTabs={visibleTabsForUser}
       >
         <div className="flex items-center justify-center h-full p-4">
           <Card className="w-full max-w-md">

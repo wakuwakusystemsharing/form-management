@@ -8,6 +8,7 @@ import { Form } from '@/types/form';
 import { SurveyForm } from '@/types/survey';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
 import StoreAdminManager from '@/components/StoreAdminManager';
+import StoreAdminMenuSettings from '@/components/StoreAdminMenuSettings';
 import FormHistoryDialog from '@/components/FormHistoryDialog';
 import ReminderTemplateEditor from '@/components/ReminderTemplateEditor';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -2237,6 +2238,9 @@ export default function StoreDetailPage() {
           <TabsContent value="settings" className="space-y-6">
             {/* 店舗管理者管理 */}
             <StoreAdminManager storeId={storeId} />
+
+            {/* 店舗管理者に表示するメニュー */}
+            <StoreAdminMenuSettings storeId={storeId} />
 
             {/* 危険ゾーン */}
             <Card className="border-destructive/50">

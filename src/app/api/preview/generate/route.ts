@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     if (formType === 'reservation') {
       const normalizedForm = normalizeForm(form as Form);
       const generator = new StaticReservationGenerator();
-      html = generator.generateHTML(normalizedForm.config, form.id, storeId);
+      html = generator.generateHTML(normalizedForm.config, form.id, storeId, 'preview');
     } else {
       const generator = new StaticSurveyGenerator();
       html = generator.generateHTML(

@@ -158,6 +158,50 @@ const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({
         </div>
       </div>
 
+      {/* 公式 LINE 以外からのアクセス制限（LINE フォームのみ） */}
+      {form.config?.form_type !== 'web' && (
+        <div className="space-y-2 pt-2 border-t">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <Label htmlFor="line_only_enabled">公式LINE以外からの予約を制限する</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                ON にすると、Chrome や Safari など LINE アプリ以外のブラウザで開いたときに「公式LINEから開いてください」の案内を表示し、予約を受け付けません。管理画面のプレビューと店舗側手動予約フォームは対象外です。
+              </p>
+            </div>
+            <button
+              id="line_only_enabled"
+              type="button"
+              role="switch"
+              aria-checked={form.config?.basic_info?.line_only !== false}
+              onClick={() => {
+                const enabled = !(form.config?.basic_info?.line_only !== false);
+                onUpdate({
+                  ...form,
+                  config: {
+                    ...form.config,
+                    basic_info: {
+                      ...form.config?.basic_info,
+                      line_only: enabled,
+                    },
+                  },
+                });
+              }}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+                form.config?.basic_info?.line_only !== false
+                  ? 'bg-green-500'
+                  : theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  form.config?.basic_info?.line_only !== false ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* LIFF 2 通目メッセージ */}
       <div className="space-y-2 pt-2 border-t">
         <div className="flex items-center justify-between">

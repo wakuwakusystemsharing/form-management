@@ -73,7 +73,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       liff_id: '',
       theme_color: '#3B82F6',
       logo_url: undefined,
-      second_message: { enabled: false, text: '' }
+      second_message: { enabled: false, text: '' },
+      line_only: true
     },
     visit_options: [],
     gender_selection: {
@@ -209,6 +210,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           const rawText = (raw as { text?: unknown } | undefined)?.text;
           const text = typeof rawText === 'string' ? rawText : '';
           return { enabled, text };
+        })(),
+        // 未設定（既存フォーム）は true = LINE アプリ外からの予約を制限する。明示的に false のときだけ許可
+        line_only: (() => {
+          const raw = existingConfig?.basic_info?.line_only
+            ?? (typedConfig?.basic_info as Form['config']['basic_info'])?.line_only;
+          return raw !== false;
         })()
       },
       visit_options: (existingConfig?.visit_options || typedConfig?.visit_options || []) as Form['config']['visit_options'],

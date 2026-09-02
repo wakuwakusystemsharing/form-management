@@ -16,8 +16,12 @@ export class StaticReservationGenerator {
    */
   // mode 'manual': 店舗側手動予約フォーム（スタッフがお客様=LINE友だちを選択して代理登録する）。
   // LIFF を読み込まず、LINE メッセージも送信しない。選択した友だちの userId を予約に紐付ける
-  generateHTML(config: FormConfig, formId: string, storeId: string, mode?: 'manual'): string {
+  // mode 'preview': 管理画面のプレビュー（通常ブラウザで開くため LINE アプリ外の制限をかけない）。
+  generateHTML(config: FormConfig, formId: string, storeId: string, mode?: 'manual' | 'preview'): string {
     const manualMode = mode === 'manual';
+    const previewMode = mode === 'preview';
+    // LINE フォームを LINE アプリ以外のブラウザで開いたときに予約を受け付けない（設定で OFF 可）
+    const lineOnly = !manualMode && !previewMode && config.form_type !== 'web' && config.basic_info?.line_only !== false;
     // config は immutable に扱うため、深くコピーして修正
     const safeConfig: FormConfig = JSON.parse(JSON.stringify(config));
 
@@ -236,6 +240,8 @@ const STORE_ID = ${JSON.stringify(storeId)};
 // 店舗側手動予約フォーム（スタッフ用）モード
 const MANUAL_MODE = ${manualMode ? 'true' : 'false'};
 const SUBMIT_LABEL = ${manualMode ? "'予約を行う'" : "'予約する'"};
+// 公式 LINE（LINE アプリ内）以外のブラウザからの予約を制限する
+const LINE_ONLY = ${lineOnly ? 'true' : 'false'};
 
 // ========== 祝日判定ロジック（1980-2099年対応）==========
 function calcVernalEquinox(year) {
@@ -455,9 +461,51 @@ class BookingForm {
         }
     }
     
+    // LINE アプリ内で開かれているかを判定（liff.isInClient() は liff.init() 前でも利用可能）。
+    // SDK が読み込めない等で判定できない場合は制限しない（正規の利用者を誤って弾かないため）
+    isOutsideLineClient() {
+        if (!LINE_ONLY) return false;
+        try {
+            if (typeof liff === 'undefined' || typeof liff.isInClient !== 'function') return false;
+            return liff.isInClient() !== true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // LINE アプリ外で開かれた場合の案内画面（フォーム全体を覆い、操作を受け付けない）
+    showLineOnlyGate() {
+        if (document.getElementById('line-only-gate')) return;
+        this.state.lineOnlyBlocked = true;
+        const liffId = this.config.basic_info.liff_id || '';
+        const openInLine = liffId ? '<a class="line-only-gate-button" href="https://line.me/R/app/' + encodeURIComponent(liffId) + '">LINE アプリで開く</a>' : '';
+        const gate = document.createElement('div');
+        gate.id = 'line-only-gate';
+        gate.setAttribute('role', 'dialog');
+        gate.setAttribute('aria-modal', 'true');
+        gate.setAttribute('aria-labelledby', 'line-only-gate-title');
+        gate.innerHTML =
+            '<div class="line-only-gate-card">' +
+                '<div class="line-only-gate-icon" aria-hidden="true">LINE</div>' +
+                '<h2 id="line-only-gate-title">公式LINEからご予約ください</h2>' +
+                '<p>この予約フォームは公式LINEから開かれた場合のみご予約可能です。<br>お手数ですが、公式LINEのトーク画面からフォームを開いてください。</p>' +
+                openInLine +
+            '</div>';
+        document.body.appendChild(gate);
+        document.body.classList.add('line-only-blocked');
+        const submitBtn = document.getElementById('submit-button');
+        if (submitBtn) submitBtn.disabled = true;
+    }
+
     async initializeLIFF() {
         const liffId = this.config.basic_info.liff_id;
         if (!liffId || liffId.length < 10) return;
+
+        // LINE アプリ外からのアクセスは案内画面を出して終了（liff.init() を呼ばずログイン画面にも飛ばさない）
+        if (this.isOutsideLineClient()) {
+            this.showLineOnlyGate();
+            return;
+        }
 
         try {
             await liff.init({ liffId });
@@ -2353,6 +2401,11 @@ class BookingForm {
     }
     
     async handleSubmit() {
+        // LINE アプリ外からのアクセスは送信しない（案内画面で操作できないが念のため）
+        if (this.state.lineOnlyBlocked || this.isOutsideLineClient()) {
+            this.showLineOnlyGate();
+            return;
+        }
         // 二重送信防止
         if (this.state.isSubmitting) return;
         this.state.isSubmitting = true;
@@ -4375,6 +4428,27 @@ if (document.readyState === 'loading') {
             border-radius: 6px;
             margin: 4px 0 12px;
         }
+        /* LINE アプリ外からのアクセス案内 */
+        #line-only-gate {
+            position: fixed; inset: 0; z-index: 10000;
+            display: flex; align-items: center; justify-content: center;
+            padding: 24px; background: rgba(27, 42, 78, 0.92);
+        }
+        .line-only-gate-card {
+            width: 100%; max-width: 420px; background: #fff; border-radius: 16px;
+            padding: 28px 24px; text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+        }
+        .line-only-gate-icon {
+            display: inline-block; background: #06C755; color: #fff; font-weight: 800; font-size: 14px;
+            letter-spacing: 0.08em; border-radius: 8px; padding: 6px 12px; margin-bottom: 14px;
+        }
+        .line-only-gate-card h2 { margin: 0 0 12px; font-size: 18px; color: #1b2a4e; }
+        .line-only-gate-card p { margin: 0 0 18px; font-size: 14px; line-height: 1.8; color: #333; }
+        .line-only-gate-button {
+            display: block; padding: 14px 16px; border-radius: 9999px; background: #06C755; color: #fff;
+            font-weight: 700; text-decoration: none; font-size: 15px;
+        }
+        body.line-only-blocked { overflow: hidden; }
         /* 店舗側手動予約フォーム */
         .manual-mode-banner {
             background: #1b2a4e;

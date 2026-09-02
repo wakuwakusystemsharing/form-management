@@ -56,7 +56,7 @@ export async function GET(
 
     // 静的HTMLを生成（デプロイ時と同じジェネレータを使用）
     const generator = new StaticReservationGenerator();
-    const html = generator.generateHTML(formConfig, formId, storeId);
+    const html = generator.generateHTML(formConfig, formId, storeId, 'preview');
 
     // レスポンスヘッダーを公開配信（public-form）と整合させる
     return new NextResponse(html, {

@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { applyUiStyle, applyM3Palette, clearUiStyle, UI_STYLE_CHANGE_EVENT } from '@/lib/ui-style';
+import { resolveVisibleTabs, type StoreAdminTabId } from '@/lib/store-admin-tabs';
 
 interface StoreAdminLayoutProps {
   children: React.ReactNode;
@@ -29,9 +30,11 @@ interface StoreAdminLayoutProps {
   onLogout?: () => void;
   /** 店舗テーマカラー（HEX）。Material スタイル時のダイナミックカラーのシードに使う */
   themeColor?: string | null;
+  /** 表示するタブ（stores.admin_visible_tabs）。null / 未指定 = すべて表示 */
+  visibleTabs?: StoreAdminTabId[] | null;
 }
 
-const menuItems = [
+const allMenuItems: { id: StoreAdminTabId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
   { id: 'reservations', label: '予約管理', icon: Calendar },
   { id: 'customers', label: '顧客管理 β', icon: Users },
@@ -40,6 +43,7 @@ const menuItems = [
 ];
 
 interface MenuContentProps {
+  menuItems: typeof allMenuItems;
   onItemClick?: () => void;
   storeName?: string;
   userEmail?: string;
@@ -49,7 +53,7 @@ interface MenuContentProps {
   isCollapsed?: boolean;
 }
 
-const MenuContent = ({ onItemClick, storeName, userEmail, activeTab, onTabChange, onLogout, isCollapsed = false }: MenuContentProps) => (
+const MenuContent = ({ menuItems, onItemClick, storeName, userEmail, activeTab, onTabChange, onLogout, isCollapsed = false }: MenuContentProps) => (
     <div className="flex flex-col h-full">
       <div className={cn("border-b", isCollapsed ? "p-2" : "p-4")}>
         {isCollapsed ? (
@@ -127,11 +131,16 @@ export default function StoreAdminLayout({
   userEmail,
   onLogout,
   themeColor,
+  visibleTabs,
 }: StoreAdminLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  // 店舗設定で非表示にされたタブを除外（null = すべて表示）
+  const visibleIds = resolveVisibleTabs(visibleTabs);
+  const menuItems = allMenuItems.filter((item) => visibleIds.includes(item.id));
 
   // 表示スタイル（標準 / Material）を <html data-ui> に反映。画面幅の変化・設定変更にも追従し、離脱時に解除
   useEffect(() => {
@@ -155,6 +164,15 @@ export default function StoreAdminLayout({
   
   // 現在のアクティブなタブを判定
   const activeTab = searchParams.get('tab') || 'dashboard';
+
+  // 非表示タブに URL で直接アクセスされた場合は、表示可能な先頭のタブへ移動
+  const firstVisible = menuItems[0]?.id;
+  const activeTabHidden = !menuItems.some((item) => item.id === activeTab);
+  useEffect(() => {
+    if (activeTabHidden && firstVisible) {
+      router.replace(`/${storeId}/admin?tab=${firstVisible}`);
+    }
+  }, [activeTabHidden, firstVisible, router, storeId]);
   
   const handleTabChange = (tabId: string) => {
     router.push(`/${storeId}/admin?tab=${tabId}`);
@@ -168,7 +186,8 @@ export default function StoreAdminLayout({
         "hidden lg:flex lg:flex-col lg:border-r transition-[width] duration-300 relative bg-white",
         sidebarCollapsed ? "lg:w-16" : "lg:w-64"
       )}>
-        <MenuContent 
+        <MenuContent
+          menuItems={menuItems}
           storeName={storeName}
           userEmail={userEmail}
           activeTab={activeTab}
@@ -211,7 +230,8 @@ export default function StoreAdminLayout({
                 </SheetTrigger>
                 <SheetContent side="left" className="w-64 p-0">
                   <SheetTitle className="sr-only">メニュー</SheetTitle>
-                  <MenuContent 
+                  <MenuContent
+                    menuItems={menuItems}
                     onItemClick={() => setMobileMenuOpen(false)}
                     storeName={storeName}
                     userEmail={userEmail}
@@ -242,7 +262,7 @@ export default function StoreAdminLayout({
           aria-label="主要メニュー"
           data-slot="mobile-nav"
         >
-          <ul className="grid grid-cols-5">
+          <ul className="grid" style={{ gridTemplateColumns: `repeat(${menuItems.length}, minmax(0, 1fr))` }}>
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
