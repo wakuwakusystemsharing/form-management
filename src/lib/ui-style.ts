@@ -71,6 +71,84 @@ export function clearUiStyle(): void {
   document.documentElement.removeAttribute('data-ui');
 }
 
+/* ------------------------------------------------------------------
+ * ダイナミックカラー: 店舗テーマカラーをシードに M3 のカラーロールを生成
+ * （@material/material-color-utilities は未導入のため HSL ベースの近似。
+ *   トーン（明度）は固定し、色相はシードから、彩度はシードの彩度に応じて弱める）
+ * ------------------------------------------------------------------ */
+export type M3PaletteVars = Record<string, string>;
+
+function hexToHsl(hex: string): { h: number; s: number; l: number } | null {
+  const m = hex.trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!m) return null;
+  let v = m[1];
+  if (v.length === 3) v = v.split('').map((c) => c + c).join('');
+  const r = parseInt(v.slice(0, 2), 16) / 255;
+  const g = parseInt(v.slice(2, 4), 16) / 255;
+  const b = parseInt(v.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l: l * 100 };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+  else if (max === g) h = ((b - r) / d + 2) * 60;
+  else h = ((r - g) / d + 4) * 60;
+  return { h: Math.round(h), s: s * 100, l: l * 100 };
+}
+
+/**
+ * シード色から M3 カラーロール（HSL トリプレット文字列）を生成。
+ * 無効な色や無彩色に近い色の場合は null（既定のオレンジパレットを使う）
+ */
+export function computeM3Palette(seedHex: string | null | undefined): M3PaletteVars | null {
+  if (!seedHex) return null;
+  const hsl = hexToHsl(seedHex);
+  if (!hsl || hsl.s < 8) return null;
+  const h = hsl.h;
+  // 彩度係数: 淡い色ほどパレットも控えめに（0.35〜1.0）
+  const k = Math.min(1, Math.max(0.35, hsl.s / 90));
+  const c = (sat: number, light: number) => `${h} ${Math.round(sat * k)}% ${light}%`;
+  return {
+    '--md-primary': c(100, 30),
+    '--md-on-primary': '0 0% 100%',
+    '--md-primary-container': c(100, 87),
+    '--md-on-primary-container': c(100, 9),
+    '--md-secondary-container': c(70, 88),
+    '--md-on-secondary-container': c(60, 10),
+    '--md-surface': c(100, 98),
+    '--md-surface-container-lowest': '0 0% 100%',
+    '--md-surface-container-low': c(100, 95),
+    '--md-surface-container': c(67, 93),
+    '--md-surface-container-high': c(50, 90),
+    '--md-surface-container-highest': c(40, 88),
+    '--md-on-surface': c(15, 11),
+    '--md-on-surface-variant': c(17, 28),
+    '--md-outline': c(11, 47),
+    '--md-outline-variant': c(29, 78),
+  };
+}
+
+const M3_PALETTE_KEYS = [
+  '--md-primary', '--md-on-primary', '--md-primary-container', '--md-on-primary-container',
+  '--md-secondary-container', '--md-on-secondary-container', '--md-surface',
+  '--md-surface-container-lowest', '--md-surface-container-low', '--md-surface-container',
+  '--md-surface-container-high', '--md-surface-container-highest', '--md-on-surface',
+  '--md-on-surface-variant', '--md-outline', '--md-outline-variant',
+];
+
+/** 店舗テーマカラーから生成したパレットを <html> のインラインスタイルに適用（null で既定に戻す） */
+export function applyM3Palette(seedHex: string | null | undefined): void {
+  if (typeof document === 'undefined') return;
+  const style = document.documentElement.style;
+  const palette = computeM3Palette(seedHex);
+  M3_PALETTE_KEYS.forEach((k) => style.removeProperty(k));
+  if (!palette) return;
+  Object.entries(palette).forEach(([k, v]) => style.setProperty(k, v));
+}
+
 /**
  * 初回描画前に <html data-ui> を付けるインラインスクリプト（src/app/layout.tsx で使用）。
  * 店舗管理画面（/{storeId}/admin）以外では何もしない。

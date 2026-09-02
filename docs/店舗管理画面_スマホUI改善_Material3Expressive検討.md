@@ -256,7 +256,20 @@ shadcn の各コンポーネントは `className` を `cn()` で合成してい�
 
 ---
 
-## 9. 参考
+## 9. 実装状況（2026-09-02 更新）
+
+案 B を採用し、フェーズ 1〜4 を実装済み。
+
+| フェーズ | 状態 | 備考 |
+|---|---|---|
+| 1. 基礎修正 | 完了 | 入力欄 16px / `h-dvh` / 44px タップ領域 / `touch-action` / 下部ナビ |
+| 2. 切替基盤 + トークン | 完了 | `src/lib/ui-style.ts`、設定タブ「表示設定」、`globals.css` の `html[data-ui="m3e"]` ブロック |
+| 3. ナビ・主要画面 | 一部完了 | タブ（Segmented button 風）/ リスト項目 / チップ / ローディング / 全画面ダイアログ。**FAB は見送り**（タブごとに単一の主要操作が定まらないため） |
+| 4. 仕上げ | 完了（近似） | ダイナミックカラーは `material-color-utilities` 未導入のため HSL 近似。`prefers-reduced-motion` 対応済み |
+
+未対応・今後の候補: FAB、フォーム編集画面（`FormEditor/`）の M3E 化、`material-color-utilities` によるトーナルパレットの厳密化、`admin/page.tsx` のタブ単位でのコンポーネント分割。
+
+## 10. 参考
 
 - Material 3 Expressive 発表（Google Design Blog）: https://design.google/library/expressive-material-design-google-research
 - Material 3 デザインガイドライン・トークン: https://m3.material.io/

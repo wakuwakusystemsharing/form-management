@@ -19,7 +19,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/s
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import { applyUiStyle, clearUiStyle, UI_STYLE_CHANGE_EVENT } from '@/lib/ui-style';
+import { applyUiStyle, applyM3Palette, clearUiStyle, UI_STYLE_CHANGE_EVENT } from '@/lib/ui-style';
 
 interface StoreAdminLayoutProps {
   children: React.ReactNode;
@@ -27,6 +27,8 @@ interface StoreAdminLayoutProps {
   storeName?: string;
   userEmail?: string;
   onLogout?: () => void;
+  /** 店舗テーマカラー（HEX）。Material スタイル時のダイナミックカラーのシードに使う */
+  themeColor?: string | null;
 }
 
 const menuItems = [
@@ -124,6 +126,7 @@ export default function StoreAdminLayout({
   storeName,
   userEmail,
   onLogout,
+  themeColor,
 }: StoreAdminLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -143,6 +146,12 @@ export default function StoreAdminLayout({
       clearUiStyle();
     };
   }, []);
+
+  // ダイナミックカラー: 店舗テーマカラーに合わせてパレットを差し替え（離脱時に既定へ戻す）
+  useEffect(() => {
+    applyM3Palette(themeColor);
+    return () => applyM3Palette(null);
+  }, [themeColor]);
   
   // 現在のアクティブなタブを判定
   const activeTab = searchParams.get('tab') || 'dashboard';

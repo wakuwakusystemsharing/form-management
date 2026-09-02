@@ -116,9 +116,8 @@ body {
      data-slot 属性でコンポーネントの形状だけを上書きする（DOM・ロジックは不変）
    - 色は店舗テーマカラー（オレンジ rgb(244,144,49)）をシードにした M3 トーナルパレット
    ============================================================ */
-html[data-ui="m3e"],
-html[data-ui="m3e"] .store-admin-bg {
-  /* --- M3 color roles（HSL） --- */
+html[data-ui="m3e"] {
+  /* --- M3 color roles（HSL）。店舗テーマカラーがある場合は applyM3Palette() がインラインスタイルで上書き --- */
   --md-primary: 33 100% 27%;                 /* #8a4f00 */
   --md-on-primary: 0 0% 100%;
   --md-primary-container: 30 100% 87%;       /* #ffdcbe */
@@ -148,7 +147,11 @@ html[data-ui="m3e"] .store-admin-bg {
   --md-motion-spring: linear(0, 0.45 14%, 0.92 30%, 1.06 44%, 0.99 60%, 1);
   --md-motion-duration: 380ms;
   --md-motion-fast: 180ms;
+}
 
+/* .store-admin-bg 自身が --primary 等を定義しているため、同じ場所で M3 の値に差し替える */
+html[data-ui="m3e"],
+html[data-ui="m3e"] .store-admin-bg {
   /* --- shadcn トークンへマッピング --- */
   --background: var(--md-surface);
   --foreground: var(--md-on-surface);
@@ -354,4 +357,79 @@ html[data-ui="m3e"] [data-slot="store-admin-root"] > aside nav button {
 /* ---------- 表示設定カードの選択肢 ---------- */
 html[data-ui="m3e"] [data-slot="ui-style-option"] {
   border-radius: var(--md-shape-lg);
+}
+
+/* ---------- Phase 3: タブ / リスト項目 / チップ / ローディング ---------- */
+/* タブ: M3 Segmented button 風（pill、選択中は secondary-container） */
+html[data-ui="m3e"] [data-slot="tabs-list"] {
+  height: auto;
+  background: transparent;
+  padding: 0;
+  gap: 0.25rem;
+  border-radius: var(--md-shape-full);
+  border: 1px solid hsl(var(--md-outline-variant));
+}
+html[data-ui="m3e"] [data-slot="tabs-trigger"] {
+  min-height: 2.5rem;
+  padding: 0.5rem 1.125rem;
+  border-radius: var(--md-shape-full);
+  color: hsl(var(--md-on-surface-variant));
+  transition:
+    background-color var(--md-motion-fast) ease,
+    color var(--md-motion-fast) ease,
+    transform var(--md-motion-duration) var(--md-motion-spring);
+}
+html[data-ui="m3e"] [data-slot="tabs-trigger"][data-state="active"] {
+  background-color: hsl(var(--md-secondary-container));
+  color: hsl(var(--md-on-secondary-container));
+  box-shadow: none;
+  font-weight: 700;
+}
+html[data-ui="m3e"] [data-slot="tabs-trigger"]:active {
+  transform: scale(0.96);
+}
+
+/* リスト項目（スマホの予約カードなど）: 角丸 16px、枠線なし、surface 階調で区切る */
+html[data-ui="m3e"] [data-slot="list-item"] {
+  border-radius: var(--md-shape-lg);
+  border-color: transparent;
+  background-color: hsl(var(--md-surface-container-low));
+  padding: 1rem;
+  min-height: 4.5rem;
+  transition: background-color var(--md-motion-fast) ease, transform var(--md-motion-duration) var(--md-motion-spring);
+}
+html[data-ui="m3e"] [data-slot="list-item"]:hover {
+  background-color: hsl(var(--md-surface-container));
+}
+html[data-ui="m3e"] [data-slot="list-item"]:active {
+  transform: scale(0.985);
+}
+html[data-ui="m3e"] [data-slot="list-item"] .text-xs {
+  font-size: 0.8125rem;
+}
+
+/* ステータスチップ: Assist chip 風（角丸 8px） */
+html[data-ui="m3e"] [data-slot="status-chip"] {
+  border-radius: var(--md-shape-sm);
+  padding: 0.25rem 0.625rem;
+}
+
+/* ローディング: M3E Loading indicator 風（形状が伸縮しながら回転） */
+html[data-ui="m3e"] [data-slot="loading"] {
+  border-width: 4px;
+  border-style: solid;
+  border-color: hsl(var(--md-primary-container));
+  border-top-color: hsl(var(--md-primary));
+  border-right-color: hsl(var(--md-primary));
+  animation: md-loading-spin 1.2s var(--md-motion-spring) infinite, md-loading-morph 1.2s ease-in-out infinite;
+}
+@keyframes md-loading-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes md-loading-morph {
+  0%, 100% { border-radius: 50%; }
+  50% { border-radius: 35%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui="m3e"] [data-slot="loading"] { animation: md-loading-spin 1.2s linear infinite; }
 }

@@ -187,6 +187,14 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - `/terms` - 利用規約
 - `src/app/(public)/layout.tsx` - 公開ページ共通レイアウト（ヘッダー・フッター）
 
+**店舗管理画面の表示スタイル（標準 / Material 3 Expressive 風）:**
+- `src/lib/ui-style.ts` - 設定値 `'auto' | 'standard' | 'm3e'` を localStorage（`store_admin_ui_style`）に保存し、`<html data-ui="m3e">` 属性で適用。`auto` はスマホ・タブレット幅（1023px 以下）のみ M3E
+- `src/app/layout.tsx` のインラインスクリプト（`UI_STYLE_INIT_SCRIPT`）が初回描画前に属性を付与（`/{storeId}/admin` のみ）。`StoreAdminLayout` がリサイズ・設定変更に追従し、離脱時に解除
+- `UiStyleSettings.tsx` - 設定タブの「表示設定」カード（端末ごとの設定。DB には保存しない）
+- 見た目は `src/app/globals.css` 末尾の `html[data-ui="m3e"]` ブロックのみで実現。shadcn コンポーネントに付けた `data-slot` 属性（button / card / input / select-trigger / textarea / badge / dialog-content / tabs-list / tabs-trigger / list-item / status-chip / loading / mobile-nav 等）をセレクタに使う。DOM・ロジックは変更しない
+- ダイナミックカラー: `applyM3Palette(store.theme_color)` が店舗テーマカラーから M3 カラーロール（`--md-*`）を HSL 近似で生成し `<html>` のインラインスタイルに設定（無彩色・未設定時は既定のオレンジパレット）
+- スマホ共通の基礎対策: `Input` / `Select` はスマホ 16px（iOS 自動ズーム防止）、レイアウトは `h-dvh`、アイコンボタンはスマホ 44px、`touch-action: manipulation`、下部ナビゲーション（`lg:hidden`）
+
 **店舗セットアップヘルプ:**
 - `/tenant/{slug}/admin/help` - 店舗セットアップガイドページ
 - `src/lib/store-setup-status.ts` - `getStoreSetupStatus()` で店舗の設定完了状態を判定
