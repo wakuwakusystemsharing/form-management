@@ -1373,6 +1373,7 @@ export default function StoreAdminPage() {
                   alt={store.name || '店舗ロゴ'}
                   width={80}
                   height={80}
+                  unoptimized
                   className="max-w-full max-h-full object-contain"
                 />
               </div>

@@ -138,7 +138,7 @@ export default function StoreAdminLayout({
   };
 
   return (
-    <div className="store-admin-bg flex h-screen bg-background">
+    <div className="store-admin-bg flex h-dvh bg-background">
       {/* デスクトップサイドバー */}
       <aside className={cn(
         "hidden lg:flex lg:flex-col lg:border-r transition-[width] duration-300 relative bg-white",
@@ -208,9 +208,43 @@ export default function StoreAdminLayout({
         </header>
 
         {/* コンテンツエリア */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto overscroll-y-contain">
           {children}
         </main>
+
+        {/* モバイル下部ナビゲーション（片手操作用。PC はサイドバー） */}
+        <nav
+          className="lg:hidden shrink-0 border-t bg-white pb-[env(safe-area-inset-bottom)]"
+          aria-label="主要メニュー"
+        >
+          <ul className="grid grid-cols-5">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange(item.id)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={cn(
+                      "w-full min-h-14 flex flex-col items-center justify-center gap-0.5 px-1 py-2 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                      isActive ? "text-primary" : "text-muted-foreground"
+                    )}
+                  >
+                    <span className={cn(
+                      "flex items-center justify-center h-7 w-12 rounded-full transition-colors",
+                      isActive && "bg-primary/15"
+                    )}>
+                      <Icon className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <span className="truncate max-w-full">{item.label.replace(' β', '')}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
       </div>
     </div>
   );

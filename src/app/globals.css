@@ -91,6 +91,17 @@
   border-color: hsl(var(--border));
 }
 
+/* スマホ: ダブルタップズームによる画面のガタつきを防ぐ（ピンチズームは許可） */
+button,
+[role="button"],
+a,
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
+}
+
 body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
