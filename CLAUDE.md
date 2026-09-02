@@ -458,6 +458,11 @@ export async function GET(req, { params }) {
 **メニュー (`MenuItem` / `SubMenuItem` / `MenuOption`):**
 - `hide_price` / `hide_duration` - 料金・所要時間を非表示にするフラグ（任意）
 
+**アンケート質問の選択肢 (`SurveyQuestionOption`, `src/types/survey.ts`):**
+- 編集画面（`SurveyQuestionEditor.tsx`）で選択肢をドラッグ&ドロップ並び替え可能（配列順がそのまま静的 HTML の表示順）
+- `allow_other` は `radio` / `checkbox` / `select` すべてで有効。`select` は内部値 `__other__`（`StaticSurveyGenerator.OTHER_OPTION_VALUE`）で「その他」を表し、送信時に `その他（理由）` に変換
+- `follow_up?: { enabled, title, type: 'text'|'textarea'|'radio'|'checkbox'|'select', required?, options? }` - その選択肢が選ばれたときだけ表示する追加質問。回答は `responses` に `follow_up.title` をキーとして親質問の直後に追加（同名キーがある場合は `（選択肢名）` を付加）。復元機能 ON 時は追加質問の入力も localStorage に保存
+
 **カスタムフィールド (`config.custom_fields[]`):**
 - `type`: `'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select'`
 
