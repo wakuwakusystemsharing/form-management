@@ -11,6 +11,7 @@ import { Form } from '@/types/form';
 import { SurveyForm } from '@/types/survey';
 import FormEditModal from '@/components/FormEditor/FormEditModal';
 import StoreAdminLayout from '@/components/StoreAdminLayout';
+import UiStyleSettings from '@/components/UiStyleSettings';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
 import CustomerList from '@/components/CustomerList';
 import CustomerDetail from '@/components/CustomerDetail';
@@ -1307,6 +1308,7 @@ export default function StoreAdminPage() {
       case 'settings':
         return (
           <div className="space-y-4 p-4 lg:p-6">
+            <UiStyleSettings />
             <Card className="shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle className="text-base">店舗設定</CardTitle>
