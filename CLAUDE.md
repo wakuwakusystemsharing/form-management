@@ -195,6 +195,14 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - ダイナミックカラー: `applyM3Palette(store.theme_color)` が店舗テーマカラーから M3 カラーロール（`--md-*`）を HSL 近似で生成し `<html>` のインラインスタイルに設定（無彩色・未設定時は既定のオレンジパレット）
 - スマホ共通の基礎対策: `Input` / `Select` はスマホ 16px（iOS 自動ズーム防止）、レイアウトは `h-dvh`、アイコンボタンはスマホ 44px、`touch-action: manipulation`、下部ナビゲーション（`lg:hidden`）
 
+**店舗管理者に表示するメニュー（タブ）の制御:**
+- `stores.admin_visible_tabs` JSONB（`null` = すべて表示）。値は `['dashboard','reservations','customers','surveys','settings']` の部分集合
+- テナント側 店舗ページ → 設定タブ → `StoreAdminMenuSettings.tsx` で ON/OFF（最低 1 つ必須。全選択時は `null` で保存）
+- 店舗管理者ページ: `StoreAdminLayout` の `visibleTabs` でサイドバー・下部ナビをフィルタし、非表示タブへの直接アクセスは先頭の表示タブへ `router.replace`。`admin/page.tsx` も非表示タブは描画しない
+- マスター管理者・システム管理者が開いた場合は常に全表示（`/api/auth/role` の判定を `isUpperAdminUser` に保持）
+- 定義・正規化は `src/lib/store-admin-tabs.ts`（`STORE_ADMIN_TABS` / `resolveVisibleTabs()`）
+- マイグレーション: `20260902000000_add_admin_visible_tabs.sql`
+
 **店舗セットアップヘルプ:**
 - `/tenant/{slug}/admin/help` - 店舗セットアップガイドページ
 - `src/lib/store-setup-status.ts` - `getStoreSetupStatus()` で店舗の設定完了状態を判定
@@ -445,6 +453,7 @@ export async function GET(req, { params }) {
 - `20260411100000_add_reminder_settings.sql` - stores.reminder_enabled / reminder_time 追加
 - `20260411100001_update_cron_hourly.sql` - send-reminders Edge Function を毎時実行に変更
 - `20260429000000_add_store_postal_code.sql` - stores.postal_code 追加（Web 予約メール用）
+- `20260902000000_add_admin_visible_tabs.sql` - stores.admin_visible_tabs 追加（店舗管理者に表示するタブ）
 
 ## テンプレートシステム
 
