@@ -477,8 +477,6 @@ class BookingForm {
     showLineOnlyGate() {
         if (document.getElementById('line-only-gate')) return;
         this.state.lineOnlyBlocked = true;
-        const liffId = this.config.basic_info.liff_id || '';
-        const openInLine = liffId ? '<a class="line-only-gate-button" href="https://line.me/R/app/' + encodeURIComponent(liffId) + '">LINE アプリで開く</a>' : '';
         const gate = document.createElement('div');
         gate.id = 'line-only-gate';
         gate.setAttribute('role', 'dialog');
@@ -488,8 +486,7 @@ class BookingForm {
             '<div class="line-only-gate-card">' +
                 '<div class="line-only-gate-icon" aria-hidden="true">LINE</div>' +
                 '<h2 id="line-only-gate-title">公式LINEからご予約ください</h2>' +
-                '<p>この予約フォームは公式LINEから開かれた場合のみご予約可能です。<br>お手数ですが、公式LINEのトーク画面からフォームを開いてください。</p>' +
-                openInLine +
+                '<p>この予約フォームは公式LINEから開かれた場合のみご予約可能です。<br>お手数ですが、公式LINEのリッチメニュー【ご予約】ボタンをタップして開いてください。</p>' +
             '</div>';
         document.body.appendChild(gate);
         document.body.classList.add('line-only-blocked');
@@ -4443,11 +4440,7 @@ if (document.readyState === 'loading') {
             letter-spacing: 0.08em; border-radius: 8px; padding: 6px 12px; margin-bottom: 14px;
         }
         .line-only-gate-card h2 { margin: 0 0 12px; font-size: 18px; color: #1b2a4e; }
-        .line-only-gate-card p { margin: 0 0 18px; font-size: 14px; line-height: 1.8; color: #333; }
-        .line-only-gate-button {
-            display: block; padding: 14px 16px; border-radius: 9999px; background: #06C755; color: #fff;
-            font-weight: 700; text-decoration: none; font-size: 15px;
-        }
+        .line-only-gate-card p { margin: 0; font-size: 14px; line-height: 1.8; color: #333; }
         body.line-only-blocked { overflow: hidden; }
         /* 店舗側手動予約フォーム */
         .manual-mode-banner {

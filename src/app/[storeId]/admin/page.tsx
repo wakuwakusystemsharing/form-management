@@ -1520,6 +1520,8 @@ export default function StoreAdminPage() {
       storeName={store.name}
       userEmail={user.email}
       onLogout={handleSignOut}
+      themeColor={store.theme_color}
+      visibleTabs={visibleTabsForUser}
     >
       {renderTabContent}
 
