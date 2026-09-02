@@ -2,9 +2,25 @@ import { StaticDeploy } from './form';
 
 export type SurveyQuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select';
 
+/** 選択肢ごとの追加質問で使える回答タイプ */
+export type SurveyFollowUpType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'select';
+
+/**
+ * 選択肢ごとの追加質問。
+ * 例: 「紹介者」を選択したら「ご紹介者を入力してください」というテキスト入力欄を表示する
+ */
+export interface SurveyFollowUpQuestion {
+  enabled: boolean;
+  title: string; // 追加質問の文言（例: ご紹介者を入力してください）
+  type: SurveyFollowUpType;
+  required?: boolean; // 親の選択肢が選ばれているときのみ必須チェック
+  options?: SurveyQuestionOption[]; // radio/checkbox/select 用（ネストした follow_up は不可）
+}
+
 export interface SurveyQuestionOption {
   label: string;
   value: string;
+  follow_up?: SurveyFollowUpQuestion; // この選択肢が選ばれたときに表示する追加質問
 }
 
 export interface SurveyQuestion {
@@ -15,7 +31,7 @@ export interface SurveyQuestion {
   required: boolean;
   options?: SurveyQuestionOption[]; // For radio/checkbox
   placeholder?: string;
-  allow_other?: boolean; // radio/checkbox: 選択肢の最後に「その他」ボタン + 理由入力欄を表示
+  allow_other?: boolean; // radio/checkbox/select: 選択肢の最後に「その他」+ 理由入力欄を表示
   restore_enabled?: boolean; // 回答内容を端末の localStorage に保存し、再訪時に復元する（他ユーザーには共有されない）
 }
 

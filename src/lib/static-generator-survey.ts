@@ -1,4 +1,4 @@
-import { SurveyConfig, SurveyQuestion } from '@/types/survey';
+import { SurveyConfig, SurveyQuestion, SurveyFollowUpQuestion } from '@/types/survey';
 import { computeAccentColor } from './color-utils';
 
 /**
@@ -80,6 +80,8 @@ export class StaticSurveyGenerator {
         // 質問定義と復元機能用ストレージキー（このフォーム専用）
         const SURVEY_QUESTIONS = ${JSON.stringify(safeConfig.questions)};
         const SURVEY_STORAGE_KEY = ${JSON.stringify(`survey_${surveyFormId || safeConfig.basic_info.title || 'default'}`)};
+        // ドロップダウンの「その他」用の内部値
+        const OTHER_OPTION_VALUE = ${JSON.stringify(StaticSurveyGenerator.OTHER_OPTION_VALUE)};
 
         // 復元機能: 回答をこの端末の localStorage にのみ保存する（サーバーには送らない）
         function loadSurveySaved() {
@@ -101,14 +103,71 @@ export class StaticSurveyGenerator {
             }
         }
 
-        // radio/checkbox の現在の選択状態 + その他理由を保存
+        // radio/checkbox/select の現在の選択状態 + その他理由 + 追加質問の回答を保存
         function saveChoiceAnswer(questionId) {
-            const container = document.getElementById('container-' + questionId);
-            if (!container) return;
-            const sel = Array.from(container.querySelectorAll('.choice-button.selected'))
-                .map(btn => ({ label: btn.innerText, other: !!btn.dataset.other }));
+            const q = SURVEY_QUESTIONS.find(x => x.id === questionId);
+            if (!q) return;
+            const payload = {};
+            if (q.type === 'select') {
+                const el = document.getElementById(questionId);
+                if (!el) return;
+                payload.v = el.value;
+            } else {
+                const container = document.getElementById('container-' + questionId);
+                if (!container) return;
+                payload.sel = Array.from(container.querySelectorAll('.choice-button.selected'))
+                    .map(btn => ({ label: btn.innerText, other: !!btn.dataset.other }));
+            }
             const reasonInput = document.getElementById('other-input-' + questionId);
-            saveSurveyAnswer(questionId, { sel, otherReason: reasonInput ? reasonInput.value : '' });
+            payload.otherReason = reasonInput ? reasonInput.value : '';
+            payload.fu = collectFollowUpState(q);
+            saveSurveyAnswer(questionId, payload);
+        }
+
+        // 追加質問の入力状態を { 選択肢index: { v } | { sel: [label] } } で収集
+        function collectFollowUpState(q) {
+            const state = {};
+            (q.options || []).forEach(function (opt, i) {
+                const fu = opt.follow_up;
+                if (!fu || fu.enabled !== true) return;
+                if (fu.type === 'radio' || fu.type === 'checkbox') {
+                    state[i] = { sel: Array.from(document.querySelectorAll('#fu-container-' + q.id + '-' + i + ' .choice-button.selected')).map(b => b.innerText) };
+                } else {
+                    const el = document.getElementById('fu-' + q.id + '-' + i);
+                    state[i] = { v: el ? el.value : '' };
+                }
+            });
+            return state;
+        }
+
+        // 追加質問の入力状態を復元
+        function restoreFollowUpState(q, state) {
+            if (!state || typeof state !== 'object') return;
+            (q.options || []).forEach(function (opt, i) {
+                const fu = opt.follow_up;
+                const data = state[i];
+                if (!fu || fu.enabled !== true || !data) return;
+                if (fu.type === 'radio' || fu.type === 'checkbox') {
+                    if (!Array.isArray(data.sel)) return;
+                    document.querySelectorAll('#fu-container-' + q.id + '-' + i + ' .choice-button').forEach(function (btn) {
+                        if (data.sel.indexOf(btn.innerText) !== -1) btn.classList.add('selected');
+                    });
+                } else {
+                    const el = document.getElementById('fu-' + q.id + '-' + i);
+                    if (el && typeof data.v === 'string') el.value = data.v;
+                }
+            });
+        }
+
+        // 追加質問の入力に保存リスナーを設定
+        function bindFollowUpSave(q) {
+            (q.options || []).forEach(function (opt, i) {
+                const fu = opt.follow_up;
+                if (!fu || fu.enabled !== true) return;
+                if (fu.type === 'radio' || fu.type === 'checkbox') return; // ボタンは selectFollowUpOption 内で保存
+                const el = document.getElementById('fu-' + q.id + '-' + i);
+                if (el) el.addEventListener(fu.type === 'select' ? 'change' : 'input', function () { saveChoiceAnswer(q.id); });
+            });
         }
 
         // 復元機能ONの質問の回答を復元 + 入力保存リスナーを設定
@@ -118,7 +177,7 @@ export class StaticSurveyGenerator {
                 if (q.restore_enabled !== true) return;
                 const data = saved[q.id];
 
-                if (q.type === 'radio' || q.type === 'checkbox') {
+                if (q.type === 'radio' || q.type === 'checkbox' || q.type === 'select') {
                     // 復元: 保存済みの選択肢を selected に戻す（ラベル一致 / その他は data-other で判定）
                     if (data && Array.isArray(data.sel)) {
                         const container = document.getElementById('container-' + q.id);
@@ -130,16 +189,26 @@ export class StaticSurveyGenerator {
                                     if (match) btn.classList.add('selected');
                                 });
                             });
-                            updateOtherReasonVisibility(q.id);
                         }
+                    }
+                    // 復元: ドロップダウンの選択値
+                    if (q.type === 'select' && data && typeof data.v === 'string' && data.v !== '') {
+                        const el = document.getElementById(q.id);
+                        if (el) el.value = data.v;
+                    }
+                    if (data) {
                         const reasonInput = document.getElementById('other-input-' + q.id);
                         if (reasonInput && typeof data.otherReason === 'string') reasonInput.value = data.otherReason;
+                        restoreFollowUpState(q, data.fu);
                     }
-                    // その他理由の入力を保存
+                    updateOtherReasonVisibility(q.id);
+                    updateFollowUpVisibility(q.id);
+                    // その他理由 / 追加質問の入力を保存
                     const reasonInput = document.getElementById('other-input-' + q.id);
                     if (reasonInput) {
                         reasonInput.addEventListener('input', function () { saveChoiceAnswer(q.id); });
                     }
+                    bindFollowUpSave(q);
                 } else {
                     const el = document.getElementById(q.id);
                     if (!el) return;
@@ -148,7 +217,7 @@ export class StaticSurveyGenerator {
                         el.value = data.v;
                     }
                     // 入力の保存
-                    el.addEventListener(q.type === 'select' ? 'change' : 'input', function () {
+                    el.addEventListener('input', function () {
                         saveSurveyAnswer(q.id, { v: el.value });
                     });
                 }
@@ -218,24 +287,82 @@ export class StaticSurveyGenerator {
             }
 
             updateOtherReasonVisibility(questionId);
+            updateFollowUpVisibility(questionId);
             saveChoiceAnswer(questionId);
         }
 
-        // 「その他」ボタンの選択状態に応じて理由入力欄を表示/非表示
+        // ドロップダウンの変更時: その他理由欄 / 追加質問の表示を更新して保存
+        function onSelectChange(questionId) {
+            updateOtherReasonVisibility(questionId);
+            updateFollowUpVisibility(questionId);
+            saveChoiceAnswer(questionId);
+        }
+
+        // 追加質問内の選択ボタンの制御（親質問の保存も行う）
+        function selectFollowUpOption(element, questionId, type) {
+            const container = element.parentElement;
+            if (type === 'radio') {
+                container.querySelectorAll('.choice-button').forEach(btn => btn.classList.remove('selected'));
+                element.classList.add('selected');
+            } else {
+                element.classList.toggle('selected');
+            }
+            saveChoiceAnswer(questionId);
+        }
+
+        // 「その他」の選択状態に応じて理由入力欄を表示/非表示（ボタン / ドロップダウン両対応）
         function updateOtherReasonVisibility(questionId) {
             const block = document.getElementById('other-block-' + questionId);
             if (!block) return;
-            const otherSelected = document.querySelector('#container-' + questionId + ' .choice-button.selected[data-other]');
+            const selectEl = document.getElementById(questionId);
+            let otherSelected = false;
+            if (selectEl && selectEl.tagName === 'SELECT') {
+                otherSelected = selectEl.value === OTHER_OPTION_VALUE;
+            } else {
+                otherSelected = !!document.querySelector('#container-' + questionId + ' .choice-button.selected[data-other]');
+            }
             block.style.display = otherSelected ? 'block' : 'none';
+        }
+
+        // 現在選択されている選択肢のインデックス一覧（ボタン / ドロップダウン両対応）
+        function getSelectedOptIndexes(questionId) {
+            const selectEl = document.getElementById(questionId);
+            if (selectEl && selectEl.tagName === 'SELECT') {
+                const o = selectEl.selectedOptions[0];
+                return o && o.dataset.optIndex !== undefined ? [Number(o.dataset.optIndex)] : [];
+            }
+            return Array.from(document.querySelectorAll('#container-' + questionId + ' .choice-button.selected[data-opt-index]'))
+                .map(btn => Number(btn.dataset.optIndex));
+        }
+
+        // 選択中の選択肢に紐づく追加質問だけを表示する
+        function updateFollowUpVisibility(questionId) {
+            const selected = getSelectedOptIndexes(questionId);
+            document.querySelectorAll('.follow-up[data-question="' + questionId + '"]').forEach(function (block) {
+                block.style.display = selected.indexOf(Number(block.dataset.optIndex)) !== -1 ? 'block' : 'none';
+            });
+        }
+
+        // 追加質問の回答値を取得
+        function getFollowUpValue(questionId, optIndex, fu) {
+            if (fu.type === 'radio' || fu.type === 'checkbox') {
+                return Array.from(document.querySelectorAll('#fu-container-' + questionId + '-' + optIndex + ' .choice-button.selected'))
+                    .map(btn => btn.innerText).join(', ');
+            }
+            const el = document.getElementById('fu-' + questionId + '-' + optIndex);
+            return el ? el.value.trim() : '';
+        }
+
+        // 「その他」理由のテキスト
+        function getOtherReasonText(questionId) {
+            const reasonInput = document.getElementById('other-input-' + questionId);
+            const reason = reasonInput ? reasonInput.value.trim() : '';
+            return reason ? 'その他（' + reason + '）' : 'その他';
         }
 
         // 選択ボタンの送信値を取得（「その他」は理由を付加）
         function getChoiceValue(btn, questionId) {
-            if (btn.dataset.other) {
-                const reasonInput = document.getElementById('other-input-' + questionId);
-                const reason = reasonInput ? reasonInput.value.trim() : '';
-                return reason ? 'その他（' + reason + '）' : 'その他';
-            }
+            if (btn.dataset.other) return getOtherReasonText(questionId);
             return btn.innerText;
         }
 
@@ -257,9 +384,12 @@ export class StaticSurveyGenerator {
             for (const q of questions) {
                 let value = '';
 
-                if (q.type === 'text' || q.type === 'textarea' || q.type === 'date' || q.type === 'datetime' || q.type === 'select') {
+                if (q.type === 'text' || q.type === 'textarea' || q.type === 'date' || q.type === 'datetime') {
                     const input = document.getElementById(q.id);
                     if (input) value = input.value;
+                } else if (q.type === 'select') {
+                    const input = document.getElementById(q.id);
+                    if (input) value = input.value === OTHER_OPTION_VALUE ? getOtherReasonText(q.id) : input.value;
                 } else if (q.type === 'radio') {
                     const activeBtn = document.querySelector(\`#container-\${q.id} .choice-button.selected\`);
                     if (activeBtn) value = getChoiceValue(activeBtn, q.id);
@@ -286,6 +416,30 @@ export class StaticSurveyGenerator {
                 formData[q.title] = value;
                 // メッセージ表示用は date/datetime のみ日本語整形
                 formDataDisplay[q.title] = (q.type === 'date' || q.type === 'datetime') ? formatDateTimeForDisplay(value) : value;
+
+                // 選択中の選択肢に紐づく追加質問の回答を親質問の直後に追加
+                if (q.type === 'radio' || q.type === 'checkbox' || q.type === 'select') {
+                    const selectedIdx = getSelectedOptIndexes(q.id);
+                    for (const i of selectedIdx) {
+                        const opt = (q.options || [])[i];
+                        const fu = opt && opt.follow_up;
+                        if (!fu || fu.enabled !== true) continue;
+                        const fuValue = getFollowUpValue(q.id, i, fu);
+                        const fuTitle = (fu.title || '').trim() || (q.title + '（' + opt.label + '）');
+                        if (fu.required && !fuValue) {
+                            // 文言が「〜ください」で終わる場合は二重表現を避ける
+                            const t = fuTitle.replace(/。$/, '');
+                            alert(/ください$/.test(t) ? t + '。' : t + 'を入力してください。');
+                            hasError = true;
+                            return;
+                        }
+                        if (!fuValue) continue;
+                        let key = fuTitle;
+                        if (Object.prototype.hasOwnProperty.call(formData, key)) key = key + '（' + opt.label + '）';
+                        formData[key] = fuValue;
+                        formDataDisplay[key] = fuValue;
+                    }
+                }
             }
 
             if (hasError) return;
@@ -403,27 +557,24 @@ export class StaticSurveyGenerator {
         fieldHtml = `<div class="date-inputs date-input-wrap"><input type="datetime-local" id="${q.id}" class="input"><span class="date-input-hint">タップしてご選択ください</span></div>`;
         break;
       case 'select': {
-        const opts = (q.options || []).map(opt =>
-          `<option value="${this.escapeHtml(opt.value || opt.label)}">${this.escapeHtml(opt.label)}</option>`
+        let opts = (q.options || []).map((opt, i) =>
+          `<option value="${this.escapeHtml(opt.value || opt.label)}" data-opt-index="${i}">${this.escapeHtml(opt.label)}</option>`
         ).join('\n');
-        fieldHtml = `<select id="${q.id}" class="input"><option value="">選択してください</option>${opts}</select>`;
+        if (q.allow_other) {
+          opts += `\n<option value="${StaticSurveyGenerator.OTHER_OPTION_VALUE}">その他</option>`;
+        }
+        fieldHtml = `<select id="${q.id}" class="input" onchange="onSelectChange('${q.id}')"><option value="">選択してください</option>${opts}</select>${this.renderFollowUps(q)}${this.renderOtherReason(q)}`;
         break;
       }
       case 'radio':
       case 'checkbox': {
-        let buttons = q.options?.map(opt =>
-          `<button type="button" class="choice-button" onclick="selectOption(this, '${q.id}', '${q.type}')">${this.escapeHtml(opt.label)}</button>`
+        let buttons = q.options?.map((opt, i) =>
+          `<button type="button" class="choice-button" data-opt-index="${i}" onclick="selectOption(this, '${q.id}', '${q.type}')">${this.escapeHtml(opt.label)}</button>`
         ).join('\n') || '';
-        let otherReasonHtml = '';
         if (q.allow_other) {
           buttons += `\n<button type="button" class="choice-button" data-other="1" onclick="selectOption(this, '${q.id}', '${q.type}')">その他</button>`;
-          otherReasonHtml = `
-            <div class="other-reason" id="other-block-${q.id}" style="display:none;">
-                <label class="field-label" for="other-input-${q.id}">その他を選択されている方はご理由をお書きください。</label>
-                <textarea id="other-input-${q.id}" class="input" rows="2" placeholder="入力してください"></textarea>
-            </div>`;
         }
-        fieldHtml = `<div class="button-group" id="container-${q.id}">${buttons}</div>${otherReasonHtml}`;
+        fieldHtml = `<div class="button-group" id="container-${q.id}">${buttons}</div>${this.renderFollowUps(q)}${this.renderOtherReason(q)}`;
         break;
       }
     }
@@ -440,6 +591,56 @@ export class StaticSurveyGenerator {
             ${fieldHtml}
         </div>
     `;
+  }
+
+  /** ドロップダウンの「その他」を表す内部値（送信時は「その他（理由）」に変換） */
+  static readonly OTHER_OPTION_VALUE = '__other__';
+
+  /** 「その他」選択時に表示する理由入力欄 */
+  private renderOtherReason(q: SurveyQuestion): string {
+    if (!q.allow_other) return '';
+    return `
+            <div class="other-reason" id="other-block-${q.id}" style="display:none;">
+                <label class="field-label" for="other-input-${q.id}">その他を選択されている方はご理由をお書きください。</label>
+                <textarea id="other-input-${q.id}" class="input" rows="2" placeholder="入力してください"></textarea>
+            </div>`;
+  }
+
+  /** 選択肢ごとの追加質問ブロック（初期状態は非表示。対応する選択肢が選ばれたときに JS で表示） */
+  private renderFollowUps(q: SurveyQuestion): string {
+    return (q.options || []).map((opt, i) => {
+      const fu = opt.follow_up;
+      if (!fu || fu.enabled !== true) return '';
+      return `
+            <div class="follow-up" id="followup-${q.id}-${i}" data-question="${q.id}" data-opt-index="${i}" style="display:none;">
+                <label class="field-label follow-up-label">${this.escapeHtml(fu.title || `${opt.label}について`)}${fu.required ? ' <span class="required">必須</span>' : ''}</label>
+                ${this.renderFollowUpField(q, i, fu)}
+            </div>`;
+    }).join('');
+  }
+
+  private renderFollowUpField(q: SurveyQuestion, optIndex: number, fu: SurveyFollowUpQuestion): string {
+    const fieldId = `fu-${q.id}-${optIndex}`;
+    switch (fu.type) {
+      case 'select': {
+        const opts = (fu.options || []).map(o =>
+          `<option value="${this.escapeHtml(o.value || o.label)}">${this.escapeHtml(o.label)}</option>`
+        ).join('\n');
+        return `<select id="${fieldId}" class="input"><option value="">選択してください</option>${opts}</select>`;
+      }
+      case 'radio':
+      case 'checkbox': {
+        const buttons = (fu.options || []).map(o =>
+          `<button type="button" class="choice-button" onclick="selectFollowUpOption(this, '${q.id}', '${fu.type}')">${this.escapeHtml(o.label)}</button>`
+        ).join('\n');
+        return `<div class="button-group" id="fu-container-${q.id}-${optIndex}">${buttons}</div>`;
+      }
+      case 'textarea':
+        return `<textarea id="${fieldId}" class="input" rows="3" placeholder="入力してください"></textarea>`;
+      case 'text':
+      default:
+        return `<textarea id="${fieldId}" class="input" rows="1" placeholder="入力してください"></textarea>`;
+    }
   }
 
   // 参考デザイン（ダークネイビー×シャンパンゴールド）を既存クラスに適用する上書きCSS。
@@ -749,6 +950,19 @@ export class StaticSurveyGenerator {
         
         .other-reason {
             margin-top: 0.75rem;
+        }
+
+        /* 選択肢ごとの追加質問 */
+        .follow-up {
+            margin-top: 0.75rem;
+            padding: 0.75rem;
+            border-left: 3px solid ${themeColor};
+            background: #f9fafb;
+            border-radius: 0.375rem;
+        }
+        .follow-up .follow-up-label {
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
         }
 
         .choice-button.selected {

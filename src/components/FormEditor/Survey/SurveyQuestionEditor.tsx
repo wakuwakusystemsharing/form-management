@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { SurveyQuestion, SurveyQuestionType } from '@/types/survey';
+import { SurveyQuestion, SurveyQuestionType, SurveyQuestionOption, SurveyFollowUpQuestion, SurveyFollowUpType } from '@/types/survey';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowUp, ArrowDown, X, Plus } from 'lucide-react';
+import { ArrowUp, ArrowDown, X, Plus, GripVertical, MessageSquarePlus } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +29,9 @@ interface SurveyQuestionEditorProps {
 
 export default function SurveyQuestionEditor({ questions, onChange }: SurveyQuestionEditorProps) {
   const [deleteIndex, setDeleteIndex] = React.useState<number | null>(null);
+  // 選択肢のドラッグ&ドロップ並び替え（質問ID + 選択肢インデックス）
+  const [dragOpt, setDragOpt] = React.useState<{ qId: string; index: number } | null>(null);
+  const [dragOverOpt, setDragOverOpt] = React.useState<{ qId: string; index: number } | null>(null);
 
   const addQuestion = () => {
     const newQuestion: SurveyQuestion = {
@@ -52,6 +55,38 @@ export default function SurveyQuestionEditor({ questions, onChange }: SurveyQues
     newQuestions.splice(index, 1);
     onChange(newQuestions);
     setDeleteIndex(null);
+  };
+
+  const updateOptions = (index: number, options: SurveyQuestionOption[]) => {
+    updateQuestion(index, { options });
+  };
+
+  const handleOptionDrop = (qIndex: number, qId: string, dropIndex: number) => {
+    if (dragOpt && dragOpt.qId === qId && dragOpt.index !== dropIndex) {
+      const options = [...(questions[qIndex].options || [])];
+      const [moved] = options.splice(dragOpt.index, 1);
+      options.splice(dropIndex, 0, moved);
+      updateOptions(qIndex, options);
+    }
+    setDragOpt(null);
+    setDragOverOpt(null);
+  };
+
+  const updateFollowUp = (qIndex: number, optIndex: number, updates: Partial<SurveyFollowUpQuestion>) => {
+    const options = [...(questions[qIndex].options || [])];
+    const current: SurveyFollowUpQuestion = options[optIndex].follow_up || { enabled: false, title: '', type: 'text' };
+    options[optIndex] = { ...options[optIndex], follow_up: { ...current, ...updates } };
+    updateOptions(qIndex, options);
+  };
+
+  const toggleFollowUp = (qIndex: number, optIndex: number) => {
+    const opt = (questions[qIndex].options || [])[optIndex];
+    const enabled = !(opt.follow_up?.enabled);
+    updateFollowUp(qIndex, optIndex, {
+      enabled,
+      title: opt.follow_up?.title || '',
+      type: opt.follow_up?.type || 'text',
+    });
   };
 
   const moveQuestion = (index: number, direction: 'up' | 'down') => {
@@ -192,58 +227,183 @@ export default function SurveyQuestionEditor({ questions, onChange }: SurveyQues
                       <CardTitle className="text-sm">選択肢</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      {q.options?.map((opt, optIndex) => (
-                        <div key={optIndex} className="flex items-center gap-2">
-                          <Input
-                            type="text"
-                            value={opt.label}
-                            onChange={(e) => {
-                              const newOptions = [...(q.options || [])];
-                              newOptions[optIndex] = { ...newOptions[optIndex], label: e.target.value, value: e.target.value };
-                              updateQuestion(index, { options: newOptions });
-                            }}
-                            placeholder={`選択肢 ${optIndex + 1}`}
-                            className="flex-1"
-                          />
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              const newOptions = [...(q.options || [])];
-                              newOptions.splice(optIndex, 1);
-                              updateQuestion(index, { options: newOptions });
-                            }}
-                            className="text-destructive hover:text-destructive"
+                      <p className="text-xs text-muted-foreground">
+                        左端のハンドルをドラッグして選択肢を並び替えできます（並び順はアンケートフォームにも反映されます）。
+                      </p>
+                      {q.options?.map((opt, optIndex) => {
+                        const isDragOver = dragOverOpt?.qId === q.id && dragOverOpt.index === optIndex && dragOpt?.qId === q.id && dragOpt.index !== optIndex;
+                        const isDragging = dragOpt?.qId === q.id && dragOpt.index === optIndex;
+                        const fu = opt.follow_up;
+                        const fuEnabled = fu?.enabled === true;
+                        return (
+                          <div
+                            key={optIndex}
+                            className={`rounded-md transition-shadow ${isDragOver ? 'ring-2 ring-primary' : ''} ${isDragging ? 'opacity-60' : ''}`}
+                            onDragOver={(e) => { if (dragOpt?.qId === q.id) { e.preventDefault(); setDragOverOpt({ qId: q.id, index: optIndex }); } }}
+                            onDrop={(e) => { if (dragOpt?.qId === q.id) { e.preventDefault(); handleOptionDrop(index, q.id, optIndex); } }}
                           >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-1 rounded touch-none"
+                                draggable
+                                onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setDragOpt({ qId: q.id, index: optIndex }); }}
+                                onDragEnd={() => { setDragOpt(null); setDragOverOpt(null); }}
+                                title="ドラッグで並び替え"
+                                aria-label="ドラッグで並び替え"
+                              >
+                                <GripVertical className="h-4 w-4" />
+                              </button>
+                              <Input
+                                type="text"
+                                value={opt.label}
+                                onChange={(e) => {
+                                  const newOptions = [...(q.options || [])];
+                                  newOptions[optIndex] = { ...newOptions[optIndex], label: e.target.value, value: e.target.value };
+                                  updateOptions(index, newOptions);
+                                }}
+                                placeholder={`選択肢 ${optIndex + 1}`}
+                                className="flex-1"
+                              />
+                              <Button
+                                type="button"
+                                variant={fuEnabled ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => toggleFollowUp(index, optIndex)}
+                                title={fuEnabled ? '追加質問を無効にする' : 'この選択肢が選ばれたときに表示する追加質問を設定'}
+                                className="shrink-0"
+                              >
+                                <MessageSquarePlus className="mr-1 h-4 w-4" />
+                                追加質問
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  const newOptions = [...(q.options || [])];
+                                  newOptions.splice(optIndex, 1);
+                                  updateOptions(index, newOptions);
+                                }}
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            {/* 追加質問の設定パネル */}
+                            {fuEnabled && fu && (
+                              <div className="ml-8 mt-2 mb-3 p-3 rounded-md border bg-background space-y-3">
+                                <div className="text-xs font-medium text-muted-foreground">
+                                  「{opt.label || `選択肢 ${optIndex + 1}`}」が選択されたときに表示する追加質問
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">追加質問の文言</Label>
+                                    <Input
+                                      type="text"
+                                      value={fu.title}
+                                      onChange={(e) => updateFollowUp(index, optIndex, { title: e.target.value })}
+                                      placeholder="例: ご紹介者を入力してください"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">回答タイプ</Label>
+                                    <Select
+                                      value={fu.type}
+                                      onValueChange={(value) => updateFollowUp(index, optIndex, { type: value as SurveyFollowUpType })}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="text">テキスト入力 (1行)</SelectItem>
+                                        <SelectItem value="textarea">テキスト入力 (複数行)</SelectItem>
+                                        <SelectItem value="select">ドロップダウン選択</SelectItem>
+                                        <SelectItem value="radio">単一選択 (ボタン)</SelectItem>
+                                        <SelectItem value="checkbox">複数選択 (ボタン)</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`fu-required-${q.id}-${optIndex}`}
+                                    checked={fu.required === true}
+                                    onCheckedChange={(checked) => updateFollowUp(index, optIndex, { required: checked as boolean })}
+                                  />
+                                  <Label htmlFor={`fu-required-${q.id}-${optIndex}`} className="cursor-pointer text-sm">
+                                    必須にする（この選択肢が選ばれているときのみ）
+                                  </Label>
+                                </div>
+                                {(fu.type === 'radio' || fu.type === 'checkbox' || fu.type === 'select') && (
+                                  <div className="space-y-2">
+                                    <Label className="text-xs">追加質問の選択肢</Label>
+                                    {(fu.options || []).map((fuOpt, fuIndex) => (
+                                      <div key={fuIndex} className="flex items-center gap-2">
+                                        <Input
+                                          type="text"
+                                          value={fuOpt.label}
+                                          onChange={(e) => {
+                                            const fuOptions = [...(fu.options || [])];
+                                            fuOptions[fuIndex] = { label: e.target.value, value: e.target.value };
+                                            updateFollowUp(index, optIndex, { options: fuOptions });
+                                          }}
+                                          placeholder={`選択肢 ${fuIndex + 1}`}
+                                          className="flex-1"
+                                        />
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => {
+                                            const fuOptions = [...(fu.options || [])];
+                                            fuOptions.splice(fuIndex, 1);
+                                            updateFollowUp(index, optIndex, { options: fuOptions });
+                                          }}
+                                          className="text-destructive hover:text-destructive"
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    ))}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => updateFollowUp(index, optIndex, { options: [...(fu.options || []), { label: '', value: '' }] })}
+                                      className="w-full"
+                                    >
+                                      <Plus className="mr-2 h-4 w-4" />
+                                      選択肢を追加
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => {
                           const newOptions = [...(q.options || [])];
                           newOptions.push({ label: '', value: '' });
-                          updateQuestion(index, { options: newOptions });
+                          updateOptions(index, newOptions);
                         }}
                         className="w-full"
                       >
                         <Plus className="mr-2 h-4 w-4" />
                         選択肢を追加
                       </Button>
-                      {(q.type === 'radio' || q.type === 'checkbox') && (
-                        <div className="flex items-center space-x-2 pt-2">
-                          <Checkbox
-                            id={`allow-other-${index}`}
-                            checked={q.allow_other || false}
-                            onCheckedChange={(checked) => updateQuestion(index, { allow_other: checked as boolean })}
-                          />
-                          <Label htmlFor={`allow-other-${index}`} className="cursor-pointer">
-                            「その他」ボタンを追加（選択時に理由入力欄を表示）
-                          </Label>
-                        </div>
-                      )}
+                      <div className="flex items-center space-x-2 pt-2">
+                        <Checkbox
+                          id={`allow-other-${index}`}
+                          checked={q.allow_other || false}
+                          onCheckedChange={(checked) => updateQuestion(index, { allow_other: checked as boolean })}
+                        />
+                        <Label htmlFor={`allow-other-${index}`} className="cursor-pointer">
+                          {q.type === 'select' ? '「その他」の選択肢を追加（選択時に理由入力欄を表示）' : '「その他」ボタンを追加（選択時に理由入力欄を表示）'}
+                        </Label>
+                      </div>
                     </CardContent>
                   </Card>
                 )}
