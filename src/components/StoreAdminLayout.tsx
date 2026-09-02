@@ -198,7 +198,7 @@ export default function StoreAdminLayout({
       </aside>
 
       {/* メインコンテンツ */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 min-w-0 w-full flex flex-col overflow-hidden">
         {/* モバイルヘッダー */}
         <header className="lg:hidden border-b bg-white shadow-sm" data-slot="mobile-header">
           <div className="flex items-center justify-between p-4">
@@ -232,7 +232,7 @@ export default function StoreAdminLayout({
         </header>
 
         {/* コンテンツエリア */}
-        <main className="flex-1 overflow-y-auto overscroll-y-contain">
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden overscroll-y-contain">
           {children}
         </main>
 

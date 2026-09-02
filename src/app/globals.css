@@ -202,6 +202,12 @@ html[data-ui="m3e"] [data-slot="button"]:active:not(:disabled) {
 html[data-ui="m3e"] [data-slot="button"][data-size="default"] { min-height: 2.75rem; padding-left: 1.5rem; padding-right: 1.5rem; }
 html[data-ui="m3e"] [data-slot="button"][data-size="sm"] { min-height: 2.5rem; padding-left: 1.125rem; padding-right: 1.125rem; }
 html[data-ui="m3e"] [data-slot="button"][data-size="lg"] { min-height: 3.5rem; padding-left: 2rem; padding-right: 2rem; }
+@media (max-width: 639px) {
+  /* スマホ幅ではボタンの左右余白を抑え、横並びのボタン群が画面幅を超えないようにする */
+  html[data-ui="m3e"] [data-slot="button"][data-size="default"] { padding-left: 1rem; padding-right: 1rem; }
+  html[data-ui="m3e"] [data-slot="button"][data-size="sm"] { padding-left: 0.75rem; padding-right: 0.75rem; }
+  html[data-ui="m3e"] [data-slot="button"][data-size="lg"] { padding-left: 1.25rem; padding-right: 1.25rem; }
+}
 html[data-ui="m3e"] [data-slot="button"][data-size="icon"] { border-radius: var(--md-shape-full); }
 html[data-ui="m3e"] [data-slot="button"][data-variant="secondary"] {
   background-color: hsl(var(--md-secondary-container));
@@ -288,9 +294,17 @@ html[data-ui="m3e"] [data-slot="dialog-content"] {
     max-width: none;
     height: 100dvh;
     max-height: 100dvh;
+    /* Tailwind v4 の translate-x-[-50%] は translate プロパティ（--tw-translate-x/y）。
+       lightningcss が translate: none を transform に統合して落とすため、変数側を 0 にして打ち消す */
+    --tw-translate-x: 0px;
+    --tw-translate-y: 0px;
     transform: none;
     border-radius: 0;
     overflow-y: auto;
+    overflow-x: hidden;
+    /* 全画面化で grid の行が引き伸ばされないよう上詰めにする */
+    align-content: start;
+    grid-auto-rows: max-content;
     padding-top: calc(1.5rem + env(safe-area-inset-top));
     padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
   }

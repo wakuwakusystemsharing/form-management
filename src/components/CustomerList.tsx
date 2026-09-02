@@ -37,18 +37,27 @@ export default function CustomerList({ storeId, onCustomerClick }: CustomerListP
       if (segmentFilter !== 'all') params.append('segment', segmentFilter);
       params.append('limit', '50');
 
-      const response = await fetch(`/api/stores/${storeId}/customers?${params.toString()}`);
+      const response = await fetch(`/api/stores/${storeId}/customers?${params.toString()}`, { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         setCustomers(data.customers || []);
         setTotal(data.total || 0);
+      } else {
+        const data = await response.json().catch(() => ({}));
+        console.error('Failed to fetch customers:', response.status, data);
+        toast({
+          title: '顧客一覧の取得に失敗しました',
+          description: data.error || `エラーコード: ${response.status}`,
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('Failed to fetch customers:', error);
+      toast({ title: '顧客一覧の取得に失敗しました', description: 'ネットワークエラー', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  }, [storeId, searchQuery, segmentFilter]);
+  }, [storeId, searchQuery, segmentFilter, toast]);
 
   useEffect(() => {
     fetchCustomers();
