@@ -471,6 +471,7 @@ export async function GET(req, { params }) {
 **基本情報 (`config.basic_info`):**
 - `form_name` / `store_name` / `liff_id` / `theme_color` / `logo_url` / `notice`
 - `second_message: { enabled, text }` - LIFF 2 通目固定テキスト送信（公式 LINE 完全一致応答用）
+- `line_only`（デフォルト true）- LINE フォームを LINE アプリ以外のブラウザで開いたとき、`liff.isInClient()` で判定して案内画面を表示し予約を受け付けない。`web` フォーム・プレビュー（`generateHTML(..., 'preview')`）・店舗側手動予約（`'manual'`）では無効。SDK 未読込など判定不能時は制限しない
 
 **メニュー (`MenuItem` / `SubMenuItem` / `MenuOption`):**
 - `hide_price` / `hide_duration` - 料金・所要時間を非表示にするフラグ（任意）

@@ -112,6 +112,9 @@ export interface FormConfig {
       enabled: boolean;
       text: string;
     };
+    // LINE フォーム（form_type: 'line'）を公式 LINE（LINE アプリ内）以外のブラウザで開いたとき、
+    // 案内画面を表示して予約を受け付けない（デフォルト true。web フォーム・プレビュー・店舗側手動予約では無効）
+    line_only?: boolean;
   };
   
   visit_options: VisitOption[];
