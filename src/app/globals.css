@@ -247,8 +247,7 @@ html[data-ui="m3e"] [data-slot="select-trigger"] {
   border-radius: var(--md-shape-sm);
   border: 1px solid hsl(var(--md-outline));
   background-color: transparent;
-  padding-left: 1rem;
-  padding-right: 1rem;
+  /* 左右の余白は Tailwind の指定（pl-10 などアイコン分の余白）を尊重するため上書きしない */
   transition: border-color var(--md-motion-fast) ease, box-shadow var(--md-motion-fast) ease;
 }
 html[data-ui="m3e"] [data-slot="textarea"] {
