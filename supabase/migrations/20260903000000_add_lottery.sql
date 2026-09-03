@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS lottery_entries (
   line_user_id TEXT NOT NULL,
   line_display_name TEXT,
   line_friend_flag BOOLEAN,
-  customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
+  customer_id TEXT REFERENCES customers(id) ON DELETE SET NULL,  -- customers.id は TEXT
   prize_id TEXT,                                -- NULL = はずれ / 未抽選
   prize_name TEXT,                              -- 当時の賞品名のスナップショット
   is_win BOOLEAN NOT NULL DEFAULT false,
@@ -148,7 +148,7 @@ BEGIN
     p_line_user_id,
     p_entry->>'line_display_name',
     (p_entry->>'line_friend_flag')::BOOLEAN,
-    (p_entry->>'customer_id')::UUID,
+    p_entry->>'customer_id',
     p_prize_id,
     p_entry->>'prize_name',
     COALESCE((p_entry->>'is_win')::BOOLEAN, false),
