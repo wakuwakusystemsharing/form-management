@@ -566,11 +566,22 @@ export class StaticLotteryGenerator {
                 return;
             }
             if (!state.idToken) {
-                // ID トークンが取れない（古いセッション）→ 再ログイン
-                try { liff.logout(); } catch (e) {}
-                liff.login({ redirectUri: window.location.href });
+                // ID トークンが取れない（古いセッション）→ 再ログインは 1 回だけ。
+                // それでも取れないのは LIFF の Scope に openid が無いケースなので、無限リロードせず案内を出す
+                var tokenRetryKey = STORAGE_KEY + '_tokenRetry';
+                var tokenRetried = false;
+                try { tokenRetried = sessionStorage.getItem(tokenRetryKey) === '1'; } catch (e) {}
+                if (!tokenRetried) {
+                    try { sessionStorage.setItem(tokenRetryKey, '1'); } catch (e) {}
+                    try { liff.logout(); } catch (e) {}
+                    liff.login({ redirectUri: window.location.href });
+                    return;
+                }
+                try { sessionStorage.removeItem(tokenRetryKey); } catch (e) {}
+                showGate('設定の確認が必要です', 'LINE の本人確認情報（ID トークン）を取得できません。<br>店舗にお問い合わせください。<br><small>（管理者向け: LINE Developers の LIFF 設定で Scope に「openid」を追加してください）</small>');
                 return;
             }
+            try { sessionStorage.removeItem(STORAGE_KEY + '_tokenRetry'); } catch (e) {}
             await trySendPendingMessage();
             await loadExistingResult();
         }
@@ -627,9 +638,21 @@ export class StaticLotteryGenerator {
                     return;
                 }
                 if (res.status === 401 && !IS_PREVIEW) {
-                    // ID トークン失効 → 再ログインして開き直す
-                    try { liff.logout(); } catch (e) {}
-                    liff.login({ redirectUri: window.location.href });
+                    // ID トークン失効なら再ログインで直るが、チャネル ID の不一致などは何度やっても直らないので
+                    // 再ログインは 1 回だけ試し、2 回目はサーバーが返したエラー内容を表示する
+                    var retryKey = STORAGE_KEY + '_authRetry';
+                    var retried = false;
+                    try { retried = sessionStorage.getItem(retryKey) === '1'; } catch (e) {}
+                    if (!retried) {
+                        try { sessionStorage.setItem(retryKey, '1'); } catch (e) {}
+                        try { liff.logout(); } catch (e) {}
+                        liff.login({ redirectUri: window.location.href });
+                        return;
+                    }
+                    try { sessionStorage.removeItem(retryKey); } catch (e) {}
+                    var detail = json && json.details ? '\\n\\n詳細: ' + json.details : '';
+                    alert(((json && json.error) || 'LINE の認証に失敗しました') + detail + '\\n\\n店舗の「LINE ログインチャネル ID」が、この LIFF を作成した LINE ログインチャネルのものか確認してください。');
+                    setBusy(false);
                     return;
                 }
                 if (!res.ok || !json || !json.entry) {

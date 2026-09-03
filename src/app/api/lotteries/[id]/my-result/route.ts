@@ -15,7 +15,7 @@ async function resolve(request: Request, formId: string, body: Record<string, un
   const store = await getStoreForLottery(form.store_id);
   if (!store) return { error: NextResponse.json({ error: '店舗が見つかりません' }, { status: 404 }) };
   const resolved = await resolveLineUser(body, store);
-  if (!resolved.ok) return { error: NextResponse.json({ error: resolved.error }, { status: resolved.status }) };
+  if (!resolved.ok) return { error: NextResponse.json({ error: resolved.error, details: resolved.detail ?? null }, { status: resolved.status }) };
   const entry = await findLatestUserEntry(form.id, resolved.user.userId);
   return { form, store, entry };
 }
