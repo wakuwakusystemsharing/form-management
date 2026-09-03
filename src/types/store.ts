@@ -28,6 +28,7 @@ export interface Store {
   /** 'system' = SA作成カレンダー, 'store_oauth' = 店舗連携のGoogleカレンダー */
   google_calendar_source?: 'system' | 'store_oauth';
   line_channel_access_token?: string; // LINEチャネルアクセストークン
+  line_channel_id?: string | null;    // LINE ログインチャネル ID（抽選フォームの ID トークン検証用。空 = 環境変数を使用）
   reminder_enabled?: boolean;         // LINEリマインダー送信の有効/無効
   reminder_time?: string;             // リマインダー送信時刻（HH:00形式、デフォルト19:00）
   reminder_days_before?: number;      // リマインダーを予約の何日前に送るか（デフォルト1 = 前日）

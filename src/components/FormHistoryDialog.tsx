@@ -30,7 +30,7 @@ interface FormHistoryDialogProps {
   onOpenChange: (open: boolean) => void;
   storeId: string;
   formId: string | null;
-  formType: 'reservation' | 'survey';
+  formType: 'reservation' | 'survey' | 'lottery';
   formName?: string;
 }
 

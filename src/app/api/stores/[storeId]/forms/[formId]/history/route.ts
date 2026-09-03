@@ -7,7 +7,7 @@ import { listFormAuditLogs, FormAuditFormType } from '@/lib/form-audit';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// GET /api/stores/[storeId]/forms/[formId]/history?type=reservation|survey
+// GET /api/stores/[storeId]/forms/[formId]/history?type=reservation|survey|lottery
 // フォームの操作履歴（監査ログ）。テナントのシステム管理者 / マスター管理者のみ閲覧可。
 // 店舗管理者は 403（店舗側には履歴を見せない）。
 export async function GET(
@@ -18,7 +18,7 @@ export async function GET(
     const { storeId, formId } = await params;
     const url = new URL(request.url);
     const typeParam = url.searchParams.get('type');
-    const formType: FormAuditFormType = typeParam === 'survey' ? 'survey' : 'reservation';
+    const formType: FormAuditFormType = typeParam === 'survey' ? 'survey' : typeParam === 'lottery' ? 'lottery' : 'reservation';
 
     const env = getAppEnvironment();
     if (env !== 'local') {
