@@ -217,6 +217,9 @@ export default function SurveyFormEditor({ form, onUpdate, userRole = 'service_a
                 questions
               }
             })}
+            storeId={form.store_id}
+            contentBlocks={form.config.content_blocks || []}
+            onContentBlocksChange={(content_blocks) => onUpdate({ ...form, config: { ...form.config, content_blocks } })}
           />
         </TabsContent>
       </Tabs>
