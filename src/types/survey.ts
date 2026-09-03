@@ -35,6 +35,20 @@ export interface SurveyQuestion {
   restore_enabled?: boolean; // 回答内容を端末の localStorage に保存し、再訪時に復元する（他ユーザーには共有されない）
 }
 
+/**
+ * 質問と質問の間に表示するテキスト / 画像ブロック（編集画面の「テキスト/画像表示を追加」）
+ * - anchor: 基準となる質問 ID。position が 'above' ならその質問の上、'below' なら下に表示
+ * - text は [color=#rrggbb]〜[/color] で部分的に文字色を変えられる（静的 HTML 側で span に変換）
+ */
+export interface SurveyContentBlock {
+  id: string;
+  type: 'text' | 'image';
+  text?: string;
+  image_url?: string;
+  anchor: string;
+  position: 'above' | 'below';
+}
+
 export interface SurveyConfig {
   basic_info: {
     title: string;
@@ -50,6 +64,7 @@ export interface SurveyConfig {
     };
   };
   questions: SurveyQuestion[];
+  content_blocks?: SurveyContentBlock[]; // 質問間のテキスト / 画像ブロック
   ui_settings: {
     submit_button_text: string;
     theme_color: string;

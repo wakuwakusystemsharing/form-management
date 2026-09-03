@@ -1,5 +1,6 @@
 import { SurveyConfig, SurveyQuestion, SurveyFollowUpQuestion } from '@/types/survey';
 import { computeAccentColor } from './color-utils';
+import { renderColoredTextHtml } from './colored-text';
 
 /**
  * アンケートフォーム用静的HTMLジェネレータ
@@ -15,7 +16,12 @@ export class StaticSurveyGenerator {
     const css = this.generateCSS(safeConfig);
     
     // 質問フィールドの生成
-    const questionsHtml = safeConfig.questions.map((q, index) => this.renderQuestion(q, index)).join('\n');
+    // 質問の上下に「テキスト/画像表示」ブロックを差し込む
+    const questionsHtml = safeConfig.questions.map((q, index) =>
+      this.renderContentBlocksAt(safeConfig, q.id, 'above')
+      + this.renderQuestion(q, index)
+      + this.renderContentBlocksAt(safeConfig, q.id, 'below')
+    ).join('\n');
 
     // 注意事項（入力時のみ Q1 の上に表示）
     const noticeText = typeof safeConfig.basic_info.notice === 'string' ? safeConfig.basic_info.notice.trim() : '';
@@ -540,6 +546,23 @@ export class StaticSurveyGenerator {
 </html>`;
   }
 
+  // 質問の上下に置くテキスト / 画像ブロック
+  private renderContentBlocksAt(config: SurveyConfig, anchor: string, position: 'above' | 'below'): string {
+    const blocks = (config.content_blocks || []).filter((b) => {
+      if (!b || b.anchor !== anchor || (b.position || 'above') !== position) return false;
+      if (b.type === 'text') return !!(b.text && b.text.trim());
+      if (b.type === 'image') return !!(b.image_url && /^https?:/i.test(b.image_url.trim()));
+      return false;
+    });
+    if (blocks.length === 0) return '';
+    return blocks.map((b) => {
+      if (b.type === 'image') {
+        return `<div class="content-block content-block-image"><img src="${this.escapeHtml((b.image_url || '').trim())}" alt="" loading="lazy"></div>`;
+      }
+      return `<div class="content-block content-block-text">${renderColoredTextHtml(b.text || '')}</div>`;
+    }).join('');
+  }
+
   private renderQuestion(q: SurveyQuestion, index: number): string {
     let fieldHtml = '';
     const requiredMark = q.required ? '<span class="required">必須</span>' : '';
@@ -581,7 +604,8 @@ export class StaticSurveyGenerator {
 
     let descriptionHtml = '';
     if (q.description) {
-        descriptionHtml = `<div class="field-description">${q.description.replace(/\n/g, '<br>')}</div>`;
+        // HTML エスケープ + [color=#xxxxxx] の文字色を反映
+        descriptionHtml = `<div class="field-description">${renderColoredTextHtml(q.description)}</div>`;
     }
 
     return `
@@ -681,6 +705,21 @@ export class StaticSurveyGenerator {
             box-shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
             padding: 25px;
         }
+        /* 質問間のテキスト / 画像ブロック */
+        .content-block { margin-bottom: 20px; }
+        .content-block-text {
+            font-size: 14px;
+            color: #333;
+            line-height: 1.7;
+            white-space: normal;
+            background-color: var(--bg-color);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-left: 3px solid var(--accent-color);
+            border-radius: 4px;
+            padding: 14px 16px;
+        }
+        .content-block-image img { display: block; max-width: 100%; margin: 0 auto; border-radius: 4px; }
+        .field-description { white-space: normal; }
         .field-label {
             display: flex;
             align-items: center;
