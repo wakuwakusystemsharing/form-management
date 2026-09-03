@@ -93,6 +93,25 @@ export default function LotteryFormEditor({ form, onUpdate, userRole = 'service_
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="lottery_status">公開ステータス</Label>
+              <Select value={form.status} onValueChange={(v) => onUpdate({ ...form, status: v as LotteryForm['status'] })}>
+                <SelectTrigger id="lottery_status"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">公開中</SelectItem>
+                  <SelectItem value="inactive">非公開</SelectItem>
+                  <SelectItem value="paused">一時停止</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {form.status === 'active'
+                  ? 'お客様が抽選に参加できます'
+                  : form.status === 'paused'
+                    ? '一時停止中です（フォームは開けますが抽選できません）'
+                    : '非公開です。「更新」（デプロイ）を押すと自動で公開中になります'}
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="lottery_title">タイトル <span className="text-destructive">*</span></Label>
               <Input id="lottery_title" value={config.basic_info.title} onChange={(e) => setBasic({ title: e.target.value })} placeholder="例：夏の来店感謝くじ" />
             </div>

@@ -48,9 +48,12 @@ export async function POST(
     } as StaticDeploy;
 
     const currentUserId = await getCurrentUserId(request);
+    // デプロイ（= 公開）したら公開中にする。一時停止中は運用上の意図なので変えない
+    const nextStatus = form.status === 'paused' ? 'paused' : 'active';
     const updated = await updateLotteryForm(id, {
       static_deploy: deployInfo,
       last_published_at: deployInfo.deployed_at,
+      status: nextStatus,
       draft_status: 'none',
       draft_config: null,
       updated_by: currentUserId,
@@ -66,7 +69,7 @@ export async function POST(
       after: { config: updated?.config ?? form.config, status: updated?.status ?? form.status } as unknown as Record<string, unknown>,
     });
 
-    return NextResponse.json(deployInfo);
+    return NextResponse.json({ ...deployInfo, form_status: updated?.status ?? nextStatus });
   } catch (error) {
     console.error('[API] Lottery deploy error:', error);
     return NextResponse.json({ error: '抽選フォームのデプロイに失敗しました' }, { status: 500 });
