@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { getSupabaseClient } from '@/lib/supabase';
@@ -28,6 +28,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
+import { ToastAction } from '@/components/ui/toast';
+import { AUTH_REQUIRED_EVENT, syncAuthCookie } from '@/lib/client-auth';
 import { SearchBar } from '@/components/ui/search-bar';
 import { useDebounce } from '@/hooks/use-debounce';
 import {
@@ -160,16 +162,7 @@ export default function StoreAdminPage() {
           // 同じブラウザで別アカウント（テナント管理者など）のクッキーが残っていると
           // ロール判定やアクセス権限チェックが別人の結果になる。
           // 復元したセッションのトークンでクッキーを同期してから API を呼ぶ。
-          try {
-            await fetch('/api/auth/set-cookie', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({ accessToken: session.access_token }),
-            });
-          } catch (err) {
-            console.warn('[Auth] Failed to sync cookie:', err);
-          }
+          await syncAuthCookie();
           setUser(session.user);
         } else {
           setUser(null);
@@ -279,6 +272,18 @@ export default function StoreAdminPage() {
     }
   };
 
+  // トークン自動更新時にサーバー用クッキーも追従させる（約 1 時間で失効するため）
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
+        syncAuthCookie();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   // ログアウト処理
   const handleSignOut = async () => {
     try {
@@ -296,6 +301,29 @@ export default function StoreAdminPage() {
       console.error('Logout error:', err);
     }
   };
+
+  // API が再試行後も 401 を返した場合: 再ログインへ誘導するトーストを表示
+  const signOutRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    signOutRef.current = handleSignOut;
+  });
+  useEffect(() => {
+    const onAuthRequired = () => {
+      toast({
+        title: '認証が必要です',
+        description: 'ログインの有効期限が切れました。再度ログインしてください。',
+        variant: 'destructive',
+        duration: 15000,
+        action: (
+          <ToastAction altText="ログイン画面へ移動" onClick={() => signOutRef.current()}>
+            ログインはこちら
+          </ToastAction>
+        ),
+      });
+    };
+    window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
+  }, [toast]);
 
   // データ取得（ログイン前でも店舗情報は取得）
   useEffect(() => {

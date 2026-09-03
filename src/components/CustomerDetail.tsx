@@ -1,5 +1,7 @@
 'use client';
 
+import { fetchWithAuth } from '@/lib/client-auth';
+
 import { useState, useEffect, useCallback } from 'react';
 import { Customer, CustomerVisit } from '@/types/form';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -54,7 +56,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/stores/${storeId}/customers/${customerId}`);
+      const response = await fetchWithAuth(`/api/stores/${storeId}/customers/${customerId}`);
       if (response.ok) {
         const result = await response.json();
         setData(result);
@@ -77,7 +79,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
     if (!customerId) return;
     setIsSaving(true);
     try {
-      const response = await fetch(`/api/stores/${storeId}/customers/${customerId}`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/customers/${customerId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -104,7 +106,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
     if (!customerId) return;
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/stores/${storeId}/customers/${customerId}`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/customers/${customerId}`, {
         method: 'DELETE',
         credentials: 'include',
       });

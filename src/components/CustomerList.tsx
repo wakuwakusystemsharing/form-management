@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
+import { fetchWithAuth } from '@/lib/client-auth';
 import { Search, UserPlus } from 'lucide-react';
 import CustomerForm, { CustomerFormData } from '@/components/CustomerForm';
 
@@ -37,11 +38,14 @@ export default function CustomerList({ storeId, onCustomerClick }: CustomerListP
       if (segmentFilter !== 'all') params.append('segment', segmentFilter);
       params.append('limit', '50');
 
-      const response = await fetch(`/api/stores/${storeId}/customers?${params.toString()}`, { credentials: 'include' });
+      const response = await fetchWithAuth(`/api/stores/${storeId}/customers?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
         setCustomers(data.customers || []);
         setTotal(data.total || 0);
+      } else if (response.status === 401) {
+        // 再ログイン誘導のトーストはページ側（AUTH_REQUIRED_EVENT）で表示する
+        console.warn('Failed to fetch customers: authentication required');
       } else {
         const data = await response.json().catch(() => ({}));
         console.error('Failed to fetch customers:', response.status, data);
@@ -66,7 +70,7 @@ export default function CustomerList({ storeId, onCustomerClick }: CustomerListP
   const handleCreateCustomer = async (formData: CustomerFormData) => {
     setIsCreating(true);
     try {
-      const response = await fetch(`/api/stores/${storeId}/customers`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/customers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

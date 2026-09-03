@@ -1,5 +1,7 @@
 'use client';
 
+import { fetchWithAuth } from '@/lib/client-auth';
+
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -94,7 +96,7 @@ export default function CustomerAnalytics({ storeId }: CustomerAnalyticsProps) {
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/stores/${storeId}/customers/analytics`);
+      const response = await fetchWithAuth(`/api/stores/${storeId}/customers/analytics`);
       if (response.ok) {
         const data = await response.json();
         setAnalytics(data);
