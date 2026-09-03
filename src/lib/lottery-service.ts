@@ -95,7 +95,7 @@ export interface ResolvedLineUser {
 
 export type ResolveLineUserResult =
   | { ok: true; user: ResolvedLineUser }
-  | { ok: false; status: number; error: string };
+  | { ok: false; status: number; error: string; detail?: string };
 
 /**
  * local: body の line_user_id を信用（開発用）

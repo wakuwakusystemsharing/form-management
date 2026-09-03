@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
     const resolved = await resolveLineUser(body, store);
     if (!resolved.ok) {
-      return NextResponse.json({ error: resolved.error }, { status: resolved.status });
+      return NextResponse.json({ error: resolved.error, details: resolved.detail ?? null }, { status: resolved.status });
     }
 
     const lineFriendFlag = typeof body.line_friend_flag === 'boolean' ? body.line_friend_flag : null;

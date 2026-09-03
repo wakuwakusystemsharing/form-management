@@ -15,7 +15,7 @@ export interface LineIdTokenPayload {
 
 export type LineVerifyResult =
   | { ok: true; payload: LineIdTokenPayload }
-  | { ok: false; status: number; error: string };
+  | { ok: false; status: number; error: string; detail?: string };
 
 export const LINE_VERIFY_ENDPOINT = 'https://api.line.me/oauth2/v2.1/verify';
 
@@ -49,7 +49,8 @@ export async function verifyLineIdToken(
     if (!res.ok || !json || typeof json.sub !== 'string' || !json.sub) {
       const detail = json && typeof json.error_description === 'string' ? json.error_description : '';
       console.warn('[line-verify] verify failed:', res.status, detail);
-      return { ok: false, status: 401, error: 'LINE の認証に失敗しました。もう一度開き直してください' };
+      // LINE のエラー文（例: Invalid IdToken Audience = チャネル ID の不一致）は原因の切り分けに必要なので返す
+      return { ok: false, status: 401, error: 'LINE の認証に失敗しました。もう一度開き直してください', detail: detail || `HTTP ${res.status}` };
     }
     return {
       ok: true,
