@@ -9,7 +9,11 @@ import { User } from '@supabase/supabase-js';
 import { Store } from '@/types/store';
 import { Form } from '@/types/form';
 import { SurveyForm } from '@/types/survey';
-import FormEditModal from '@/components/FormEditor/FormEditModal';
+import FormEditModal, { type EditableForm, isLotteryForm } from '@/components/FormEditor/FormEditModal';
+import LotteryFormList from '@/components/LotteryFormList';
+import LotteryEntryList from '@/components/LotteryEntryList';
+import LotteryDeferredPanel from '@/components/LotteryDeferredPanel';
+import type { LotteryFormWithStats } from '@/types/lottery';
 import StoreAdminLayout from '@/components/StoreAdminLayout';
 import UiStyleSettings from '@/components/UiStyleSettings';
 import { resolveVisibleTabs } from '@/lib/store-admin-tabs';
@@ -105,7 +109,10 @@ export default function StoreAdminPage() {
   const [selectedSurveyFormId, setSelectedSurveyFormId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingForm, setEditingForm] = useState<Form | SurveyForm | null>(null);
+  const [editingForm, setEditingForm] = useState<EditableForm | null>(null);
+  const [lotteryForms, setLotteryForms] = useState<LotteryFormWithStats[]>([]);
+  const [lotteryRefreshKey, setLotteryRefreshKey] = useState(0);
+  const [lotteryTodayCount, setLotteryTodayCount] = useState<number | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   // 予約詳細モーダルの「予約内容を編集」モード
@@ -144,6 +151,42 @@ export default function StoreAdminPage() {
   const visibleTabsForUser = isUpperAdminUser ? null : (store?.admin_visible_tabs ?? null);
   const visibleTabIds = resolveVisibleTabs(visibleTabsForUser);
   const activeTab = visibleTabIds.includes(requestedTab as (typeof visibleTabIds)[number]) ? requestedTab : visibleTabIds[0];
+
+  // ダッシュボード用: 本日（JST）の抽選参加数
+  useEffect(() => {
+    if (!storeId || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const jstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+        const start = new Date(Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()) - 9 * 60 * 60 * 1000);
+        const res = await fetch(`/api/stores/${storeId}/lotteries/entries?from=${encodeURIComponent(start.toISOString())}&limit=1`, { credentials: 'include' });
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        if (!cancelled) setLotteryTodayCount(typeof json.total === 'number' ? json.total : 0);
+      } catch (e) {
+        console.error('Lottery today count fetch error:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [storeId, user, lotteryRefreshKey]);
+
+  // 抽選フォームの集計を更新（引換・保存のあと）
+  useEffect(() => {
+    if (!storeId || !user || lotteryRefreshKey === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/stores/${storeId}/lotteries`, { credentials: 'include' });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) setLotteryForms(Array.isArray(data) ? data : []);
+      } catch (e) {
+        console.error('Lottery forms fetch error:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [storeId, user, lotteryRefreshKey]);
 
   // 認証チェック
   useEffect(() => {
@@ -412,6 +455,12 @@ export default function StoreAdminPage() {
           const surveysData = await surveysResponse.json();
           setSurveyForms(surveysData);
         }
+
+        const lotteriesResponse = await fetch(`/api/stores/${storeId}/lotteries`, { credentials: 'include' });
+        if (lotteriesResponse.ok) {
+          const lotteriesData = await lotteriesResponse.json();
+          setLotteryForms(Array.isArray(lotteriesData) ? lotteriesData : []);
+        }
         
       } catch (err) {
         console.error('Data fetch error:', err);
@@ -560,6 +609,14 @@ export default function StoreAdminPage() {
                   <div className="text-2xl font-bold text-[rgb(55,114,58)]">{stats.reservations}</div>
                 </CardContent>
               </Card>
+              {lotteryForms.length > 0 && (
+                <Card className="shadow-sm">
+                  <CardContent className="p-4">
+                    <p className="text-xs font-medium text-muted-foreground mb-1">本日の抽選参加</p>
+                    <div className="text-2xl font-bold text-[rgb(55,114,58)]">{lotteryTodayCount ?? '–'}</div>
+                  </CardContent>
+                </Card>
+              )}
           </div>
 
             {/* 最近の予約 */}
@@ -1364,6 +1421,55 @@ export default function StoreAdminPage() {
           </div>
         );
 
+      case 'lotteries':
+        return (
+          <div className="space-y-5 p-4 lg:p-6">
+            <div>
+              <h2 className="text-lg font-semibold">抽選管理</h2>
+              <p className="text-sm text-muted-foreground">抽選フォームの編集と、抽選履歴・当選の引換を行います</p>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {(() => {
+                const totals = lotteryForms.reduce(
+                  (acc, f) => ({ entries: acc.entries + f.stats.entries, wins: acc.wins + f.stats.wins, redeemed: acc.redeemed + f.stats.redeemed }),
+                  { entries: 0, wins: 0, redeemed: 0 }
+                );
+                const winRate = totals.entries > 0 ? Math.round((totals.wins / totals.entries) * 100) : 0;
+                const redeemRate = totals.wins > 0 ? Math.round((totals.redeemed / totals.wins) * 100) : 0;
+                return (
+                  <>
+                    <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground mb-1">参加数</p><div className="text-2xl font-bold text-[rgb(55,114,58)]">{totals.entries}</div></CardContent></Card>
+                    <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground mb-1">当選数（当選率）</p><div className="text-2xl font-bold text-[rgb(55,114,58)]">{totals.wins}<span className="text-sm font-normal text-muted-foreground ml-1">{winRate}%</span></div></CardContent></Card>
+                    <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground mb-1">引換数（引換率）</p><div className="text-2xl font-bold text-[rgb(55,114,58)]">{totals.redeemed}<span className="text-sm font-normal text-muted-foreground ml-1">{redeemRate}%</span></div></CardContent></Card>
+                  </>
+                );
+              })()}
+            </div>
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-muted-foreground">フォーム管理</h3>
+              <LotteryFormList
+                storeId={storeId}
+                forms={lotteryForms}
+                onEdit={(form) => { setEditingForm(form); setShowEditModal(true); }}
+                onCopy={copyToClipboard}
+                emptyText="抽選フォームはまだありません（テナント管理者が作成できます）"
+              />
+            </div>
+
+            {lotteryForms.filter((f) => f.config.lottery_type === 'deferred').map((f) => (
+              <LotteryDeferredPanel key={f.id} storeId={storeId} form={f} onChanged={() => setLotteryRefreshKey((k) => k + 1)} />
+            ))}
+            <div className="border-t pt-5">
+              <LotteryEntryList
+                storeId={storeId}
+                forms={lotteryForms}
+                scanHref={`/${storeId}/admin/lottery-scan`}
+                onChanged={() => setLotteryRefreshKey((k) => k + 1)}
+              />
+            </div>
+          </div>
+        );
+
       case 'settings':
         return (
           <div className="space-y-4 p-4 lg:p-6">
@@ -1400,7 +1506,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView, customersRefreshKey]);
+  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView, customersRefreshKey, lotteryForms, lotteryTodayCount]);
 
   // 認証チェック中
   if (checkingAuth) {
@@ -1564,20 +1670,27 @@ export default function StoreAdminPage() {
           form={editingForm}
           storeId={storeId}
           onSave={async (updatedForm) => {
-            const isSurvey = 'questions' in updatedForm.config;
-            const endpoint = isSurvey 
-              ? `/api/surveys/${updatedForm.id}`
-              : `/api/forms/${updatedForm.id}`;
-            
+            const isLottery = isLotteryForm(updatedForm);
+            const isSurvey = !isLottery && 'questions' in updatedForm.config;
+            const endpoint = isLottery
+              ? `/api/lotteries/${updatedForm.id}`
+              : isSurvey
+                ? `/api/surveys/${updatedForm.id}`
+                : `/api/forms/${updatedForm.id}`;
+
             const response = await fetch(endpoint, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify(updatedForm),
             });
 
             if (response.ok) {
               const savedForm = await response.json();
-              if (isSurvey) {
+              if (isLottery) {
+                setLotteryForms((prev) => prev.map((f) => (f.id === savedForm.id ? { ...savedForm, stats: f.stats } : f)));
+                setEditingForm((prev) => (prev && prev.id === savedForm.id ? { ...prev, ...savedForm } : prev));
+              } else if (isSurvey) {
                 setSurveyForms(surveyForms.map(f => f.id === savedForm.id ? savedForm : f));
               } else {
               setForms(forms.map(f => f.id === savedForm.id ? savedForm : f));
@@ -1587,7 +1700,9 @@ export default function StoreAdminPage() {
                 description: 'フォームの変更を保存しました',
               });
             } else {
-              throw new Error('保存に失敗しました');
+              const err = await response.json().catch(() => ({}));
+              const detail = Array.isArray(err.details) ? `\n${err.details.join('\n')}` : '';
+              throw new Error((err.error || '保存に失敗しました') + detail);
             }
           }}
           theme="light"

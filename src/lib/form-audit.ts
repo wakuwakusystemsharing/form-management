@@ -13,9 +13,10 @@ import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { getCurrentUserRole } from '@/lib/auth-helper';
 import { normalizeForm } from '@/lib/form-normalizer';
+import { normalizeLotteryConfig } from '@/lib/lottery-normalizer';
 
 export type FormAuditAction = 'create' | 'update' | 'deploy' | 'duplicate' | 'delete';
-export type FormAuditFormType = 'reservation' | 'survey';
+export type FormAuditFormType = 'reservation' | 'survey' | 'lottery';
 
 export interface FormAuditChange {
   key: string;      // 変更したセクション / 項目のキー
@@ -75,6 +76,20 @@ const SURVEY_SECTION_LABELS: Record<string, string> = {
   questions: '質問',
   ui_settings: 'UI設定',
   design: 'デザイン',
+};
+
+// 抽選フォーム config の各セクションの日本語ラベル
+const LOTTERY_SECTION_LABELS: Record<string, string> = {
+  lottery_type: '抽選方式',
+  redeem_method: '引換方式',
+  basic_info: '基本情報',
+  deferred: '後日抽選の設定',
+  prizes: '賞品と確率',
+  consolation_prize: '残念賞',
+  entry_rules: '参加条件',
+  presentation: '演出・デザイン',
+  messages: 'メッセージ',
+  ui_settings: 'UI設定',
 };
 
 // フォーム行レベルの項目
@@ -149,7 +164,21 @@ export function diffFormForAudit(
     }
   }
 
-  const labels = formType === 'survey' ? SURVEY_SECTION_LABELS : RESERVATION_SECTION_LABELS;
+  // 抽選フォームも両側を正規化してから比較する（欠落フィールドの既定値補完による偽の差分を防ぐ）
+  if (formType === 'lottery') {
+    try {
+      beforeConfig = normalizeLotteryConfig(beforeConfig) as unknown as Record<string, unknown>;
+      afterConfig = normalizeLotteryConfig(afterConfig) as unknown as Record<string, unknown>;
+    } catch {
+      /* 正規化に失敗した場合は生の config で比較 */
+    }
+  }
+
+  const labels = formType === 'survey'
+    ? SURVEY_SECTION_LABELS
+    : formType === 'lottery'
+      ? LOTTERY_SECTION_LABELS
+      : RESERVATION_SECTION_LABELS;
   const keys = new Set([...Object.keys(beforeConfig), ...Object.keys(afterConfig)]);
   for (const key of keys) {
     if (stable(beforeConfig[key]) !== stable(afterConfig[key])) {

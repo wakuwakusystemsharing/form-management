@@ -8,6 +8,8 @@
 		"start": "next start",
 		"lint": "eslint . --ext .js,.jsx,.ts,.tsx",
 		"type-check": "tsc --noEmit",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"clean": "rm -rf .next",
 		"vercel:build": "pnpm run build",
 		"seed:local": "tsx scripts/seed-dummy-stores.ts local",
@@ -41,6 +43,7 @@
 		"googleapis": "^171.0.0",
 		"lucide-react": "^0.562.0",
 		"next": "16.0.10",
+		"qrcode": "1.5.4",
 		"react": "19.2.3",
 		"react-dom": "19.2.3",
 		"react-easy-crop": "^5.5.5",
@@ -51,6 +54,7 @@
 		"@eslint/eslintrc": "^3",
 		"@tailwindcss/postcss": "^4",
 		"@types/node": "^20",
+		"@types/qrcode": "1.5.5",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
 		"dotenv": "^16.4.7",
@@ -59,6 +63,7 @@
 		"tailwindcss": "^4",
 		"tsx": "^4.19.2",
 		"typescript": "^5",
-		"vercel": "^48.2.9"
+		"vercel": "^48.2.9",
+		"vitest": "^3.2.7"
 	}
 }

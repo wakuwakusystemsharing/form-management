@@ -6,6 +6,8 @@ import { getCurrentUser } from '@/lib/auth-helper';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { StaticReservationGenerator } from '@/lib/static-generator-reservation';
 import { StaticSurveyGenerator } from '@/lib/static-generator-survey';
+import { StaticLotteryGenerator } from '@/lib/static-generator-lottery';
+import { normalizeLotteryForm } from '@/lib/lottery-normalizer';
 
 export async function POST(request: Request) {
   try {
@@ -28,9 +30,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (formType !== 'reservation' && formType !== 'survey') {
+    if (formType !== 'reservation' && formType !== 'survey' && formType !== 'lottery') {
       return NextResponse.json(
-        { error: 'formType は "reservation" または "survey" を指定してください' },
+        { error: 'formType は "reservation"、"survey"、"lottery" のいずれかを指定してください' },
         { status: 400 }
       );
     }
@@ -41,6 +43,10 @@ export async function POST(request: Request) {
       const normalizedForm = normalizeForm(form as Form);
       const generator = new StaticReservationGenerator();
       html = generator.generateHTML(normalizedForm.config, form.id, storeId, 'preview');
+    } else if (formType === 'lottery') {
+      // 保存前の編集状態をプレビュー（抽選 API は呼ばず、演出のみ確認できる）
+      const lotteryForm = normalizeLotteryForm({ ...form, store_id: storeId });
+      html = new StaticLotteryGenerator().generateHTML(lotteryForm, 'preview');
     } else {
       const generator = new StaticSurveyGenerator();
       html = generator.generateHTML(

@@ -15,6 +15,7 @@ pnpm dev                  # 開発サーバー起動（localhost:3000）
 pnpm build                # プロダクションビルド
 pnpm lint                 # ESLint チェック
 pnpm type-check           # TypeScript 検証（コミット前必須）
+pnpm test                 # Vitest（純粋ロジックのユニットテスト。抽選エンジン等）
 ```
 
 ### データベースシーディング
@@ -81,6 +82,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 **静的 HTML 生成:**
 - 予約フォーム: `src/lib/static-generator-reservation.ts` の `StaticReservationGenerator.generateHTML()`
 - アンケートフォーム: `src/lib/static-generator-survey.ts` の `StaticSurveyGenerator.generateHTML()`
+- 抽選フォーム: `src/lib/static-generator-lottery.ts` の `StaticLotteryGenerator.generateHTML()`
 - LINE LIFF 互換性のため vanilla JS のみ使用（React なし）
 - 動的テーマカラーを使用したインライン CSS
 - すべての設定を `FORM_CONFIG` 定数として JSON 埋め込み
@@ -93,6 +95,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - パス構造:
   - 予約フォーム: `reservations/{storeId}/{formId}/index.html`
   - アンケートフォーム: `surveys/{storeId}/{formId}/index.html`
+  - 抽選フォーム: `lotteries/{storeId}/{formId}/index.html`
 
 **認証アーキテクチャ（3階層マルチテナント）:**
 - Middleware（`src/middleware.ts`）: UI ページアクセス制御。ロール別ルート保護
@@ -196,12 +199,30 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - スマホ共通の基礎対策: `Input` / `Select` はスマホ 16px（iOS 自動ズーム防止）、レイアウトは `h-dvh`、アイコンボタンはスマホ 44px、`touch-action: manipulation`、下部ナビゲーション（`lg:hidden`）
 
 **店舗管理者に表示するメニュー（タブ）の制御:**
-- `stores.admin_visible_tabs` JSONB（`null` = すべて表示）。値は `['dashboard','reservations','customers','surveys','settings']` の部分集合
+- `stores.admin_visible_tabs` JSONB（`null` = すべて表示）。値は `['dashboard','reservations','customers','surveys','lotteries','settings']` の部分集合
 - テナント側 店舗ページ → 設定タブ → `StoreAdminMenuSettings.tsx` で ON/OFF（最低 1 つ必須。全選択時は `null` で保存）
 - 店舗管理者ページ: `StoreAdminLayout` の `visibleTabs` でサイドバー・下部ナビをフィルタし、非表示タブへの直接アクセスは先頭の表示タブへ `router.replace`。`admin/page.tsx` も非表示タブは描画しない
 - マスター管理者・システム管理者が開いた場合は常に全表示（`/api/auth/role` の判定を `isUpperAdminUser` に保持）
 - 定義・正規化は `src/lib/store-admin-tabs.ts`（`STORE_ADMIN_TABS` / `resolveVisibleTabs()`）
 - マイグレーション: `20260902000000_add_admin_visible_tabs.sql`
+
+**抽選フォーム機能（LINE LIFF 専用）:**
+- 設計書: `docs/抽選フォーム_実装設計.md`。即時抽選（その場で結果）と後日抽選（応募 → 管理画面で抽選 → 当選者へ Bot push）の 2 方式
+- 型: `src/types/lottery.ts`（`LotteryConfig` / `LotteryForm` / `LotteryEntry`）。読み取り時は必ず `normalizeLotteryForm()`（`src/lib/lottery-normalizer.ts`）を通す
+- 純粋ロジック: `src/lib/lottery-engine.ts`（確率判定・在庫・回数制限・引換コード・有効期限・後日抽選の当選者抽出）。DB 非依存で Vitest 対象
+- 抽選の実行: `src/lib/lottery-service.ts` の `executeLotteryDraw()`。サーバー側で結果を確定し、クライアントは演出のみ。同時アクセスの在庫・回数チェックは DB 関数 `lottery_insert_entry_checked`（`src/lib/lottery-repository.ts` から RPC）
+- 本人確認: LIFF の ID トークンを `src/lib/line-verify.ts` で検証。チャネル ID は `stores.line_channel_id` → 環境変数 `NEXT_PUBLIC_LINE_CHANNEL_ID` の順（local は `line_user_id` の申告を許容）
+- LINE 通知: LIFF `sendMessages` 用テキストと Bot Flex 当選カードは `src/lib/lottery-line-message.ts`。push は `src/lib/line-push.ts`（はずれには送らない）
+- 引換: 6 桁コード（店舗内ユニーク）+ QR 方式（`qr_token`）。管理者ページから `redeem / unredeem / cancel / restore`
+- 管理 API は `src/lib/store-access.ts` の `authorizeStoreAccess()` で保護（local はスキップ）。ローカルデータは `data/lottery_forms.json` / `data/lottery_entries.json`
+- 静的 HTML: `src/lib/static-generator-lottery.ts` の `StaticLotteryGenerator.generateHTML(form, 'production' | 'preview')`。演出はスクラッチ / ガチャ / シンプル。埋め込み JS はバッククォート不使用、設定 JSON は `\u003c` エスケープで埋め込む
+- デプロイ: `POST /api/lotteries/{id}/deploy` → `lotteries/{storeId}/{formId}/index.html`。プレビュー: `/preview/{storeId}/lotteries/{formId}`、`POST /api/preview/generate`（`formType: 'lottery'`）
+- QR 画像: `GET /api/lotteries/qr/{token}.png`（`qrcode` パッケージ、認証なし。トークン自体が秘密）。ヘルパーは `src/lib/lottery-qr.ts`
+- 管理画面: テナント側 店舗ページの「抽選フォーム」タブ（作成・一覧・履歴）、店舗管理者ページの「抽選管理」タブ（`lotteries`）。編集は `FormEditModal` → `src/components/FormEditor/Lottery/LotteryFormEditor.tsx`（賞品は `LotteryPrizeEditor.tsx`）。一覧 `LotteryFormList.tsx`、履歴・引換 `LotteryEntryList.tsx`
+- QR 引換: `/{storeId}/admin/lottery-scan`（カメラ読み取り + コード手入力）、`/r/{token}` はスキャン画面へリダイレクト
+- 保存前の検証はクライアントでも使うため `src/lib/lottery-validation.ts`（純粋関数）。`lottery-service.ts` はサーバー専用（fs / Supabase に依存）なのでクライアントから import しない
+- 後日抽選: `src/lib/lottery-deferred-service.ts`。応募（entered）→ 抽選実行（provisional）→ 手動修正 → 確定（drawn / lost）+ 当選者へ Bot push。仮当選はお客様には応募済みとして見せる。管理 UI は `LotteryDeferredPanel.tsx`
+- マイグレーション: `20260903000000_add_lottery.sql`（テーブル・RLS・DB 関数・監査ログの form_type 追加）/ `20260903000001_add_store_line_channel_id.sql`
 
 **店舗セットアップヘルプ:**
 - `/tenant/{slug}/admin/help` - 店舗セットアップガイドページ
@@ -242,6 +263,9 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - `src/lib/email-sender.ts` - Resend ラッパ（fromName / replyTo 対応、API キー無しで安全スキップ）
 - `src/lib/email-templates.ts` - お客様確認 / 店舗通知の 2 種類のメールテンプレ
 - `src/lib/reservation-email.ts` - Web 予約完了時のメール送信オーケストレーション
+- `src/lib/lottery-engine.ts` / `lottery-normalizer.ts` / `lottery-repository.ts` / `lottery-service.ts` / `lottery-line-message.ts` - 抽選フォーム（詳細は上記「抽選フォーム機能」）
+- `src/lib/line-verify.ts` - LINE ID トークン検証 / `src/lib/line-push.ts` - Messaging API push
+- `src/lib/store-access.ts` - 店舗単位の管理 API 共通認可（`authorizeStoreAccess`）
 
 **Middleware & 認証:**
 - `src/middleware.ts` - ルート保護（UI ページアクセス制御のみ）、RLS バイパスルーティング
@@ -373,6 +397,20 @@ export async function GET(req, { params }) {
 - `POST /api/stores/{storeId}/admins` - 管理者追加（メールアドレス招待）
 - `DELETE /api/stores/{storeId}/admins/{userId}` - 管理者削除
 
+### 抽選フォーム API:
+- `GET/POST /api/stores/{storeId}/lotteries` - 一覧（参加数・当選数・引換数付き）/ 作成（`form_name`, `liff_id`, `lottery_type`）
+- `GET/PUT/DELETE /api/lotteries/{id}` - 取得（公開）/ 更新（config 全体。確率合計・在庫・締切を検証）/ 削除（履歴もカスケード）
+- `POST /api/lotteries/{id}/duplicate` - 複製（履歴はコピーしない。賞品 ID は振り直し）
+- `POST /api/lotteries/draw` - 抽選実行 / 後日抽選の応募（公開。`id_token` 必須、回数上限は 409 + `existing_result`）
+- `GET/PATCH /api/lotteries/{id}/my-result` - 直近結果の再表示 / LIFF 送信完了の記録
+- `POST /api/lotteries/{id}/deploy` - 静的 HTML を生成して Storage へデプロイ（設定検証 + LIFF ID 必須）
+- `GET /api/lotteries/qr/{token}.png` - 当選 QR コード画像（公開）
+- `GET /api/lotteries/{id}/deferred/summary` / `POST .../deferred/draw`（`{ force }`）/ `PATCH .../deferred/winners`（`{ remove, add }`）/ `POST .../deferred/confirm` / `POST .../deferred/resend` - 後日抽選の進行
+- `GET /api/stores/{storeId}/lotteries/entries` - 履歴一覧（`form_id` / `prize_id` / `status` / `search` / `from` / `to` / `limit` / `offset`）
+- `PATCH /api/stores/{storeId}/lotteries/entries/{entryId}` - `action: redeem | unredeem | cancel | restore`
+- `GET /api/stores/{storeId}/lotteries/entries/export` - CSV（UTF-8 BOM）
+- `GET /api/stores/{storeId}/lotteries/redeem/{qrToken}` - QR トークン or 6 桁コードで当選内容を照会
+
 ### Webhook:
 - `POST /api/webhooks/line` - LINE Messaging API Webhook（署名検証あり）
 
@@ -415,6 +453,7 @@ export async function GET(req, { params }) {
 - `CustomerList.tsx` - 顧客一覧
 - `CustomerDetail.tsx` - 顧客詳細
 - `CustomerAnalytics.tsx` - 顧客分析
+- `LotteryFormList.tsx` / `LotteryEntryList.tsx` - 抽選フォーム一覧・抽選履歴（引換操作・CSV）
 - `ReservationAnalytics.tsx` - 予約分析
 - `FormEditor/` - フォーム編集コンポーネント群
 
@@ -433,6 +472,8 @@ export async function GET(req, { params }) {
 - `customer_visits` - 顧客来店履歴（visit_date、treatment_menus、amount 等）
 - `customer_interactions` - 顧客インタラクション履歴
 - `admin_settings` - サービス全体の設定（Google API 認証情報など）
+- `lottery_forms` - 抽選フォーム（config: JSONB、後日抽選の進行状態 `deferred_draw_status`）
+- `lottery_entries` - 抽選履歴（1 行 = 1 回の抽選 / 1 口の応募。引換コード・QR トークン・引換状態）
 
 **RLS（Row Level Security）:**
 - マスター管理者: `is_master_admin()` で全テーブルフルアクセス
@@ -454,6 +495,8 @@ export async function GET(req, { params }) {
 - `20260411100001_update_cron_hourly.sql` - send-reminders Edge Function を毎時実行に変更
 - `20260429000000_add_store_postal_code.sql` - stores.postal_code 追加（Web 予約メール用）
 - `20260902000000_add_admin_visible_tabs.sql` - stores.admin_visible_tabs 追加（店舗管理者に表示するタブ）
+- `20260903000000_add_lottery.sql` - lottery_forms / lottery_entries テーブル・RLS・`lottery_insert_entry_checked` 関数
+- `20260903000001_add_store_line_channel_id.sql` - stores.line_channel_id 追加（ID トークン検証用）
 
 ## テンプレートシステム
 

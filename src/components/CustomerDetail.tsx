@@ -25,6 +25,12 @@ import {
 import { Phone, Mail, Pencil, X, Trash2 } from 'lucide-react';
 import CustomerForm, { CustomerFormData, customerToFormData } from '@/components/CustomerForm';
 
+import type { LotteryEntryEffectiveStatus, LotteryEntryView } from '@/types/lottery';
+
+const LOTTERY_STATUS_LABELS: Record<LotteryEntryEffectiveStatus, string> = {
+  entered: '応募', provisional: '応募', drawn: '当選', lost: 'はずれ', redeemed: '引換済み', cancelled: '取り消し', expired: '期限切れ',
+};
+
 interface CustomerDetailProps {
   storeId: string;
   customerId: string | null;
@@ -44,6 +50,7 @@ interface CustomerDetailData {
 
 export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated, onDeleted, onOpenReservation }: CustomerDetailProps) {
   const [data, setData] = useState<CustomerDetailData | null>(null);
+  const [lotteryEntries, setLotteryEntries] = useState<LotteryEntryView[]>([]);
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -74,6 +81,23 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
       setIsEditing(false);
     }
   }, [customerId, open, fetchCustomerDetail]);
+
+  // 抽選履歴（顧客に紐付いた抽選参加・当選・引換）
+  useEffect(() => {
+    if (!customerId || !open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchWithAuth(`/api/stores/${storeId}/lotteries/entries?customer_id=${encodeURIComponent(customerId)}&limit=100`);
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        if (!cancelled) setLotteryEntries(Array.isArray(json.entries) ? json.entries : []);
+      } catch (e) {
+        console.error('Failed to fetch lottery entries:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [storeId, customerId, open]);
 
   const handleUpdate = async (formData: CustomerFormData) => {
     if (!customerId) return;
@@ -328,9 +352,10 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
 
             {/* タブコンテンツ */}
             <Tabs defaultValue="reservations" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="reservations">予約履歴</TabsTrigger>
                 <TabsTrigger value="visits">来店履歴</TabsTrigger>
+                <TabsTrigger value="lotteries">抽選履歴</TabsTrigger>
                 <TabsTrigger value="line">LINE情報</TabsTrigger>
               </TabsList>
 
@@ -417,6 +442,39 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                           ))}
                         </TableBody>
                       </Table>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* 抽選履歴タブ */}
+              <TabsContent value="lotteries">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>抽選履歴</CardTitle>
+                    <CardDescription>{lotteryEntries.length}件の抽選参加があります</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {lotteryEntries.length === 0 ? (
+                      <p className="text-center text-muted-foreground py-4">抽選履歴がありません</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {lotteryEntries.map((e) => (
+                          <div key={e.id} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">
+                                {e.prize_name || (e.status === 'entered' || e.status === 'provisional' ? '応募中' : 'はずれ')}
+                                {e.is_consolation && <span className="ml-1 text-xs text-muted-foreground">残念賞</span>}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {new Date(e.entered_at).toLocaleString('ja-JP')}
+                                {e.redeem_code ? ` ・ コード ${e.redeem_code}` : ''}
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="shrink-0">{LOTTERY_STATUS_LABELS[e.effective_status]}</Badge>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </CardContent>
                 </Card>

@@ -6,7 +6,11 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Store } from '@/types/store';
 import { Form } from '@/types/form';
 import { SurveyForm } from '@/types/survey';
-import FormEditModal from '@/components/FormEditor/FormEditModal';
+import FormEditModal, { type EditableForm, isLotteryForm } from '@/components/FormEditor/FormEditModal';
+import LotteryFormList from '@/components/LotteryFormList';
+import LotteryEntryList from '@/components/LotteryEntryList';
+import LotteryDeferredPanel from '@/components/LotteryDeferredPanel';
+import type { LotteryFormWithStats } from '@/types/lottery';
 import StoreAdminManager from '@/components/StoreAdminManager';
 import StoreAdminMenuSettings from '@/components/StoreAdminMenuSettings';
 import FormHistoryDialog from '@/components/FormHistoryDialog';
@@ -590,7 +594,11 @@ export default function StoreDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [editingForm, setEditingForm] = useState<Form | SurveyForm | null>(null);
+  const [editingForm, setEditingForm] = useState<EditableForm | null>(null);
+  const [lotteryForms, setLotteryForms] = useState<LotteryFormWithStats[]>([]);
+  const [lotteryRefreshKey, setLotteryRefreshKey] = useState(0);
+  const [showCreateLotteryForm, setShowCreateLotteryForm] = useState(false);
+  const [newLotteryData, setNewLotteryData] = useState({ form_name: '', liff_id: '', lottery_type: 'instant' as 'instant' | 'deferred' });
   const [showEditModal, setShowEditModal] = useState(false);
   const [newFormData, setNewFormData] = useState({
     form_name: '',
@@ -609,7 +617,7 @@ export default function StoreDetailPage() {
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
   const [duplicatingFormId, setDuplicatingFormId] = useState<string | null>(null);
   // 操作履歴ダイアログ（管理者側のみ表示）
-  const [historyTarget, setHistoryTarget] = useState<{ formId: string; formType: 'reservation' | 'survey'; formName: string } | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<{ formId: string; formType: 'reservation' | 'survey' | 'lottery'; formName: string } | null>(null);
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
   const [duplicateTargetFormId, setDuplicateTargetFormId] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -625,6 +633,22 @@ export default function StoreDetailPage() {
   const [selectedCalendarId, setSelectedCalendarId] = useState<string>('');
   const [savingCalendarId, setSavingCalendarId] = useState(false);
   const searchParams = useSearchParams();
+
+  // 抽選フォーム一覧（参加数・当選数付き）。引換や保存のあとは lotteryRefreshKey を進めて再取得
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/stores/${storeId}/lotteries`, { credentials: 'include' });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) setLotteryForms(Array.isArray(data) ? data : []);
+      } catch (e) {
+        console.error('Lottery forms fetch error:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [storeId, lotteryRefreshKey]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -864,7 +888,7 @@ export default function StoreDetailPage() {
     }
   };
 
-  const handleEditForm = (form: Form | SurveyForm) => {
+  const handleEditForm = (form: EditableForm) => {
     setEditingForm(form);
     setShowEditModal(true);
   };
@@ -947,6 +971,78 @@ export default function StoreDetailPage() {
         description: 'アンケートフォームの複製に失敗しました',
         variant: 'destructive',
       });
+    } finally {
+      setDuplicatingFormId(null);
+    }
+  };
+
+  const handleCreateLotteryForm = async () => {
+    if (!newLotteryData.form_name.trim()) {
+      toast({ title: 'エラー', description: 'フォーム名を入力してください', variant: 'destructive' });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const response = await fetch(`/api/stores/${storeId}/lotteries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          form_name: newLotteryData.form_name.trim(),
+          liff_id: newLotteryData.liff_id.trim(),
+          lottery_type: newLotteryData.lottery_type,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        setNewLotteryData({ form_name: '', liff_id: '', lottery_type: 'instant' });
+        setShowCreateLotteryForm(false);
+        setLotteryRefreshKey((k) => k + 1);
+        toast({ title: '成功', description: `抽選フォーム「${data.config?.basic_info?.title || ''}」を作成しました。賞品と確率を設定して公開してください` });
+        handleEditForm({ ...data, stats: { entries: 0, wins: 0, redeemed: 0, prize_counts: {} } });
+      } else {
+        toast({ title: 'エラー', description: data.error || '抽選フォームの作成に失敗しました', variant: 'destructive' });
+      }
+    } catch (error) {
+      console.error('Lottery creation error:', error);
+      toast({ title: 'エラー', description: '抽選フォームの作成に失敗しました', variant: 'destructive' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteLotteryForm = async (formId: string) => {
+    if (!confirm('本当にこの抽選フォームを削除しますか？\n抽選履歴もすべて削除され、この操作は取り消せません。')) return;
+    try {
+      const response = await fetch(`/api/lotteries/${formId}`, { method: 'DELETE', credentials: 'include' });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        setLotteryForms((prev) => prev.filter((f) => f.id !== formId));
+        toast({ title: '成功', description: '抽選フォームを削除しました' });
+      } else {
+        toast({ title: 'エラー', description: data.error || '削除に失敗しました', variant: 'destructive' });
+      }
+    } catch (error) {
+      console.error('Lottery delete error:', error);
+      toast({ title: 'エラー', description: '削除に失敗しました', variant: 'destructive' });
+    }
+  };
+
+  const handleDuplicateLotteryForm = async (formId: string) => {
+    setDuplicatingFormId(formId);
+    try {
+      const response = await fetch(`/api/lotteries/${formId}/duplicate`, { method: 'POST', credentials: 'include' });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        setLotteryRefreshKey((k) => k + 1);
+        toast({ title: '成功', description: '抽選フォームを複製しました' });
+        handleEditForm({ ...data, stats: { entries: 0, wins: 0, redeemed: 0, prize_counts: {} } });
+      } else {
+        toast({ title: 'エラー', description: data.error || '抽選フォームの複製に失敗しました', variant: 'destructive' });
+      }
+    } catch (error) {
+      console.error('Lottery duplicate error:', error);
+      toast({ title: 'エラー', description: '抽選フォームの複製に失敗しました', variant: 'destructive' });
     } finally {
       setDuplicatingFormId(null);
     }
@@ -1422,6 +1518,7 @@ export default function StoreDetailPage() {
             <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">概要</TabsTrigger>
             <TabsTrigger value="forms" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">予約フォーム</TabsTrigger>
             <TabsTrigger value="surveys" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">アンケート</TabsTrigger>
+            <TabsTrigger value="lotteries" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">抽選フォーム</TabsTrigger>
             <TabsTrigger value="settings" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">設定</TabsTrigger>
           </TabsList>
 
@@ -2235,6 +2332,102 @@ export default function StoreDetailPage() {
           </TabsContent>
 
           {/* 設定タブ */}
+          <TabsContent value="lotteries" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>抽選フォーム</CardTitle>
+                  <Button onClick={() => setShowCreateLotteryForm(!showCreateLotteryForm)} className="w-full sm:w-auto">
+                    <Plus className="mr-2 h-4 w-4" />
+                    {showCreateLotteryForm ? 'キャンセル' : '新規抽選フォーム作成'}
+                  </Button>
+                </div>
+                <CardDescription>LINE から参加できる抽選。結果は公式 LINE のトークに届き、当選の引換状況を履歴で管理できます</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {showCreateLotteryForm && (
+                  <Card className="border-primary/50">
+                    <CardHeader>
+                      <CardTitle className="text-lg">新しい抽選フォームを作成</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="lottery_form_name">フォーム名 <span className="text-destructive">*</span></Label>
+                        <Input
+                          id="lottery_form_name"
+                          value={newLotteryData.form_name}
+                          onChange={(e) => setNewLotteryData({ ...newLotteryData, form_name: e.target.value })}
+                          placeholder="例：夏の来店感謝くじ"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>抽選方式</Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {([
+                            { id: 'instant', name: '🎯 即時抽選', description: 'その場で結果が出る。スクラッチ / ガチャ / シンプルの演出' },
+                            { id: 'deferred', name: '📮 後日抽選', description: '応募を集めて締切後に抽選し、当選者へ LINE で通知（チャネルアクセストークンが必要）' },
+                          ] as const).map((t) => (
+                            <div
+                              key={t.id}
+                              onClick={() => setNewLotteryData({ ...newLotteryData, lottery_type: t.id })}
+                              className={`cursor-pointer border rounded-lg p-3 transition-colors ${newLotteryData.lottery_type === t.id ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="font-medium">{t.name}</span>
+                                {newLotteryData.lottery_type === t.id && <span className="text-primary">✓</span>}
+                              </div>
+                              <p className="text-xs text-muted-foreground">{t.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="lottery_liff_id">LIFF ID</Label>
+                        <Input
+                          id="lottery_liff_id"
+                          value={newLotteryData.liff_id}
+                          onChange={(e) => setNewLotteryData({ ...newLotteryData, liff_id: e.target.value })}
+                          placeholder="例：1234567890-abcdefgh"
+                        />
+                        <p className="text-xs text-muted-foreground">LINE Developers で作成した LIFF ID（あとから編集画面でも設定できます。公開には必須）</p>
+                      </div>
+                      <div className="flex gap-3">
+                        <Button onClick={handleCreateLotteryForm} disabled={submitting} className="flex-1 sm:flex-none">
+                          {submitting ? '作成中...' : '抽選フォームを作成'}
+                        </Button>
+                        <Button variant="outline" onClick={() => setShowCreateLotteryForm(false)} className="flex-1 sm:flex-none">
+                          キャンセル
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <LotteryFormList
+                  storeId={storeId}
+                  forms={lotteryForms}
+                  onEdit={(form) => handleEditForm(form)}
+                  onDuplicate={(form) => handleDuplicateLotteryForm(form.id)}
+                  onDelete={(form) => handleDeleteLotteryForm(form.id)}
+                  onHistory={(form) => setHistoryTarget({ formId: form.id, formType: 'lottery', formName: form.config.basic_info.title || '' })}
+                  onCopy={copyToClipboard}
+                  duplicatingId={duplicatingFormId}
+                />
+              </CardContent>
+            </Card>
+
+
+            {lotteryForms.filter((f) => f.config.lottery_type === 'deferred').map((f) => (
+              <LotteryDeferredPanel key={f.id} storeId={storeId} form={f} onChanged={() => setLotteryRefreshKey((k) => k + 1)} />
+            ))}
+
+            <LotteryEntryList
+              storeId={storeId}
+              forms={lotteryForms}
+              onChanged={() => setLotteryRefreshKey((k) => k + 1)}
+            />
+          </TabsContent>
+
           <TabsContent value="settings" className="space-y-6">
             {/* 店舗管理者管理 */}
             <StoreAdminManager storeId={storeId} />
@@ -2367,6 +2560,19 @@ export default function StoreDetailPage() {
                     Webhook・リマインドで使用します。
                   </p>
                 </div>
+                <div className="md:col-span-2 space-y-2">
+                  <Label htmlFor="edit_line_channel_id">LINE ログインチャネル ID（抽選フォーム用・任意）</Label>
+                  <Input
+                    id="edit_line_channel_id"
+                    placeholder="例：1234567890（未設定時はシステム共通のチャネル ID を使用）"
+                    value={editingStore.line_channel_id || ''}
+                    onChange={(e) => setEditingStore({...editingStore, line_channel_id: e.target.value || null})}
+                    autoComplete="off"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    抽選フォームの本人確認（LINE ID トークン検証）に使います。この店舗の LIFF が独自の LINE チャネルに紐づく場合に設定してください。
+                  </p>
+                </div>
 
                 {/* リマインダー設定（2カラムグリッドの中で横いっぱいに使う） */}
                 <div className="md:col-span-2 space-y-3 rounded-md border p-3">
@@ -2470,11 +2676,14 @@ export default function StoreDetailPage() {
           form={editingForm}
           storeId={storeId}
           onSave={async (updatedForm) => {
-            const isSurvey = updatedForm.config && 'questions' in updatedForm.config;
-            const endpoint = isSurvey 
-              ? `/api/surveys/${updatedForm.id}`
-              : `/api/forms/${updatedForm.id}`;
-            
+            const isLottery = isLotteryForm(updatedForm);
+            const isSurvey = !isLottery && updatedForm.config && 'questions' in updatedForm.config;
+            const endpoint = isLottery
+              ? `/api/lotteries/${updatedForm.id}`
+              : isSurvey
+                ? `/api/surveys/${updatedForm.id}`
+                : `/api/forms/${updatedForm.id}`;
+
             const response = await fetch(endpoint, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
@@ -2484,7 +2693,10 @@ export default function StoreDetailPage() {
 
             if (response.ok) {
               const savedForm = await response.json();
-              if (isSurvey) {
+              if (isLottery) {
+                 setLotteryForms((prev) => prev.map((f) => (f.id === savedForm.id ? { ...savedForm, stats: f.stats } : f)));
+                 setEditingForm((prev) => (prev && prev.id === savedForm.id ? { ...prev, ...savedForm } : prev));
+              } else if (isSurvey) {
                  setSurveyForms(surveyForms.map(f => f.id === savedForm.id ? (savedForm as SurveyForm) : f));
               } else {
                  setForms(forms.map(f => f.id === savedForm.id ? (savedForm as Form) : f));
@@ -2494,7 +2706,9 @@ export default function StoreDetailPage() {
                 description: 'フォームを保存しました',
               });
             } else {
-              throw new Error('保存に失敗しました');
+              const err = await response.json().catch(() => ({}));
+              const detail = Array.isArray(err.details) ? `\n${err.details.join('\n')}` : '';
+              throw new Error((err.error || '保存に失敗しました') + detail);
             }
           }}
           theme="light"

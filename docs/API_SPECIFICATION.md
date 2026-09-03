@@ -433,6 +433,70 @@
 
 ---
 
+## 🎯 抽選フォーム（Lottery Forms）API
+
+LINE LIFF 専用の抽選フォーム。設計と画面仕様は `docs/抽選フォーム_実装設計.md` を参照。
+管理 API はすべて `authorizeStoreAccess`（マスター / システム管理者 / 店舗管理者）で保護（local 環境はスキップ）。
+
+### `GET /api/stores/{storeId}/lotteries`
+抽選フォーム一覧。各フォームに `stats`（`entries` / `wins` / `redeemed` / `prize_counts`）を付けて返す。
+
+### `POST /api/stores/{storeId}/lotteries`
+作成。`{ form_name, liff_id?, lottery_type?: 'instant' | 'deferred', template_config? }`。後日抽選は店舗の LINE チャネルアクセストークンが必須（local を除く）。
+
+### `GET /api/lotteries/{id}` / `PUT /api/lotteries/{id}` / `DELETE /api/lotteries/{id}`
+取得（公開）/ 更新（`{ config, status? }`。確率合計・在庫・締切・事前質問を検証し、不備は 400 + `details[]`）/ 削除（履歴もカスケード）。
+抽選履歴がある状態での抽選方式の変更、抽選実行後の賞品変更は 400。
+
+### `POST /api/lotteries/{id}/duplicate` / `POST /api/lotteries/{id}/deploy`
+複製（履歴はコピーしない。賞品 ID は振り直し）/ 静的 HTML を `lotteries/{storeId}/{formId}/index.html` へデプロイ（LIFF ID 必須）。
+
+### `POST /api/lotteries/draw`（公開）
+抽選の実行 / 後日抽選の応募。
+
+```json
+{
+  "lottery_form_id": "abc123def456",
+  "store_id": "xyz789",
+  "id_token": "<LIFF の ID トークン>",
+  "line_display_name": "太郎",
+  "line_friend_flag": true,
+  "answers": { "お名前": "太郎" }
+}
+```
+
+- ID トークンは LINE の verify API で検証（チャネル ID は `stores.line_channel_id` → `NEXT_PUBLIC_LINE_CHANNEL_ID`）。local 環境は `line_user_id` の申告で代用
+- レスポンス: `{ entry, prize, message_text, second_message, is_existing }`
+- 409（回数上限）: `{ error, existing_result }` で前回の結果を返す。403（期間外・非公開・友だち必須）、400（必須質問未回答）、410（全賞品在庫切れで受付終了）
+
+### `GET /api/lotteries/{id}/my-result?id_token=`（公開） / `PATCH`
+直近結果の再表示 / `{ id_token, message_sent: true }` で LIFF 送信完了を記録。仮当選（provisional）は賞品を返さず応募済みとして返す。
+
+### `GET /api/lotteries/qr/{token}.png`（公開）
+当選 QR コードの PNG。QR の中身は `{baseUrl}/r/{token}`。
+
+### `GET /api/stores/{storeId}/lotteries/entries`
+抽選履歴。`form_id` / `prize_id` / `status`（`all|entered|provisional|drawn|lost|redeemed|cancelled|expired`）/ `search` / `from` / `to` / `customer_id` / `limit` / `offset`。
+レスポンス: `{ entries: LotteryEntryView[], total, limit, offset }`（`effective_status` で期限切れを判定済み）。
+
+### `PATCH /api/stores/{storeId}/lotteries/entries/{entryId}`
+`{ action: 'redeem' | 'unredeem' | 'cancel' | 'restore', note? }`。期限切れ・二重引換は拒否。`cancel` は在庫・回数のカウントから外れる。
+
+### `GET /api/stores/{storeId}/lotteries/entries/export`
+CSV（UTF-8 BOM）。クエリは一覧と同じ。
+
+### `GET /api/stores/{storeId}/lotteries/redeem/{qrToken}`
+QR トークン（32 文字）または 6 桁コードで当選内容を照会。`{ entry, prize, form_title, can_redeem, reason }`。他店舗の当選は 404。
+
+### 後日抽選: `/api/lotteries/{id}/deferred/*`
+- `GET summary` - `{ applicants, provisional[], winners[], unnotified, prize_capacity, is_closed, deferred_draw_status }`
+- `POST draw` - `{ force?: boolean }`。締切前は `force` が必要。再実行で仮当選を引き直す
+- `PATCH winners` - `{ remove?: entryId[], add?: [{ entry_id, prize_id }] }`。当選数超過は 400
+- `POST confirm` - 確定（provisional → drawn、entered → lost）+ 当選者へ Flex push。`{ notified, failed, lost, ... }`
+- `POST resend` - 未通知の当選者に再送
+
+---
+
 ## 🌐 公開フォーム（Public Form）API
 
 ### `GET /api/public-form/[...path]`
