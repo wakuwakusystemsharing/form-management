@@ -1,7 +1,14 @@
 'use client';
 
 import React from 'react';
-import { SurveyQuestion, SurveyQuestionType, SurveyQuestionOption, SurveyFollowUpQuestion, SurveyFollowUpType } from '@/types/survey';
+import { SurveyQuestion, SurveyQuestionType, SurveyQuestionOption, SurveyFollowUpQuestion, SurveyFollowUpType, SurveyContentBlock } from '@/types/survey';
+import {
+  AddContentBlockButton,
+  ColoredTextPreview,
+  ColoredTextToolbar,
+  SurveyContentBlockCard,
+  createSurveyContentBlock,
+} from './SurveyContentBlockEditor';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -25,10 +32,35 @@ import {
 interface SurveyQuestionEditorProps {
   questions: SurveyQuestion[];
   onChange: (questions: SurveyQuestion[]) => void;
+  /** 質問間のテキスト / 画像ブロック（指定すると「テキスト/画像表示を追加」ボタンが出る） */
+  contentBlocks?: SurveyContentBlock[];
+  onContentBlocksChange?: (blocks: SurveyContentBlock[]) => void;
+  /** 画像アップロード先の店舗 ID（contentBlocks を使う場合に必須） */
+  storeId?: string;
 }
 
-export default function SurveyQuestionEditor({ questions, onChange }: SurveyQuestionEditorProps) {
+export default function SurveyQuestionEditor({ questions, onChange, contentBlocks, onContentBlocksChange, storeId }: SurveyQuestionEditorProps) {
   const [deleteIndex, setDeleteIndex] = React.useState<number | null>(null);
+  // 説明文の文字色ツールバー用（質問 ID → textarea）
+  const descriptionRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const blocksEnabled = !!onContentBlocksChange && !!storeId;
+  const blocks = contentBlocks || [];
+  const blocksAt = (anchor: string, position: 'above' | 'below') =>
+    blocks.filter((b) => b.anchor === anchor && (b.position || 'above') === position);
+  const addBlock = (anchor: string, position: 'above' | 'below') => {
+    onContentBlocksChange?.([...blocks, createSurveyContentBlock(anchor, position)]);
+  };
+  const updateBlock = (id: string, patch: Partial<SurveyContentBlock>) => {
+    onContentBlocksChange?.(blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+  };
+  const deleteBlock = (id: string) => {
+    if (!confirm('このテキスト/画像表示を削除しますか？')) return;
+    onContentBlocksChange?.(blocks.filter((b) => b.id !== id));
+  };
+  const renderBlocks = (anchor: string, position: 'above' | 'below') =>
+    blocksAt(anchor, position).map((b) => (
+      <SurveyContentBlockCard key={b.id} block={b} storeId={storeId || ''} onChange={(patch) => updateBlock(b.id, patch)} onDelete={() => deleteBlock(b.id)} />
+    ));
   // 選択肢のドラッグ&ドロップ並び替え（質問ID + 選択肢インデックス）
   const [dragOpt, setDragOpt] = React.useState<{ qId: string; index: number } | null>(null);
   const [dragOverOpt, setDragOverOpt] = React.useState<{ qId: string; index: number } | null>(null);
@@ -51,9 +83,21 @@ export default function SurveyQuestionEditor({ questions, onChange }: SurveyQues
   };
 
   const removeQuestion = (index: number) => {
+    const removedId = questions[index]?.id;
     const newQuestions = [...questions];
     newQuestions.splice(index, 1);
     onChange(newQuestions);
+    // その質問に紐づくテキスト/画像表示は、直前の質問の下（無ければ次の質問の上）へ移す
+    if (blocksEnabled && removedId && blocks.some((b) => b.anchor === removedId)) {
+      const prev = newQuestions[index - 1];
+      const next = newQuestions[index];
+      onContentBlocksChange?.(blocks.map((b) => {
+        if (b.anchor !== removedId) return b;
+        if (prev) return { ...b, anchor: prev.id, position: 'below' as const };
+        if (next) return { ...b, anchor: next.id, position: 'above' as const };
+        return b;
+      }));
+    }
     setDeleteIndex(null);
   };
 
@@ -119,7 +163,10 @@ export default function SurveyQuestionEditor({ questions, onChange }: SurveyQues
           </div>
         ) : (
           questions.map((q, index) => (
-            <Card key={q.id}>
+            <React.Fragment key={q.id}>
+            {blocksEnabled && renderBlocks(q.id, 'above')}
+            {blocksEnabled && <AddContentBlockButton onClick={() => addBlock(q.id, 'above')} label={index === 0 ? 'Q1 の上にテキスト/画像表示を追加' : `Q${index} と Q${index + 1} の間にテキスト/画像表示を追加`} />}
+            <Card>
               <CardHeader>
                 <div className="flex justify-between items-start">
                   <div className="flex items-center gap-2">
@@ -213,11 +260,18 @@ export default function SurveyQuestionEditor({ questions, onChange }: SurveyQues
                 <div className="space-y-2">
                   <Label>説明文・補足（任意）</Label>
                   <Textarea
+                    ref={(el) => { descriptionRefs.current[q.id] = el; }}
                     value={q.description || ''}
                     onChange={(e) => updateQuestion(index, { description: e.target.value })}
-                    rows={2}
+                    rows={3}
                     placeholder="質問の下に表示される説明文を入力（同意事項など）"
                   />
+                  <ColoredTextToolbar
+                    getTextarea={() => descriptionRefs.current[q.id] ?? null}
+                    value={q.description || ''}
+                    onChange={(description) => updateQuestion(index, { description })}
+                  />
+                  <ColoredTextPreview text={q.description || ''} accentColor="#9ca3af" />
                 </div>
 
                 {/* 選択肢設定 (radio/checkbox/select) */}
@@ -409,6 +463,9 @@ export default function SurveyQuestionEditor({ questions, onChange }: SurveyQues
                 )}
               </CardContent>
             </Card>
+            {blocksEnabled && renderBlocks(q.id, 'below')}
+            {blocksEnabled && index === questions.length - 1 && <AddContentBlockButton onClick={() => addBlock(q.id, 'below')} label={`Q${index + 1} の下にテキスト/画像表示を追加`} />}
+            </React.Fragment>
           ))
         )}
       </div>

@@ -10,6 +10,7 @@
 import type { LotteryConfig, LotteryForm } from '@/types/lottery';
 import type { SurveyQuestion } from '@/types/survey';
 import { computeAccentColor } from './color-utils';
+import { renderColoredTextHtml } from './colored-text';
 import { getLoseProbability } from './lottery-engine';
 
 export type LotteryGenerateMode = 'production' | 'preview';
@@ -301,7 +302,7 @@ export class StaticLotteryGenerator {
     return `
                     <div class="question" id="question-${id}">
                         <label class="field-label">Q${index + 1}. ${this.escapeHtml(q.title)}${requiredMark}</label>
-                        ${q.description ? `<p class="question-desc">${this.escapeHtml(q.description)}</p>` : ''}
+                        ${q.description ? `<p class="question-desc">${renderColoredTextHtml(q.description)}</p>` : ''}
                         ${field}
                         ${otherInput}
                         ${followUps}
@@ -1177,7 +1178,7 @@ export class StaticLotteryGenerator {
 
         /* 事前質問 */
         .question { margin-bottom: 22px; }
-        .question-desc { font-size: 13px; color: #666; margin: -6px 0 10px; white-space: pre-wrap; }
+        .question-desc { font-size: 13px; color: #666; margin: -6px 0 10px; }
         .input { width: 100%; padding: 14px; border: 1px solid #ccc; border-radius: 2px; font-size: 16px; background: #fafafa; font-family: inherit; }
         .input:focus { outline: none; border-color: var(--primary-color); background: var(--white); box-shadow: 0 0 0 1px var(--primary-color); }
         .other-input, .follow-up { margin-top: 10px; }

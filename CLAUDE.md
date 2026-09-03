@@ -519,6 +519,12 @@ export async function GET(req, { params }) {
 **メニュー (`MenuItem` / `SubMenuItem` / `MenuOption`):**
 - `hide_price` / `hide_duration` - 料金・所要時間を非表示にするフラグ（任意）
 
+**アンケートの「テキスト/画像表示」ブロックと文字色 (`SurveyContentBlock`, `config.content_blocks`):**
+- 質問項目の編集画面で Q と Q の間（Q1 の上・最後の Q の下も）に「テキスト/画像表示を追加」。`anchor` = 基準の質問 ID、`position` = `above | below`
+- テキストは `[color=#rrggbb]〜[/color]` で部分的に文字色変更（予約フォームの「画像orテキスト設置」と同じ書式）。各質問の説明文も同じ書式に対応
+- 共通ヘルパー `src/lib/colored-text.ts`（エスケープ + 色タグ変換。hex 以外は色として扱わない）。編集 UI は `src/components/FormEditor/Survey/SurveyContentBlockEditor.tsx`
+- 静的 HTML では `StaticSurveyGenerator.renderContentBlocksAt()` が質問の上下に描画。画像は `/api/upload/menu-image` でアップロード（`menuId = survey_block_{id}`）
+
 **アンケート質問の選択肢 (`SurveyQuestionOption`, `src/types/survey.ts`):**
 - 編集画面（`SurveyQuestionEditor.tsx`）で選択肢をドラッグ&ドロップ並び替え可能（配列順がそのまま静的 HTML の表示順）
 - `allow_other` は `radio` / `checkbox` / `select` すべてで有効。`select` は内部値 `__other__`（`StaticSurveyGenerator.OTHER_OPTION_VALUE`）で「その他」を表し、送信時に `その他（理由）` に変換

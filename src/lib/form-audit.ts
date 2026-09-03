@@ -74,6 +74,7 @@ const RESERVATION_SECTION_LABELS: Record<string, string> = {
 const SURVEY_SECTION_LABELS: Record<string, string> = {
   basic_info: '基本情報',
   questions: '質問',
+  content_blocks: 'テキスト/画像表示',
   ui_settings: 'UI設定',
   design: 'デザイン',
 };
