@@ -20,14 +20,14 @@ export class SupabaseStorageDeployer {
    * @param storeId 店舗ID
    * @param formId フォームID
    * @param html 生成されたHTML
-   * @param formType フォームタイプ（'reservation' | 'survey'）
+   * @param formType フォームタイプ（'reservation' | 'survey' | 'lottery'）
    * @returns デプロイ結果（URL、Storage URL、環境情報）
    */
   async deployForm(
     storeId: string,
     formId: string,
     html: string,
-    formType: 'reservation' | 'survey' = 'reservation'
+    formType: 'reservation' | 'survey' | 'lottery' = 'reservation'
   ): Promise<DeployResult> {
     const env = getAppEnvironment();
     
@@ -125,9 +125,9 @@ export class SupabaseStorageDeployer {
    * フォームをSupabase Storageから削除
    * @param storeId 店舗ID
    * @param formId フォームID
-   * @param formType フォームタイプ（'reservation' | 'survey'）
+   * @param formType フォームタイプ（'reservation' | 'survey' | 'lottery'）
    */
-  async deleteForm(storeId: string, formId: string, formType: 'reservation' | 'survey' = 'reservation'): Promise<void> {
+  async deleteForm(storeId: string, formId: string, formType: 'reservation' | 'survey' | 'lottery' = 'reservation'): Promise<void> {
     if (shouldUseMockBlob()) {
       // ローカル環境: ファイルシステムから削除
       const staticDir = path.join(process.cwd(), 'public', 'static-forms');
@@ -169,9 +169,9 @@ export class SupabaseStorageDeployer {
   /**
    * 店舗の全フォームをSupabase Storageから削除
    * @param storeId 店舗ID
-   * @param formType フォームタイプ（'reservation' | 'survey' | 'all'）
+   * @param formType フォームタイプ（'reservation' | 'survey' | 'lottery' | 'all'）
    */
-  async deleteStoreAllForms(storeId: string, formType: 'reservation' | 'survey' | 'all' = 'all'): Promise<void> {
+  async deleteStoreAllForms(storeId: string, formType: 'reservation' | 'survey' | 'lottery' | 'all' = 'all'): Promise<void> {
     if (shouldUseMockBlob()) {
       console.log('[LOCAL MODE] Skipping bulk deletion in local mode');
       return;
@@ -189,6 +189,7 @@ export class SupabaseStorageDeployer {
       if (formType === 'all') {
         prefixes.push(`reservations/${storeId}/`);
         prefixes.push(`surveys/${storeId}/`);
+        prefixes.push(`lotteries/${storeId}/`);
       } else {
         prefixes.push(`${formType}s/${storeId}/`);
       }

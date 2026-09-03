@@ -313,6 +313,15 @@ Local:    /public/uploads/{storeId}/{menuId}.{ext} (mock)
 5. `static_deploy` 情報を DB に記録
 6. 顧客が LINE で フォーム URL にアクセス → `/api/public-form/*` 経由で静的 HTML を表示
 
+**フロー（抽選フォーム）**:
+1. 管理者が「更新」をクリック → `/api/lotteries/{id}/deploy`
+2. `StaticLotteryGenerator.generateHTML(form, 'production')` で HTML を生成（演出: スクラッチ / ガチャ / シンプル）
+3. `SupabaseStorageDeployer.deployForm(..., 'lottery')` で `lotteries/{storeId}/{formId}/index.html` にアップロード
+4. 顧客が LINE で開く → LIFF の ID トークンを付けて `POST /api/lotteries/draw` → サーバーで当選確定（DB 関数でフォーム行をロックして在庫・回数を再確認）→ クライアントは演出のみ
+5. 結果テキストを LIFF `sendMessages` でトークへ送信。当選時は Bot から Flex 当選カードを push（任意）
+6. 店舗は管理画面の抽選履歴または QR スキャン画面（`/{storeId}/admin/lottery-scan`）で引換
+- 後日抽選は応募（entered）→ 管理画面で抽選（provisional）→ 確定（drawn / lost）→ 当選者へ push（`src/lib/lottery-deferred-service.ts`）
+
 **環境分離**:
 - Staging 環境: Staging 用 Supabase プロジェクトの Storage にデプロイ
 - Production 環境: Production 用 Supabase プロジェクトの Storage にデプロイ
@@ -324,6 +333,7 @@ Local:    /public/uploads/{storeId}/{menuId}.{ext} (mock)
 - テーマカラーはインライン CSS で適用
 - 予約フォーム: すべての設定（menu_structure など）を `FORM_CONFIG` として JSON 埋め込み
 - アンケートフォーム: 質問設定を `questions` 配列として JSON 埋め込み
+- 抽選フォーム: 設定を `FORM_CONFIG` として JSON 埋め込み（`<` `>` `&` を `\u` エスケープしてスクリプト閉じを防止）。バッククォート不使用の vanilla JS
 - プロキシURL (`/api/public-form/*`) 経由で配信することで、正しいContent-Typeヘッダーを設定
 
 ## 🔐 認証・認可設計

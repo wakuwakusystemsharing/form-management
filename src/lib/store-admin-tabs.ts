@@ -7,7 +7,7 @@
  * - マスター管理者・システム管理者が店舗管理者ページを開いた場合は常にすべて表示
  */
 
-export const STORE_ADMIN_TAB_IDS = ['dashboard', 'reservations', 'customers', 'surveys', 'settings'] as const;
+export const STORE_ADMIN_TAB_IDS = ['dashboard', 'reservations', 'customers', 'surveys', 'lotteries', 'settings'] as const;
 export type StoreAdminTabId = (typeof STORE_ADMIN_TAB_IDS)[number];
 
 export const STORE_ADMIN_TABS: { id: StoreAdminTabId; label: string; description: string }[] = [
@@ -15,6 +15,7 @@ export const STORE_ADMIN_TABS: { id: StoreAdminTabId; label: string; description
   { id: 'reservations', label: '予約管理', description: '予約フォームと予約一覧・分析' },
   { id: 'customers', label: '顧客管理 β', description: '顧客一覧・顧客分析（CRM）' },
   { id: 'surveys', label: 'アンケート管理', description: 'アンケートフォームと回答一覧' },
+  { id: 'lotteries', label: '抽選管理', description: '抽選フォームと抽選履歴・引換' },
   { id: 'settings', label: '設定', description: '店舗情報の確認・表示設定' },
 ];
 

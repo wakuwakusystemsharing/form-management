@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { Form } from '@/types/form';
 import { SurveyForm } from '@/types/survey';
+import type { LotteryForm } from '@/types/lottery';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,17 +14,24 @@ import BasicInfoEditor from './Reservation/BasicInfoEditor';
 import MenuStructureEditor from './Reservation/MenuStructureEditor';
 import BusinessRulesEditor from './Reservation/BusinessRulesEditor';
 import SurveyFormEditor from './Survey/SurveyFormEditor';
+import LotteryFormEditor from './Lottery/LotteryFormEditor';
 import { Eye, Save, Upload } from 'lucide-react';
+
+export type EditableForm = Form | SurveyForm | LotteryForm;
 
 interface FormEditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  form: Form | SurveyForm;
+  form: EditableForm;
   storeId: string;
-  onSave: (form: Form | SurveyForm) => Promise<void>;
+  onSave: (form: EditableForm) => Promise<void>;
   theme?: 'light' | 'dark';
   userRole: 'service_admin' | 'store_admin';
 }
+
+export const isLotteryForm = (form: EditableForm): form is LotteryForm => {
+  return !!form.config && 'prizes' in form.config && 'lottery_type' in form.config;
+};
 
 const FormEditModal: React.FC<FormEditModalProps> = ({
   isOpen,
@@ -34,7 +42,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
   theme = 'light',
   userRole
 }) => {
-  const [editingForm, setEditingForm] = useState<Form | SurveyForm>(initialForm);
+  const [editingForm, setEditingForm] = useState<EditableForm>(initialForm);
   const [activeTab, setActiveTab] = useState<TabId>(
     userRole === 'service_admin' ? 'basic' : 'menu'
   );
@@ -48,8 +56,8 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
     setEditingForm(initialForm);
   }, [initialForm]);
 
-  const isSurvey = (form: Form | SurveyForm): form is SurveyForm => {
-    return form.config && 'questions' in form.config;
+  const isSurvey = (form: EditableForm): form is SurveyForm => {
+    return !!form.config && 'questions' in form.config && !isLotteryForm(form);
   };
 
   const handleSave = async () => {
@@ -80,9 +88,11 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
       await onSave(editingForm);
       
       // 静的HTMLを再デプロイ
-      const endpoint = isSurvey(editingForm) 
-        ? `/api/surveys/${editingForm.id}/deploy`
-        : `/api/forms/${editingForm.id}/deploy`;
+      const endpoint = isLotteryForm(editingForm)
+        ? `/api/lotteries/${editingForm.id}/deploy`
+        : isSurvey(editingForm)
+          ? `/api/surveys/${editingForm.id}/deploy`
+          : `/api/forms/${editingForm.id}/deploy`;
 
       const deployResponse = await fetch(endpoint, {
         method: 'POST',
@@ -125,7 +135,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
   const handlePreview = async () => {
     try {
       setIsPreviewing(true);
-      const formType = isSurvey(editingForm) ? 'survey' : 'reservation';
+      const formType = isLotteryForm(editingForm) ? 'lottery' : isSurvey(editingForm) ? 'survey' : 'reservation';
 
       const response = await fetch('/api/preview/generate', {
         method: 'POST',
@@ -178,7 +188,9 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex-1">
               <DialogTitle className="text-2xl">
-                {isSurvey(editingForm) 
+                {isLotteryForm(editingForm)
+                  ? `${editingForm.config?.basic_info?.title || '抽選フォーム'} 編集`
+                  : isSurvey(editingForm)
                   ? `${editingForm.config?.basic_info?.title || 'アンケートフォーム'} 編集`
                   : `${(editingForm as Form).config?.basic_info?.form_name || (editingForm as any).form_name || '予約フォーム'} 編集`}
               </DialogTitle>
@@ -223,7 +235,15 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
 
         {/* コンテンツエリア */}
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-          {isSurvey(editingForm) ? (
+          {isLotteryForm(editingForm) ? (
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <LotteryFormEditor
+                form={editingForm}
+                onUpdate={(updatedForm) => setEditingForm(updatedForm)}
+                userRole={userRole}
+              />
+            </div>
+          ) : isSurvey(editingForm) ? (
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               <SurveyFormEditor
                 form={editingForm}
