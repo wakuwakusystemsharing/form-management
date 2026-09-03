@@ -112,6 +112,12 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
           title: '更新しました',
           description: `${result.environment === 'local' ? 'ローカル' : '本番環境'}にデプロイされました。`,
         });
+        // 抽選フォームはデプロイ = 公開。サーバー側で切り替わった公開ステータスを編集中のフォームと一覧に反映する
+        if (isLotteryForm(editingForm) && typeof result.form_status === 'string' && result.form_status !== editingForm.status) {
+          const published = { ...editingForm, status: result.form_status as LotteryForm['status'] };
+          setEditingForm(published);
+          await onSave(published);
+        }
       } else {
         const error = await deployResponse.json();
         toast({
