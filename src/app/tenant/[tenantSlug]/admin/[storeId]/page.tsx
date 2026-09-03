@@ -1514,7 +1514,7 @@ export default function StoreDetailPage() {
 
         {/* ── タブナビゲーション ── */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="h-10 bg-card border border-border p-1 w-full sm:w-auto grid grid-cols-4 sm:inline-grid">
+          <TabsList className="h-10 bg-card border border-border p-1 w-full sm:w-auto grid grid-cols-5 sm:inline-grid">
             <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">概要</TabsTrigger>
             <TabsTrigger value="forms" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">予約フォーム</TabsTrigger>
             <TabsTrigger value="surveys" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">アンケート</TabsTrigger>
