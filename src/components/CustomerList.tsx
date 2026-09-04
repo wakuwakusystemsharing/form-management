@@ -12,7 +12,8 @@ import { SearchBar } from '@/components/ui/search-bar';
 import { useToast } from '@/components/ui/use-toast';
 import { useDebounce } from '@/hooks/use-debounce';
 import { fetchWithAuth } from '@/lib/client-auth';
-import { UserPlus, ChevronRight, Plus } from 'lucide-react';
+import { UserPlus, ChevronRight, Plus, Tag, X } from 'lucide-react';
+import { summarizeTags } from '@/lib/customer-chart';
 import CustomerForm, { CustomerFormData } from '@/components/CustomerForm';
 import MobileSheet from '@/components/customers/MobileSheet';
 import { ChipFilter } from '@/components/customers/ChipTabs';
@@ -23,6 +24,9 @@ interface CustomerListProps {
   onCustomerClick?: (customer: Customer) => void;
   /** 件数が分かったときに親へ通知（スマホのヘッダー行に表示するため） */
   onTotalChange?: (total: number) => void;
+  /** タグで絞り込み（親が制御する場合。顧客詳細のタグをタップしたときに親から渡す） */
+  tagFilter?: string | null;
+  onTagFilterChange?: (tag: string | null) => void;
 }
 
 const PAGE_SIZE = 50;
@@ -77,13 +81,19 @@ const dateFmt = new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numer
 const dateFullFmt = new Intl.DateTimeFormat('ja-JP');
 const yenFmt = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 });
 
-export default function CustomerList({ storeId, onCustomerClick, onTotalChange }: CustomerListProps) {
+export default function CustomerList({ storeId, onCustomerClick, onTotalChange, tagFilter: tagFilterProp, onTagFilterChange }: CustomerListProps) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery.trim(), 300);
   const [segmentFilter, setSegmentFilter] = useState<'all' | CustomerSegment>('all');
+  const [internalTagFilter, setInternalTagFilter] = useState<string | null>(null);
+  const tagFilter = tagFilterProp !== undefined ? tagFilterProp : internalTagFilter;
+  const setTagFilter = (tag: string | null) => {
+    setInternalTagFilter(tag);
+    onTagFilterChange?.(tag);
+  };
   const [total, setTotal] = useState(0);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -94,6 +104,7 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange }
     const params = new URLSearchParams();
     if (debouncedSearch) params.append('search', debouncedSearch);
     if (segmentFilter !== 'all') params.append('segment', segmentFilter);
+    if (tagFilter) params.append('tag', tagFilter);
     params.append('limit', String(PAGE_SIZE));
     if (offset > 0) params.append('offset', String(offset));
     const response = await fetchWithAuth(`/api/stores/${storeId}/customers?${params.toString()}`);
@@ -108,7 +119,7 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange }
     const data = await response.json().catch(() => ({}));
     toast({ title: '顧客一覧の取得に失敗しました', description: data.error || `エラーコード: ${response.status}`, variant: 'destructive' });
     return null;
-  }, [storeId, debouncedSearch, segmentFilter, toast]);
+  }, [storeId, debouncedSearch, segmentFilter, tagFilter, toast]);
 
   const fetchCustomers = useCallback(async () => {
     const seq = ++requestSeq.current;
@@ -170,7 +181,20 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange }
   };
 
   const hasMore = customers.length < total;
-  const isFiltered = !!debouncedSearch || segmentFilter !== 'all';
+  const isFiltered = !!debouncedSearch || segmentFilter !== 'all' || !!tagFilter;
+
+  const renderTags = (customer: Customer, className = '') => {
+    const { shown, rest } = summarizeTags(customer.tags, 2);
+    if (shown.length === 0) return null;
+    return (
+      <span className={`inline-flex flex-wrap items-center gap-1 ${className}`} aria-label="タグ">
+        {shown.map((t) => (
+          <span key={t} className="inline-flex items-center rounded-full border bg-muted/40 px-1.5 text-[11px] leading-5 text-muted-foreground max-w-[9rem] truncate">{t}</span>
+        ))}
+        {rest > 0 && <span className="text-[11px] leading-5 text-muted-foreground">+{rest}</span>}
+      </span>
+    );
+  };
 
   const listBody = (
     <>
@@ -183,7 +207,7 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange }
             {isFiltered ? '検索語や絞り込みを変えてみてください' : 'LINE 予約が入ると自動で登録されます。手動で追加することもできます'}
           </p>
           {isFiltered ? (
-            <Button variant="outline" size="sm" className="mt-4" onClick={() => { setSearchQuery(''); setSegmentFilter('all'); }}>
+            <Button variant="outline" size="sm" className="mt-4" onClick={() => { setSearchQuery(''); setSegmentFilter('all'); setTagFilter(null); }}>
               絞り込みを解除
             </Button>
           ) : (
@@ -219,6 +243,7 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange }
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground truncate">{customer.phone || '電話番号なし'}</p>
+                      {renderTags(customer, 'mt-0.5')}
                       <p className="mt-0.5 text-[13px] text-muted-foreground tabular-nums truncate">
                         来店 <span className="text-foreground">{customer.total_visits}回</span>
                         <span className="mx-1.5 opacity-50">・</span>
@@ -242,6 +267,7 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange }
                   <TableHead className="w-[50px]"></TableHead>
                   <TableHead>顧客名</TableHead>
                   <TableHead>電話番号</TableHead>
+                  <TableHead>タグ</TableHead>
                   <TableHead>セグメント</TableHead>
                   <TableHead className="text-right">来店回数</TableHead>
                   <TableHead className="text-right">総利用金額</TableHead>
@@ -261,6 +287,7 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange }
                       </TableCell>
                       <TableCell className="font-medium">{customer.name}</TableCell>
                       <TableCell>{customer.phone || '-'}</TableCell>
+                      <TableCell>{renderTags(customer) ?? <span className="text-muted-foreground">-</span>}</TableCell>
                       <TableCell><Badge variant={getSegmentBadgeVariant(segment)}>{getSegmentLabel(segment)}</Badge></TableCell>
                       <TableCell className="text-right tabular-nums">{customer.total_visits}回</TableCell>
                       <TableCell className="text-right tabular-nums">{yenFmt.format(customer.total_spent)}</TableCell>
@@ -289,10 +316,22 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange }
       <SearchBar
         value={searchQuery}
         onChange={setSearchQuery}
-        placeholder="顧客名、電話番号、メールで検索"
+        placeholder="顧客名、電話番号、メール、タグで検索"
         ariaLabel="顧客を検索"
         className="md:flex-1 [&_input]:h-12 md:[&_input]:h-10"
       />
+      {tagFilter && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="inline-flex items-center gap-1 rounded-full border bg-muted/50 pl-2.5 pr-1 py-0.5 text-xs">
+            <Tag className="h-3 w-3" aria-hidden="true" />
+            <span className="max-w-[12rem] truncate">{tagFilter}</span>
+            <button type="button" onClick={() => setTagFilter(null)} aria-label="タグの絞り込みを解除" className="inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-muted active:bg-muted">
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </span>
+          <span className="text-xs text-muted-foreground">のタグで絞り込み中</span>
+        </div>
+      )}
       {/* スマホ: チップ列 / PC: セレクト */}
       <ChipFilter items={SEGMENT_ITEMS} value={segmentFilter} onChange={setSegmentFilter} ariaLabel="セグメントで絞り込み" className="md:hidden -mx-4 px-4" />
       <Select value={segmentFilter} onValueChange={(v) => setSegmentFilter(v as 'all' | CustomerSegment)}>
@@ -370,6 +409,7 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange }
             onCancel={() => setShowCreateDialog(false)}
             submitLabel="追加"
             isSubmitting={isCreating}
+            storeId={storeId}
             hideActions
           />
         </div>

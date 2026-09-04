@@ -135,6 +135,11 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - `/api/stores/{storeId}/customers/analytics` - 顧客分析データ
 - **すべての顧客 API に `getCurrentUser` + `checkStoreAccess` 認証必須**（local 環境はスキップ）。`{customerId}` 操作時は `verifyCustomerBelongsToStore` で店舗境界も確認
 - `CustomerList.tsx`、`CustomerDetail.tsx`、`CustomerAnalytics.tsx`、`CustomerForm.tsx` - UI コンポーネント
+- **カルテ機能（第 1 弾）**: 設計は `docs/顧客管理_カルテ機能_実装設計.md`。純粋ロジックは `src/lib/customer-chart.ts`（`normalizeTags` / `CONTACT_METHODS` / `pickPendingNextVisitNote` / `buildVisitNotePatch`）
+  - 安全のための情報: `customers.allergies` / `medical_history` を編集フォームの「安全のための情報」で入力し、登録があるときだけ顧客詳細の上部に赤い帯（`data-slot="caution"`）で表示。要配慮個人情報のため本人同意の注記を固定表示
+  - タグ: `customers.tags`（TEXT[]。1 タグ 30 文字・20 個まで。API で `normalizeTags`）。`TagInput.tsx` が `GET /customers/tags`（使用回数順の候補）を表示。一覧カード / 行に最大 2 個 + 「+N」、`search` はタグ完全一致もヒット、`?tag=` で絞り込み（顧客詳細のタグをタップ → 一覧へ）
+  - 希望連絡手段: `customers.preferred_contact_method`（`line` / `phone` / `email` / `none`。API で検証）
+  - 次回への申し送り: `customer_visits.next_visit_note` / `next_visit_note_by` / `next_visit_note_acknowledged_at`（`20260904100000_add_visit_next_note.sql`）。来店カードの「申し送りを書く / 編集」で `PATCH /customers/{id}/visits/{visitId}`。未確認の最新 1 件を顧客詳細の上部に黄色の帯（`data-slot="handoff"`）で表示し、「確認済みにする」（`acknowledge: true`）で消える（来店カードには残る）。本文を変更すると未確認に戻る。`customer_reservation_history` が OFF の店舗では申し送りを出さない
 
 **LINE 友だち追加状態の取り扱い:**
 - LIFF `getFriendship()` 失敗時は `null`（不明）を送信。サーバ側で `typeof === 'boolean'` のときだけ既存値を上書きし、不明時は保持
@@ -382,10 +387,12 @@ export async function GET(req, { params }) {
 
 ### 顧客管理 API:
 - 全エンドポイントで認証必須（`getCurrentUser` + `checkStoreAccess`、local 環境はスキップ）
-- `GET /api/stores/{storeId}/customers` - 顧客一覧（`search` / `customer_type` / `segment` / `limit` / `offset`）
+- `GET /api/stores/{storeId}/customers` - 顧客一覧（`search`（名前・電話・メール部分一致 + タグ完全一致）/ `tag` / `customer_type` / `segment` / `limit` / `offset`）
 - `POST /api/stores/{storeId}/customers` - 顧客作成（電話番号重複時は 409 + `existing_customer_id`）
 - `GET /api/stores/{storeId}/customers/{customerId}` - 顧客詳細（予約履歴・来店履歴含む）
 - `PATCH /api/stores/{storeId}/customers/{customerId}` - 顧客情報更新（空文字は nullable フィールドで自動的に null に正規化）
+- `GET /api/stores/{storeId}/customers/tags` - 店舗の顧客タグを使用回数順に最大 50 件（`{ tags: [{ tag, count }] }`）
+- `PATCH /api/stores/{storeId}/customers/{customerId}/visits/{visitId}` - 来店記録の申し送り更新（`next_visit_note` / `next_visit_note_by` / `acknowledge: true`）
 - `DELETE /api/stores/{storeId}/customers/{customerId}` - 顧客削除（`customer_visits` は CASCADE、`reservations.customer_id` は SET NULL）
 - `GET /api/stores/{storeId}/customers/analytics` - 顧客分析データ（セグメント分布、月別新規、性別/年齢、`line_friend_rate` + `line_friend_connected` + `line_linked_customers`、平均来店間隔、リピート率、売上ランキング）
 
@@ -504,6 +511,7 @@ export async function GET(req, { params }) {
 - `20260411100001_update_cron_hourly.sql` - send-reminders Edge Function を毎時実行に変更
 - `20260429000000_add_store_postal_code.sql` - stores.postal_code 追加（Web 予約メール用）
 - `20260902000000_add_admin_visible_tabs.sql` - stores.admin_visible_tabs 追加（店舗管理者に表示するタブ）
+- `20260904100000_add_visit_next_note.sql` - customer_visits に次回への申し送り 3 列追加（カルテ機能）
 - `20260903000000_add_lottery.sql` - lottery_forms / lottery_entries テーブル・RLS・`lottery_insert_entry_checked` 関数
 - `20260903000001_add_store_line_channel_id.sql` - stores.line_channel_id 追加（ID トークン検証用）
 - `20260904000000_add_admin_visible_options.sql` - stores.admin_visible_options 追加（店舗管理者に表示する項目の個別設定）
