@@ -540,6 +540,11 @@ export async function GET(req, { params }) {
 **メニュー (`MenuItem` / `SubMenuItem` / `MenuOption`):**
 - `hide_price` / `hide_duration` - 料金・所要時間を非表示にするフラグ（任意）
 
+**アンケートの選択肢タグ（`SurveyQuestionOption.tags`）:**
+- 質問項目の各選択肢の「タグ」ボタン（追加質問の左）で、その選択肢を選んで送信した回答者に付ける顧客タグを設定（`TagInput`。店舗で使用中のタグを候補表示）
+- `POST /api/surveys/submit` が回答保存後に `applySurveyTagsToCustomer()`（`src/lib/survey-tags-apply.ts`）を呼び、`line_user_id` で店舗内の顧客を検索してタグをマージ（顧客が無ければ何もしない。失敗しても送信は成功扱い）。回答 → タグの集計は `src/lib/survey-tags.ts` の `collectSurveyOptionTags()`（radio / select はラベル一致、checkbox は ", " 区切り）
+- 顧客一覧はセグメントの隣に「タグで絞り込み」プルダウン（`GET /customers/tags` の一覧。将来の配信機能の絞り込みにも流用予定）
+
 **アンケートの「テキスト/画像表示」ブロックと文字色 (`SurveyContentBlock`, `config.content_blocks`):**
 - 質問項目の編集画面で Q と Q の間（Q1 の上・最後の Q の下も）に「テキスト/画像表示を追加」。`anchor` = 基準の質問 ID、`position` = `above | below`
 - テキストは `[color=#rrggbb]〜[/color]` で部分的に文字色変更（予約フォームの「画像orテキスト設置」と同じ書式）。各質問の説明文も同じ書式に対応

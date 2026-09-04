@@ -3,9 +3,30 @@ import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import fs from 'fs';
 import path from 'path';
+import { applySurveyTagsToCustomer } from '@/lib/survey-tags-apply';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const SURVEY_RESPONSES_FILE = path.join(DATA_DIR, 'survey_responses.json');
+
+/**
+ * 選択肢に設定されたタグを回答者の顧客レコードへ付与する。
+ * 回答の保存は済んでいるため、失敗してもログだけ残して送信自体は成功として返す。
+ */
+async function applyTagsSafely(storeId: string, surveyFormId: string, responses: Record<string, unknown>, lineUserId: unknown) {
+  try {
+    const result = await applySurveyTagsToCustomer({
+      storeId,
+      surveyFormId,
+      responses,
+      lineUserId: typeof lineUserId === 'string' && lineUserId ? lineUserId : null,
+    });
+    if (result.applied.length > 0 && !result.customerId) {
+      console.warn('[Survey] タグ付与スキップ:', result.reason, { storeId, surveyFormId });
+    }
+  } catch (e) {
+    console.error('[Survey] タグ付与エラー:', e);
+  }
+}
 
 // POST /api/surveys/submit - アンケート回答を送信
 export async function POST(request: Request) {
@@ -51,6 +72,7 @@ export async function POST(request: Request) {
       existing.push(newResponse);
       fs.writeFileSync(SURVEY_RESPONSES_FILE, JSON.stringify(existing, null, 2));
 
+      await applyTagsSafely(store_id, survey_form_id, parsedResponses, body.line_user_id);
       return NextResponse.json(newResponse, { status: 201 });
     }
 
@@ -84,6 +106,7 @@ export async function POST(request: Request) {
       );
     }
 
+    await applyTagsSafely(store_id, survey_form_id, parsedResponses, body.line_user_id);
     return NextResponse.json(survey, { status: 201 });
   } catch (error) {
     console.error('Survey submit error:', error);
