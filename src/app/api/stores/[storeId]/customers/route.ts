@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
+import { isContactMethod, normalizeTags } from '@/lib/customer-chart';
 import { createAdminClient, createAuthenticatedClient, checkStoreAccess } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth-helper';
 import { Customer, CustomerInsert } from '@/types/form';
@@ -65,7 +66,8 @@ function escapeForOrFilter(value: string): string {
  * 自店舗の顧客一覧を取得
  *
  * クエリパラメータ:
- * - search: 検索クエリ（名前、電話番号、メール）
+ * - search: 検索クエリ（名前、電話番号、メール、タグ完全一致）
+ * - tag: タグで絞り込み（完全一致）
  * - customer_type: 顧客タイプでフィルタ (new, regular, vip, inactive)
  * - segment: セグメントでフィルタ (new, repeat, vip, dormant)
  * - limit: 取得件数（デフォルト: 50）
@@ -83,6 +85,7 @@ export async function GET(
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
+    const tag = searchParams.get('tag')?.trim() || null;
     const customerType = searchParams.get('customer_type');
     const segment = searchParams.get('segment');
     const limit = parseInt(searchParams.get('limit') || '50');
@@ -109,8 +112,14 @@ export async function GET(
           (c) =>
             c.name.toLowerCase().includes(query) ||
             c.phone?.toLowerCase().includes(query) ||
-            c.email?.toLowerCase().includes(query)
+            c.email?.toLowerCase().includes(query) ||
+            (Array.isArray(c.tags) && c.tags.some((t) => t.toLowerCase() === query))
         );
+      }
+
+      // タグで絞り込み（完全一致）
+      if (tag) {
+        customers = customers.filter((c) => Array.isArray(c.tags) && c.tags.includes(tag));
       }
 
       // 顧客タイプでフィルタ
@@ -158,10 +167,18 @@ export async function GET(
     if (search) {
       const safe = escapeForOrFilter(search);
       if (safe) {
+        // タグは配列のため部分一致できない。完全一致（cs = contains）だけ検索対象にする
+        const tagSafe = safe.replace(/["{}]/g, '').trim();
+        const tagClause = tagSafe ? `,tags.cs.{"${tagSafe}"}` : '';
         query = query.or(
-          `name.ilike.%${safe}%,phone.ilike.%${safe}%,email.ilike.%${safe}%`
+          `name.ilike.%${safe}%,phone.ilike.%${safe}%,email.ilike.%${safe}%${tagClause}`
         );
       }
+    }
+
+    // タグで絞り込み（完全一致）
+    if (tag) {
+      query = query.contains('tags', [tag]);
     }
 
     // 顧客タイプフィルタ
@@ -291,11 +308,11 @@ export async function POST(
       line_status_message: body.line_status_message || null,
       line_email: body.line_email || null,
       customer_type: body.customer_type || 'regular',
-      preferred_contact_method: body.preferred_contact_method || null,
+      preferred_contact_method: isContactMethod(body.preferred_contact_method) ? body.preferred_contact_method : null,
       allergies: body.allergies || null,
       medical_history: body.medical_history || null,
       notes: body.notes || null,
-      tags: body.tags || null,
+      tags: normalizeTags(body.tags),
     };
 
     const newCustomer = await createCustomer(customerData);

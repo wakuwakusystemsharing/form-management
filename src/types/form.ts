@@ -730,6 +730,10 @@ export interface Database {
           // 金額情報
           amount: number | null;
           payment_method: string | null;
+          // 次回への申し送り（カルテ）
+          next_visit_note: string | null;
+          next_visit_note_by: string | null;
+          next_visit_note_acknowledged_at: string | null;
           // タイムスタンプ
           created_at: string;
           updated_at: string;
@@ -751,6 +755,10 @@ export interface Database {
           // 金額情報
           amount?: number | null;
           payment_method?: string | null;
+          // 次回への申し送り（カルテ）
+          next_visit_note?: string | null;
+          next_visit_note_by?: string | null;
+          next_visit_note_acknowledged_at?: string | null;
           // タイムスタンプ
           created_at?: string;
           updated_at?: string;
@@ -772,6 +780,10 @@ export interface Database {
           // 金額情報
           amount?: number | null;
           payment_method?: string | null;
+          // 次回への申し送り（カルテ）
+          next_visit_note?: string | null;
+          next_visit_note_by?: string | null;
+          next_visit_note_acknowledged_at?: string | null;
           // タイムスタンプ
           created_at?: string;
           updated_at?: string;

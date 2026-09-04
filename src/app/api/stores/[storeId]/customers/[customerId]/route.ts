@@ -6,6 +6,7 @@ import { createAdminClient, createAuthenticatedClient, checkStoreAccess } from '
 import { getCurrentUser } from '@/lib/auth-helper';
 import { Customer, CustomerUpdate } from '@/types/form';
 import { updateCustomer, deleteCustomer } from '@/lib/customer-utils';
+import { isContactMethod, normalizeTags } from '@/lib/customer-chart';
 
 // ローカル環境用のデータファイル
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -147,7 +148,10 @@ export async function GET(
       if (fs.existsSync(VISITS_FILE)) {
         const visitsData = fs.readFileSync(VISITS_FILE, 'utf-8');
         const allVisits = JSON.parse(visitsData);
-        visits = allVisits.filter((v: any) => v.customer_id === customerId);
+        visits = allVisits
+          .filter((v: any) => v.customer_id === customerId)
+          // Supabase 側（visit_date 降順）と同じ並びにする
+          .sort((a: any, b: any) => String(b.visit_date).localeCompare(String(a.visit_date)) || String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
       }
 
       return NextResponse.json({
@@ -266,6 +270,18 @@ export async function PATCH(
       let value = body[field];
       if (nullableFields.has(field) && value === '') {
         value = null;
+      }
+      if (field === 'tags') {
+        if (value === null) {
+          value = [];
+        } else if (!Array.isArray(value)) {
+          return NextResponse.json({ error: 'タグは配列で指定してください' }, { status: 400 });
+        } else {
+          value = normalizeTags(value);
+        }
+      }
+      if (field === 'preferred_contact_method' && value !== null && !isContactMethod(value)) {
+        return NextResponse.json({ error: '希望連絡手段の値が不正です' }, { status: 400 });
       }
       (updateData as any)[field] = value;
     }
