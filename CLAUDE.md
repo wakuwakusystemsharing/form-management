@@ -212,6 +212,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - マスター管理者・システム管理者が開いた場合は常に全表示（`/api/auth/role` の判定を `isUpperAdminUser` に保持）
 - 定義・正規化は `src/lib/store-admin-tabs.ts`（`STORE_ADMIN_TABS` / `resolveVisibleTabs()`）
 - マイグレーション: `20260902000000_add_admin_visible_tabs.sql`
+- **項目単位の表示**: `stores.admin_visible_options` JSONB（`reservation_forms` / `survey_forms` / `lottery_forms` = 各タブの「フォーム管理」、`customer_reservation_history` = 顧客詳細の予約履歴・来店履歴・統計情報、`customer_lottery_history` = 顧客詳細の抽選履歴）。**未設定キーは親タブに連動**（予約管理 OFF → 顧客詳細の予約・来店・統計も非表示、抽選管理 OFF → 抽選履歴も非表示）。明示的に true/false を保存すると連動より優先。判定は `resolveAdminVisibleOptions(tabs, options, upperAdmin)`。設定 UI は `StoreAdminMenuSettings.tsx` の各タブ配下のチェック（「連動に戻す」で未設定へ）。マイグレーション: `20260904000000_add_admin_visible_options.sql`
 
 **抽選フォーム機能（LINE LIFF 専用）:**
 - 設計書: `docs/抽選フォーム_実装設計.md`。即時抽選（その場で結果）と後日抽選（応募 → 管理画面で抽選 → 当選者へ Bot push）の 2 方式
@@ -505,6 +506,7 @@ export async function GET(req, { params }) {
 - `20260902000000_add_admin_visible_tabs.sql` - stores.admin_visible_tabs 追加（店舗管理者に表示するタブ）
 - `20260903000000_add_lottery.sql` - lottery_forms / lottery_entries テーブル・RLS・`lottery_insert_entry_checked` 関数
 - `20260903000001_add_store_line_channel_id.sql` - stores.line_channel_id 追加（ID トークン検証用）
+- `20260904000000_add_admin_visible_options.sql` - stores.admin_visible_options 追加（店舗管理者に表示する項目の個別設定）
 
 ## テンプレートシステム
 
