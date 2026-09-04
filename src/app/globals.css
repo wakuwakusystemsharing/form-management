@@ -454,22 +454,20 @@ html[data-ui="m3e"] [data-slot="status-chip"] {
   padding: 0.25rem 0.625rem;
 }
 
-/* ローディング: M3E Loading indicator 風（形状が伸縮しながら回転） */
+/* ローディング: 回転させず、円がゆっくり脈打つ（拡大縮小 + 濃淡）だけの表示。
+   標準スタイルの animate-spin / 透明ボーダーはここで上書きする */
 html[data-ui="m3e"] [data-slot="loading"] {
   border-width: 4px;
   border-style: solid;
-  border-color: hsl(var(--md-primary-container));
-  border-top-color: hsl(var(--md-primary));
-  border-right-color: hsl(var(--md-primary));
-  animation: md-loading-spin 1.2s var(--md-motion-spring) infinite, md-loading-morph 1.2s ease-in-out infinite;
+  border-color: hsl(var(--md-primary));
+  border-radius: 50%;
+  transform: none;
+  animation: md-loading-pulse 1.4s ease-in-out infinite;
 }
-@keyframes md-loading-spin {
-  to { transform: rotate(360deg); }
-}
-@keyframes md-loading-morph {
-  0%, 100% { border-radius: 50%; }
-  50% { border-radius: 35%; }
+@keyframes md-loading-pulse {
+  0%, 100% { transform: scale(0.85); opacity: 0.45; }
+  50% { transform: scale(1); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  html[data-ui="m3e"] [data-slot="loading"] { animation: md-loading-spin 1.2s linear infinite; }
+  html[data-ui="m3e"] [data-slot="loading"] { animation: none; opacity: 0.8; }
 }
