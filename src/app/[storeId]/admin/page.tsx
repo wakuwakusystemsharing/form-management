@@ -16,7 +16,7 @@ import LotteryDeferredPanel from '@/components/LotteryDeferredPanel';
 import type { LotteryFormWithStats } from '@/types/lottery';
 import StoreAdminLayout from '@/components/StoreAdminLayout';
 import UiStyleSettings from '@/components/UiStyleSettings';
-import { resolveVisibleTabs } from '@/lib/store-admin-tabs';
+import { resolveAdminVisibleOptions, resolveVisibleTabs } from '@/lib/store-admin-tabs';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
 import CustomerList from '@/components/CustomerList';
 import CustomerDetail from '@/components/CustomerDetail';
@@ -159,6 +159,8 @@ export default function StoreAdminPage() {
   // 店舗設定（admin_visible_tabs）で非表示のタブは描画しない（レイアウト側で先頭の表示タブへ移動する）
   const visibleTabsForUser = isUpperAdminUser ? null : (store?.admin_visible_tabs ?? null);
   const visibleTabIds = resolveVisibleTabs(visibleTabsForUser);
+  // タブ内の項目単位の表示（フォーム管理 / 顧客詳細の履歴）。上位管理者はすべて表示
+  const adminOptions = resolveAdminVisibleOptions(visibleTabsForUser, store?.admin_visible_options ?? null, isUpperAdminUser);
   const activeTab = visibleTabIds.includes(requestedTab as (typeof visibleTabIds)[number]) ? requestedTab : visibleTabIds[0];
 
   // ダッシュボード用: 本日（JST）の抽選参加数
@@ -852,6 +854,7 @@ export default function StoreAdminPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* フォーム管理セクション */}
+                {adminOptions.reservation_forms && (
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold">フォーム管理</h3>
                   {filteredForms.length === 0 ? (
@@ -971,6 +974,7 @@ export default function StoreAdminPage() {
                     </div>
                   )}
                           </div>
+                )}
                           
                 {/* 一覧・分析タブ */}
                 <div className="border-t pt-6">
@@ -1154,6 +1158,7 @@ export default function StoreAdminPage() {
             </div>
             <div className="space-y-6">
               {/* フォーム管理セクション */}
+              {adminOptions.survey_forms && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-muted-foreground">フォーム管理</h3>
                   {surveyForms.filter(survey => {
@@ -1270,6 +1275,7 @@ export default function StoreAdminPage() {
                     </div>
                   )}
                 </div>
+              )}
 
                 {/* 回答一覧セクション */}
                 <div className="border-t pt-5">
@@ -1467,6 +1473,7 @@ export default function StoreAdminPage() {
                 );
               })()}
             </div>
+            {adminOptions.lottery_forms && (
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-muted-foreground">フォーム管理</h3>
               <LotteryFormList
@@ -1477,6 +1484,7 @@ export default function StoreAdminPage() {
                 emptyText="抽選フォームはまだありません（テナント管理者が作成できます）"
               />
             </div>
+            )}
 
             {lotteryForms.filter((f) => f.config.lottery_type === 'deferred').map((f) => (
               <LotteryDeferredPanel key={f.id} storeId={storeId} form={f} onChanged={() => setLotteryRefreshKey((k) => k + 1)} />
@@ -1528,7 +1536,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView, customersRefreshKey, customersTotal, lotteryForms, lotteryTodayCount]);
+  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView, customersRefreshKey, customersTotal, lotteryForms, lotteryTodayCount, adminOptions]);
 
   // 認証チェック中
   if (checkingAuth) {
@@ -2054,6 +2062,8 @@ export default function StoreAdminPage() {
         storeId={storeId}
         customerId={selectedCustomerId}
         open={showCustomerDetail}
+        showReservationHistory={adminOptions.customer_reservation_history}
+        showLotteryHistory={adminOptions.customer_lottery_history}
         onClose={() => {
           setShowCustomerDetail(false);
           setSelectedCustomerId(null);

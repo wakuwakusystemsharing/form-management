@@ -1,5 +1,5 @@
 import type { Form } from './form';
-import type { StoreAdminTabId } from '@/lib/store-admin-tabs';
+import type { StoreAdminTabId, StoreAdminVisibleOptions } from '@/lib/store-admin-tabs';
 
 // LINE リマインダーの文面カスタマイズ（未設定 = デフォルト文面）
 export interface ReminderTemplate {
@@ -34,6 +34,7 @@ export interface Store {
   reminder_days_before?: number;      // リマインダーを予約の何日前に送るか（デフォルト1 = 前日）
   reminder_template?: ReminderTemplate | null; // リマインダー文面のカスタマイズ（null = デフォルト）
   admin_visible_tabs?: StoreAdminTabId[] | null; // 店舗管理者に表示するタブ（null = すべて表示。上位管理者には常に全表示）
+  admin_visible_options?: StoreAdminVisibleOptions | null; // タブ内の項目単位の表示設定（未設定キーは親タブに連動）
   created_at: string;
   updated_at: string;
   status: 'active' | 'inactive';

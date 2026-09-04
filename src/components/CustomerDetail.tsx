@@ -49,6 +49,10 @@ interface CustomerDetailProps {
   onDeleted?: () => void;
   // 予約履歴の予約をタップしたときに予約詳細モーダルを開く（店舗管理者ページから渡される）
   onOpenReservation?: (reservation: any) => void;
+  /** 予約履歴・来店履歴・統計情報を表示するか（店舗設定「店舗管理者に表示するメニュー」に連動。既定 true） */
+  showReservationHistory?: boolean;
+  /** 抽選履歴を表示するか（同上。既定 true） */
+  showLotteryHistory?: boolean;
 }
 
 interface CustomerDetailData {
@@ -98,7 +102,7 @@ function visitMenus(visit: CustomerVisit): string {
   return (visit.treatment_menus as Array<{ name?: string; menu_name?: string }>).map((m) => m.menu_name || m.name || '').filter(Boolean).join(', ') || '-';
 }
 
-export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated, onDeleted, onOpenReservation }: CustomerDetailProps) {
+export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated, onDeleted, onOpenReservation, showReservationHistory = true, showLotteryHistory = true }: CustomerDetailProps) {
   const [data, setData] = useState<CustomerDetailData | null>(null);
   const [lotteryEntries, setLotteryEntries] = useState<LotteryEntryView[]>([]);
   const [loading, setLoading] = useState(false);
@@ -126,12 +130,12 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
     if (customerId && open) {
       fetchCustomerDetail();
       setIsEditing(false);
-      setTab('reservations');
+      setTab(showReservationHistory ? 'reservations' : showLotteryHistory ? 'lotteries' : 'line');
     }
-  }, [customerId, open, fetchCustomerDetail]);
+  }, [customerId, open, fetchCustomerDetail, showReservationHistory, showLotteryHistory]);
 
   useEffect(() => {
-    if (!customerId || !open) return;
+    if (!customerId || !open || !showLotteryHistory) return;
     let cancelled = false;
     (async () => {
       try {
@@ -144,7 +148,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
       }
     })();
     return () => { cancelled = true; };
-  }, [storeId, customerId, open]);
+  }, [storeId, customerId, open, showLotteryHistory]);
 
   const handleUpdate = async (formData: CustomerFormData) => {
     if (!customerId) return;
@@ -300,7 +304,8 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
             </div>
           </section>
 
-          {/* 統計（2×2） */}
+          {/* 統計（2×2）: 予約管理が非表示の店舗では出さない */}
+          {showReservationHistory && (
           <section className="px-4 py-3 md:px-0 md:py-0" aria-label="統計情報">
             <StatGrid cols={4}>
               <StatTile label="来店回数" value={`${customer.total_visits}回`} />
@@ -309,6 +314,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
               <StatTile label="最終来店日" value={formatDateShort(customer.last_visit_date)} size="md" />
             </StatGrid>
           </section>
+          )}
 
           {/* 履歴タブ */}
           <section className="py-3 md:py-0" aria-label="履歴">
@@ -317,14 +323,17 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                 <ChipTabsList
                   desktopGrid
                   items={[
-                    { value: 'reservations', label: '予約', count: reservations.length },
-                    { value: 'visits', label: '来店', count: visits.length },
-                    { value: 'lotteries', label: '抽選', count: lotteryEntries.length },
+                    ...(showReservationHistory ? [
+                      { value: 'reservations', label: '予約', count: reservations.length },
+                      { value: 'visits', label: '来店', count: visits.length },
+                    ] : []),
+                    ...(showLotteryHistory ? [{ value: 'lotteries', label: '抽選', count: lotteryEntries.length }] : []),
                     { value: 'line', label: 'LINE' },
                   ]}
                 />
               </div>
 
+              {showReservationHistory && (
               <TabsContent value="reservations" className="px-4 md:px-0 mt-3">
                 {reservations.length === 0 ? (
                   <p className="text-center text-sm text-muted-foreground py-6">予約履歴がありません</p>
@@ -353,7 +362,9 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                   </ul>
                 )}
               </TabsContent>
+              )}
 
+              {showReservationHistory && (
               <TabsContent value="visits" className="px-4 md:px-0 mt-3">
                 {visits.length === 0 ? (
                   <p className="text-center text-sm text-muted-foreground py-6">来店履歴がありません</p>
@@ -395,7 +406,9 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                   </>
                 )}
               </TabsContent>
+              )}
 
+              {showLotteryHistory && (
               <TabsContent value="lotteries" className="px-4 md:px-0 mt-3">
                 {lotteryEntries.length === 0 ? (
                   <p className="text-center text-sm text-muted-foreground py-6">抽選履歴がありません</p>
@@ -419,6 +432,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                   </ul>
                 )}
               </TabsContent>
+              )}
 
               <TabsContent value="line" className="px-4 md:px-0 mt-3">
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
