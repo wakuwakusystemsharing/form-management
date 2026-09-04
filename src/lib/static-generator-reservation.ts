@@ -22,6 +22,8 @@ export class StaticReservationGenerator {
     const previewMode = mode === 'preview';
     // LINE フォームを LINE アプリ以外のブラウザで開いたときに予約を受け付けない（設定で OFF 可）
     const lineOnly = !manualMode && !previewMode && config.form_type !== 'web' && config.basic_info?.line_only !== false;
+    // 「予約する」ボタンの文言（基本情報で変更可。手動予約フォームは固定）
+    const submitLabel = manualMode ? '予約を行う' : ((config.basic_info?.submit_button_label || '').trim() || '予約する');
     // config は immutable に扱うため、深くコピーして修正
     const safeConfig: FormConfig = JSON.parse(JSON.stringify(config));
 
@@ -228,7 +230,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
             ${this.renderAgreementField(safeConfig)}
 
             ${this.renderContentBlocksAt(safeConfig, 'submit', 'above')}
-            <button type="button" id="submit-button" class="submit-button">${manualMode ? '予約を行う' : '予約する'}</button>
+            <button type="button" id="submit-button" class="submit-button">${this.escapeHtml(submitLabel)}</button>
             ${this.renderContentBlocksAt(safeConfig, 'submit', 'below')}
         </div>
     </div>
@@ -239,7 +241,7 @@ const FORM_ID = ${JSON.stringify(formId)};
 const STORE_ID = ${JSON.stringify(storeId)};
 // 店舗側手動予約フォーム（スタッフ用）モード
 const MANUAL_MODE = ${manualMode ? 'true' : 'false'};
-const SUBMIT_LABEL = ${manualMode ? "'予約を行う'" : "'予約する'"};
+const SUBMIT_LABEL = ${JSON.stringify(submitLabel)};
 // 公式 LINE（LINE アプリ内）以外のブラウザからの予約を制限する
 const LINE_ONLY = ${lineOnly ? 'true' : 'false'};
 
@@ -818,6 +820,7 @@ class BookingForm {
                 }
             }
         });
+        this.updateAdditionalQuestionsVisibility();
         this.updateSummary();
     }
 
@@ -857,6 +860,14 @@ class BookingForm {
             (cat.options || []).forEach(opt => pushQuestions(opt.additional_questions, 'option', opt.id));
         });
         (this.config.menu_structure?.menus || []).forEach(processMenu);
+        // カスタムフィールドの選択肢ごとの追加質問（その選択肢が選ばれているときだけ表示）
+        (this.config.custom_fields || []).forEach(field => {
+            (field.options || []).forEach(opt => {
+                (opt.additional_questions || []).forEach(q => {
+                    if (q && q.id && q.title) entries.push({ field: q, ownerType: 'custom_option', ownerId: field.id, ownerValue: opt.value });
+                });
+            });
+        });
         this._aqEntries = entries;
         return entries;
     }
@@ -879,6 +890,12 @@ class BookingForm {
     }
 
     isAdditionalQuestionVisible(entry, sel) {
+        if (entry.ownerType === 'custom_option') {
+            // 親のカスタムフィールド自体が非表示なら出さない
+            if (this.getHiddenCustomFieldIds().indexOf(entry.ownerId) !== -1) return false;
+            const v = this.state.customFields[entry.ownerId];
+            return Array.isArray(v) ? v.indexOf(entry.ownerValue) !== -1 : v === entry.ownerValue;
+        }
         return entry.ownerType === 'menu'
             ? sel.menuIds.indexOf(entry.ownerId) !== -1
             : sel.optionIds.indexOf(entry.ownerId) !== -1;
@@ -1040,6 +1057,7 @@ class BookingForm {
                     el.addEventListener('change', function() {
                         self.state.customFields[field.id] = el.value;
                         self.persistCustomField(field, el.value);
+                        self.updateAdditionalQuestionsVisibility();
                         self.updateSummary();
                     });
                 }
@@ -1054,6 +1072,7 @@ class BookingForm {
                             if (radio.checked) {
                                 self.state.customFields[field.id] = radio.value;
                                 self.persistCustomField(field, radio.value);
+                                self.updateAdditionalQuestionsVisibility();
                                 self.updateSummary();
                             }
                         });
@@ -1068,6 +1087,7 @@ class BookingForm {
                             const checked = Array.from(document.querySelectorAll('input[data-field-id="' + field.id + '"][data-field-type="checkbox"]:checked')).map(function(c) { return c.value; });
                             self.state.customFields[field.id] = checked;
                             self.persistCustomField(field, checked);
+                            self.updateAdditionalQuestionsVisibility();
                             self.updateSummary();
                         });
                     });
@@ -2858,6 +2878,12 @@ class BookingForm {
                     if (msgFieldHasPlacement(field)) return;
                     const display = customFieldDisplayValue(field);
                     if (display !== null) addMsgSegment('custom_fields', '《' + oneLine(field.title) + '》\\n' + display);
+                    // この項目の選択肢に紐づく追加質問（選択中のものだけ値がある）
+                    this.getAdditionalQuestionEntries().forEach(entry => {
+                        if (entry.ownerType !== 'custom_option' || entry.ownerId !== field.id) return;
+                        const fuDisplay = customFieldDisplayValue(entry.field);
+                        if (fuDisplay !== null) addMsgSegment('custom_fields', '《' + oneLine(entry.field.title) + '》\\n' + fuDisplay);
+                    });
                 });
             }
 
@@ -2873,6 +2899,7 @@ class BookingForm {
             // メニュー/オプションの追加質問（フォーム上はメニュー欄の直後に表示される）
             if (showLineItem('custom_fields')) {
                 this.getAdditionalQuestionEntries().forEach(entry => {
+                    if (entry.ownerType === 'custom_option') return;  // カスタム項目の追加質問は項目の直後に入れる
                     const display = customFieldDisplayValue(entry.field);
                     if (display !== null) addMsgSegment('menu', '《' + oneLine(entry.field.title) + '》\\n' + display);
                 });
@@ -3014,7 +3041,10 @@ class BookingForm {
                     }
                     liff.sendMessages(messages).then(() => {
                         // メッセージ送信成功後にウィンドウを閉じる
-                        alert('当日キャンセルは無いようにお願いいたします。');
+                        const completeMessage = (typeof this.config.basic_info?.complete_message === 'string' && this.config.basic_info.complete_message.trim())
+                            ? this.config.basic_info.complete_message.trim()
+                            : '当日キャンセルは無いようにお願いいたします。';
+                        alert(completeMessage);
                         liff.closeWindow();
                     }).catch((err) => {
                         console.error('メッセージの送信に失敗しました', err);
@@ -3834,6 +3864,18 @@ if (document.readyState === 'loading') {
     ).join('\n            ');
   }
 
+  // カスタムフィールド + その選択肢に紐づく追加質問（初期状態は非表示。選択時にクライアント側で表示）
+  private renderCustomFieldWithFollowUps(field: NonNullable<FormConfig['custom_fields']>[number]): string {
+    const core = this.renderCustomFieldItem(field);
+    if (!core) return '';
+    const followUps = (field.options || []).flatMap(opt =>
+      (opt.additional_questions || [])
+        .filter(q => q && q.id && q.title)
+        .map(q => `<div class="aq-field aq-followup" id="aq-wrap-${q.id}" data-owner-field="${field.id}" style="display:none;">${this.renderCustomFieldItem(q)}</div>`)
+    );
+    return followUps.length > 0 ? core + '\n            ' + followUps.join('\n            ') : core;
+  }
+
   // 表示位置が変更されているカスタムフィールドか（セクションアンカーのみ有効）
   private customFieldHasPlacement(field: NonNullable<FormConfig['custom_fields']>[number]): boolean {
     return !!(field.placement
@@ -3846,7 +3888,7 @@ if (document.readyState === 'loading') {
     // 表示位置を変更したフィールドは renderContentBlocksAt 側で描画するため、標準位置のフィールドのみ
     const fields = (config.custom_fields || []).filter(f => !this.customFieldHasPlacement(f));
     if (fields.length === 0) return '';
-    const renderField = (field: NonNullable<FormConfig['custom_fields']>[number]): string => this.renderCustomFieldItem(field);
+    const renderField = (field: NonNullable<FormConfig['custom_fields']>[number]): string => this.renderCustomFieldWithFollowUps(field);
 
     // 各カスタムフィールドの上下に「画像orテキスト設置」ブロックを挿入できるようにする
     return fields
@@ -4086,7 +4128,7 @@ if (document.readyState === 'loading') {
       this.customFieldHasPlacement(f)
       && f.placement!.anchor === anchor
       && (f.placement!.position || 'above') === position);
-    const placedFieldsHtml = placedFields.map(f => this.renderCustomFieldItem(f)).join('\n            ');
+    const placedFieldsHtml = placedFields.map(f => this.renderCustomFieldWithFollowUps(f)).join('\n            ');
     if (blocks.length === 0) return placedFieldsHtml;
     const items = blocks.map(b => {
       if (b.type === 'image') {

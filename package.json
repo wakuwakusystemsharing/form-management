@@ -53,6 +53,7 @@
 	"devDependencies": {
 		"@eslint/eslintrc": "^3",
 		"@tailwindcss/postcss": "^4",
+		"@types/jsdom": "^21.1.7",
 		"@types/node": "^20",
 		"@types/qrcode": "1.5.5",
 		"@types/react": "^19",
@@ -60,6 +61,7 @@
 		"dotenv": "^16.4.7",
 		"eslint": "^9",
 		"eslint-config-next": "16.0.10",
+		"jsdom": "^26.1.0",
 		"tailwindcss": "^4",
 		"tsx": "^4.19.2",
 		"typescript": "^5",
