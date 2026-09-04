@@ -253,6 +253,9 @@ export interface FormConfig {
           closed: boolean;                // 定休日
           custom?: boolean;               // カスタム受付時間（自由入力の時間帯を選択肢にする）
           custom_slots?: string[];        // 例: ["10:00~12:00", "16:00以降"]
+          // 通常の時間リストに差し込む追加の時間帯（例: 午前中 / 午後 / 16:00以降）。
+          // after: 'start' = 先頭、'end' = 末尾、'HH:MM' = その時刻の直後（その時刻が✕で消えている場合は次の時刻の前）
+          extra_slots?: Array<{ label: string; after: string }>;
         };
       };
       // 祝日の受付時間。enabled のとき祝日は曜日設定より優先してこの時間で受付する

@@ -91,7 +91,22 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     (form.config?.calendar_settings?.time_interval as 10 | 15 | 20 | 30 | 45 | 60 | 120) || 30
   );
 
-  const defaultWeekdayHours: { [key: string]: { open: string; close: string; closed: boolean; custom?: boolean; custom_slots?: string[] } } = {
+  // 通常の時間リストに差し込む追加の時間帯（after: 'start' | 'end' | 'HH:MM'）
+  type ExtraSlot = { label: string; after: string };
+  const buildTimeList = (open: string, close: string, interval: number): string[] => {
+    const out: string[] = [];
+    const [sh, sm] = (open || '09:00').split(':').map(Number);
+    const [eh, em] = (close || '18:00').split(':').map(Number);
+    if (![sh, sm, eh, em].every(Number.isFinite)) return out;
+    let h = sh, m = sm, guard = 0;
+    while ((h < eh || (h === eh && m < em)) && guard++ < 400) {
+      out.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      m += interval;
+      if (m >= 60) { h += Math.floor(m / 60); m = m % 60; }
+    }
+    return out;
+  };
+  const defaultWeekdayHours: { [key: string]: { open: string; close: string; closed: boolean; custom?: boolean; custom_slots?: string[]; extra_slots?: ExtraSlot[] } } = {
     '0': { open: '09:00', close: '18:00', closed: true },
     '1': { open: '09:00', close: '18:00', closed: false },
     '2': { open: '09:00', close: '18:00', closed: false },
@@ -107,8 +122,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     exclude_weekdays: number[];
     start_time: string;
     end_time: string;
-    weekday_hours?: { [key: string]: { open: string; close: string; closed: boolean; custom?: boolean; custom_slots?: string[] } };
-    holiday_hours?: { enabled: boolean; open: string; close: string; custom?: boolean; custom_slots?: string[] };
+    weekday_hours?: { [key: string]: { open: string; close: string; closed: boolean; custom?: boolean; custom_slots?: string[]; extra_slots?: ExtraSlot[] } };
+    holiday_hours?: { enabled: boolean; open: string; close: string; custom?: boolean; custom_slots?: string[]; extra_slots?: ExtraSlot[] };
     required_choices?: number[];
     visible_choices?: number[];
     blocked_times?: string[];
@@ -494,7 +509,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     handleMultipleDatesSettingsChange('visible_choices', next);
   };
 
-  const handleWeekdayHoursChange = (dayIndex: string, field: 'open' | 'close' | 'closed' | 'custom' | 'custom_slots', value: string | boolean | string[]) => {
+  const handleWeekdayHoursChange = (dayIndex: string, field: 'open' | 'close' | 'closed' | 'custom' | 'custom_slots' | 'extra_slots', value: string | boolean | string[] | ExtraSlot[]) => {
     const currentHours = multipleDatesSettings.weekday_hours || defaultWeekdayHours;
     const updatedHours = {
       ...currentHours,
@@ -1441,6 +1456,14 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                                   onChange={(e) => handleWeekdayHoursChange(dayKey, 'close', e.target.value)}
                                   className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
                                 />
+                                <button
+                                  type="button"
+                                  onClick={() => handleWeekdayHoursChange(dayKey, 'extra_slots', [...(hours.extra_slots || []), { label: '', after: 'end' }])}
+                                  title="「午前中」「16:00以降」など、時間のリストに追加の選択肢を差し込む"
+                                  className={`px-2 py-1 text-xs rounded-md flex-shrink-0 sm:ml-2 ${themeClasses.button.secondary}`}
+                                >
+                                  ＋ 時間帯を追加{(hours.extra_slots || []).length > 0 ? `（${(hours.extra_slots || []).length}）` : ''}
+                                </button>
                               </div>
                             )}
 
@@ -1507,6 +1530,51 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                               </button>
                             )}
                           </div>
+                          {!hours.closed && !hours.custom && (hours.extra_slots || []).length > 0 && (
+                            <div className={`mt-2 ml-0 sm:ml-20 space-y-1.5 rounded-md p-2 ${theme === 'light' ? 'bg-gray-50 border border-gray-200' : 'bg-gray-800/60 border border-gray-700'}`}>
+                              <p className={`text-xs ${themeClasses.text.tertiary}`}>追加の時間帯（「時間を選択」のリストに差し込まれます。テキストは自由です）</p>
+                              {(hours.extra_slots || []).map((slot, slotIndex) => {
+                                const times = buildTimeList(hours.open, hours.close, multipleDatesSettings.time_interval || 30);
+                                const updateSlot = (patch: Partial<ExtraSlot>) => {
+                                  const next = [...(hours.extra_slots || [])];
+                                  next[slotIndex] = { ...next[slotIndex], ...patch };
+                                  handleWeekdayHoursChange(dayKey, 'extra_slots', next);
+                                };
+                                return (
+                                  <div key={slotIndex} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <input
+                                      type="text"
+                                      value={slot.label}
+                                      maxLength={30}
+                                      onChange={(ev) => updateSlot({ label: ev.target.value })}
+                                      placeholder="例: 午前中 / 午後 / 16:00以降"
+                                      className={`${themeClasses.input} text-sm flex-1 min-w-0`}
+                                    />
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-xs whitespace-nowrap ${themeClasses.text.tertiary}`}>表示位置</span>
+                                      <select
+                                        value={slot.after || 'end'}
+                                        onChange={(ev) => updateSlot({ after: ev.target.value })}
+                                        className={`${themeClasses.input} text-sm`}
+                                      >
+                                        <option value="start">リストの先頭</option>
+                                        {times.map((t) => <option key={t} value={t}>{t} の後</option>)}
+                                        <option value="end">リストの末尾</option>
+                                      </select>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleWeekdayHoursChange(dayKey, 'extra_slots', (hours.extra_slots || []).filter((_, i) => i !== slotIndex))}
+                                        title="削除"
+                                        className={`p-1.5 rounded text-red-400 hover:text-red-300 flex-shrink-0 ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       );
                     })}

@@ -3431,7 +3431,8 @@ class BookingForm {
                 close: hh.close || '18:00',
                 closed: false,
                 custom: hh.custom === true,
-                custom_slots: Array.isArray(hh.custom_slots) ? hh.custom_slots : []
+                custom_slots: Array.isArray(hh.custom_slots) ? hh.custom_slots : [],
+                extra_slots: []
             };
         }
         // weekday_hours がある場合はそちらを優先
@@ -3442,7 +3443,8 @@ class BookingForm {
                 close: wh.close,
                 closed: wh.closed,
                 custom: wh.custom === true,
-                custom_slots: Array.isArray(wh.custom_slots) ? wh.custom_slots : []
+                custom_slots: Array.isArray(wh.custom_slots) ? wh.custom_slots : [],
+                extra_slots: Array.isArray(wh.extra_slots) ? wh.extra_slots : []
             };
         }
         // レガシー互換: exclude_weekdays + start_time/end_time
@@ -3451,7 +3453,8 @@ class BookingForm {
             close: settings.end_time || '18:00',
             closed: (settings.exclude_weekdays || []).includes(dayOfWeek),
             custom: false,
-            custom_slots: []
+            custom_slots: [],
+            extra_slots: []
         };
     }
 
@@ -3510,6 +3513,7 @@ class BookingForm {
         // 選択された日付の曜日に基づいて時間スロットを生成
         let startTime = settings.start_time || '09:00';
         let endTime = settings.end_time || '18:00';
+        let extraSlots = [];
 
         if (selectedDateStr) {
             const selectedDate = new Date(selectedDateStr + 'T00:00:00');
@@ -3517,6 +3521,7 @@ class BookingForm {
             const hours = this.getWeekdayHours(settings, dayOfWeek, selectedDate);
             startTime = hours.open;
             endTime = hours.close;
+            extraSlots = hours.extra_slots || [];
             // カスタム受付時間: 自由入力の時間帯テキストをそのまま選択肢にする
             // （時間の解釈ができないため、✕時間帯・予約受付開始時間のフィルタは適用しない）
             if (hours.custom && hours.custom_slots.length > 0) {
@@ -3562,17 +3567,46 @@ class BookingForm {
             ? Date.now() + minAdvHoursRaw * 3600000
             : 0;
 
-        timeSlots.forEach(time => {
-            if (isBlockedForSelectedDay(time)) return;
+        const visibleSlots = timeSlots.filter(time => {
+            if (isBlockedForSelectedDay(time)) return false;
             if (minAdvThreshold && selectedDateStr) {
                 const slotMs = new Date(selectedDateStr + 'T' + time + ':00').getTime();
-                if (Number.isFinite(slotMs) && slotMs < minAdvThreshold) return;
+                if (Number.isFinite(slotMs) && slotMs < minAdvThreshold) return false;
             }
+            return true;
+        });
+        // 追加の時間帯（午前中 など）を指定位置に差し込む。'HH:MM' 指定はその時刻の直後
+        // （その時刻が✕などで消えている場合は、それより後の最初の時刻の前）
+        const finalSlots = this.insertExtraSlots(visibleSlots, timeSlots, extraSlots);
+        finalSlots.forEach(time => {
             const option = document.createElement('option');
             option.value = time;
             option.textContent = time;
             select.appendChild(option);
         });
+    }
+
+    insertExtraSlots(visibleSlots, allSlots, extraSlots) {
+        const result = visibleSlots.slice();
+        const labels = (extraSlots || [])
+            .map(s => ({ label: String((s && s.label) || '').trim(), after: String((s && s.after) || 'end') }))
+            .filter(s => s.label && result.indexOf(s.label) === -1);
+        // 先頭・末尾は順序を保って前後に付ける
+        labels.filter(s => s.after === 'start').forEach((s, i) => result.splice(i, 0, s.label));
+        labels.filter(s => s.after !== 'start' && s.after !== 'end').forEach(s => {
+            const idx = result.indexOf(s.after);
+            if (idx !== -1) { result.splice(idx + 1, 0, s.label); return; }
+            // 指定時刻が表示されていない: 指定時刻より後の最初の表示時刻の前に入れる（無ければ末尾）
+            const order = allSlots.indexOf(s.after);
+            let insertAt = result.length;
+            for (let i = 0; i < result.length; i++) {
+                const pos = allSlots.indexOf(result[i]);
+                if (pos !== -1 && (order === -1 ? result[i] > s.after : pos > order)) { insertAt = i; break; }
+            }
+            result.splice(insertAt, 0, s.label);
+        });
+        labels.filter(s => s.after === 'end').forEach(s => result.push(s.label));
+        return result;
     }
     
     generateTimeSlots(startTime, endTime, interval) {
