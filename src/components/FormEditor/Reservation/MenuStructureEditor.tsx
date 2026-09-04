@@ -1904,6 +1904,24 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     currentFields[index] = { ...currentFields[index], ...patch };
     onUpdate({ ...form, config: { ...form.config, custom_fields: currentFields } });
   };
+  // カスタムフィールドの選択肢ごとの追加質問（モーダルで編集中の対象）
+  const [followUpTarget, setFollowUpTarget] = useState<{ fieldIndex: number; optIndex: number } | null>(null);
+  const followUpField = followUpTarget ? (form.config?.custom_fields || [])[followUpTarget.fieldIndex] : undefined;
+  const followUpOption = followUpTarget && followUpField ? (followUpField.options || [])[followUpTarget.optIndex] : undefined;
+  const updateFollowUpQuestions = (questions: AdditionalQuestion[]) => {
+    if (!followUpTarget) return;
+    const currentFields = [...(form.config?.custom_fields || [])];
+    const field = currentFields[followUpTarget.fieldIndex];
+    if (!field) return;
+    const newOptions = [...(field.options || [])];
+    if (!newOptions[followUpTarget.optIndex]) return;
+    newOptions[followUpTarget.optIndex] = {
+      ...newOptions[followUpTarget.optIndex],
+      additional_questions: questions.length > 0 ? questions : undefined,
+    };
+    currentFields[followUpTarget.fieldIndex] = { ...field, options: newOptions };
+    onUpdate({ ...form, config: { ...form.config, custom_fields: currentFields } });
+  };
   // カスタムフィールドの表示トリガー: 種別ごとの選択肢（フォーム設定から動的に生成）
   type TriggerType = 'visit_count' | 'menu' | 'option' | 'staff' | 'gender' | 'coupon';
   const TRIGGER_TYPE_LABELS: Array<{ value: TriggerType; label: string }> = [
@@ -3881,7 +3899,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                           onChange={(e) => {
                             const currentFields = [...(form.config?.custom_fields || [])];
                             const newOptions = [...(currentFields[index].options || [])];
-                            newOptions[optIndex] = { label: e.target.value, value: e.target.value };
+                            newOptions[optIndex] = { ...newOptions[optIndex], label: e.target.value, value: e.target.value };
                             currentFields[index] = { ...currentFields[index], options: newOptions };
                             const updatedForm = {
                               ...form,
@@ -3895,6 +3913,14 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                           className={`flex-1 ${themeClasses.input} text-sm`}
                           placeholder={`選択肢 ${optIndex + 1}`}
                         />
+                        <button
+                          type="button"
+                          onClick={() => setFollowUpTarget({ fieldIndex: index, optIndex })}
+                          title="この選択肢が選ばれたときに表示する追加質問を設定"
+                          className={`shrink-0 px-2 py-1 text-xs rounded border ${(opt.additional_questions || []).length > 0 ? (theme === 'light' ? 'border-[rgb(244,144,49)] text-[rgb(220,125,35)] bg-orange-50' : 'border-cyan-500 text-cyan-300 bg-cyan-950/40') : themeClasses.button.secondary}`}
+                        >
+                          追加質問{(opt.additional_questions || []).length > 0 ? `(${(opt.additional_questions || []).length})` : ''}
+                        </button>
                         <button
                           onClick={() => {
                             const currentFields = [...(form.config?.custom_fields || [])];
@@ -4334,7 +4360,34 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
         form={form}
       />
 
+      {/* カスタムフィールドの選択肢ごとの追加質問 */}
+      {followUpTarget && followUpField && followUpOption && (
+        <div className={`fixed inset-0 flex items-center justify-center z-50 ${themeClasses.modalOverlay}`}>
+          <div className={`rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto ${themeClasses.modal}`}>
+            <div className="p-6">
+              <div className="flex items-start justify-between mb-4 gap-3">
+                <div className="min-w-0">
+                  <h3 className={`text-lg font-semibold ${themeClasses.text.primary}`}>選択肢の追加質問</h3>
+                  <p className={`text-xs ${themeClasses.text.tertiary} mt-1 break-words`}>
+                    「{followUpField.title || '項目'}」で「{followUpOption.label || `選択肢 ${followUpTarget.optIndex + 1}`}」が選ばれたときだけ、ここで設定した質問がその項目の直下に表示されます。
+                  </p>
+                </div>
+                <button type="button" onClick={() => setFollowUpTarget(null)} className={`${themeClasses.text.secondary} text-xl leading-none shrink-0`} aria-label="閉じる">×</button>
+              </div>
+              <AdditionalQuestionsEditor
+                questions={followUpOption.additional_questions || []}
+                onChange={updateFollowUpQuestions}
+                theme={theme}
+              />
+              <div className={`flex justify-end mt-6 pt-4 border-t ${themeClasses.divider}`}>
+                <button type="button" onClick={() => setFollowUpTarget(null)} className={`px-4 py-2 rounded-md ${themeClasses.button.primary}`}>閉じる</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* カテゴリー共通オプションを別カテゴリーへコピーするモーダル */}
+
       {copyOptsModalOpen && (() => {
         const sourceCat = categories.find(c => c.id === copyOptsSourceCategoryId);
         const sourceOptions = sourceCat?.options || [];
