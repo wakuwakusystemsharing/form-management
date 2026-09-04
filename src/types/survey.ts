@@ -21,6 +21,8 @@ export interface SurveyQuestionOption {
   label: string;
   value: string;
   follow_up?: SurveyFollowUpQuestion; // この選択肢が選ばれたときに表示する追加質問
+  // この選択肢を選んで送信した回答者（LINE ユーザー ID で紐付く顧客）に付与するタグ（顧客管理のタグと同じ）
+  tags?: string[];
 }
 
 export interface SurveyQuestion {

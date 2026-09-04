@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { SurveyQuestion, SurveyQuestionType, SurveyQuestionOption, SurveyFollowUpQuestion, SurveyFollowUpType, SurveyContentBlock } from '@/types/survey';
 import {
   AddContentBlockButton,
@@ -10,6 +10,7 @@ import {
   createSurveyContentBlock,
 } from './SurveyContentBlockEditor';
 import { Button } from '@/components/ui/button';
+import TagInput from '@/components/customers/TagInput';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowUp, ArrowDown, X, Plus, GripVertical, MessageSquarePlus } from 'lucide-react';
+import { ArrowUp, ArrowDown, X, Plus, GripVertical, MessageSquarePlus, Tag } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -121,6 +122,17 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
     const current: SurveyFollowUpQuestion = options[optIndex].follow_up || { enabled: false, title: '', type: 'text' };
     options[optIndex] = { ...options[optIndex], follow_up: { ...current, ...updates } };
     updateOptions(qIndex, options);
+  };
+
+  // タグ設定パネルの開閉（`${questionId}:${optIndex}`）
+  const [openTagPanels, setOpenTagPanels] = useState<Set<string>>(new Set());
+  const toggleTagPanel = (questionId: string, optIndex: number) => {
+    const key = `${questionId}:${optIndex}`;
+    setOpenTagPanels((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
   };
 
   const toggleFollowUp = (qIndex: number, optIndex: number) => {
@@ -321,6 +333,17 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                               />
                               <Button
                                 type="button"
+                                variant={(opt.tags || []).length > 0 ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => toggleTagPanel(q.id, optIndex)}
+                                title="この選択肢を選んで送信した人（LINE で紐付いた顧客）に付けるタグを設定"
+                                className="shrink-0"
+                              >
+                                <Tag className="mr-1 h-4 w-4" />
+                                タグ{(opt.tags || []).length > 0 ? `(${(opt.tags || []).length})` : ''}
+                              </Button>
+                              <Button
+                                type="button"
                                 variant={fuEnabled ? 'default' : 'outline'}
                                 size="sm"
                                 onClick={() => toggleFollowUp(index, optIndex)}
@@ -344,6 +367,27 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                               </Button>
                             </div>
 
+                            {/* タグの設定パネル */}
+                            {openTagPanels.has(`${q.id}:${optIndex}`) && (
+                              <div className="mt-2 ml-8 rounded-md border bg-muted/30 p-3 space-y-2">
+                                <p className="text-xs text-muted-foreground">
+                                  「{opt.label || `選択肢 ${optIndex + 1}`}」を選んで送信した人に、顧客管理で使えるタグを自動で付けます（LINE で顧客に紐付いた回答のみ。配信の絞り込みなどに使えます）
+                                </p>
+                                <TagInput
+                                  id={`opt-tags-${q.id}-${optIndex}`}
+                                  value={opt.tags || []}
+                                  onChange={(tags) => {
+                                    const newOptions = [...(q.options || [])];
+                                    newOptions[optIndex] = { ...newOptions[optIndex], tags: tags.length > 0 ? tags : undefined };
+                                    updateOptions(index, newOptions);
+                                  }}
+                                  storeId={storeId}
+                                />
+                                <div className="flex justify-end">
+                                  <Button type="button" variant="ghost" size="sm" onClick={() => toggleTagPanel(q.id, optIndex)}>閉じる</Button>
+                                </div>
+                              </div>
+                            )}
                             {/* 追加質問の設定パネル */}
                             {fuEnabled && fu && (
                               <div className="ml-8 mt-2 mb-3 p-3 rounded-md border bg-background space-y-3">

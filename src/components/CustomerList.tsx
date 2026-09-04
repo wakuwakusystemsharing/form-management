@@ -89,6 +89,22 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange, 
   const debouncedSearch = useDebounce(searchQuery.trim(), 300);
   const [segmentFilter, setSegmentFilter] = useState<'all' | CustomerSegment>('all');
   const [internalTagFilter, setInternalTagFilter] = useState<string | null>(null);
+  // 店舗のタグ一覧（絞り込みのプルダウン用）
+  const [storeTags, setStoreTags] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchWithAuth(`/api/stores/${storeId}/customers/tags`);
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        if (!cancelled) setStoreTags(Array.isArray(json.tags) ? json.tags.map((t: { tag: string }) => t.tag) : []);
+      } catch (e) {
+        console.error('Failed to fetch store tags:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [storeId]);
   const tagFilter = tagFilterProp !== undefined ? tagFilterProp : internalTagFilter;
   const setTagFilter = (tag: string | null) => {
     setInternalTagFilter(tag);
@@ -342,6 +358,18 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange, 
           {SEGMENT_ITEMS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
         </SelectContent>
       </Select>
+      {/* タグで絞り込み（店舗にタグが 1 つでもあるとき。スマホは検索欄の下、PC はセグメントの右） */}
+      {(storeTags.length > 0 || tagFilter) && (
+        <Select value={tagFilter || '__all__'} onValueChange={(v) => setTagFilter(v === '__all__' ? null : v)}>
+          <SelectTrigger className="w-full md:w-[200px] h-11 md:h-10" aria-label="タグで絞り込み">
+            <SelectValue placeholder="タグで絞り込み" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">タグ: すべて</SelectItem>
+            {[...new Set([...(tagFilter ? [tagFilter] : []), ...storeTags])].map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      )}
     </div>
   );
 
