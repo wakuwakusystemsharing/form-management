@@ -930,7 +930,7 @@ export class StaticLotteryGenerator {
                 html += '<hr class="result-sep">';
                 if (FORM_CONFIG.redeem_method === 'qr' && entry.qr_token) {
                     if (entry.qr_token === 'preview') html += '<div class="result-qr preview-qr">QR</div>';
-                    else html += '<img class="result-qr" src="' + window.location.origin + '/api/lotteries/qr/' + encodeURIComponent(entry.qr_token) + '.png" alt="引換用 QR コード">';
+                    else html += '<div class="result-qr-wrap"><img class="result-qr" src="' + window.location.origin + '/api/lotteries/qr/' + encodeURIComponent(entry.qr_token) + '.png" alt="引換用 QR コード"></div>';
                     html += '<div class="result-label">スキャンできない場合はこちら</div>';
                 }
                 if (entry.redeem_code) {
@@ -939,7 +939,19 @@ export class StaticLotteryGenerator {
                 }
                 var exp = formatDateJst(entry.expires_at);
                 if (exp) html += '<div class="result-row"><span>有効期限</span><strong>' + escapeHtml(exp) + '</strong></div>';
-                html += '<p class="result-note">' + escapeHtml(prize.redeem_note || '店頭でこの画面をご提示ください') + '</p>';
+                var isRedeemed = entry.status === 'redeemed';
+                var isExpired = !isRedeemed && !!result.is_expired;
+                if (isRedeemed) {
+                    html += '<div class="result-used"><span class="result-used-mark">✓</span>この賞品は使用済みです' + (entry.redeemed_at ? '<small>' + escapeHtml(formatDateJst(entry.redeemed_at)) + ' に使用</small>' : '') + '</div>';
+                } else if (isExpired) {
+                    html += '<div class="result-used expired">有効期限が切れています</div>';
+                } else {
+                    html += '<p class="result-note">' + escapeHtml(prize.redeem_note || '店頭でこの画面をご提示ください') + '</p>';
+                    if (pres.allow_self_redeem !== false && entry.id) {
+                        html += '<button type="button" class="redeem-button" id="selfRedeemButton" onclick="openRedeemConfirm()">この賞品を使用済みにする</button>';
+                        html += '<p class="redeem-hint">店頭でスタッフに確認してもらってから押してください。一度使用済みにすると元に戻せません</p>';
+                    }
+                }
                 html += '</div></div>';
             } else {
                 html += '<div class="result-lose-icon" aria-hidden="true">🍀</div>';
@@ -958,6 +970,7 @@ export class StaticLotteryGenerator {
             html += '</div>';
             panel.innerHTML = html;
             panel.classList.remove('hidden');
+            panel.classList.toggle('is-redeemed', entry.status === 'redeemed');
             var stageInner = $('stageInner');
             if (stageInner && !opts.existing) stageInner.classList.add('done');
             var qsec = $('questionsSection');
@@ -969,6 +982,60 @@ export class StaticLotteryGenerator {
                 setTimeout(function () { if (panel.scrollIntoView) panel.scrollIntoView({ behavior: REDUCED_MOTION ? 'auto' : 'smooth', block: 'start' }); }, 100);
             }
         }
+        // ---- お客様自身の「使用済みにする」 ----
+        function openRedeemConfirm() {
+            if ($('redeemConfirm')) return;
+            var dlg = document.createElement('div');
+            dlg.id = 'redeemConfirm';
+            dlg.className = 'confirm-overlay';
+            dlg.setAttribute('role', 'dialog');
+            dlg.setAttribute('aria-modal', 'true');
+            dlg.innerHTML =
+                '<div class="confirm-card">' +
+                    '<h3>使用済みにしますか？</h3>' +
+                    '<p>この操作は取り消せません。店頭でスタッフに確認してもらってから「はい」を押してください。</p>' +
+                    '<div class="confirm-actions">' +
+                        '<button type="button" class="confirm-no" onclick="closeRedeemConfirm()">いいえ</button>' +
+                        '<button type="button" class="confirm-yes" id="redeemYes" onclick="confirmSelfRedeem()">はい</button>' +
+                    '</div>' +
+                '</div>';
+            document.body.appendChild(dlg);
+        }
+        function closeRedeemConfirm() {
+            var dlg = $('redeemConfirm');
+            if (dlg) dlg.remove();
+        }
+        async function confirmSelfRedeem() {
+            var result = state.result;
+            if (!result || !result.entry) { closeRedeemConfirm(); return; }
+            var yes = $('redeemYes');
+            if (yes) { yes.disabled = true; yes.textContent = '処理中...'; }
+            if (IS_PREVIEW) {
+                closeRedeemConfirm();
+                showResult(Object.assign({}, result, { entry: Object.assign({}, result.entry, { status: 'redeemed', redeemed_at: new Date().toISOString() }) }), { existing: true, canRetry: false });
+                return;
+            }
+            try {
+                var res = await fetch(window.location.origin + '/api/lotteries/' + encodeURIComponent(FORM_CONFIG.form_id) + '/my-result', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(authBody({ redeem: true, entry_id: result.entry.id }))
+                });
+                var json = null;
+                try { json = await res.json(); } catch (e) {}
+                closeRedeemConfirm();
+                if (!res.ok || !json || !json.result) {
+                    alert((json && json.error) || '使用済みにできませんでした。時間をおいて再度お試しください');
+                    return;
+                }
+                showResult(json.result, { existing: true, canRetry: false });
+            } catch (err) {
+                console.error('self redeem failed', err);
+                closeRedeemConfirm();
+                alert('通信に失敗しました。電波の良い場所で再度お試しください');
+            }
+        }
+
         function retryDraw() {
             var panel = $('resultPanel');
             if (panel) { panel.classList.add('hidden'); panel.innerHTML = ''; }
@@ -1209,6 +1276,27 @@ export class StaticLotteryGenerator {
         .result-text { font-size: 15px; color: #555; }
         .result-note { margin-top: 12px; font-size: 13px; color: #555; background: #f7f8fa; padding: 10px; border-radius: 6px; }
         .result-existing { font-size: 12px; color: #888; margin-top: 10px; }
+        /* 使用済み */
+        .redeem-button { display: block; width: 100%; margin-top: 14px; min-height: 48px; padding: 12px; font-size: 15px; font-weight: 700; color: var(--primary-color); background: var(--white); border: 2px solid var(--primary-color); border-radius: 6px; }
+        .redeem-button:active { background: #f1f3f5; }
+        .redeem-hint { margin-top: 6px; font-size: 11px; color: #888; text-align: center; }
+        .result-used { margin-top: 14px; padding: 14px; border-radius: 8px; background: #e5e7eb; color: #374151; font-weight: 700; font-size: 16px; text-align: center; }
+        .result-used small { display: block; margin-top: 4px; font-size: 12px; font-weight: 500; color: #6b7280; }
+        .result-used-mark { display: inline-block; width: 22px; height: 22px; line-height: 22px; border-radius: 50%; background: #6b7280; color: #fff; font-size: 13px; margin-right: 6px; }
+        .result-used.expired { background: #fef3c7; color: #92400e; }
+        .result-qr-wrap { position: relative; width: 180px; margin: 4px auto 0; }
+        .result.is-redeemed .result-card { opacity: .75; filter: grayscale(.6); }
+        .result.is-redeemed .result-code { position: relative; }
+        .result.is-redeemed .result-code::after, .result.is-redeemed .result-qr-wrap::after { content: '使用済み'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.75); color: #6b7280; font-size: 18px; font-weight: 800; letter-spacing: 2px; border-radius: 8px; }
+        .confirm-overlay { position: fixed; inset: 0; z-index: 90; background: rgba(15,23,42,0.6); display: flex; align-items: center; justify-content: center; padding: 24px; }
+        .confirm-card { background: var(--white); border-radius: 12px; padding: 22px 20px; max-width: 340px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
+        .confirm-card h3 { font-size: 17px; margin-bottom: 8px; }
+        .confirm-card p { font-size: 13px; color: #555; line-height: 1.7; }
+        .confirm-actions { display: flex; gap: 10px; margin-top: 16px; }
+        .confirm-actions button { flex: 1; min-height: 46px; border-radius: 6px; font-size: 15px; font-weight: 700; border: 0; }
+        .confirm-no { background: #e5e7eb; color: #374151; }
+        .confirm-yes { background: var(--primary-color); color: var(--white); }
+        .confirm-yes:disabled { opacity: .6; }
         .result-actions { margin-top: 18px; }
 
         /* フッター（固定ボタン） */

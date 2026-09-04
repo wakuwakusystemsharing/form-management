@@ -214,6 +214,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - 本人確認: LIFF の ID トークンを `src/lib/line-verify.ts` で検証。チャネル ID は `stores.line_channel_id` → 環境変数 `NEXT_PUBLIC_LINE_CHANNEL_ID` の順（local は `line_user_id` の申告を許容）
 - LINE 通知: LIFF `sendMessages` 用テキストと Bot Flex 当選カードは `src/lib/lottery-line-message.ts`。push は `src/lib/line-push.ts`（はずれには送らない）
 - 引換: 6 桁コード（店舗内ユニーク）+ QR 方式（`qr_token`）。管理者ページから `redeem / unredeem / cancel / restore`
+- お客様自身の「使用済みにする」: 当選画面のボタン → 確認ダイアログ → `PATCH /api/lotteries/{id}/my-result` に `{ redeem: true, entry_id }`（ID トークン検証。本人の当選で未引換・期限内のみ）→ `selfRedeemEntry()` が `redeemed` + 備考「本人操作」で更新。`presentation.allow_self_redeem`（既定 true）で店舗が無効化できる
 - 管理 API は `src/lib/store-access.ts` の `authorizeStoreAccess()` で保護（local はスキップ）。ローカルデータは `data/lottery_forms.json` / `data/lottery_entries.json`
 - 静的 HTML: `src/lib/static-generator-lottery.ts` の `StaticLotteryGenerator.generateHTML(form, 'production' | 'preview')`。演出はスクラッチ / ガチャ / シンプル。埋め込み JS はバッククォート不使用、設定 JSON は `\u003c` エスケープで埋め込む
 - デプロイ: `POST /api/lotteries/{id}/deploy` → `lotteries/{storeId}/{formId}/index.html`。プレビュー: `/preview/{storeId}/lotteries/{formId}`、`POST /api/preview/generate`（`formType: 'lottery'`）

@@ -33,7 +33,7 @@ const config = (): LotteryConfig => ({
   basic_info: { title: 'くじ', liff_id: '', theme_color: '#000000' },
   prizes: [{ id: 'a', name: 'A', probability: 10, stock: 1 }],
   entry_rules: { limit: 'once', require_friend: false, when_sold_out: 'lose', pre_questions: [] },
-  presentation: { animation: 'scratch', scratch_style: 'silver', show_probability: false, show_stock: false, confetti: true, win_title: 'w', lose_title: 'l' },
+  presentation: { animation: 'scratch', scratch_style: 'silver', show_probability: false, show_stock: false, confetti: true, win_title: 'w', lose_title: 'l', allow_self_redeem: true },
   messages: { win_text: 'w', lose_text: 'l', entry_text: 'e', push_flex_enabled: false },
   ui_settings: { submit_button_text: '抽選する', theme_color: '#000000' },
 });
