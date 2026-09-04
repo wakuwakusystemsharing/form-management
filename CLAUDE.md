@@ -201,6 +201,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - `UiStyleSettings.tsx` - 設定タブの「表示設定」カード（端末ごとの設定。DB には保存しない）
 - 見た目は `src/app/globals.css` 末尾の `html[data-ui="m3e"]` ブロックのみで実現。shadcn コンポーネントに付けた `data-slot` 属性（button / card / input / select-trigger / textarea / badge / dialog-content / tabs-list / tabs-trigger / list-item / status-chip / loading / mobile-nav 等）をセレクタに使う。DOM・ロジックは変更しない
 - ダイナミックカラー: `applyM3Palette(store.theme_color)` が店舗テーマカラーから M3 カラーロール（`--md-*`）を HSL 近似で生成し `<html>` のインラインスタイルに設定（無彩色・未設定時は既定のオレンジパレット）
+- ローディング表示（`data-slot="loading"`）は M3E では回転させず、円がゆっくり脈打つだけ（回転は意味が分かりにくいという店舗からの要望）。`data-slot="loading"` はスピナー要素自体に付ける（文言を含む親には付けない）
 - スマホ共通の基礎対策: `Input` / `Select` はスマホ 16px（iOS 自動ズーム防止）、レイアウトは `h-dvh`、アイコンボタンはスマホ 44px、`touch-action: manipulation`、下部ナビゲーション（`lg:hidden`）
 
 **顧客管理タブのスマホ最適化（`docs/顧客管理_スマホUI最適化設計.md`）:**
@@ -568,6 +569,7 @@ export async function GET(req, { params }) {
 - `show_customer_email` - メールアドレス入力 2 欄（メイン+確認）の表示。Web 予約での自動メール送信に必須
 - `notification_email` - Web 予約の店舗側通知メール宛先（空時は `store.owner_email`）
 - `multiple_dates_settings` - 希望日時モードの時間間隔・選択日数・曜日別時間設定
+  - `weekday_hours[day].extra_slots?: Array<{ label, after }>` - 通常の時間リストに差し込む追加の選択肢（例: 午前中 / 午後 / 16:00以降）。`after` は `'start'`（先頭）/ `'end'`（末尾）/ `'HH:MM'`（その時刻の直後。✕で消えている時刻なら次の時刻の前）。編集 UI は曜日行の「＋ 時間帯を追加」。生成 HTML は `insertExtraSlots()`。`custom`（カスタム受付時間）が ON のときは custom_slots が優先され extra_slots は使わない
 
 **フォームタイプ (`config.form_type`):**
 - `'line'` - LIFF 経由（LINE トーク内で開く、メッセージ送信あり）

@@ -369,8 +369,8 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
       footer={footer}
     >
       {loading || !customer ? (
-        <div className="text-center py-10" data-slot="loading">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
+        <div className="text-center py-10">
+          <div data-slot="loading" className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent"></div>
           <p className="mt-2 text-sm text-muted-foreground">読み込み中…</p>
         </div>
       ) : isEditing ? (
