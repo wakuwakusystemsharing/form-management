@@ -155,12 +155,24 @@ export default function StoreAdminPage() {
 
   // マスター/システム管理者として開いているか（店舗ごとのタブ表示制御を受けない）
   const [isUpperAdminUser, setIsUpperAdminUser] = useState(false);
+  const [upperAdminRole, setUpperAdminRole] = useState<'master' | 'system' | null>(null);
+  // 上位管理者が「店舗管理者の見え方」で確認するモード（同じブラウザで店舗管理者の表示を確認するため。端末内にだけ保持）
+  const [previewAsStoreAdmin, setPreviewAsStoreAdmin] = useState(false);
+  useEffect(() => {
+    try { setPreviewAsStoreAdmin(sessionStorage.getItem(`store_admin_preview_${storeId}`) === '1'); } catch {}
+  }, [storeId]);
+  const togglePreviewAsStoreAdmin = (on: boolean) => {
+    setPreviewAsStoreAdmin(on);
+    try { on ? sessionStorage.setItem(`store_admin_preview_${storeId}`, '1') : sessionStorage.removeItem(`store_admin_preview_${storeId}`); } catch {}
+  };
 
   // 店舗設定（admin_visible_tabs）で非表示のタブは描画しない（レイアウト側で先頭の表示タブへ移動する）
-  const visibleTabsForUser = isUpperAdminUser ? null : (store?.admin_visible_tabs ?? null);
+  // 店舗設定を適用するか: 店舗管理者本人、または上位管理者が「店舗管理者の見え方」で確認中
+  const applyStoreSettings = !isUpperAdminUser || previewAsStoreAdmin;
+  const visibleTabsForUser = applyStoreSettings ? (store?.admin_visible_tabs ?? null) : null;
   const visibleTabIds = resolveVisibleTabs(visibleTabsForUser);
   // タブ内の項目単位の表示（フォーム管理 / 顧客詳細の履歴）。上位管理者はすべて表示
-  const adminOptions = resolveAdminVisibleOptions(visibleTabsForUser, store?.admin_visible_options ?? null, isUpperAdminUser);
+  const adminOptions = resolveAdminVisibleOptions(visibleTabsForUser, store?.admin_visible_options ?? null, !applyStoreSettings);
   const activeTab = visibleTabIds.includes(requestedTab as (typeof visibleTabIds)[number]) ? requestedTab : visibleTabIds[0];
 
   // ダッシュボード用: 本日（JST）の抽選参加数
@@ -419,6 +431,7 @@ export default function StoreAdminPage() {
               console.warn('[Auth] role API user mismatch; treating as store admin', { roleUser: roleData.userId, sessionUser: user.id });
             }
             isUpperAdmin = sameUser && (roleData.role === 'master' || roleData.role === 'system');
+            setUpperAdminRole(isUpperAdmin ? roleData.role : null);
           }
         } catch {}
         setIsUpperAdminUser(isUpperAdmin);
@@ -1687,6 +1700,25 @@ export default function StoreAdminPage() {
       themeColor={store.theme_color}
       visibleTabs={visibleTabsForUser}
     >
+      {isUpperAdminUser && (
+        <div className={`px-4 lg:px-6 pt-3 ${previewAsStoreAdmin ? '' : ''}`}>
+          <div className={`flex flex-col sm:flex-row sm:items-center gap-2 rounded-md border px-3 py-2 text-xs ${previewAsStoreAdmin ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-amber-300 bg-amber-50 text-amber-900'}`} role="status">
+            <p className="flex-1 min-w-0">
+              {previewAsStoreAdmin ? (
+                <>店舗管理者の見え方で確認中です（<span className="font-medium">{user.email}</span> は{upperAdminRole === 'master' ? 'マスター管理者' : 'システム管理者'}）。「店舗管理者に表示するメニュー」の設定を適用して表示しています。</>
+              ) : (
+                <>{upperAdminRole === 'master' ? 'マスター管理者' : 'システム管理者'}（<span className="font-medium">{user.email}</span>）として閲覧中のため、「店舗管理者に表示するメニュー」の設定は適用されず、すべてのメニューを表示しています。店舗管理者の見え方を確認するには右のボタンを押してください。</>
+              )}
+            </p>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button type="button" size="sm" variant={previewAsStoreAdmin ? 'outline' : 'default'} className="h-8 text-xs" onClick={() => togglePreviewAsStoreAdmin(!previewAsStoreAdmin)}>
+                {previewAsStoreAdmin ? 'すべて表示に戻す' : '店舗管理者の見え方で確認'}
+              </Button>
+              <Button type="button" size="sm" variant="ghost" className="h-8 text-xs" onClick={handleSignOut}>別のアカウントでログイン</Button>
+            </div>
+          </div>
+        </div>
+      )}
       {renderTabContent}
 
       {/* フォーム編集モーダル */}

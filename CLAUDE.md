@@ -209,7 +209,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - `stores.admin_visible_tabs` JSONB（`null` = すべて表示）。値は `['dashboard','reservations','customers','surveys','lotteries','settings']` の部分集合
 - テナント側 店舗ページ → 設定タブ → `StoreAdminMenuSettings.tsx` で ON/OFF（最低 1 つ必須。全選択時は `null` で保存）
 - 店舗管理者ページ: `StoreAdminLayout` の `visibleTabs` でサイドバー・下部ナビをフィルタし、非表示タブへの直接アクセスは先頭の表示タブへ `router.replace`。`admin/page.tsx` も非表示タブは描画しない
-- マスター管理者・システム管理者が開いた場合は常に全表示（`/api/auth/role` の判定を `isUpperAdminUser` に保持）
+- マスター管理者・システム管理者が開いた場合は常に全表示（`/api/auth/role` の判定を `isUpperAdminUser` に保持）。**同じブラウザにテナント管理者のセッションが残っていると店舗管理者ページは自動的にそのセッションで開く**ため、全表示になる。ページ上部に「〜として閲覧中」のバナーを出し、「店舗管理者の見え方で確認」（`previewAsStoreAdmin`、sessionStorage `store_admin_preview_{storeId}`）で店舗設定を適用した表示に切り替えられる
 - 定義・正規化は `src/lib/store-admin-tabs.ts`（`STORE_ADMIN_TABS` / `resolveVisibleTabs()`）
 - マイグレーション: `20260902000000_add_admin_visible_tabs.sql`
 - **項目単位の表示**: `stores.admin_visible_options` JSONB（`reservation_forms` / `survey_forms` / `lottery_forms` = 各タブの「フォーム管理」、`customer_reservation_history` = 顧客詳細の予約履歴・来店履歴・統計情報、`customer_lottery_history` = 顧客詳細の抽選履歴）。**未設定キーは親タブに連動**（予約管理 OFF → 顧客詳細の予約・来店・統計も非表示、抽選管理 OFF → 抽選履歴も非表示）。明示的に true/false を保存すると連動より優先。判定は `resolveAdminVisibleOptions(tabs, options, upperAdmin)`。設定 UI は `StoreAdminMenuSettings.tsx` の各タブ配下のチェック（「連動に戻す」で未設定へ）。マイグレーション: `20260904000000_add_admin_visible_options.sql`
