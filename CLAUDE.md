@@ -532,6 +532,8 @@ export async function GET(req, { params }) {
 **基本情報 (`config.basic_info`):**
 - `form_name` / `store_name` / `liff_id` / `theme_color` / `logo_url` / `notice`
 - `second_message: { enabled, text }` - LIFF 2 通目固定テキスト送信（公式 LINE 完全一致応答用）
+- `submit_button_label` - 「予約する」ボタンの文言（空 = 既定「予約する」。手動予約フォームは常に「予約を行う」）
+- `complete_message` - LINE メッセージ送信成功後（`liff.closeWindow()` 前）に `alert` で出す案内（空 = 既定「当日キャンセルは無いようにお願いいたします。」）
 - `line_only`（デフォルト true）- LINE フォームを LINE アプリ以外のブラウザで開いたとき、`liff.isInClient()` で判定して案内画面を表示し予約を受け付けない。`web` フォーム・プレビュー（`generateHTML(..., 'preview')`）・店舗側手動予約（`'manual'`）では無効。SDK 未読込など判定不能時は制限しない
 
 **メニュー (`MenuItem` / `SubMenuItem` / `MenuOption`):**
@@ -550,6 +552,7 @@ export async function GET(req, { params }) {
 
 **カスタムフィールド (`config.custom_fields[]`):**
 - `type`: `'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select'`
+- 選択肢（`radio` / `checkbox` / `select`）ごとに `options[].additional_questions?: AdditionalQuestion[]`（その選択肢が選ばれたときだけ表示する追加質問。メニュー / オプションの追加質問と同じ型・同じ仕組み）。編集 UI は選択肢行の「追加質問」ボタン → モーダル（`AdditionalQuestionsEditor`）。生成 HTML では親項目の直下に `aq-wrap-{id}`（`data-owner-field`）として描画し、`getAdditionalQuestionEntries()` の `ownerType: 'custom_option'`（`ownerId` = 親フィールド ID、`ownerValue` = 選択肢の value）で表示・必須チェック・LINE メッセージ（親項目の直後に《質問名》）を制御。入れ子は不可
 
 **カレンダー設定 (`config.calendar_settings`):**
 - `booking_mode`: `'calendar'`（Google カレンダー連携式）| `'multiple_dates'`（第一〜第三希望日時選択）

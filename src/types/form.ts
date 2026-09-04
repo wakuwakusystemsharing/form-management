@@ -115,6 +115,10 @@ export interface FormConfig {
     // LINE フォーム（form_type: 'line'）を公式 LINE（LINE アプリ内）以外のブラウザで開いたとき、
     // 案内画面を表示して予約を受け付けない（デフォルト true。web フォーム・プレビュー・店舗側手動予約では無効）
     line_only?: boolean;
+    // 「予約する」ボタンの文言（未設定 / 空は既定の「予約する」。店舗側手動予約フォームでは使わない）
+    submit_button_label?: string;
+    // 送信完了後（LINE メッセージ送信成功後）に表示するメッセージ（未設定 / 空は既定の「当日キャンセルは無いようにお願いいたします。」）
+    complete_message?: string;
   };
   
   visit_options: VisitOption[];
@@ -158,6 +162,8 @@ export interface FormConfig {
     options?: Array<{
       label: string;
       value: string;
+      // この選択肢が選ばれたときに表示される追加質問（アンケートの追加質問と同じ考え方。入れ子は不可）
+      additional_questions?: AdditionalQuestion[];
     }>;
     placeholder?: string;
     // 入力/選択内容を端末の localStorage に保存し、再訪時に復元する（他ユーザーには共有されない）

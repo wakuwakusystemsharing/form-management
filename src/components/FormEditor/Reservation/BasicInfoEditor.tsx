@@ -4,6 +4,7 @@ import React from 'react';
 import { Form } from '@/types/form';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface BasicInfoEditorProps {
@@ -269,6 +270,44 @@ const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({
           }}
           placeholder="例: 予約送信"
         />
+      </div>
+
+      {/* 送信ボタンの文言 / 送信完了メッセージ */}
+      <div className="space-y-4 pt-2 border-t">
+        <div className="space-y-2">
+          <Label htmlFor="submit_button_label">「予約する」ボタンの文言</Label>
+          <p className="text-xs text-muted-foreground">
+            フォーム最下部の送信ボタンに表示する文字です。空欄のときは「予約する」になります（店舗側手動予約フォームは「予約を行う」のまま）。
+          </p>
+          <Input
+            id="submit_button_label"
+            type="text"
+            value={form.config?.basic_info?.submit_button_label || ''}
+            maxLength={30}
+            onChange={(e) => onUpdate({
+              ...form,
+              config: { ...form.config, basic_info: { ...form.config?.basic_info, submit_button_label: e.target.value } },
+            })}
+            placeholder="予約する"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="complete_message">送信完了時に表示するメッセージ</Label>
+          <p className="text-xs text-muted-foreground">
+            ボタンを押して LINE にメッセージを送信したあと、画面を閉じる前に表示する案内です。空欄のときは「当日キャンセルは無いようにお願いいたします。」になります。
+          </p>
+          <Textarea
+            id="complete_message"
+            value={form.config?.basic_info?.complete_message || ''}
+            maxLength={300}
+            rows={2}
+            onChange={(e) => onUpdate({
+              ...form,
+              config: { ...form.config, basic_info: { ...form.config?.basic_info, complete_message: e.target.value } },
+            })}
+            placeholder="当日キャンセルは無いようにお願いいたします。"
+          />
+        </div>
       </div>
 
       {/* システム管理者のみ表示 */}

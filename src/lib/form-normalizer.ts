@@ -74,7 +74,9 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       theme_color: '#3B82F6',
       logo_url: undefined,
       second_message: { enabled: false, text: '' },
-      line_only: true
+      line_only: true,
+      submit_button_label: '',
+      complete_message: ''
     },
     visit_options: [],
     gender_selection: {
@@ -216,6 +218,16 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           const raw = existingConfig?.basic_info?.line_only
             ?? (typedConfig?.basic_info as Form['config']['basic_info'])?.line_only;
           return raw !== false;
+        })(),
+        submit_button_label: (() => {
+          const raw = existingConfig?.basic_info?.submit_button_label
+            ?? (typedConfig?.basic_info as Form['config']['basic_info'])?.submit_button_label;
+          return typeof raw === 'string' ? raw : '';
+        })(),
+        complete_message: (() => {
+          const raw = existingConfig?.basic_info?.complete_message
+            ?? (typedConfig?.basic_info as Form['config']['basic_info'])?.complete_message;
+          return typeof raw === 'string' ? raw : '';
         })()
       },
       visit_options: (existingConfig?.visit_options || typedConfig?.visit_options || []) as Form['config']['visit_options'],
