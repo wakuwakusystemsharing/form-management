@@ -139,6 +139,18 @@ describe('StaticLotteryGenerator', () => {
     expect(html).toContain('9/1（火） 〜 9/30（水）');
   });
 
+  it('使用済みボタン・確認ダイアログ・使用済み表示の JS を埋め込む。OFF なら設定に反映される', () => {
+    const on = gen.generateHTML(makeForm(), 'production');
+    expect(on).toContain('function openRedeemConfirm()');
+    expect(on).toContain('function confirmSelfRedeem()');
+    expect(on).toContain('この賞品を使用済みにする');
+    expect(on).toContain('使用済みにしますか？');
+    expect(on).toContain('この賞品は使用済みです');
+    expect(on).toContain('"allow_self_redeem":true');
+    const off = gen.generateHTML(makeForm({ presentation: { allow_self_redeem: false } }), 'production');
+    expect(off).toContain('"allow_self_redeem":false');
+  });
+
   it('不正なテーマカラーは既定色に落とす', () => {
     const html = gen.generateHTML(makeForm({ basic_info: { title: 'T', liff_id: 'x', theme_color: 'javascript:alert(1)' } }), 'production');
     expect(html).toContain('--primary-color: #1b2a4e;');

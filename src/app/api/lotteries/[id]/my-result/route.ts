@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { findLatestUserEntry, getLotteryForm, updateLotteryEntry } from '@/lib/lottery-repository';
-import { getStoreForLottery, resolveLineUser, toDrawResponse } from '@/lib/lottery-service';
+import { getStoreForLottery, resolveLineUser, selfRedeemEntry, toDrawResponse } from '@/lib/lottery-service';
 
 /**
  * 同一 LINE ユーザーの直近の抽選結果（再訪時の再表示用。公開 API・ID トークン検証あり）
@@ -8,6 +8,8 @@ import { getStoreForLottery, resolveLineUser, toDrawResponse } from '@/lib/lotte
  * GET  /api/lotteries/[id]/my-result?id_token=...        （local: &line_user_id=...）
  * PATCH /api/lotteries/[id]/my-result  body: { id_token, line_user_id?, message_sent: true }
  *        → LIFF sendMessages 完了を記録
+ *       body: { id_token, line_user_id?, redeem: true, entry_id }
+ *        → お客様自身が当選を「使用済み」にする（本人の当選で未引換・期限内のみ）
  */
 async function resolve(request: Request, formId: string, body: Record<string, unknown>) {
   const form = await getLotteryForm(formId);
@@ -17,7 +19,7 @@ async function resolve(request: Request, formId: string, body: Record<string, un
   const resolved = await resolveLineUser(body, store);
   if (!resolved.ok) return { error: NextResponse.json({ error: resolved.error, details: resolved.detail ?? null }, { status: resolved.status }) };
   const entry = await findLatestUserEntry(form.id, resolved.user.userId);
-  return { form, store, entry };
+  return { form, store, entry, user: resolved.user };
 }
 
 export async function GET(
@@ -52,6 +54,13 @@ export async function PATCH(
     const r = await resolve(request, id, body);
     if ('error' in r) return r.error;
     if (!r.entry) return NextResponse.json({ error: '抽選結果が見つかりません' }, { status: 404 });
+    // お客様自身による「使用済みにする」（entry_id 指定。本人の当選で未引換・期限内のみ）
+    if (body.redeem === true) {
+      const entryId = typeof body.entry_id === 'string' ? body.entry_id : r.entry.id;
+      const outcome = await selfRedeemEntry(r.form, r.store, r.user, entryId);
+      if (!outcome.ok) return NextResponse.json({ error: outcome.error }, { status: outcome.status });
+      return NextResponse.json({ success: true, result: outcome.response });
+    }
     if (body.message_sent === true && !r.entry.message_sent) {
       await updateLotteryEntry(r.entry.id, { message_sent: true });
     }
