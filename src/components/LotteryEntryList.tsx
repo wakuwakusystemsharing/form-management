@@ -238,7 +238,7 @@ export default function LotteryEntryList({ storeId, forms, scanHref, onChanged }
                       {e.effective_status === 'drawn' ? (
                         <Button size="sm" variant="outline" className="h-8" onClick={(ev) => { ev.stopPropagation(); setSelected(e); setNote(''); }}>引換</Button>
                       ) : e.status === 'redeemed' ? (
-                        <span className="text-xs text-muted-foreground">{formatDateTime(e.redeemed_at)}</span>
+                        <span className="text-xs text-muted-foreground">{formatDateTime(e.redeemed_at)}{e.redeemed_by === null && e.redeemed_note?.startsWith('本人操作') ? '（本人）' : ''}</span>
                       ) : null}
                     </TableCell>
                   </TableRow>

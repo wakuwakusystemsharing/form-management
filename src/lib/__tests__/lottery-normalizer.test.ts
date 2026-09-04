@@ -26,6 +26,7 @@ describe('normalizeLotteryConfig', () => {
       confetti: true,
       win_title: 'おめでとうございます！',
       lose_title: '残念、今回ははずれでした',
+      allow_self_redeem: true,
     });
     expect(c.messages.win_text).toBe(LOTTERY_DEFAULT_WIN_TEXT);
     expect(c.messages.lose_text).toBe(LOTTERY_DEFAULT_LOSE_TEXT);

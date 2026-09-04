@@ -8,6 +8,7 @@ const repo = vi.hoisted(() => ({
   insertLotteryEntryChecked: vi.fn(),
   redeemCodeExists: vi.fn(),
   updateLotteryEntry: vi.fn(),
+  listUserEntries: vi.fn(),
 }));
 const customers = vi.hoisted(() => ({
   findCustomerByLineOrPhone: vi.fn(),
@@ -316,5 +317,61 @@ describe('executeLotteryDraw（後日抽選）', () => {
     repo.findLatestUserEntry.mockResolvedValue({ id: 'prev', status: 'entered', entered_at: '2026-09-05T00:00:00Z', line_display_name: null } as unknown as LotteryEntry);
     const outcome = await executeLotteryDraw({ form: deferredForm(), store, user, lineFriendFlag: null, answers: null, userAgent: null, now });
     expect(outcome).toMatchObject({ ok: false, status: 409, error: 'この抽選にはすでに応募済みです' });
+  });
+});
+
+describe('selfRedeemEntry（お客様自身の使用済み操作）', () => {
+  const win = (over: Partial<LotteryEntry> = {}): LotteryEntry => ({
+    id: 'e1', lottery_form_id: 'form1', store_id: 'st1', line_user_id: 'U123', line_display_name: '太郎', line_friend_flag: null, customer_id: null,
+    prize_id: 'a', prize_name: 'A賞', is_win: true, is_consolation: false, redeem_code: 'ABC234', qr_token: null,
+    expires_at: '2026-12-31T14:59:59.999Z', status: 'drawn', redeemed_at: null, redeemed_by: null, redeemed_note: null, answers: null,
+    message_sent: false, push_sent: false, user_agent: null, entered_at: '2026-09-01T00:00:00Z', created_at: 'x', updated_at: 'x', ...over,
+  });
+
+  it('本人の未引換・期限内の当選なら redeemed にして結果を返す', async () => {
+    repo.listUserEntries.mockResolvedValue([win()]);
+    repo.updateLotteryEntry.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({ ...win(), ...patch }));
+    const { selfRedeemEntry } = await import('@/lib/lottery-service');
+    const r = await selfRedeemEntry(makeForm(), store, user, 'e1', now);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.response.entry.status).toBe('redeemed');
+    expect(r.response.entry.redeemed_at).toBe(now.toISOString());
+    expect(r.response.is_expired).toBe(false);
+    expect(repo.updateLotteryEntry).toHaveBeenCalledWith('e1', expect.objectContaining({ status: 'redeemed', redeemed_by: null, redeemed_note: expect.stringContaining('本人操作') }));
+  });
+
+  it('他人の当選・存在しない ID は 404', async () => {
+    repo.listUserEntries.mockResolvedValue([win({ id: 'other' })]);
+    const { selfRedeemEntry } = await import('@/lib/lottery-service');
+    expect(await selfRedeemEntry(makeForm(), store, user, 'e1', now)).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it('すでに使用済みなら更新せず現状を返す（冪等）', async () => {
+    repo.listUserEntries.mockResolvedValue([win({ status: 'redeemed', redeemed_at: '2026-09-05T00:00:00Z' })]);
+    const { selfRedeemEntry } = await import('@/lib/lottery-service');
+    const r = await selfRedeemEntry(makeForm(), store, user, 'e1', now);
+    expect(r.ok).toBe(true);
+    expect(repo.updateLotteryEntry).not.toHaveBeenCalled();
+  });
+
+  it('はずれ・応募中・期限切れは 400', async () => {
+    const { selfRedeemEntry } = await import('@/lib/lottery-service');
+    repo.listUserEntries.mockResolvedValue([win({ status: 'lost', prize_id: null, is_win: false })]);
+    expect(await selfRedeemEntry(makeForm(), store, user, 'e1', now)).toMatchObject({ ok: false, status: 400 });
+    repo.listUserEntries.mockResolvedValue([win({ status: 'entered', prize_id: null })]);
+    expect(await selfRedeemEntry(makeForm(), store, user, 'e1', now)).toMatchObject({ ok: false, status: 400 });
+    repo.listUserEntries.mockResolvedValue([win({ expires_at: '2026-01-01T00:00:00Z' })]);
+    const r = await selfRedeemEntry(makeForm(), store, user, 'e1', now);
+    expect(r).toMatchObject({ ok: false, status: 400 });
+    expect(r.ok ? '' : r.error).toContain('有効期限');
+    expect(repo.updateLotteryEntry).not.toHaveBeenCalled();
+  });
+
+  it('店舗が自己引換を OFF にしていれば 403', async () => {
+    repo.listUserEntries.mockResolvedValue([win()]);
+    const { selfRedeemEntry } = await import('@/lib/lottery-service');
+    const form = makeForm({}, { presentation: { allow_self_redeem: false } });
+    expect(await selfRedeemEntry(form, store, user, 'e1', now)).toMatchObject({ ok: false, status: 403 });
   });
 });

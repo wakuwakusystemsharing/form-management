@@ -17,6 +17,7 @@ import {
   getEntryLimitWindow,
   getPeriodState,
   isAllSoldOut,
+  isEntryExpired,
   secureRandomUnit,
   selectPrize,
 } from '@/lib/lottery-engine';
@@ -28,6 +29,7 @@ import {
   countPrizeEntries,
   findLatestUserEntry,
   insertLotteryEntryChecked,
+  listUserEntries,
   redeemCodeExists,
   updateLotteryEntry,
   type LotteryEntryPatch,
@@ -162,7 +164,9 @@ export function toDrawResponse(
       qr_token: entry.qr_token,
       expires_at: entry.expires_at,
       entered_at: entry.entered_at,
+      redeemed_at: entry.redeemed_at,
     },
+    is_expired: isEntryExpired(entry, new Date()),
     prize,
     message_text: messageText,
     second_message: second && second.enabled && second.text ? { enabled: true, text: second.text } : null,
@@ -404,4 +408,50 @@ export async function executeLotteryDraw(params: DrawParams): Promise<DrawOutcom
   }
 
   return { ok: true, status: 201, response: toDrawResponse(form, entry, store.name, false) };
+}
+
+// ---------------------------------------------------------------------------
+// お客様自身による「使用済みにする」
+// ---------------------------------------------------------------------------
+
+export type SelfRedeemOutcome =
+  | { ok: true; response: LotteryDrawResponse }
+  | { ok: false; status: number; error: string };
+
+/**
+ * 当選画面の「この賞品を使用済みにする」。
+ * 本人（ID トークン検証済みの LINE ユーザー）の当選で、未引換かつ期限内のときだけ redeemed にする。
+ * 店舗管理者の抽選履歴には「本人操作」の備考付きで引換済みとして表示される。
+ */
+export async function selfRedeemEntry(
+  form: LotteryForm,
+  store: LotteryStoreInfo,
+  user: ResolvedLineUser,
+  entryId: string,
+  now: Date = new Date()
+): Promise<SelfRedeemOutcome> {
+  if (!form.config.presentation.allow_self_redeem) {
+    return { ok: false, status: 403, error: 'この抽選では店頭スタッフが引換を行います。画面をスタッフにご提示ください' };
+  }
+  const entries = await listUserEntries(form.id, user.userId);
+  const entry = entries.find((e) => e.id === entryId);
+  if (!entry) {
+    return { ok: false, status: 404, error: '当選情報が見つかりません' };
+  }
+  if (entry.status === 'redeemed') {
+    return { ok: true, response: toDrawResponse(form, entry, store.name, true) };
+  }
+  if (entry.status !== 'drawn' || !entry.prize_id) {
+    return { ok: false, status: 400, error: 'この結果は使用済みにできません' };
+  }
+  if (isEntryExpired(entry, now)) {
+    return { ok: false, status: 400, error: '有効期限が切れているため使用できません' };
+  }
+  const updated = await updateLotteryEntry(entry.id, {
+    status: 'redeemed',
+    redeemed_at: now.toISOString(),
+    redeemed_by: null,
+    redeemed_note: '本人操作（お客様がフォームで使用済みにしました）',
+  });
+  return { ok: true, response: toDrawResponse(form, updated ?? { ...entry, status: 'redeemed', redeemed_at: now.toISOString() }, store.name, true) };
 }

@@ -153,6 +153,7 @@ export function normalizeLotteryConfig(raw: unknown): LotteryConfig {
       confetti: bool(pres.confetti, true),
       win_title: str(pres.win_title) || LOTTERY_DEFAULT_WIN_TITLE,
       lose_title: str(pres.lose_title) || LOTTERY_DEFAULT_LOSE_TITLE,
+      allow_self_redeem: bool(pres.allow_self_redeem, true),
     },
     messages: {
       win_text: str(msgs.win_text) || LOTTERY_DEFAULT_WIN_TEXT,

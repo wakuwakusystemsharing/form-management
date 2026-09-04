@@ -83,6 +83,8 @@ export interface LotteryConfig {
     win_title: string;                   // 例: おめでとうございます！
     lose_title: string;                  // 例: 残念、今回ははずれでした
     lose_message?: string;
+    /** お客様自身が当選画面から「使用済みにする」を押せるか（既定 true。店頭でスタッフだけが引換したい店舗は false） */
+    allow_self_redeem: boolean;
   };
   messages: {
     /** 当選時に LIFF から送るテキスト。{賞品名} {引換コード} {有効期限} {店舗名} {LINE名} {抽選名} を差し込める */
@@ -166,8 +168,10 @@ export interface LotteryFormWithStats extends LotteryForm {
 export interface LotteryDrawResponse {
   entry: Pick<
     LotteryEntry,
-    'id' | 'status' | 'is_win' | 'is_consolation' | 'prize_id' | 'prize_name' | 'redeem_code' | 'qr_token' | 'expires_at' | 'entered_at'
+    'id' | 'status' | 'is_win' | 'is_consolation' | 'prize_id' | 'prize_name' | 'redeem_code' | 'qr_token' | 'expires_at' | 'entered_at' | 'redeemed_at'
   >;
+  /** 表示用: drawn かつ有効期限切れなら true */
+  is_expired: boolean;
   prize: LotteryPrize | null;
   message_text: string;
   second_message: { enabled: boolean; text: string } | null;

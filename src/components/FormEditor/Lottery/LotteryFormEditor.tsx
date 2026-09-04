@@ -303,6 +303,13 @@ export default function LotteryFormEditor({ form, onUpdate, userRole = 'service_
                   <Label htmlFor="confetti" className="cursor-pointer">当選時に紙吹雪を出す</Label>
                 </div>
               )}
+              <div className="flex items-start gap-2">
+                <Checkbox id="allow_self_redeem" className="mt-0.5" checked={config.presentation.allow_self_redeem} onCheckedChange={(c) => setPres({ allow_self_redeem: c === true })} />
+                <div>
+                  <Label htmlFor="allow_self_redeem" className="cursor-pointer">当選画面に「この賞品を使用済みにする」ボタンを表示する</Label>
+                  <p className="text-xs text-muted-foreground">お客様が店頭で確認してもらってから自分で使用済みにできます（抽選履歴は自動で「引換済み」になります）。スタッフだけが引換したい場合は OFF にしてください</p>
+                </div>
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
