@@ -8,6 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import TagInput from '@/components/customers/TagInput';
+import { CONTACT_METHODS, normalizeTags } from '@/lib/customer-chart';
+import { ShieldAlert } from 'lucide-react';
 
 export interface CustomerFormData {
   name: string;
@@ -18,6 +21,11 @@ export interface CustomerFormData {
   gender: string;
   customer_type: string;
   notes: string;
+  // カルテ（安全のための情報・タグ）
+  allergies: string;
+  medical_history: string;
+  preferred_contact_method: string;
+  tags: string[];
 }
 
 interface CustomerFormProps {
@@ -32,6 +40,8 @@ interface CustomerFormProps {
   formId?: string;
   /** フォーム末尾のボタン行を出さない（外側の固定バーに置く場合） */
   hideActions?: boolean;
+  /** タグの候補（よく使うタグ）を取得する店舗 ID */
+  storeId?: string;
 }
 
 function toFormData(customer?: Partial<CustomerFormData>): CustomerFormData {
@@ -44,6 +54,10 @@ function toFormData(customer?: Partial<CustomerFormData>): CustomerFormData {
     gender: customer?.gender || '',
     customer_type: customer?.customer_type || 'new',
     notes: customer?.notes || '',
+    allergies: customer?.allergies || '',
+    medical_history: customer?.medical_history || '',
+    preferred_contact_method: customer?.preferred_contact_method || '',
+    tags: normalizeTags(customer?.tags),
   };
 }
 
@@ -57,6 +71,10 @@ export function customerToFormData(customer: Customer): CustomerFormData {
     gender: customer.gender ?? '',
     customer_type: customer.customer_type ?? 'new',
     notes: customer.notes ?? '',
+    allergies: customer.allergies ?? '',
+    medical_history: customer.medical_history ?? '',
+    preferred_contact_method: customer.preferred_contact_method ?? '',
+    tags: customer.tags ?? [],
   });
 }
 
@@ -70,6 +88,7 @@ export default function CustomerForm({
   customerName,
   formId,
   hideActions = false,
+  storeId,
 }: CustomerFormProps) {
   const [form, setForm] = useState<CustomerFormData>(toFormData(initialData));
   const [error, setError] = useState('');
@@ -88,7 +107,7 @@ export default function CustomerForm({
     }
   };
 
-  const updateField = (field: keyof CustomerFormData, value: string) => {
+  const updateField = <K extends keyof CustomerFormData>(field: K, value: CustomerFormData[K]) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -159,6 +178,41 @@ export default function CustomerForm({
           <p className="text-[11px] leading-4 text-muted-foreground">一覧のバッジは来店履歴から自動判定。これは手動の区分です</p>
         </div>
       </div>
+
+      {/* タグ・希望連絡手段 */}
+      <div className="space-y-1.5">
+        <Label htmlFor="customer-tags">タグ</Label>
+        <TagInput id="customer-tags" value={form.tags} onChange={(tags) => updateField('tags', tags)} storeId={storeId} disabled={isSubmitting} />
+      </div>
+      <div className="space-y-1.5 sm:max-w-xs">
+        <Label htmlFor="customer-contact-method">希望連絡手段</Label>
+        <Select value={form.preferred_contact_method || 'none-selected'} onValueChange={(v) => updateField('preferred_contact_method', v === 'none-selected' ? '' : v)}>
+          <SelectTrigger id="customer-contact-method"><SelectValue placeholder="選択" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none-selected">未選択</SelectItem>
+            {CONTACT_METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* 安全のための情報（要配慮個人情報。本人同意のうえで記録） */}
+      <fieldset className="rounded-lg border border-red-200 bg-red-50/40 p-3 space-y-3" data-slot="caution">
+        <legend className="px-1 text-sm font-medium inline-flex items-center gap-1.5">
+          <ShieldAlert className="h-4 w-4 text-red-600" aria-hidden="true" />
+          安全のための情報
+        </legend>
+        <p className="text-[11px] leading-4 text-muted-foreground -mt-1">
+          施術の安全のために使う情報です。お客様の同意を得て記録してください。登録があるときだけ顧客詳細の上部に赤い帯で表示されます
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="customer-allergies">アレルギー</Label>
+          <Textarea id="customer-allergies" value={form.allergies} onChange={(e) => updateField('allergies', e.target.value)} placeholder="例: ジアミン、ラテックス、金属" rows={2} maxLength={500} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="customer-medical-history">既往歴・注意事項</Label>
+          <Textarea id="customer-medical-history" value={form.medical_history} onChange={(e) => updateField('medical_history', e.target.value)} placeholder="例: 頭皮が敏感。刺激の弱い薬剤で対応" rows={2} maxLength={1000} />
+        </div>
+      </fieldset>
 
       <div className="space-y-1.5">
         <Label htmlFor="customer-notes">メモ</Label>

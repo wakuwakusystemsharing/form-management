@@ -27,7 +27,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Phone, Mail, Pencil, Trash2, MoreHorizontal, ChevronRight, Cake, User } from 'lucide-react';
+import { Phone, Mail, Pencil, Trash2, MoreHorizontal, ChevronRight, Cake, User, AlertTriangle, StickyNote, Tag, MessageCircle, Check } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { contactMethodLabel, pickPendingNextVisitNote, NEXT_VISIT_NOTE_MAX_LENGTH } from '@/lib/customer-chart';
 import CustomerForm, { CustomerFormData, customerToFormData } from '@/components/CustomerForm';
 import MobileSheet from '@/components/customers/MobileSheet';
 import { ChipTabsList } from '@/components/customers/ChipTabs';
@@ -53,6 +57,10 @@ interface CustomerDetailProps {
   showReservationHistory?: boolean;
   /** 抽選履歴を表示するか（同上。既定 true） */
   showLotteryHistory?: boolean;
+  /** 基本情報のタグをタップしたとき（一覧をそのタグで絞り込む） */
+  onTagClick?: (tag: string) => void;
+  /** 最初に開く履歴タブ（'reservations' | 'visits' | 'lotteries' | 'line'。表示できないタブは無視） */
+  initialTab?: string;
 }
 
 interface CustomerDetailData {
@@ -102,7 +110,7 @@ function visitMenus(visit: CustomerVisit): string {
   return (visit.treatment_menus as Array<{ name?: string; menu_name?: string }>).map((m) => m.menu_name || m.name || '').filter(Boolean).join(', ') || '-';
 }
 
-export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated, onDeleted, onOpenReservation, showReservationHistory = true, showLotteryHistory = true }: CustomerDetailProps) {
+export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated, onDeleted, onOpenReservation, showReservationHistory = true, showLotteryHistory = true, onTagClick, initialTab }: CustomerDetailProps) {
   const [data, setData] = useState<CustomerDetailData | null>(null);
   const [lotteryEntries, setLotteryEntries] = useState<LotteryEntryView[]>([]);
   const [loading, setLoading] = useState(false);
@@ -111,6 +119,12 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [tab, setTab] = useState('reservations');
+  // 次回への申し送り（来店カード内の編集）
+  const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [noteByDraft, setNoteByDraft] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [acknowledging, setAcknowledging] = useState(false);
   const { toast } = useToast();
 
   const fetchCustomerDetail = useCallback(async () => {
@@ -130,9 +144,15 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
     if (customerId && open) {
       fetchCustomerDetail();
       setIsEditing(false);
-      setTab(showReservationHistory ? 'reservations' : showLotteryHistory ? 'lotteries' : 'line');
+      setEditingVisitId(null);
+      const allowed = [
+        ...(showReservationHistory ? ['reservations', 'visits'] : []),
+        ...(showLotteryHistory ? ['lotteries'] : []),
+        'line',
+      ];
+      setTab(initialTab && allowed.includes(initialTab) ? initialTab : allowed[0]);
     }
-  }, [customerId, open, fetchCustomerDetail, showReservationHistory, showLotteryHistory]);
+  }, [customerId, open, fetchCustomerDetail, showReservationHistory, showLotteryHistory, initialTab]);
 
   useEffect(() => {
     if (!customerId || !open || !showLotteryHistory) return;
@@ -173,6 +193,61 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
     }
   };
 
+  /** 来店記録の申し送りを更新し、取得済みデータへ反映する */
+  const patchVisit = async (visitId: string, body: Record<string, unknown>): Promise<boolean> => {
+    if (!customerId) return false;
+    try {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/customers/${customerId}/visits/${visitId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        toast({ title: '申し送りの保存に失敗しました', description: err.error || `エラーコード: ${response.status}`, variant: 'destructive' });
+        return false;
+      }
+      const updated = (await response.json()) as CustomerVisit;
+      setData((prev) => (prev ? { ...prev, visits: prev.visits.map((v) => (v.id === visitId ? { ...v, ...updated } : v)) } : prev));
+      return true;
+    } catch (error) {
+      console.error('Failed to update visit note:', error);
+      toast({ title: '申し送りの保存に失敗しました', description: 'ネットワークエラー', variant: 'destructive' });
+      return false;
+    }
+  };
+
+  const startEditNote = (visit: CustomerVisit) => {
+    setEditingVisitId(visit.id);
+    setNoteDraft(visit.next_visit_note ?? '');
+    setNoteByDraft(visit.next_visit_note_by ?? '');
+  };
+
+  const saveNote = async () => {
+    if (!editingVisitId) return;
+    setNoteSaving(true);
+    try {
+      if (await patchVisit(editingVisitId, { next_visit_note: noteDraft, next_visit_note_by: noteByDraft })) {
+        toast({ title: noteDraft.trim() ? '申し送りを保存しました' : '申し送りを削除しました' });
+        setEditingVisitId(null);
+      }
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
+  const acknowledgeNote = async (visitId: string) => {
+    setAcknowledging(true);
+    try {
+      if (await patchVisit(visitId, { acknowledge: true })) {
+        toast({ title: '申し送りを確認済みにしました', description: '来店履歴には残ります' });
+      }
+    } finally {
+      setAcknowledging(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!customerId) return;
     setIsDeleting(true);
@@ -199,6 +274,58 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
   const reservations = data?.reservations || [];
   const visits = data?.visits || [];
   const segment = customer ? determineSegmentForList(customer) : null;
+  const tags = customer?.tags ?? [];
+  const contactLabel = contactMethodLabel(customer?.preferred_contact_method);
+  const hasCaution = !!(customer?.allergies || customer?.medical_history);
+  // 来店履歴が非表示の店舗では申し送りも出さない
+  const pendingNote = showReservationHistory ? pickPendingNextVisitNote(visits) : null;
+
+  /** 来店カード / 行の申し送り表示（編集中はその場で入力） */
+  const renderVisitNote = (visit: CustomerVisit) => {
+    if (editingVisitId === visit.id) {
+      return (
+        <div className="mt-2 space-y-2 border-t pt-2">
+          <Label htmlFor={`visit-note-${visit.id}`} className="text-xs">次回への申し送り</Label>
+          <Textarea
+            id={`visit-note-${visit.id}`}
+            value={noteDraft}
+            onChange={(e) => setNoteDraft(e.target.value)}
+            placeholder="次回来店時にスタッフが見るメモ（例: 前髪は切りすぎない。トリートメントを提案）"
+            rows={3}
+            maxLength={NEXT_VISIT_NOTE_MAX_LENGTH}
+            autoFocus
+          />
+          <Input value={noteByDraft} onChange={(e) => setNoteByDraft(e.target.value)} placeholder="担当者名（任意）" maxLength={50} autoComplete="off" />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" size="sm" className="h-10 md:h-9" onClick={() => setEditingVisitId(null)} disabled={noteSaving}>キャンセル</Button>
+            <Button type="button" size="sm" className="h-10 md:h-9 min-w-20" onClick={saveNote} disabled={noteSaving}>{noteSaving ? '保存中…' : '保存'}</Button>
+          </div>
+        </div>
+      );
+    }
+    const note = visit.next_visit_note?.trim();
+    return (
+      <div className="mt-2 flex items-start gap-2 border-t pt-2">
+        <div className="flex-1 min-w-0 text-sm">
+          {note ? (
+            <>
+              <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <StickyNote className="h-3.5 w-3.5" aria-hidden="true" />
+                申し送り{visit.next_visit_note_by ? `（${visit.next_visit_note_by}）` : ''}{visit.next_visit_note_acknowledged_at ? ' ・ 確認済み' : ''}
+              </p>
+              <p className="whitespace-pre-wrap break-words">{note}</p>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">申し送りなし</p>
+          )}
+        </div>
+        <Button type="button" variant="ghost" size="sm" className="h-9 shrink-0 px-2 text-xs" onClick={() => startEditNote(visit)}>
+          <Pencil className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
+          {note ? '編集' : '申し送りを書く'}
+        </Button>
+      </div>
+    );
+  };
 
   const headerRight = !isEditing && !loading && customer ? (
     <DropdownMenu>
@@ -257,6 +384,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
             isSubmitting={isSaving}
             linePictureUrl={customer.line_picture_url}
             customerName={customer.name}
+            storeId={storeId}
             hideActions
           />
         </div>
@@ -300,9 +428,84 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                     </span>
                   )}
                 </div>
+                {(tags.length > 0 || contactLabel) && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {tags.map((t) =>
+                      onTagClick ? (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => onTagClick(t)}
+                          title="このタグで一覧を絞り込む"
+                          className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-2.5 min-h-7 text-xs active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <Tag className="h-3 w-3 shrink-0" aria-hidden="true" />
+                          <span className="max-w-[10rem] truncate">{t}</span>
+                        </button>
+                      ) : (
+                        <span key={t} className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-2.5 min-h-7 text-xs">
+                          <Tag className="h-3 w-3 shrink-0" aria-hidden="true" />
+                          <span className="max-w-[10rem] truncate">{t}</span>
+                        </span>
+                      )
+                    )}
+                    {contactLabel && (
+                      <span className="inline-flex items-center gap-1 min-h-7 text-xs text-muted-foreground">
+                        <MessageCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        希望連絡: {contactLabel}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </section>
+
+          {/* 安全のための情報（登録があるときだけ） */}
+          {hasCaution && (
+            <section className="px-4 py-3 md:px-0 md:py-0" aria-label="注意事項">
+              <div className="rounded-lg border border-red-200 bg-red-50 text-red-950 px-3 py-2.5 space-y-2" data-slot="caution">
+                {customer.allergies && (
+                  <div className="flex gap-2">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-red-600" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold">アレルギー</p>
+                      <p className="text-sm whitespace-pre-wrap break-words">{customer.allergies}</p>
+                    </div>
+                  </div>
+                )}
+                {customer.medical_history && (
+                  <div className="flex gap-2">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-red-600" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold">既往歴・注意事項</p>
+                      <p className="text-sm whitespace-pre-wrap break-words">{customer.medical_history}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* 前回の申し送り（未確認の最新 1 件） */}
+          {pendingNote && (
+            <section className="px-4 py-3 md:px-0 md:py-0" aria-label="前回の申し送り">
+              <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-950 px-3 py-2.5" data-slot="handoff">
+                <p className="flex items-center gap-1.5 text-xs font-semibold">
+                  <StickyNote className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+                  前回の申し送り
+                  <span className="font-normal text-amber-900/70 tabular-nums">（{formatDateShort(pendingNote.visit_date)}{pendingNote.next_visit_note_by ? `・${pendingNote.next_visit_note_by}` : ''}）</span>
+                </p>
+                <p className="mt-1 text-sm whitespace-pre-wrap break-words">{pendingNote.next_visit_note}</p>
+                <div className="mt-2 flex justify-end">
+                  <Button type="button" size="sm" variant="outline" className="h-10 md:h-9 bg-white" onClick={() => acknowledgeNote(pendingNote.id)} disabled={acknowledging}>
+                    <Check className="h-4 w-4 mr-1" aria-hidden="true" />
+                    {acknowledging ? '更新中…' : '確認済みにする'}
+                  </Button>
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* 統計（2×2）: 予約管理が非表示の店舗では出さない */}
           {showReservationHistory && (
@@ -367,7 +570,10 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
               {showReservationHistory && (
               <TabsContent value="visits" className="px-4 md:px-0 mt-3">
                 {visits.length === 0 ? (
-                  <p className="text-center text-sm text-muted-foreground py-6">来店履歴がありません</p>
+                  <div className="text-center py-6">
+                    <p className="text-sm text-muted-foreground">来店履歴がありません</p>
+                    <p className="mt-1 text-xs text-muted-foreground">来店が記録されると、次回への申し送りを残せます</p>
+                  </div>
                 ) : (
                   <>
                     {/* スマホ: カード */}
@@ -379,6 +585,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                             <p className="font-semibold tabular-nums shrink-0">{visit.amount ? currencyFormatter.format(Number(visit.amount)) : '-'}</p>
                           </div>
                           <p className="text-sm text-muted-foreground truncate">{visitMenus(visit)}</p>
+                          {renderVisitNote(visit)}
                         </li>
                       ))}
                     </ul>
@@ -390,6 +597,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                             <TableHead>来店日時</TableHead>
                             <TableHead>施術内容</TableHead>
                             <TableHead className="text-right">利用金額</TableHead>
+                            <TableHead className="w-[40%]">次回への申し送り</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -397,7 +605,8 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                             <TableRow key={visit.id}>
                               <TableCell>{formatDateTime(visit.visit_date, visit.visit_time)}</TableCell>
                               <TableCell>{visitMenus(visit)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{visit.amount ? currencyFormatter.format(Number(visit.amount)) : '-'}</TableCell>
+                              <TableCell className="text-right tabular-nums align-top">{visit.amount ? currencyFormatter.format(Number(visit.amount)) : '-'}</TableCell>
+                              <TableCell className="align-top [&>div]:mt-0 [&>div]:border-t-0 [&>div]:pt-0">{renderVisitNote(visit)}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>

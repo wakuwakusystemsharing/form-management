@@ -504,6 +504,10 @@ export async function createCustomerVisit(
       // 金額情報
       amount: data.amount || null,
       payment_method: data.payment_method || null,
+      // 次回への申し送り（カルテ）
+      next_visit_note: null,
+      next_visit_note_by: null,
+      next_visit_note_acknowledged_at: null,
       // タイムスタンプ
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

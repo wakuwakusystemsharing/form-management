@@ -143,6 +143,8 @@ export default function StoreAdminPage() {
   const [showCustomerDetail, setShowCustomerDetail] = useState(false);
   const [customersRefreshKey, setCustomersRefreshKey] = useState(0);
   const [customersTotal, setCustomersTotal] = useState<number | null>(null);
+  // 顧客一覧のタグ絞り込み（顧客詳細のタグをタップしたときに設定）
+  const [customersTagFilter, setCustomersTagFilter] = useState<string | null>(null);
   // ディープリンク: ?tab=customers&customerId=... で顧客詳細を直接開く（抽選履歴の「顧客情報を見る」など）
   const customerIdParam = searchParams.get('customerId');
   useEffect(() => {
@@ -1436,6 +1438,8 @@ export default function StoreAdminPage() {
                 storeId={storeId}
                 onCustomerClick={(customer) => openCustomer(customer.id)}
                 onTotalChange={setCustomersTotal}
+                tagFilter={customersTagFilter}
+                onTagFilterChange={setCustomersTagFilter}
               />
             </TabsContent>
 
@@ -1549,7 +1553,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView, customersRefreshKey, customersTotal, lotteryForms, lotteryTodayCount, adminOptions]);
+  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView, customersRefreshKey, customersTotal, customersTagFilter, lotteryForms, lotteryTodayCount, adminOptions]);
 
   // 認証チェック中
   if (checkingAuth) {
@@ -2096,6 +2100,14 @@ export default function StoreAdminPage() {
         open={showCustomerDetail}
         showReservationHistory={adminOptions.customer_reservation_history}
         showLotteryHistory={adminOptions.customer_lottery_history}
+        onTagClick={(tag) => {
+          setCustomersTagFilter(tag);
+          const params = new URLSearchParams(searchParams.toString());
+          params.set('customersView', 'list');
+          router.push(`/${storeId}/admin?tab=customers&${params.toString()}`);
+          setShowCustomerDetail(false);
+          setSelectedCustomerId(null);
+        }}
         onClose={() => {
           setShowCustomerDetail(false);
           setSelectedCustomerId(null);
