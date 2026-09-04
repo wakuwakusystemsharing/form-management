@@ -198,6 +198,13 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - ダイナミックカラー: `applyM3Palette(store.theme_color)` が店舗テーマカラーから M3 カラーロール（`--md-*`）を HSL 近似で生成し `<html>` のインラインスタイルに設定（無彩色・未設定時は既定のオレンジパレット）
 - スマホ共通の基礎対策: `Input` / `Select` はスマホ 16px（iOS 自動ズーム防止）、レイアウトは `h-dvh`、アイコンボタンはスマホ 44px、`touch-action: manipulation`、下部ナビゲーション（`lg:hidden`）
 
+**顧客管理タブのスマホ最適化（`docs/顧客管理_スマホUI最適化設計.md`）:**
+- スマホ（< 768px）では外側・内側の Card を描画せず画面幅いっぱい（左右 16px）。一覧 / 分析の切替と件数を 1 行、検索は `SearchBar` + `useDebounce`、セグメント絞り込みは横スクロールのチップ列、「追加」は右下の固定ボタン、50 件超は「さらに読み込む」
+- 顧客詳細・追加フォームは `src/components/customers/MobileSheet.tsx`（スマホ全画面 / PC は従来ダイアログ。固定ヘッダー + 下部固定バー。標準 / M3E 共通）。編集 / 削除はヘッダー右の「⋯」メニュー
+- 共通部品: `ChipTabs.tsx`（`ChipTabsList` / `ChipFilter`）、`StatTile.tsx`（`StatTile` / `StatGrid`）、`ListSkeleton.tsx`。他タブでも流用可
+- `?tab=customers&customerId=...` で顧客詳細を直接開ける
+- PC 表示は従来どおり（`md:` 以上で Card・テーブル・ヘッダー右上のボタン）
+
 **店舗管理者に表示するメニュー（タブ）の制御:**
 - `stores.admin_visible_tabs` JSONB（`null` = すべて表示）。値は `['dashboard','reservations','customers','surveys','lotteries','settings']` の部分集合
 - テナント側 店舗ページ → 設定タブ → `StoreAdminMenuSettings.tsx` で ON/OFF（最低 1 つ必須。全選択時は `null` で保存）
