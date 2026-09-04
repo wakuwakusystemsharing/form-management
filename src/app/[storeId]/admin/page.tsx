@@ -142,6 +142,15 @@ export default function StoreAdminPage() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [showCustomerDetail, setShowCustomerDetail] = useState(false);
   const [customersRefreshKey, setCustomersRefreshKey] = useState(0);
+  const [customersTotal, setCustomersTotal] = useState<number | null>(null);
+  // ディープリンク: ?tab=customers&customerId=... で顧客詳細を直接開く（抽選履歴の「顧客情報を見る」など）
+  const customerIdParam = searchParams.get('customerId');
+  useEffect(() => {
+    if (customerIdParam) {
+      setSelectedCustomerId(customerIdParam);
+      setShowCustomerDetail(true);
+    }
+  }, [customerIdParam]);
   const customersView = searchParams.get('customersView') || 'list';
 
   // マスター/システム管理者として開いているか（店舗ごとのタブ表示制御を受けない）
@@ -1374,52 +1383,65 @@ export default function StoreAdminPage() {
           </div>
         );
 
-      case 'customers':
-        return (
-          <div className="space-y-5 p-4 lg:p-6">
-            <Card className="shadow-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-base">顧客管理</CardTitle>
-                <CardDescription>顧客情報の確認・管理を行います</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Tabs value={customersView} onValueChange={(v) => {
-                  const params = new URLSearchParams(searchParams.toString());
-                  params.set('customersView', v);
-                  router.push(`/${storeId}/admin?tab=customers&${params.toString()}`);
-                }} className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <TabsList>
-                      <TabsTrigger value="list">
-                        <Users className="mr-2 h-4 w-4" />
-                        一覧
-                      </TabsTrigger>
-                      <TabsTrigger value="analytics">
-                        <Calendar className="mr-2 h-4 w-4" />
-                        分析
-                      </TabsTrigger>
-                    </TabsList>
-                  </div>
+      case 'customers': {
+        const openCustomer = (customerId: string) => {
+          setSelectedCustomerId(customerId);
+          setShowCustomerDetail(true);
+        };
+        const customersTabs = (
+          <Tabs value={customersView} onValueChange={(v) => {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set('customersView', v);
+            router.push(`/${storeId}/admin?tab=customers&${params.toString()}`);
+          }} className="space-y-3 md:space-y-6">
+            {/* 切替 + 件数を 1 行に（スマホ: 高さ 44px） */}
+            <div className="flex items-center justify-between gap-3">
+              <TabsList className="h-11 md:h-10 flex-1 md:flex-none grid grid-cols-2 md:inline-flex">
+                <TabsTrigger value="list" className="min-h-9">
+                  <Users className="mr-2 h-4 w-4" />
+                  一覧
+                </TabsTrigger>
+                <TabsTrigger value="analytics" className="min-h-9">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  分析
+                </TabsTrigger>
+              </TabsList>
+              {customersView === 'list' && customersTotal !== null && (
+                <p className="text-sm text-muted-foreground tabular-nums shrink-0 md:hidden">{customersTotal} 件</p>
+              )}
+            </div>
 
-                  <TabsContent value="list" className="space-y-6">
-                    <CustomerList
-                      key={customersRefreshKey}
-                      storeId={storeId}
-                      onCustomerClick={(customer) => {
-                        setSelectedCustomerId(customer.id);
-                        setShowCustomerDetail(true);
-                      }}
-                    />
-                  </TabsContent>
+            <TabsContent value="list" className="mt-0 md:mt-2">
+              <CustomerList
+                key={customersRefreshKey}
+                storeId={storeId}
+                onCustomerClick={(customer) => openCustomer(customer.id)}
+                onTotalChange={setCustomersTotal}
+              />
+            </TabsContent>
 
-                  <TabsContent value="analytics" className="space-y-6">
-                    <CustomerAnalytics storeId={storeId} />
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </div>
+            <TabsContent value="analytics" className="mt-0 md:mt-2">
+              <CustomerAnalytics storeId={storeId} onCustomerClick={openCustomer} />
+            </TabsContent>
+          </Tabs>
         );
+        return (
+          <>
+            {/* スマホ: 外側の Card なし・左右 16px */}
+            <div className="md:hidden px-4 pt-3 pb-4">{customersTabs}</div>
+            {/* PC: 従来の Card */}
+            <div className="hidden md:block space-y-5 p-4 lg:p-6">
+              <Card className="shadow-sm">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-base">顧客管理</CardTitle>
+                  <CardDescription>顧客情報の確認・管理を行います</CardDescription>
+                </CardHeader>
+                <CardContent>{customersTabs}</CardContent>
+              </Card>
+            </div>
+          </>
+        );
+      }
 
       case 'lotteries':
         return (
@@ -1506,7 +1528,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView, customersRefreshKey, lotteryForms, lotteryTodayCount]);
+  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView, customersRefreshKey, customersTotal, lotteryForms, lotteryTodayCount]);
 
   // 認証チェック中
   if (checkingAuth) {

@@ -309,6 +309,33 @@ html[data-ui="m3e"] [data-slot="dialog-content"] {
   }
 }
 
+/* 顧客管理の全画面シート（MobileSheet）: 固定ヘッダー/フッターを自前で持つため、
+   M3E の全画面ダイアログ用 padding と grid 設定を打ち消す（両スタイル共通の見た目にする） */
+html[data-ui="m3e"] [data-slot="mobile-sheet"] {
+  padding: 0;
+  display: flex;
+  border-radius: 0;
+}
+@media (min-width: 768px) {
+  html[data-ui="m3e"] [data-slot="mobile-sheet"] {
+    border-radius: var(--md-shape-xl);
+  }
+}
+html[data-ui="m3e"] [data-slot="mobile-sheet-header"],
+html[data-ui="m3e"] [data-slot="mobile-sheet-footer"] {
+  background-color: hsl(var(--md-surface-container-low) / 0.95);
+}
+html[data-ui="m3e"] [data-slot="fab"] {
+  border-radius: var(--md-shape-full);
+  min-height: 3.5rem;
+  box-shadow: 0 6px 20px hsl(var(--md-on-surface) / 0.2);
+}
+html[data-ui="m3e"] [data-slot="status-chip"][data-active="true"] {
+  background-color: hsl(var(--md-secondary-container));
+  color: hsl(var(--md-on-secondary-container));
+  border-color: transparent;
+}
+
 /* ---------- ポップオーバー / セレクトのメニュー ---------- */
 html[data-ui="m3e"] [data-radix-popper-content-wrapper] > * {
   border-radius: var(--md-shape-md);
