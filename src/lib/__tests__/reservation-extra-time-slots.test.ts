@@ -25,6 +25,8 @@ function buildForm(): Form {
           start_time: '09:00',
           end_time: '12:00',
           blocked_times: ['11:00'],
+          // 祝日は 10:00〜12:00 + 「祝日は午前のみ」を先頭に
+          holiday_hours: { enabled: true, open: '10:00', close: '12:00', extra_slots: [{ label: '祝日は午前のみ', after: 'start' }] },
           weekday_hours: {
             // 2026-09-07 は月曜
             '1': {
@@ -79,5 +81,17 @@ describe('予約フォーム（第三希望日時モード）: 追加の時間�
     const select = dom.window.document.getElementById('date1_time') as HTMLSelectElement;
     const values = Array.from(select.options).map((o) => o.value);
     expect(values).toEqual(['', '午前中', '09:00', '10:00', '10時台', '11時ごろ', '午後']);
+  });
+
+  it('祝日の受付時間にも追加の時間帯が差し込まれる（2026-09-21 敬老の日）', async () => {
+    const form = buildForm();
+    const html = new StaticReservationGenerator().generateHTML(form.config, form.id, form.store_id, 'preview');
+    const dom = await loadDom(html);
+    const bf = (dom.window as unknown as { bookingForm: BookingForm }).bookingForm;
+    const settings = form.config.calendar_settings.multiple_dates_settings;
+    bf.populateTimeOptions(1, settings, '2026-09-21');
+    const select = dom.window.document.getElementById('date1_time') as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).toEqual(['', '祝日は午前のみ', '10:00']);
   });
 });
