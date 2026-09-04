@@ -560,7 +560,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
   };
 
   // 祝日の受付時間（日時選択モード）。OFF = 曜日の設定に従う（既存挙動）
-  const handleMdHolidayHoursChange = (patch: Partial<{ enabled: boolean; open: string; close: string; custom: boolean; custom_slots: string[] }>) => {
+  const handleMdHolidayHoursChange = (patch: Partial<{ enabled: boolean; open: string; close: string; custom: boolean; custom_slots: string[]; extra_slots: ExtraSlot[] }>) => {
     const current = multipleDatesSettings.holiday_hours || { enabled: false, open: '09:00', close: '18:00', custom: false, custom_slots: [] };
     const updatedSettings = {
       ...multipleDatesSettings,
@@ -1649,6 +1649,14 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                                   onChange={(e) => handleMdHolidayHoursChange({ close: e.target.value })}
                                   className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
                                 />
+                                <button
+                                  type="button"
+                                  onClick={() => handleMdHolidayHoursChange({ extra_slots: [...(holidayHours.extra_slots || []), { label: '', after: 'end' }] })}
+                                  title="「午前中」「16:00以降」など、時間のリストに追加の選択肢を差し込む"
+                                  className={`px-2 py-1 text-xs rounded-md flex-shrink-0 sm:ml-2 ${themeClasses.button.secondary}`}
+                                >
+                                  ＋ 時間帯を追加{(holidayHours.extra_slots || []).length > 0 ? `（${(holidayHours.extra_slots || []).length}）` : ''}
+                                </button>
                               </div>
                             )}
 
@@ -1690,6 +1698,51 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                               </div>
                             )}
                           </div>
+                          {holidayHours.enabled === true && !holidayHours.custom && (holidayHours.extra_slots || []).length > 0 && (
+                            <div className={`mt-2 ml-0 sm:ml-20 space-y-1.5 rounded-md p-2 ${theme === 'light' ? 'bg-gray-50 border border-gray-200' : 'bg-gray-800/60 border border-gray-700'}`}>
+                              <p className={`text-xs ${themeClasses.text.tertiary}`}>追加の時間帯（「時間を選択」のリストに差し込まれます。テキストは自由です）</p>
+                              {(holidayHours.extra_slots || []).map((slot, slotIndex) => {
+                                const times = buildTimeList(holidayHours.open || '09:00', holidayHours.close || '18:00', multipleDatesSettings.time_interval || 30);
+                                const updateSlot = (patch: Partial<ExtraSlot>) => {
+                                  const next = [...(holidayHours.extra_slots || [])];
+                                  next[slotIndex] = { ...next[slotIndex], ...patch };
+                                  handleMdHolidayHoursChange({ extra_slots: next });
+                                };
+                                return (
+                                  <div key={slotIndex} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <input
+                                      type="text"
+                                      value={slot.label}
+                                      maxLength={30}
+                                      onChange={(ev) => updateSlot({ label: ev.target.value })}
+                                      placeholder="例: 午前中 / 午後 / 16:00以降"
+                                      className={`${themeClasses.input} text-sm flex-1 min-w-0`}
+                                    />
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-xs whitespace-nowrap ${themeClasses.text.tertiary}`}>表示位置</span>
+                                      <select
+                                        value={slot.after || 'end'}
+                                        onChange={(ev) => updateSlot({ after: ev.target.value })}
+                                        className={`${themeClasses.input} text-sm`}
+                                      >
+                                        <option value="start">リストの先頭</option>
+                                        {times.map((t) => <option key={t} value={t}>{t} の後</option>)}
+                                        <option value="end">リストの末尾</option>
+                                      </select>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMdHolidayHoursChange({ extra_slots: (holidayHours.extra_slots || []).filter((_, i) => i !== slotIndex) })}
+                                        title="削除"
+                                        className={`p-1.5 rounded text-red-400 hover:text-red-300 flex-shrink-0 ${theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'}`}
+                                      >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                           <p className={`text-xs ${themeClasses.text.tertiary} mt-2`}>
                             ONにすると、祝日（振替休日含む）は曜日の設定より優先してこの時間で受付します。
                             予約ルール設定の「祝日を予約不可にする」がONの祝日はそちらが優先されます。

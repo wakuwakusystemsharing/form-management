@@ -574,7 +574,7 @@ export async function GET(req, { params }) {
 - `show_customer_email` - メールアドレス入力 2 欄（メイン+確認）の表示。Web 予約での自動メール送信に必須
 - `notification_email` - Web 予約の店舗側通知メール宛先（空時は `store.owner_email`）
 - `multiple_dates_settings` - 希望日時モードの時間間隔・選択日数・曜日別時間設定
-  - `weekday_hours[day].extra_slots?: Array<{ label, after }>` - 通常の時間リストに差し込む追加の選択肢（例: 午前中 / 午後 / 16:00以降）。`after` は `'start'`（先頭）/ `'end'`（末尾）/ `'HH:MM'`（その時刻の直後。✕で消えている時刻なら次の時刻の前）。編集 UI は曜日行の「＋ 時間帯を追加」。生成 HTML は `insertExtraSlots()`。`custom`（カスタム受付時間）が ON のときは custom_slots が優先され extra_slots は使わない
+  - `weekday_hours[day].extra_slots?: Array<{ label, after }>` - 通常の時間リストに差し込む追加の選択肢（例: 午前中 / 午後 / 16:00以降）。`after` は `'start'`（先頭）/ `'end'`（末尾）/ `'HH:MM'`（その時刻の直後。✕で消えている時刻なら次の時刻の前）。編集 UI は曜日行と祝日行の「＋ 時間帯を追加」（`holiday_hours.extra_slots` も同形式）。生成 HTML は `insertExtraSlots()`。`custom`（カスタム受付時間）が ON のときは custom_slots が優先され extra_slots は使わない
 
 **フォームタイプ (`config.form_type`):**
 - `'line'` - LIFF 経由（LINE トーク内で開く、メッセージ送信あり）

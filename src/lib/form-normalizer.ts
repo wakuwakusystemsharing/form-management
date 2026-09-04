@@ -353,7 +353,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           }
           // 祝日の受付時間（未設定 = OFF、曜日の設定に従う）
           {
-            const hh = (base as { holiday_hours?: { enabled?: unknown; open?: unknown; close?: unknown; custom?: unknown; custom_slots?: unknown } }).holiday_hours;
+            const hh = (base as { holiday_hours?: { enabled?: unknown; open?: unknown; close?: unknown; custom?: unknown; custom_slots?: unknown; extra_slots?: unknown } }).holiday_hours;
             (base as Record<string, unknown>).holiday_hours = {
               enabled: hh?.enabled === true,
               open: typeof hh?.open === 'string' && hh.open ? hh.open : '09:00',
@@ -361,6 +361,9 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
               custom: hh?.custom === true,
               custom_slots: Array.isArray(hh?.custom_slots)
                 ? hh.custom_slots.filter((x): x is string => typeof x === 'string')
+                : [],
+              extra_slots: Array.isArray(hh?.extra_slots)
+                ? hh.extra_slots.filter((x): x is { label: string; after: string } => !!x && typeof x === 'object' && typeof (x as { label?: unknown }).label === 'string' && typeof (x as { after?: unknown }).after === 'string')
                 : []
             };
           }

@@ -3432,7 +3432,7 @@ class BookingForm {
                 closed: false,
                 custom: hh.custom === true,
                 custom_slots: Array.isArray(hh.custom_slots) ? hh.custom_slots : [],
-                extra_slots: []
+                extra_slots: Array.isArray(hh.extra_slots) ? hh.extra_slots : []
             };
         }
         // weekday_hours がある場合はそちらを優先
