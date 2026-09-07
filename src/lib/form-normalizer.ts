@@ -32,6 +32,17 @@ function sanitizeMenuImageDisplay(raw: unknown): 'thumbnail' | 'hidden' {
  * フォーム構造を正規化する関数
  * 旧「フラット形式」(top-level form_name 等) と新 config.* 形式を統一
  */
+/** 追加で表示する分: 0〜59 の整数だけを残し、重複を除いて昇順にする */
+export function sanitizeExtraMinutes(v: unknown): number[] {
+  if (!Array.isArray(v)) return [];
+  const out = new Set<number>();
+  for (const x of v) {
+    const n = typeof x === 'number' ? x : typeof x === 'string' ? Number(x) : NaN;
+    if (Number.isInteger(n) && n >= 0 && n <= 59) out.add(n);
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
 export function normalizeForm(form: Form | Record<string, unknown>): Form {
   const rawForm = form as Record<string, unknown>;
   
@@ -337,6 +348,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
               '6': { open: '09:00', close: '18:00', closed: false },  // 土曜
             };
           }
+          // 追加で表示する分（不正値は除去）
+          (base as { extra_minutes?: unknown }).extra_minutes = sanitizeExtraMinutes((base as { extra_minutes?: unknown }).extra_minutes);
           // 必須選択（未設定 = 全て必須、第一希望は常に必須）
           {
             const rcRaw = (base as { required_choices?: unknown }).required_choices;
@@ -402,6 +415,10 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.time_interval;
           return v === 10 || v === 15 || v === 20 || v === 30 || v === 45 || v === 60 || v === 120 ? v : 30;
         })() as 10 | 15 | 20 | 30 | 45 | 60 | 120,
+        extra_minutes: sanitizeExtraMinutes(
+          existingConfig?.calendar_settings?.extra_minutes
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.extra_minutes
+        ),
         blocked_times: (() => {
           const v = existingConfig?.calendar_settings?.blocked_times
             ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.blocked_times;
@@ -486,6 +503,21 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           cancel_select_prompt: pick(raw?.cancel_select_prompt),
           cancel_done_heading: pick(raw?.cancel_done_heading)
         };
+      })(),
+      // 店舗側手動予約フォームの項目設定（boolean 以外は未設定扱い）
+      manual_form_settings: (() => {
+        const raw = (existingConfig as { manual_form_settings?: unknown } | undefined)?.manual_form_settings
+          ?? (typedConfig as { manual_form_settings?: unknown } | undefined)?.manual_form_settings;
+        if (!raw || typeof raw !== 'object') return undefined;
+        const r = raw as Record<string, unknown>;
+        const pick = (k: string) => (typeof r[k] === 'boolean' ? (r[k] as boolean) : undefined);
+        const out = {
+          show_customer_name: pick('show_customer_name'),
+          require_customer_name: pick('require_customer_name'),
+          show_customer_phone: pick('show_customer_phone'),
+          require_customer_phone: pick('require_customer_phone'),
+        };
+        return Object.values(out).some((v) => v !== undefined) ? out : undefined;
       })(),
       content_blocks: (() => {
         const raw = existingConfig?.content_blocks

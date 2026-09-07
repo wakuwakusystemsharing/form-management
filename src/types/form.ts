@@ -154,6 +154,13 @@ export interface FormConfig {
     }>;
   };
   
+  // 店舗側手動予約フォーム（スタッフ用）だけに適用する項目設定。通常の予約フォームには影響しない
+  manual_form_settings?: {
+    show_customer_name?: boolean;     // 既定 true（未設定 = 表示）
+    require_customer_name?: boolean;  // 既定 true（false = 任意）
+    show_customer_phone?: boolean;    // 既定: 通常フォームの show_customer_phone に従う
+    require_customer_phone?: boolean; // 既定 true（false = 任意）
+  };
   custom_fields?: Array<{
     id: string;
     type: 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select';
@@ -218,6 +225,11 @@ export interface FormConfig {
     event_color_id?: string;
     // カレンダー表示モードの時間間隔（分）。デフォルト 30
     time_interval?: 10 | 15 | 20 | 30 | 45 | 60 | 120;
+    // 追加で表示する分（0〜59）。時間間隔の行に加えて、営業時間内の毎時この分の行も表示する（例: [10] → 09:10, 10:10, …）
+    extra_minutes?: number[];
+    // 店舗側手動予約フォームの生成時にだけ立つ内部フラグ（manual_form_settings から算出。保存はしない）
+    customer_name_optional?: boolean;
+    customer_phone_optional?: boolean;
     // デフォルトで✕にする時間帯（"HH:MM"）。カレンダー表示モードで該当スロットを常に✕にする
     blocked_times?: string[];
     // ✕にする時間帯の曜日指定: 時刻("HH:MM") → 適用する曜日(0=日〜6=土)の配列。
@@ -238,6 +250,7 @@ export interface FormConfig {
     // 第三希望日時モード用設定
     multiple_dates_settings?: {
       time_interval: 10 | 15 | 20 | 30 | 45 | 60 | 120;   // 時間間隔（分）
+      extra_minutes?: number[];           // 追加で表示する分（0〜59）。時間選択の選択肢に毎時この分を追加
       blocked_times?: string[];           // デフォルトで✕にする時間帯（"HH:MM"）。時間選択の選択肢から除外
       // ✕にする時間帯の曜日指定: 時刻 → 適用曜日(0=日〜6=土)。エントリ無し = 全曜日（既存挙動）
       blocked_time_weekdays?: { [time: string]: number[] };
