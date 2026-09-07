@@ -124,9 +124,16 @@ export class StaticReservationGenerator {
       if (safeConfig.calendar_settings?.multiple_dates_settings) {
         safeConfig.calendar_settings.multiple_dates_settings.required_choices = [1];
       }
-      // スタッフが登録相手を記録できるよう、お名前欄は設定に関わらず表示する
+      // 店舗側手動予約フォームだけの項目設定（通常フォームの設定は変えない）
+      // お名前は既定で表示（スタッフが登録相手を記録できるように）。電話番号は既定で通常フォームの設定に従う
       if (safeConfig.calendar_settings) {
-        safeConfig.calendar_settings.show_customer_name = true;
+        const mfs = safeConfig.manual_form_settings || {};
+        safeConfig.calendar_settings.show_customer_name = mfs.show_customer_name !== false;
+        if (typeof mfs.show_customer_phone === 'boolean') {
+          safeConfig.calendar_settings.show_customer_phone = mfs.show_customer_phone;
+        }
+        safeConfig.calendar_settings.customer_name_optional = mfs.require_customer_name === false;
+        safeConfig.calendar_settings.customer_phone_optional = mfs.require_customer_phone === false;
       }
     }
 
@@ -177,7 +184,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
             ${safeConfig.calendar_settings?.show_customer_name === false ? '' : `
             <!-- お客様名 -->
             <div class="field" id="name-field">
-                <label class="field-label">お名前 <span class="required">*</span></label>
+                <label class="field-label">お名前 ${safeConfig.calendar_settings?.customer_name_optional === true ? '<span class="optional-mark">（任意）</span>' : '<span class="required">*</span>'}</label>
                 <input type="text" id="customer-name" class="input" placeholder="山田太郎">
             </div>
             `}
@@ -186,7 +193,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
             ${safeConfig.calendar_settings?.show_customer_phone === false ? '' : `
             <!-- 電話番号 -->
             <div class="field" id="phone-field">
-                <label class="field-label">電話番号 <span class="required">*</span></label>
+                <label class="field-label">電話番号 ${safeConfig.calendar_settings?.customer_phone_optional === true ? '<span class="optional-mark">（任意）</span>' : '<span class="required">*</span>'}</label>
                 <input type="tel" id="customer-phone" class="input" placeholder="090-1234-5678">
             </div>
             `}
@@ -1797,12 +1804,14 @@ class BookingForm {
 
         const rawInterval = this.config?.calendar_settings?.time_interval;
         const timeInterval = (rawInterval === 10 || rawInterval === 15 || rawInterval === 20 || rawInterval === 30 || rawInterval === 45 || rawInterval === 60 || rawInterval === 120) ? rawInterval : 30;
-        const timeSlots = [];
-        for (let m = earliestOpen; m < latestClose; m += timeInterval) {
-            const hh = String(Math.floor(m / 60)).padStart(2, '0');
-            const mm = String(m % 60).padStart(2, '0');
-            timeSlots.push(hh + ':' + mm);
-        }
+        const timeSlots = this.addExtraMinuteSlots(
+            (() => {
+                const base = [];
+                for (let m = earliestOpen; m < latestClose; m += timeInterval) base.push(m);
+                return base;
+            })(),
+            earliestOpen, latestClose, this.config?.calendar_settings?.extra_minutes
+        ).map(m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'));
         
         // 月表示を更新
         const monthDisplay = document.getElementById('current-month');
@@ -2455,12 +2464,12 @@ class BookingForm {
         // バリデーション（非表示の項目はスキップし、空ならフォールバック値で埋める）
         const showNameField = this.config.calendar_settings?.show_customer_name !== false;
         const showPhoneField = this.config.calendar_settings?.show_customer_phone !== false;
-        if (showNameField && !this.state.name) {
+        if (showNameField && !this.state.name && this.config.calendar_settings?.customer_name_optional !== true) {
             alert('お名前を入力してください');
             resetSubmitState();
             return;
         }
-        if (showPhoneField && !this.state.phone) {
+        if (showPhoneField && !this.state.phone && this.config.calendar_settings?.customer_phone_optional !== true) {
             alert('電話番号を入力してください');
             resetSubmitState();
             return;
@@ -2487,11 +2496,11 @@ class BookingForm {
                 return;
             }
         }
-        // 非表示フィールドのフォールバック: 名前は LINE 表示名 → 「未記入」、電話は「未記入」
-        if (!showNameField && !this.state.name) {
+        // 非表示 / 任意で空のフィールドのフォールバック: 名前は LINE 表示名 → 「未記入」、電話は「未記入」
+        if (!this.state.name) {
             this.state.name = this.state.lineDisplayName || '未記入';
         }
-        if (!showPhoneField && !this.state.phone) {
+        if (!this.state.phone) {
             this.state.phone = '未記入';
         }
         const menuCats = this.config.menu_structure?.categories || [];
@@ -3539,7 +3548,7 @@ class BookingForm {
         }
 
         // 時間スロット生成
-        const timeSlots = this.generateTimeSlots(startTime, endTime, settings.time_interval);
+        const timeSlots = this.generateTimeSlots(startTime, endTime, settings.time_interval, settings.extra_minutes);
 
         // デフォルトで✕にする時間帯は選択肢から除外（"9:00" → "09:00" に正規化）
         // 曜日指定がある時刻は選択日の曜日が対象のときのみ除外（指定なし = 全曜日除外の既存挙動）
@@ -3609,26 +3618,30 @@ class BookingForm {
         return result;
     }
     
-    generateTimeSlots(startTime, endTime, interval) {
-        const slots = [];
-        const [startHour, startMin] = startTime.split(':').map(Number);
-        const [endHour, endMin] = endTime.split(':').map(Number);
-        
-        let currentHour = startHour;
-        let currentMin = startMin;
-        
-        while (currentHour < endHour || (currentHour === endHour && currentMin < endMin)) {
-            const timeStr = \`\${currentHour.toString().padStart(2, '0')}:\${currentMin.toString().padStart(2, '0')}\`;
-            slots.push(timeStr);
-            
-            currentMin += interval;
-            if (currentMin >= 60) {
-                currentHour += Math.floor(currentMin / 60);
-                currentMin = currentMin % 60;
+    // 「追加で表示する分」: 営業時間内の毎時 extraMinutes の分を時間間隔の行に加える（分単位の数値配列で受け取り、昇順・重複なしで返す）
+    addExtraMinuteSlots(baseMinutes, startMin, endMin, extraMinutes) {
+        const set = new Set(baseMinutes);
+        const extras = Array.isArray(extraMinutes) ? extraMinutes.filter(n => Number.isInteger(n) && n >= 0 && n <= 59) : [];
+        if (extras.length > 0) {
+            for (let h = Math.floor(startMin / 60); h * 60 < endMin; h++) {
+                extras.forEach(mm => {
+                    const m = h * 60 + mm;
+                    if (m >= startMin && m < endMin) set.add(m);
+                });
             }
         }
-        
-        return slots;
+        return Array.from(set).sort((a, b) => a - b);
+    }
+
+    generateTimeSlots(startTime, endTime, interval, extraMinutes) {
+        const [startHour, startMin] = startTime.split(':').map(Number);
+        const [endHour, endMin] = endTime.split(':').map(Number);
+        const start = startHour * 60 + startMin;
+        const end = endHour * 60 + endMin;
+        const base = [];
+        for (let m = start; m < end; m += interval) base.push(m);
+        return this.addExtraMinuteSlots(base, start, end, extraMinutes)
+            .map(m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'));
     }
     
     updateDateTime(index) {
@@ -5178,6 +5191,8 @@ if (document.readyState === 'loading') {
         .required {
             color: #ef4444;
         }
+        
+        .optional-mark { color: #6b7280; font-size: 0.75rem; font-weight: normal; }
         
         .input {
             width: 100%;

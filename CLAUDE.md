@@ -562,7 +562,8 @@ export async function GET(req, { params }) {
 
 **カレンダー設定 (`config.calendar_settings`):**
 - `booking_mode`: `'calendar'`（Google カレンダー連携式）| `'multiple_dates'`（第一〜第三希望日時選択）
-- `time_interval`: `10 | 15 | 30 | 60` - カレンダー表示モードの時間スロット間隔（デフォルト 30）
+- `time_interval`: `10 | 15 | 20 | 30 | 45 | 60 | 120` - カレンダー表示モードの時間スロット間隔（デフォルト 30）
+- `extra_minutes?: number[]` - 追加で表示する分（0〜59）。時間間隔の行に加えて営業時間内の毎時この分の行を表示（例: 30 分間隔 + `[10]` → 09:00, 09:10, 09:30 …）。`multiple_dates_settings.extra_minutes` も同じ（時間の選択肢に追加）。生成 HTML は `addExtraMinuteSlots()`、正規化は `sanitizeExtraMinutes()`
 - `business_hours` - 曜日別営業時間
 - `advance_booking_days` - 何日先まで予約可能か（デフォルト 30）
 - `max_concurrent_events` - 同時刻にこの件数以上のカレンダーイベントが重なる時間帯は ✕（デフォルト 1）
@@ -575,6 +576,10 @@ export async function GET(req, { params }) {
 - `notification_email` - Web 予約の店舗側通知メール宛先（空時は `store.owner_email`）
 - `multiple_dates_settings` - 希望日時モードの時間間隔・選択日数・曜日別時間設定
   - `weekday_hours[day].extra_slots?: Array<{ label, after }>` - 通常の時間リストに差し込む追加の選択肢（例: 午前中 / 午後 / 16:00以降）。`after` は `'start'`（先頭）/ `'end'`（末尾）/ `'HH:MM'`（その時刻の直後。✕で消えている時刻なら次の時刻の前）。編集 UI は曜日行と祝日行の「＋ 時間帯を追加」（`holiday_hours.extra_slots` も同形式）。生成 HTML は `insertExtraSlots()`。`custom`（カスタム受付時間）が ON のときは custom_slots が優先され extra_slots は使わない
+
+**店舗側手動予約フォームの項目設定 (`config.manual_form_settings`):**
+- `show_customer_name` / `require_customer_name` / `show_customer_phone` / `require_customer_phone`。**手動フォーム（`generateHTML(..., 'manual')`）だけ**に適用し、通常フォームの `calendar_settings.show_customer_*` は変えない。生成時に `safeConfig.calendar_settings` へ上書きし、任意は内部フラグ `customer_name_optional` / `customer_phone_optional`（保存しない）で「（任意）」表示 + 必須チェックをスキップ。空のときは名前 = LINE 表示名 → 「未記入」、電話 = 「未記入」で補う
+- 編集 UI は営業時間・ルール → 予約ルール設定の「店舗側手動予約フォームの項目」
 
 **フォームタイプ (`config.form_type`):**
 - `'line'` - LIFF 経由（LINE トーク内で開く、メッセージ送信あり）
