@@ -36,6 +36,39 @@ function InfoTooltip({ text, theme = 'light' }: { text: string; theme?: ThemeTyp
   );
 }
 
+/** 「追加で表示する分」の選択（5 分刻み）。時間間隔の行に加えて、毎時この分の行も表示する */
+const ExtraMinutesPicker: React.FC<{ value: number[]; interval: number; onChange: (mins: number[]) => void; theme: ThemeType }> = ({ value, interval, onChange, theme }) => {
+  const candidates = Array.from({ length: 11 }, (_, i) => (i + 1) * 5);
+  const toggle = (m: number, on: boolean) => {
+    const next = new Set(value);
+    if (on) next.add(m); else next.delete(m);
+    onChange([...next].sort((a, b) => a - b));
+  };
+  const light = theme === 'light';
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {candidates.map((m) => {
+        const onGrid = interval > 0 && m % interval === 0;
+        const checked = value.includes(m);
+        return (
+          <label
+            key={m}
+            title={onGrid ? `${m}分は時間間隔の行に含まれています` : `毎時 ${m} 分の行を追加`}
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-xs cursor-pointer select-none ${
+              checked
+                ? (light ? 'border-[rgb(244,144,49)] bg-orange-50 text-[rgb(200,100,10)]' : 'border-cyan-500 bg-cyan-950/40 text-cyan-300')
+                : (light ? 'border-gray-300 text-gray-600 hover:bg-gray-50' : 'border-gray-600 text-gray-300 hover:bg-gray-700')
+            } ${onGrid ? 'opacity-50' : ''}`}
+          >
+            <input type="checkbox" className="sr-only" checked={checked} onChange={(e) => toggle(m, e.target.checked)} />
+            {m}分
+          </label>
+        );
+      })}
+    </div>
+  );
+};
+
 const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdate, theme = 'dark' }) => {
   const themeClasses = getThemeClasses(theme);
   const accentClasses = theme === 'light'
@@ -118,6 +151,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
 
   const [multipleDatesSettings, setMultipleDatesSettings] = useState<{
     time_interval: 10 | 15 | 20 | 30 | 45 | 60 | 120;
+    extra_minutes?: number[];
     date_range_days: number;
     exclude_weekdays: number[];
     start_time: string;
@@ -133,6 +167,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
       const existing = form.config?.calendar_settings?.multiple_dates_settings;
       return {
         time_interval: existing?.time_interval || 30,
+        extra_minutes: existing?.extra_minutes || [],
         date_range_days: existing?.date_range_days || 30,
         exclude_weekdays: existing?.exclude_weekdays || [0],
         start_time: existing?.start_time || '09:00',
@@ -473,7 +508,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
   // （デフォルトで✕にする時間帯 のプルダウン選択肢用。営業中の曜日の最も早い開始〜最も遅い終了）
   const generateSlotOptions = (
     hours: Array<{ open?: string; close?: string; closed?: boolean }>,
-    interval: number
+    interval: number,
+    extraMinutes: number[] = []
   ): string[] => {
     const toMin = (t: string) => {
       const [h, m] = t.split(':').map(Number);
@@ -483,11 +519,12 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     if (openDays.length === 0) return [];
     const start = Math.min(...openDays.map(h => toMin(h.open || '09:00')));
     const end = Math.max(...openDays.map(h => toMin(h.close || '18:00')));
-    const out: string[] = [];
-    for (let m = start; m < end; m += interval) {
-      out.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+    const mins = new Set<number>();
+    for (let m = start; m < end; m += interval) mins.add(m);
+    for (let h = Math.floor(start / 60); h * 60 < end; h++) {
+      extraMinutes.forEach((mm) => { const m = h * 60 + mm; if (m >= start && m < end) mins.add(m); });
     }
-    return out;
+    return [...mins].sort((a, b) => a - b).map((m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
   };
 
   const toggleRequiredChoice = (idx: number) => {
@@ -851,6 +888,20 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   </select>
                 </div>
 
+                {/* 追加で表示する分 */}
+                <div className="mt-4">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>追加で表示する分</label>
+                    <InfoTooltip theme={theme} text={'時間間隔の行に加えて、営業時間内の毎時この分の行もカレンダーに表示します。\n例: 30分間隔 + 10分 → 09:00, 09:10, 09:30, 10:00, 10:10, …'} />
+                  </div>
+                  <ExtraMinutesPicker
+                    value={form.config?.calendar_settings?.extra_minutes || []}
+                    interval={calendarTimeInterval}
+                    theme={theme}
+                    onChange={(mins) => onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, extra_minutes: mins } } })}
+                  />
+                </div>
+
                 {/* デフォルトで✕にする時間帯 */}
                 <div className="mt-4 max-w-xs">
                   <div className="flex items-center gap-1.5 mb-2">
@@ -877,7 +928,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                           className={themeClasses.input}
                         >
                           {(() => {
-                            const slots = generateSlotOptions(Object.values(businessHours), calendarTimeInterval);
+                            const slots = generateSlotOptions(Object.values(businessHours), calendarTimeInterval, form.config?.calendar_settings?.extra_minutes || []);
                             // 時間間隔や営業時間の変更で選択肢から外れた保存済みの値も表示は維持
                             const opts = slots.includes(t) || !t ? slots : [t, ...slots];
                             return opts.map(slot => (
@@ -927,7 +978,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     <button
                       type="button"
                       onClick={() => {
-                        const slots = generateSlotOptions(Object.values(businessHours), calendarTimeInterval);
+                        const slots = generateSlotOptions(Object.values(businessHours), calendarTimeInterval, form.config?.calendar_settings?.extra_minutes || []);
                         const used = form.config?.calendar_settings?.blocked_times || [];
                         const nextSlot = slots.find(slot => !used.includes(slot)) || slots[0] || '12:00';
                         onUpdate({ ...form, config: { ...form.config, calendar_settings: { ...form.config?.calendar_settings, blocked_times: [...used, nextSlot] } } });
@@ -1183,6 +1234,18 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                       <option value={60}>60分間隔</option>
                       <option value={120}>120分間隔</option>
                     </select>
+                    <div className="mt-3">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>追加で表示する分</label>
+                        <InfoTooltip theme={theme} text={'時間間隔の選択肢に加えて、受付時間内の毎時この分も時間の選択肢に表示します。\n例: 30分間隔 + 10分 → 09:00, 09:10, 09:30, 10:00, 10:10, …'} />
+                      </div>
+                      <ExtraMinutesPicker
+                        value={multipleDatesSettings.extra_minutes || []}
+                        interval={multipleDatesSettings.time_interval || 30}
+                        theme={theme}
+                        onChange={(mins) => handleMultipleDatesSettingsChange('extra_minutes', mins)}
+                      />
+                    </div>
                   </div>
 
                   {/* デフォルトで✕にする時間帯 */}
@@ -1216,7 +1279,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                               const hoursList = multipleDatesSettings.weekday_hours
                                 ? Object.values(multipleDatesSettings.weekday_hours)
                                 : [{ open: multipleDatesSettings.start_time, close: multipleDatesSettings.end_time, closed: false }];
-                              const slots = generateSlotOptions(hoursList, multipleDatesSettings.time_interval);
+                              const slots = generateSlotOptions(hoursList, multipleDatesSettings.time_interval, multipleDatesSettings.extra_minutes || []);
                               const opts = slots.includes(t) || !t ? slots : [t, ...slots];
                               return opts.map(slot => (
                                 <option key={slot} value={slot}>{slot}</option>
@@ -1270,7 +1333,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                           const hoursList = multipleDatesSettings.weekday_hours
                             ? Object.values(multipleDatesSettings.weekday_hours)
                             : [{ open: multipleDatesSettings.start_time, close: multipleDatesSettings.end_time, closed: false }];
-                          const slots = generateSlotOptions(hoursList, multipleDatesSettings.time_interval);
+                          const slots = generateSlotOptions(hoursList, multipleDatesSettings.time_interval, multipleDatesSettings.extra_minutes || []);
                           const used = multipleDatesSettings.blocked_times || [];
                           const nextSlot = slots.find(slot => !used.includes(slot)) || slots[0] || '12:00';
                           handleMultipleDatesSettingsChange('blocked_times', [...used, nextSlot]);
@@ -2192,6 +2255,46 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 className={themeClasses.input}
               />
             </div>
+
+            {/* 店舗側手動予約フォームの項目（通常フォームには影響しない） */}
+            {(() => {
+              const mfs = form.config?.manual_form_settings || {};
+              const setMfs = (patch: Partial<NonNullable<typeof form.config.manual_form_settings>>) => onUpdate({ ...form, config: { ...form.config, manual_form_settings: { ...mfs, ...patch } } });
+              const rows: Array<{ key: 'show_customer_name' | 'require_customer_name' | 'show_customer_phone' | 'require_customer_phone'; label: string; value: boolean; disabled?: boolean; hint?: string }> = [
+                { key: 'show_customer_name', label: '「お名前」を表示', value: mfs.show_customer_name !== false, hint: 'OFF のときは LINE 表示名（未取得なら「未記入」）で登録します' },
+                { key: 'require_customer_name', label: '「お名前」を必須にする', value: mfs.require_customer_name !== false, disabled: mfs.show_customer_name === false, hint: 'OFF のときは空のまま登録できます（LINE 表示名または「未記入」で補います）' },
+                { key: 'show_customer_phone', label: '「電話番号」を表示', value: mfs.show_customer_phone ?? (form.config?.calendar_settings?.show_customer_phone !== false), hint: '未設定のときは通常フォームの設定に従います。OFF のときは「未記入」で登録します' },
+                { key: 'require_customer_phone', label: '「電話番号」を必須にする', value: mfs.require_customer_phone !== false, disabled: (mfs.show_customer_phone ?? (form.config?.calendar_settings?.show_customer_phone !== false)) === false, hint: 'OFF のときは空のまま登録できます（「未記入」で補います）' },
+              ];
+              return (
+                <div className={`rounded-lg border p-4 space-y-3 ${theme === 'light' ? 'border-gray-200 bg-gray-50' : 'border-gray-700 bg-gray-900/40'}`}>
+                  <div>
+                    <h4 className={`text-sm font-medium ${themeClasses.text.primary}`}>店舗側手動予約フォームの項目</h4>
+                    <p className={`text-xs ${themeClasses.text.tertiary} mt-0.5`}>
+                      店舗管理者ページの予約管理から使う「店舗側手動予約フォーム」（スタッフ用）だけに適用されます。お客様に公開している通常の予約フォームは変わりません。
+                    </p>
+                  </div>
+                  {rows.map((r) => (
+                    <div key={r.key} className={`flex items-center justify-between gap-3 ${r.disabled ? 'opacity-50' : ''}`}>
+                      <div className="min-w-0">
+                        <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>{r.label}</label>
+                        {r.hint && <p className={`text-xs ${themeClasses.text.tertiary}`}>{r.hint}</p>}
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={r.value}
+                        disabled={r.disabled}
+                        onClick={() => setMfs({ [r.key]: !r.value })}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${r.value ? themeClasses.toggle.enabled : themeClasses.toggle.disabled}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${r.value ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
 
             <div className={`${themeClasses.highlight} rounded-lg p-4`}>
               <h4 className={`text-sm font-medium mb-2 ${theme === 'light' ? 'text-[rgb(244,144,49)]' : 'text-cyan-300'}`}>現在の設定:</h4>
