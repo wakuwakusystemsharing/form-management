@@ -442,6 +442,11 @@ interface Store {
   line_channel_access_token?: string;                 // LINEチャネルアクセストークン
   reminder_enabled?: boolean;     // LINE リマインダー送信の ON/OFF（デフォルト true）
   reminder_time?: string;         // リマインダー送信時刻（HH:00 形式、デフォルト '19:00'）
+  follow_enabled?: boolean;       // LINE フォローメッセージの ON/OFF（デフォルト false）
+  follow_base?: 'reservation_date' | 'created_at'; // フォローの基準日（予約日 / 予約受付日）
+  follow_days_after?: number;     // 基準日から何日後に送るか（1〜60、デフォルト 7）
+  follow_time?: string;           // フォロー送信時刻（HH:00 形式、デフォルト '12:00'）
+  follow_template?: ReminderTemplate | null; // フォロー文面（reminder_template と同じ形式）
   status: 'active' | 'inactive';
   created_at: string;
   updated_at: string;
@@ -605,6 +610,29 @@ Supabase Edge Function: send-reminders
   ├─ 2. reminder_enabled=true かつ reminder_time が現在時刻と一致する store のみ抽出
   └─ 3. 各 reservation について LINE Messaging API で Flex リマインダー送信
         → store の line_channel_access_token を使用
+```
+
+### 7-2. LINE フォローメッセージ送信フロー（リマインダーとは独立）
+
+```
+[予約成立] POST /api/reservations
+  ↓ scheduleFollowMessageForReservation()（src/lib/follow-message-repository.ts）
+  ├─ 店舗の follow_enabled が OFF / line_user_id 無し / 予定が過去 → 何もしない
+  ├─ 同じ店舗・同じ LINE ユーザーの scheduled 行 → superseded（再予約で作り直し）
+  └─ follow_messages に 1 行（base_date = 予約日 or 予約受付日、scheduled_at = base_date + N 日 の follow_time JST）
+
+[キャンセル / 復元 / 日時変更] PATCH /api/reservations/{id}・LINE Webhook
+  └─ cancelFollowMessageForReservation / scheduleFollowMessageForReservation / rescheduleFollowMessageForReservation
+
+pg_cron が毎時 5 分に実行（send_follow_messages ジョブ。send_reservation_reminders とは別）
+  ↓
+Supabase Edge Function: send-follow-messages
+  ├─ 1. status = scheduled かつ scheduled_at <= now の行を取得（最大 200 件）
+  ├─ 2. 見送り判定 → skipped + skip_reason
+  │     store_disabled / no_token / reservation_cancelled /
+  │     rebooked（基準日より後の未キャンセル予約あり）/ reminder_same_day（今日 + reminder_days_before に予約あり）
+  ├─ 3. attempt_count を条件に行を確保（同時起動の二重送信防止）
+  └─ 4. LINE Messaging API push（Flex）→ sent / 失敗は再試行（3 回で failed）
 ```
 
 ### 8. LINE 友だち追加状態の同期フロー

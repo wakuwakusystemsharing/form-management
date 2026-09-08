@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase';
 import { createReservationEvent, deleteCalendarEvent, listCalendarEvents } from '@/lib/google-calendar';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { deleteCustomerVisitByReservation, recalculateCustomerStats } from '@/lib/customer-utils';
+import { cancelFollowMessageForReservation } from '@/lib/follow-message-repository';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -626,6 +627,9 @@ export async function POST(req: NextRequest) {
       .from('reservations')
       .update({ status: 'cancelled' })
       .eq('id', target.id);
+
+    // フォローメッセージの配信予定を取り消す（失敗しても続行）
+    await cancelFollowMessageForReservation(target.id);
 
     // CRM 統計補正: visit を削除して再計算
     if (target.customer_id && target.status !== 'cancelled') {

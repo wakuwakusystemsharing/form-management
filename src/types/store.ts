@@ -12,6 +12,12 @@ export interface ReminderTemplate {
   show_footer?: boolean;   // 末尾の一言を表示するか（デフォルト true）
 }
 
+/** LINE フォローメッセージの文面カスタマイズ（リマインダーと同じ形。デフォルト文言だけ異なる） */
+export type FollowTemplate = ReminderTemplate;
+
+/** フォローメッセージの基準日: 予約日（来店日）/ 予約受付日 */
+export type FollowBase = 'reservation_date' | 'created_at';
+
 export interface Store {
   id: string;                 // 6文字のランダム文字列 (全環境共通)
   name: string;
@@ -33,6 +39,11 @@ export interface Store {
   reminder_time?: string;             // リマインダー送信時刻（HH:00形式、デフォルト19:00）
   reminder_days_before?: number;      // リマインダーを予約の何日前に送るか（デフォルト1 = 前日）
   reminder_template?: ReminderTemplate | null; // リマインダー文面のカスタマイズ（null = デフォルト）
+  follow_enabled?: boolean;           // LINE フォローメッセージの有効/無効（既定 false）
+  follow_base?: FollowBase;           // 基準日（既定 'reservation_date'）
+  follow_days_after?: number;         // 基準日から何日後に送るか（1〜60。既定 7）
+  follow_time?: string;               // 送信時刻（HH:00 形式、既定 12:00）
+  follow_template?: FollowTemplate | null; // フォロー文面のカスタマイズ（null = デフォルト）
   admin_visible_tabs?: StoreAdminTabId[] | null; // 店舗管理者に表示するタブ（null = すべて表示。上位管理者には常に全表示）
   admin_visible_options?: StoreAdminVisibleOptions | null; // タブ内の項目単位の表示設定（未設定キーは親タブに連動）
   created_at: string;
