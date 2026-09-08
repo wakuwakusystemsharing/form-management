@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase';
 import { createReservationEvent, getBusyCalendars } from '@/lib/google-calendar';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { sendReservationEmails } from '@/lib/reservation-email';
+import { scheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
 import {
   findCustomerByLineOrPhone,
   createCustomer,
@@ -595,6 +596,17 @@ export async function POST(request: Request) {
         }
       }
 
+      // 3-2. フォローメッセージの配信予定（店舗のフォロー設定が ON かつ LINE ユーザーの予約のみ。失敗しても予約は成功扱い）
+      await scheduleFollowMessageForReservation({
+        id: newReservation.id,
+        store_id: newReservation.store_id,
+        line_user_id: newReservation.line_user_id,
+        customer_id: customerId,
+        reservation_date: newReservation.reservation_date,
+        created_at: newReservation.created_at,
+        status: newReservation.status,
+      });
+
       // 4. Web 予約フォームの場合、お客様 / 店舗にメール送信
       //    Vercel サーバーレスでは return 後に fire-and-forget 処理が打ち切られるため、
       //    after() でレスポンス送信後の実行を保証する
@@ -915,6 +927,17 @@ export async function POST(request: Request) {
         // エラーが発生しても予約のレスポンスは返す
       }
     }
+
+    // 3-2. フォローメッセージの配信予定（店舗のフォロー設定が ON かつ LINE ユーザーの予約のみ。失敗しても予約は成功扱い）
+    await scheduleFollowMessageForReservation({
+      id: reservation.id,
+      store_id: reservation.store_id,
+      line_user_id: reservation.line_user_id,
+      customer_id: reservation.customer_id ?? customerId,
+      reservation_date: reservation.reservation_date,
+      created_at: reservation.created_at,
+      status: reservation.status,
+    });
 
     // 4. Googleカレンダーに予約イベントを作成（希望日時式はスキップ — LINEチャットへの送信のみ）
     const bookingMode = body.booking_mode || customerInfo.booking_mode || 'calendar';

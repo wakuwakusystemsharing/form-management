@@ -11,6 +11,11 @@ import {
   recalculateCustomerStats,
   calculateTotalAmount,
 } from '@/lib/customer-utils';
+import {
+  cancelFollowMessageForReservation,
+  rescheduleFollowMessageForReservation,
+  scheduleFollowMessageForReservation,
+} from '@/lib/follow-message-repository';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
@@ -25,6 +30,46 @@ function writeReservations(reservations: any[]) {
 }
 
 const VALID_STATUSES = ['pending', 'confirmed', 'cancelled', 'completed'];
+
+/**
+ * 予約の変更に合わせてフォローメッセージの配信予定を同期する（失敗しても予約更新は成功扱い）。
+ * - 非キャンセル → cancelled: 未送信の予定を取り消す
+ * - cancelled → 非キャンセル: 予定を作り直す（店舗のフォロー設定が ON の場合）
+ * - 日時の変更（キャンセル中以外）: 未送信の予定日を計算し直す
+ */
+async function syncFollowMessageForChange(
+  reservation: any,
+  previousStatus: string | undefined,
+  nextStatus: string | undefined,
+  hasContentEdit: boolean
+): Promise<void> {
+  try {
+    const input = {
+      id: reservation.id,
+      store_id: reservation.store_id,
+      line_user_id: reservation.line_user_id,
+      customer_id: reservation.customer_id ?? null,
+      reservation_date: reservation.reservation_date,
+      created_at: reservation.created_at,
+      status: reservation.status,
+    };
+    const wasCancelled = previousStatus === 'cancelled';
+    const willBeCancelled = (nextStatus ?? previousStatus) === 'cancelled';
+    if (!wasCancelled && willBeCancelled) {
+      await cancelFollowMessageForReservation(reservation.id);
+      return;
+    }
+    if (wasCancelled && !willBeCancelled) {
+      await scheduleFollowMessageForReservation(input);
+      return;
+    }
+    if (hasContentEdit && !willBeCancelled) {
+      await rescheduleFollowMessageForReservation(input);
+    }
+  } catch (e) {
+    console.error('[follow-message] sync error:', e);
+  }
+}
 
 /**
  * 予約ステータス変更に応じて customer_visits を増減し、顧客統計を再計算する。
@@ -249,6 +294,7 @@ export async function PATCH(
       } catch (e) {
         console.error('[CRM] visit sync error (local):', e);
       }
+      await syncFollowMessageForChange(existing, previousStatus, status, hasContentEdit);
 
       return NextResponse.json(existing);
     }
@@ -336,6 +382,7 @@ export async function PATCH(
     } catch (e) {
       console.error('[CRM] visit sync error:', e);
     }
+    await syncFollowMessageForChange(reservation, previousStatus, status, hasContentEdit);
 
     let calendarSync: 'updated' | 'moved' | 'failed' | 'skipped' | 'deleted' = 'skipped';
 

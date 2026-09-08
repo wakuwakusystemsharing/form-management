@@ -4,6 +4,45 @@ import path from 'path';
 import { Store } from '@/types/store';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { FOLLOW_DAYS_AFTER_OPTIONS } from '@/lib/follow-message-scheduler';
+
+/**
+ * フォローメッセージ設定の入力検証（指定されたキーだけ検証。未指定は変更なし）
+ * 不正なら日本語のエラーメッセージを返す
+ */
+function validateFollowSettings(body: Record<string, unknown>): string | null {
+  if ('follow_enabled' in body && typeof body.follow_enabled !== 'boolean') {
+    return 'フォローメッセージの有効/無効の値が不正です';
+  }
+  if ('follow_base' in body && body.follow_base !== 'reservation_date' && body.follow_base !== 'created_at') {
+    return 'フォローメッセージの基準日の値が不正です';
+  }
+  if ('follow_days_after' in body) {
+    const n = body.follow_days_after;
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 60) {
+      return 'フォローメッセージの「何日後」は 1〜60 の整数で指定してください';
+    }
+    if (!FOLLOW_DAYS_AFTER_OPTIONS.includes(n)) {
+      return 'フォローメッセージの「何日後」は選択肢の中から指定してください';
+    }
+  }
+  if ('follow_time' in body && (typeof body.follow_time !== 'string' || !/^([01]\d|2[0-3]):00$/.test(body.follow_time))) {
+    return 'フォローメッセージの送信時刻は HH:00 形式で指定してください';
+  }
+  if ('follow_template' in body && body.follow_template !== null && body.follow_template !== undefined) {
+    const t = body.follow_template;
+    if (typeof t !== 'object' || Array.isArray(t)) return 'フォローメッセージの文面の形式が不正です';
+    const tt = t as Record<string, unknown>;
+    for (const key of ['header_title', 'header_color', 'body_text', 'text_color', 'footer_text']) {
+      if (key in tt && tt[key] !== undefined && typeof tt[key] !== 'string') return 'フォローメッセージの文面の形式が不正です';
+    }
+    for (const key of ['show_details', 'show_footer']) {
+      if (key in tt && tt[key] !== undefined && typeof tt[key] !== 'boolean') return 'フォローメッセージの文面の形式が不正です';
+    }
+    if (typeof tt.body_text === 'string' && tt.body_text.length > 2000) return 'フォローメッセージの本文は 2000 文字以内で指定してください';
+  }
+  return null;
+}
 
 // 一時的なJSONファイルでのデータ保存（開発用）
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -102,6 +141,11 @@ export async function PUT(
     const { storeId } = await params;
     const body = await request.json();
     const env = getAppEnvironment();
+
+    const followError = validateFollowSettings(body || {});
+    if (followError) {
+      return NextResponse.json({ error: followError }, { status: 400 });
+    }
 
     // ローカル環境: JSON を更新
     if (env === 'local') {
