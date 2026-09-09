@@ -15,6 +15,8 @@ import StoreAdminManager from '@/components/StoreAdminManager';
 import StoreAdminMenuSettings from '@/components/StoreAdminMenuSettings';
 import FormHistoryDialog from '@/components/FormHistoryDialog';
 import ReminderTemplateEditor from '@/components/ReminderTemplateEditor';
+import FollowTemplateEditor from '@/components/FollowTemplateEditor';
+import { FOLLOW_DAYS_AFTER_OPTIONS } from '@/lib/follow-message-scheduler';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -2649,6 +2651,108 @@ export default function StoreDetailPage() {
                     value={editingStore.reminder_template}
                     onChange={(next) => setEditingStore({ ...editingStore, reminder_template: next })}
                   />
+                )}
+                </div>
+
+                {/* フォローメッセージ設定（予約リマインダーの直下。reminder_* とは独立した follow_* 設定） */}
+                <div className="md:col-span-2 space-y-3 rounded-md border p-3">
+                <div className="space-y-2">
+                  <Label>フォローメッセージ</Label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={editingStore.follow_enabled === true}
+                      onClick={() => setEditingStore({...editingStore, follow_enabled: editingStore.follow_enabled !== true})}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editingStore.follow_enabled === true ? 'bg-primary' : 'bg-gray-300'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editingStore.follow_enabled === true ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                    <span className="text-sm text-muted-foreground">
+                      {editingStore.follow_enabled === true ? '有効' : '無効'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    予約から設定した日数後に、お礼・次回予約のご案内を LINE で自動送信します（通数を1消費します）
+                  </p>
+                </div>
+                {editingStore.follow_enabled === true && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>基準日</Label>
+                      <div className="flex flex-wrap gap-4 text-sm">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="follow_base"
+                            className="h-4 w-4"
+                            checked={(editingStore.follow_base || 'reservation_date') === 'reservation_date'}
+                            onChange={() => setEditingStore({...editingStore, follow_base: 'reservation_date'})}
+                          />
+                          予約日（来店日）から
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="follow_base"
+                            className="h-4 w-4"
+                            checked={editingStore.follow_base === 'created_at'}
+                            onChange={() => setEditingStore({...editingStore, follow_base: 'created_at'})}
+                          />
+                          予約受付日（フォーム送信日）から
+                        </label>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-4">
+                      <div className="space-y-2">
+                        <Label>何日後に送る</Label>
+                        <Select
+                          value={String(editingStore.follow_days_after || 7)}
+                          onValueChange={(value) => setEditingStore({...editingStore, follow_days_after: parseInt(value)})}
+                        >
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FOLLOW_DAYS_AFTER_OPTIONS.map((days) => (
+                              <SelectItem key={days} value={String(days)}>{days === 1 ? '翌日（1日後）' : `${days}日後`}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>フォロー送信時刻</Label>
+                        <Select
+                          value={editingStore.follow_time || '12:00'}
+                          onValueChange={(value) => setEditingStore({...editingStore, follow_time: value})}
+                        >
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 15 }, (_, i) => {
+                              const hour = i + 7;
+                              const value = `${String(hour).padStart(2, '0')}:00`;
+                              return <SelectItem key={value} value={value}>{value}</SelectItem>;
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>
+                        {(editingStore.follow_base || 'reservation_date') === 'reservation_date' ? '予約日（来店日）' : '予約受付日'}
+                        の{editingStore.follow_days_after || 7}日後 {editingStore.follow_time || '12:00'} にフォローメッセージが送信されます
+                      </p>
+                      <p>※ 送信日までに次の予約が入っている方には送りません。次の予約を基準に改めてフォローが予定されます。</p>
+                      <p>※ 予約リマインダーと同じ日になる場合はフォローを送りません。</p>
+                    </div>
+                    <FollowTemplateEditor
+                      storeName={editingStore.name}
+                      value={editingStore.follow_template}
+                      onChange={(next) => setEditingStore({ ...editingStore, follow_template: next })}
+                    />
+                  </>
                 )}
                 </div>
                 </div>

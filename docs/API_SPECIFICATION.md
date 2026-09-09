@@ -104,8 +104,21 @@
   "phone": "03-9876-5432",
   "address": "更新された住所",
   "website_url": "https://updated.com",
-  "description": "更新された説明"
+  "description": "更新された説明",
+  "follow_enabled": true,
+  "follow_base": "reservation_date",
+  "follow_days_after": 7,
+  "follow_time": "12:00",
+  "follow_template": { "header_title": "", "body_text": "{LINE名}様 先日はありがとうございました" }
 }
+```
+
+**フォローメッセージ設定の検証**（指定されたキーのみ。不正時は 400 + 日本語メッセージ）:
+- `follow_enabled`: boolean
+- `follow_base`: `'reservation_date'` | `'created_at'`
+- `follow_days_after`: `1, 2, 3, 5, 7, 10, 14, 21, 30, 45, 60` のいずれか
+- `follow_time`: `HH:00`
+- `follow_template`: `reminder_template` と同じ形（文字列 / boolean のみ。本文 2000 文字以内）
 
 ### `DELETE /api/stores/{storeId}`
 店舗を削除（関連フォーム・予約も削除）
@@ -885,6 +898,7 @@ Google Calendar 連携を解除（OAuth トークンを削除）
 顧客詳細を取得
 
 **レスポンス**: `{ customer, reservations, visits }`（予約履歴・来店履歴は最大 50 件、日付降順）
+- `reservations[].follow_message`: フォローメッセージの配信状態（無ければ `null`）。`{ status: 'scheduled'|'sent'|'skipped'|'cancelled'|'superseded'|'failed', skip_reason: 'rebooked'|'reminder_same_day'|'store_disabled'|'no_token'|'reservation_cancelled'|null, scheduled_at, sent_at }`
 
 ### `PATCH /api/stores/{storeId}/customers/{customerId}`
 顧客情報を更新

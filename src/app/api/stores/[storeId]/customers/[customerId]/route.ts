@@ -4,6 +4,7 @@ import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient, createAuthenticatedClient, checkStoreAccess } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth-helper';
+import { getFollowMessageSummariesByReservationIds } from '@/lib/follow-message-repository';
 import { Customer, CustomerUpdate } from '@/types/form';
 import { updateCustomer, deleteCustomer } from '@/lib/customer-utils';
 import { isContactMethod, normalizeTags } from '@/lib/customer-chart';
@@ -154,6 +155,10 @@ export async function GET(
           .sort((a: any, b: any) => String(b.visit_date).localeCompare(String(a.visit_date)) || String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
       }
 
+      // フォローメッセージの配信状態を予約履歴に同梱
+      const followMap = await getFollowMessageSummariesByReservationIds(reservations.map((r: any) => r.id));
+      reservations = reservations.map((r: any) => ({ ...r, follow_message: followMap[r.id] || null }));
+
       return NextResponse.json({
         customer,
         reservations,
@@ -198,9 +203,14 @@ export async function GET(
       .order('visit_date', { ascending: false })
       .limit(50);
 
+    // フォローメッセージの配信状態を予約履歴に同梱
+    const reservationRows: any[] = reservations || [];
+    const followMap = await getFollowMessageSummariesByReservationIds(reservationRows.map((r) => r.id));
+    const reservationsWithFollow = reservationRows.map((r) => ({ ...r, follow_message: followMap[r.id] || null }));
+
     return NextResponse.json({
       customer,
-      reservations: reservations || [],
+      reservations: reservationsWithFollow,
       visits: visits || [],
     });
   } catch (error) {

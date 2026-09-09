@@ -39,6 +39,7 @@ import { StatGrid, StatTile } from '@/components/customers/StatTile';
 import { determineSegmentForList, getSegmentBadgeVariant, getSegmentLabel } from '@/components/CustomerList';
 
 import type { LotteryEntryEffectiveStatus, LotteryEntryView } from '@/types/lottery';
+import { FOLLOW_MESSAGE_SKIP_REASON_LABELS, FOLLOW_MESSAGE_STATUS_LABELS, type FollowMessageSummary } from '@/types/follow-message';
 
 const LOTTERY_STATUS_LABELS: Record<LotteryEntryEffectiveStatus, string> = {
   entered: '応募', provisional: '応募', drawn: '当選', lost: 'はずれ', redeemed: '引換済み', cancelled: '取り消し', expired: '期限切れ',
@@ -104,6 +105,22 @@ function getStatusLabel(status: string) {
     case 'completed': return '完了';
     default: return status;
   }
+}
+/** 予約履歴に出すフォローメッセージの状態バッジ（差替済みは表示しない） */
+function followBadge(summary: FollowMessageSummary | null | undefined): { label: string; className: string; title: string } | null {
+  if (!summary || summary.status === 'superseded') return null;
+  const label = FOLLOW_MESSAGE_STATUS_LABELS[summary.status] || `フォロー: ${summary.status}`;
+  const reason = summary.skip_reason ? FOLLOW_MESSAGE_SKIP_REASON_LABELS[summary.skip_reason] : '';
+  const when = summary.status === 'sent' && summary.sent_at
+    ? `送信: ${new Date(summary.sent_at).toLocaleString('ja-JP')}`
+    : summary.status === 'scheduled' ? `予定: ${new Date(summary.scheduled_at).toLocaleString('ja-JP')}` : '';
+  const title = [reason, when].filter(Boolean).join(' / ');
+  const className = summary.status === 'sent'
+    ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20'
+    : summary.status === 'scheduled' ? 'bg-sky-50 text-sky-700 border-sky-200'
+    : summary.status === 'failed' ? 'bg-red-50 text-red-600 border-red-200'
+    : 'bg-muted text-muted-foreground';
+  return { label: reason && summary.status === 'skipped' ? `${label}（${reason}）` : label, className, title };
 }
 function visitMenus(visit: CustomerVisit): string {
   if (!visit.treatment_menus || !Array.isArray(visit.treatment_menus)) return '-';
@@ -556,6 +573,14 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                           <div className="flex-1 min-w-0">
                             <p className="font-medium tabular-nums">{formatDateTime(reservation.reservation_date, reservation.reservation_time)}</p>
                             <p className="text-sm text-muted-foreground truncate">{reservation.menu_name}</p>
+                            {(() => {
+                              const fb = followBadge(reservation.follow_message);
+                              return fb ? (
+                                <Badge variant="outline" className={`mt-1 text-[11px] font-normal ${fb.className}`} title={fb.title} data-slot="status-chip">
+                                  {fb.label}
+                                </Badge>
+                              ) : null;
+                            })()}
                           </div>
                           <Badge variant="outline" className={`shrink-0 ${getStatusBadgeClass(reservation.status)}`}>{getStatusLabel(reservation.status)}</Badge>
                           {onOpenReservation && <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" aria-hidden="true" />}

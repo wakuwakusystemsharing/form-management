@@ -59,21 +59,53 @@ export function applyReminderPlaceholders(text: string, ctx: ReminderContext): s
     .replace(/\{店舗名\}/g, ctx.storeName);
 }
 
+export interface MessageContentDefaults {
+  headerTitle: string;
+  bodyText: string;
+  footerText: string;
+}
+
+export interface ResolvedMessageContent {
+  headerTitle: string;
+  headerColor: string;
+  textColor: string;
+  bodyText: string;
+  isCustomBody: boolean;
+  showDetails: boolean;
+  showFooter: boolean;
+  footerText: string;
+}
+
 /**
- * テンプレートと予約情報から、送信される内容を「表示用の構造」に解決する
+ * テンプレート + デフォルト文言から、送信される内容を「表示用の構造」に解決する（リマインダー / フォロー共通）
  * （管理画面プレビューと Edge Function の Flex 組み立てで同じ結果になるようにする）
  */
-export function resolveReminderContent(template: ReminderTemplate | null | undefined, ctx: ReminderContext) {
+export function resolveMessageContent(
+  template: ReminderTemplate | null | undefined,
+  ctx: ReminderContext,
+  defaults: MessageContentDefaults
+): ResolvedMessageContent {
   const t = template || {};
-  const headerTitle = (t.header_title || '').trim() ? applyReminderPlaceholders(t.header_title!, ctx) : defaultHeaderTitle(ctx.daysBefore);
+  const headerTitle = (t.header_title || '').trim() ? applyReminderPlaceholders(t.header_title!, ctx) : defaults.headerTitle;
   const headerColor = isValidHex(t.header_color) ? t.header_color : REMINDER_DEFAULT_HEADER_COLOR;
   const textColor = isValidHex(t.text_color) ? t.text_color : REMINDER_DEFAULT_TEXT_COLOR;
   const customBody = (t.body_text || '').trim() ? applyReminderPlaceholders(t.body_text!, ctx).trim() : '';
-  const bodyText = customBody || defaultBodyLabel(ctx.daysBefore);
+  const bodyText = customBody || defaults.bodyText;
   const showDetails = t.show_details !== false;
   const showFooter = t.show_footer !== false;
-  const footerText = (t.footer_text || '').trim() ? applyReminderPlaceholders(t.footer_text!, ctx).trim() : REMINDER_DEFAULT_FOOTER;
+  const footerText = (t.footer_text || '').trim() ? applyReminderPlaceholders(t.footer_text!, ctx).trim() : defaults.footerText;
   return { headerTitle, headerColor, textColor, bodyText, isCustomBody: !!customBody, showDetails, showFooter, footerText };
+}
+
+/**
+ * リマインダー文面を解決する（デフォルト文言は「何日前」設定に応じて変わる）
+ */
+export function resolveReminderContent(template: ReminderTemplate | null | undefined, ctx: ReminderContext): ResolvedMessageContent {
+  return resolveMessageContent(template, ctx, {
+    headerTitle: defaultHeaderTitle(ctx.daysBefore),
+    bodyText: defaultBodyLabel(ctx.daysBefore),
+    footerText: REMINDER_DEFAULT_FOOTER,
+  });
 }
 
 /** プレビュー用のサンプル予約 */
