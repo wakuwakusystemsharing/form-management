@@ -5,6 +5,74 @@ import { Store } from '@/types/store';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { FOLLOW_DAYS_AFTER_OPTIONS } from '@/lib/follow-message-scheduler';
+import { applyFollowSettingsToScheduledRows, backfillFollowMessagesForStore } from '@/lib/follow-message-repository';
+
+const TIME_HH00_RE = /^([01]\d|2[0-3]):00$/;
+
+/** 文面テンプレート（reminder_template / follow_template）の形式チェック */
+function validateMessageTemplate(t: unknown, label: string): string | null {
+  if (t === null || t === undefined) return null;
+  if (typeof t !== 'object' || Array.isArray(t)) return `${label}の文面の形式が不正です`;
+  const tt = t as Record<string, unknown>;
+  for (const key of ['header_title', 'header_color', 'body_text', 'text_color', 'footer_text']) {
+    if (key in tt && tt[key] !== undefined && typeof tt[key] !== 'string') return `${label}の文面の形式が不正です`;
+  }
+  for (const key of ['show_details', 'show_footer']) {
+    if (key in tt && tt[key] !== undefined && typeof tt[key] !== 'boolean') return `${label}の文面の形式が不正です`;
+  }
+  if (typeof tt.body_text === 'string' && tt.body_text.length > 2000) return `${label}の本文は 2000 文字以内で指定してください`;
+  return null;
+}
+
+/**
+ * 予約リマインダー設定の入力検証（指定されたキーだけ検証。未指定は変更なし）
+ * 送信 Function は reminder_time を「HH:00」で照合するため、それ以外の書式は保存させない
+ */
+function validateReminderSettings(body: Record<string, unknown>): string | null {
+  if ('reminder_enabled' in body && typeof body.reminder_enabled !== 'boolean') {
+    return '予約リマインダーの有効/無効の値が不正です';
+  }
+  if ('reminder_days_before' in body) {
+    const n = body.reminder_days_before;
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 30) {
+      return '予約リマインダーの「何日前」は 1〜30 の整数で指定してください';
+    }
+  }
+  if ('reminder_time' in body && (typeof body.reminder_time !== 'string' || !TIME_HH00_RE.test(body.reminder_time))) {
+    return '予約リマインダーの送信時刻は HH:00 形式で指定してください';
+  }
+  if ('reminder_template' in body) {
+    const err = validateMessageTemplate(body.reminder_template, '予約リマインダー');
+    if (err) return err;
+  }
+  return null;
+}
+
+type FollowSettingKeys = 'follow_enabled' | 'follow_base' | 'follow_days_after' | 'follow_time';
+const FOLLOW_SETTING_KEYS: FollowSettingKeys[] = ['follow_enabled', 'follow_base', 'follow_days_after', 'follow_time'];
+
+/**
+ * フォロー設定の変更を既存の配信予定に反映する（保存後に呼ぶ。失敗しても保存は成功扱い）
+ * - OFF → ON: 未来の予約（LINE 経由）に予定を後付けする
+ * - 基準日 / 何日後 / 時刻の変更: 未送信の予定を新設定で計算し直す
+ */
+async function syncFollowSettingsChange(storeId: string, before: Record<string, unknown> | null, after: Record<string, unknown>): Promise<void> {
+  try {
+    const turnedOn = before?.follow_enabled !== true && after.follow_enabled === true;
+    const timingChanged = (['follow_base', 'follow_days_after', 'follow_time'] as const)
+      .some((k) => before && before[k] !== after[k]);
+    if (turnedOn) {
+      const created = await backfillFollowMessagesForStore(storeId);
+      console.log(`[follow-message] backfill on enable: store=${storeId} created=${created}`);
+    }
+    if (after.follow_enabled === true && timingChanged) {
+      const updated = await applyFollowSettingsToScheduledRows(storeId);
+      console.log(`[follow-message] settings applied: store=${storeId} updated=${updated}`);
+    }
+  } catch (e) {
+    console.error('[follow-message] settings sync error:', e);
+  }
+}
 
 /**
  * フォローメッセージ設定の入力検証（指定されたキーだけ検証。未指定は変更なし）
@@ -29,17 +97,9 @@ function validateFollowSettings(body: Record<string, unknown>): string | null {
   if ('follow_time' in body && (typeof body.follow_time !== 'string' || !/^([01]\d|2[0-3]):00$/.test(body.follow_time))) {
     return 'フォローメッセージの送信時刻は HH:00 形式で指定してください';
   }
-  if ('follow_template' in body && body.follow_template !== null && body.follow_template !== undefined) {
-    const t = body.follow_template;
-    if (typeof t !== 'object' || Array.isArray(t)) return 'フォローメッセージの文面の形式が不正です';
-    const tt = t as Record<string, unknown>;
-    for (const key of ['header_title', 'header_color', 'body_text', 'text_color', 'footer_text']) {
-      if (key in tt && tt[key] !== undefined && typeof tt[key] !== 'string') return 'フォローメッセージの文面の形式が不正です';
-    }
-    for (const key of ['show_details', 'show_footer']) {
-      if (key in tt && tt[key] !== undefined && typeof tt[key] !== 'boolean') return 'フォローメッセージの文面の形式が不正です';
-    }
-    if (typeof tt.body_text === 'string' && tt.body_text.length > 2000) return 'フォローメッセージの本文は 2000 文字以内で指定してください';
+  if ('follow_template' in body) {
+    const err = validateMessageTemplate(body.follow_template, 'フォローメッセージ');
+    if (err) return err;
   }
   return null;
 }
@@ -146,6 +206,11 @@ export async function PUT(
     if (followError) {
       return NextResponse.json({ error: followError }, { status: 400 });
     }
+    const reminderError = validateReminderSettings(body || {});
+    if (reminderError) {
+      return NextResponse.json({ error: reminderError }, { status: 400 });
+    }
+    const touchesFollowSettings = FOLLOW_SETTING_KEYS.some((k) => body && k in body);
 
     // ローカル環境: JSON を更新
     if (env === 'local') {
@@ -167,8 +232,13 @@ export async function PUT(
         updated_at: new Date().toISOString()
       };
 
+      const beforeStore = stores[storeIndex] as unknown as Record<string, unknown>;
       stores[storeIndex] = updatedStore;
       writeStores(stores);
+
+      if (touchesFollowSettings) {
+        await syncFollowSettingsChange(storeId, beforeStore, updatedStore as unknown as Record<string, unknown>);
+      }
 
       return NextResponse.json(updatedStore);
     }
@@ -191,6 +261,17 @@ export async function PUT(
     delete updateData.id;
     delete updateData.created_at;
 
+    // フォロー設定の変更検知用に変更前の値を取っておく
+    let beforeFollow: Record<string, unknown> | null = null;
+    if (touchesFollowSettings) {
+      const { data: prev } = await (adminClient as any)
+        .from('stores')
+        .select('follow_enabled,follow_base,follow_days_after,follow_time')
+        .eq('id', storeId)
+        .maybeSingle();
+      beforeFollow = prev || null;
+    }
+
      
     const { data: updatedStore, error } = await (adminClient as any)
       .from('stores')
@@ -205,6 +286,10 @@ export async function PUT(
         { error: '店舗の更新に失敗しました' },
         { status: 500 }
       );
+    }
+
+    if (touchesFollowSettings) {
+      await syncFollowSettingsChange(storeId, beforeFollow, updatedStore);
     }
 
     return NextResponse.json(updatedStore);

@@ -112,3 +112,60 @@ describe('normalize', () => {
     expect(normalizeFollowBase(undefined)).toBe('reservation_date');
   });
 });
+
+// ---------------------------------------------------------------------------
+// リマインダー用
+// ---------------------------------------------------------------------------
+import {
+  isReminderTimeReached,
+  reminderTargetDate,
+  normalizeReminderTime,
+  normalizeReminderDaysBefore,
+  toLineRetryKey,
+} from '@/lib/follow-message-scheduler';
+
+describe('isReminderTimeReached', () => {
+  it('送信時刻以降なら true（同じ日のうちは回収できる）', () => {
+    expect(isReminderTimeReached('19:00', '19:00')).toBe(true);
+    expect(isReminderTimeReached('19:00', '20:05')).toBe(true);
+    expect(isReminderTimeReached('19:00', '23:59')).toBe(true);
+  });
+  it('送信時刻より前なら false', () => {
+    expect(isReminderTimeReached('19:00', '18:59')).toBe(false);
+    expect(isReminderTimeReached('09:00', '08:00')).toBe(false);
+  });
+  it('不正な設定は 19:00 扱い', () => {
+    expect(isReminderTimeReached('12:30', '12:00')).toBe(false);
+    expect(isReminderTimeReached('12:30', '19:00')).toBe(true);
+    expect(isReminderTimeReached(undefined, '19:00')).toBe(true);
+  });
+});
+
+describe('reminderTargetDate / normalize', () => {
+  it('今日 + N 日', () => {
+    expect(reminderTargetDate('2026-09-11', 1)).toBe('2026-09-12');
+    expect(reminderTargetDate('2026-12-31', 3)).toBe('2027-01-03');
+    expect(reminderTargetDate('2026-09-11', 0)).toBe('2026-09-12');   // 不正 → 1
+    expect(reminderTargetDate('2026-09-11', 31)).toBe('2026-09-12');
+  });
+  it('normalize', () => {
+    expect(normalizeReminderTime('07:00')).toBe('07:00');
+    expect(normalizeReminderTime('19:00:00')).toBe('19:00');
+    expect(normalizeReminderDaysBefore(7)).toBe(7);
+    expect(normalizeReminderDaysBefore('7')).toBe(1);
+  });
+});
+
+describe('toLineRetryKey', () => {
+  it('32 桁 hex はハイフン付き UUID にする', () => {
+    expect(toLineRetryKey('0123456789ABCDEF0123456789abcdef')).toBe('01234567-89ab-cdef-0123-456789abcdef');
+  });
+  it('UUID はそのまま（小文字化）', () => {
+    expect(toLineRetryKey('01234567-89AB-CDEF-0123-456789ABCDEF')).toBe('01234567-89ab-cdef-0123-456789abcdef');
+  });
+  it('それ以外は null', () => {
+    expect(toLineRetryKey('fm_abc')).toBeNull();
+    expect(toLineRetryKey('')).toBeNull();
+    expect(toLineRetryKey(null)).toBeNull();
+  });
+});

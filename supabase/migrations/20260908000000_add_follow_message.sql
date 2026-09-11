@@ -72,25 +72,8 @@ CREATE POLICY store_admin_follow_messages_select ON follow_messages FOR SELECT
   USING (store_id IN (SELECT store_id FROM store_admins WHERE user_id = (SELECT auth.uid())));
 
 -- ==========================================
--- pg_cron ジョブ（テンプレート）
--- 実運用では Dashboard の SQL Editor から Service Role Key を指定して cron.schedule() を実行すること。
--- 既存の send_reservation_reminders（毎時 0 分）とは別名・別時刻（毎時 5 分）で登録し、リマインダー側には影響させない。
+-- pg_cron ジョブはこのファイルでは登録しない
+-- （テンプレの URL・仮キーがそのまま登録される事故が実際に起きたため撤去。2026-09-11）
+-- 登録は docs/フォローメッセージ_リリース手順.md の手順どおり、各プロジェクトの Dashboard から
+-- 本物の service_role キー・自プロジェクトの URL・timeout_milliseconds := 60000 を指定して手動で行うこと。
 -- ==========================================
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-    PERFORM cron.schedule(
-      'send_follow_messages',
-      '5 * * * *',
-      $cmd$
-        SELECT net.http_post(
-          url := 'https://tpuqjpdaasxfwsvjcbum.supabase.co/functions/v1/send-follow-messages',
-          headers := jsonb_build_object(
-            'Content-Type', 'application/json',
-            'Authorization', 'Bearer <SERVICE_ROLE_KEY>'
-          )
-        );
-      $cmd$
-    );
-  END IF;
-END $$;

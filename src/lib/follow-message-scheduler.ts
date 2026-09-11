@@ -118,3 +118,48 @@ export function isReminderSameDay(
   const reminderTargetDate = addDays(todayJst, daysBefore);
   return reservations.some((r) => r && r.status !== 'cancelled' && r.reservation_date === reminderTargetDate);
 }
+
+// ---------------------------------------------------------------------------
+// リマインダー用（Edge Function send-reminders と同じ判定。変更時は両方を合わせること）
+// ---------------------------------------------------------------------------
+
+export const REMINDER_DEFAULT_TIME = '19:00';
+export const REMINDER_DEFAULT_DAYS_BEFORE = 1;
+export const REMINDER_MAX_ATTEMPTS = 3;
+
+export function normalizeReminderTime(value: unknown): string {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):00$/.test(value) ? value : REMINDER_DEFAULT_TIME;
+}
+
+export function normalizeReminderDaysBefore(value: unknown): number {
+  const n = typeof value === 'number' && Number.isFinite(value) ? Math.floor(value) : NaN;
+  return n >= 1 && n <= 30 ? n : REMINDER_DEFAULT_DAYS_BEFORE;
+}
+
+/**
+ * 店舗の送信時刻に達しているか（現在の HH:MM >= reminder_time）。
+ * 完全一致ではなく「以降」にすることで、cron が 1 回止まっても同じ日のうちなら次の回で回収できる。
+ */
+export function isReminderTimeReached(reminderTime: unknown, currentHHMM: string): boolean {
+  const t = normalizeReminderTime(reminderTime);
+  return /^\d{2}:\d{2}$/.test(currentHHMM) && currentHHMM >= t;
+}
+
+/** 今日（JST）+ days_before = リマインド対象の予約日 */
+export function reminderTargetDate(todayJst: string, daysBefore: unknown): string {
+  return addDays(todayJst, normalizeReminderDaysBefore(daysBefore));
+}
+
+/**
+ * LINE の X-Line-Retry-Key は UUID 形式が必須。
+ * ハイフン無しの 32 桁 hex（follow_messages.id）はハイフンを入れて UUID にし、UUID はそのまま、それ以外は null。
+ */
+export function toLineRetryKey(id: string | null | undefined): string | null {
+  if (!id) return null;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return id.toLowerCase();
+  if (/^[0-9a-f]{32}$/i.test(id)) {
+    const s = id.toLowerCase();
+    return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
+  }
+  return null;
+}
