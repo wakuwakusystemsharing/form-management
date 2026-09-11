@@ -174,7 +174,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - 店舗ごとに ON/OFF + 送信時刻指定が可能（`stores.reminder_enabled` / `stores.reminder_time`、デフォルト 19:00）。`PUT /api/stores/{storeId}` で `HH:00` / 1〜30 日 / 文面の型を検証（DB にも CHECK）
 - **送信記録 `reminder_logs`**（1 予約 × 対象日 = 1 行。`sending / sent / failed / skipped`）: 送信前に行を確保（sending）してから push するので二重送信しない。`X-Line-Retry-Key` に行 ID（UUID）。失敗は 3 回まで再試行、10 分以上 sending のままの行は再確保
 - 判定は「現在時刻(JST) >= reminder_time」（完全一致ではない）。cron が 1 回止まっても同じ日のうちなら次の回で回収する。対象日は「今日 + N 日」なので前日分を翌日に送ることはない。純粋ロジックは `src/lib/follow-message-scheduler.ts`（`isReminderTimeReached` / `reminderTargetDate`）
-- トークンが空文字の店舗は抽出時に除外。店舗編集画面でトークン未設定なら赤い警告を表示。顧客詳細の予約履歴に「リマインダー送信済み / 失敗」バッジ（`reservations[].reminder_log`）
+- トークンが空文字の店舗は抽出時に除外。店舗編集画面でトークン未設定なら赤い警告を表示。顧客詳細の予約履歴に「リマインダー 9/19（土）19:00 送信予定」「リマインダー送信済み 9/19（土）19:00」バッジ（`reservations[].reminder_log` = 送信記録、`reservations[].reminder_plan` = 記録が無い予約について店舗設定から計算した予定。`getReminderPlansForReservations` / `computeReminderScheduledAt` / `formatJstShort`）。フォローも「フォロー 9/25（金）12:00 送信予定」の形で日時を表示
 - 1 件ごとに try/catch + 10 秒タイムアウト。店舗・予約の取得は 1000 件ずつページング
 - マイグレーション: `20260411100000_add_reminder_settings.sql` / `20260411100001_update_cron_hourly.sql` / `20260911000000_message_delivery_reliability.sql`
 - **cron の登録はマイグレーションに含めない**（テンプレの URL・仮キーがそのまま登録される事故が起きたため）。各プロジェクトの Dashboard から手動登録（`docs/フォローメッセージ_リリース手順.md`）

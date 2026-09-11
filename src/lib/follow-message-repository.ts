@@ -15,9 +15,10 @@ import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
-import type { FollowMessage, FollowMessageSummary, ReminderLogSummary } from '@/types/follow-message';
+import type { FollowMessage, FollowMessageSummary, ReminderLogSummary, ReminderPlanSummary } from '@/types/follow-message';
 import type { Store } from '@/types/store';
 import {
+  computeReminderScheduledAt,
   computeScheduledAt,
   normalizeFollowBase,
   normalizeFollowDaysAfter,
@@ -571,6 +572,50 @@ export async function getReminderLogSummariesByReservationIds(
     });
   } catch (e) {
     console.error('[reminder-log] summaries failed:', e);
+  }
+  return result;
+}
+
+/**
+ * 送信記録がまだ無い予約について、店舗のリマインダー設定から「いつ送られる予定か」を計算する（顧客詳細の表示用）。
+ * 店舗のリマインダーが OFF / トークン未設定、予約がキャンセル / LINE ユーザーでない、予定が過去（対象日を過ぎた）ものは含めない。
+ */
+export async function getReminderPlansForReservations(
+  storeId: string,
+  reservations: Array<{ id: string; reservation_date?: string | null; line_user_id?: string | null; status?: string | null }>,
+  existingLogs: Record<string, ReminderLogSummary>,
+  now: Date = new Date()
+): Promise<Record<string, ReminderPlanSummary>> {
+  const result: Record<string, ReminderPlanSummary> = {};
+  try {
+    if (!storeId || reservations.length === 0) return result;
+    let store: Pick<Store, 'reminder_enabled' | 'reminder_days_before' | 'reminder_time' | 'line_channel_access_token'> | null = null;
+    if (isLocal()) {
+      store = readJsonFile<Store>(STORES_FILE).find((s) => s.id === storeId) || null;
+    } else {
+      const client = createAdminClient();
+      if (!client) return result;
+      const { data, error } = await (client as any)
+        .from('stores')
+        .select('reminder_enabled,reminder_days_before,reminder_time,line_channel_access_token')
+        .eq('id', storeId)
+        .maybeSingle();
+      if (error) { console.error('[reminder-plan] store lookup error:', error.message); return result; }
+      store = data || null;
+    }
+    if (!store || store.reminder_enabled === false || !(store.line_channel_access_token || '').trim()) return result;
+    const todayJst = toJstDateString(now);
+    for (const r of reservations) {
+      if (existingLogs[r.id] || !r.line_user_id || r.status === 'cancelled') continue;
+      if (typeof r.reservation_date !== 'string') continue;
+      const scheduledAt = computeReminderScheduledAt(r.reservation_date, store.reminder_days_before, store.reminder_time);
+      if (!scheduledAt) continue;
+      // 対象日（送信日）を過ぎたものは予定として出さない（当日中なら遅れて送られる可能性があるので残す）
+      if (toJstDateString(new Date(scheduledAt)) < todayJst) continue;
+      result[r.id] = { scheduled_at: scheduledAt };
+    }
+  } catch (e) {
+    console.error('[reminder-plan] failed:', e);
   }
   return result;
 }
