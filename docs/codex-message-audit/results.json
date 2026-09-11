@@ -1,0 +1,61 @@
+{
+  "method": "Actual Edge Function TS transpiled; in-memory Supabase mock; mocked LINE only",
+  "results": [
+    {
+      "name": "R1: JST boundary and 1/3/7/30 days, month/year rollover",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "R2: same-hour repeated invocation sends twice",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "R3: missed hour is not recovered next hour/day",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "R4: non-hour reminder time never matches",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "R5: network exception aborts remaining reminder batch",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "R6: pending reservations are sent",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "F1: stale scheduled_at wins over current store days/time",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "F2: second invocation after claim can claim and send same row",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "F3: network failures exceed three attempts and remain scheduled",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "F4: 201 due rows leave at least one for next run",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "F5: HTTP 500 retries do stop after three attempts",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "Q1: cancelling replacement does not restore original follow",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "Q2: editing reservation after computed follow time discards due queue as store_disabled",
+      "result": "PASS (current behavior reproduced)"
+    },
+    {
+      "name": "Q3: enabling follow after booking does not backfill on edit",
+      "result": "PASS (current behavior reproduced)"
+    }
+  ]
+}

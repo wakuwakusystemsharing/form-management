@@ -34,9 +34,14 @@ beforeAll(async () => {
   repo = await import('@/lib/follow-message-repository');
 });
 
+function writeReservations(rows: Array<Record<string, unknown>>) {
+  fs.writeFileSync(path.join(tmpDir, 'data', 'reservations.json'), JSON.stringify(rows));
+}
+
 beforeEach(() => {
   writeStores();
   fs.rmSync(path.join(tmpDir, 'data', 'follow_messages.json'), { force: true });
+  writeReservations([]);
 });
 
 afterAll(() => {
@@ -121,6 +126,97 @@ describe('cancel / reschedule', () => {
     await repo.scheduleFollowMessageForReservation(rsv('r2'), NOW);
     expect(await repo.rescheduleFollowMessageForReservation(rsv('r1', { reservation_date: '2026-09-13' }), NOW)).toBe(false);
     expect(readRows().find((r) => r.reservation_id === 'r1').base_date).toBe('2026-09-12');
+  });
+
+  it('予約日の変更で予定が過去になっても scheduled のまま残す（次回実行で送る）', async () => {
+    await repo.scheduleFollowMessageForReservation(rsv('r1'), NOW);
+    expect(await repo.rescheduleFollowMessageForReservation(rsv('r1', { reservation_date: '2026-08-01' }), NOW)).toBe(true);
+    expect(readRows()[0]).toMatchObject({ status: 'scheduled', base_date: '2026-08-01', scheduled_at: '2026-08-08T03:00:00.000Z' });
+  });
+
+  it('店舗が OFF になっていれば store_disabled で見送り', async () => {
+    await repo.scheduleFollowMessageForReservation(rsv('r1'), NOW);
+    writeStores({ follow_enabled: false });
+    await repo.rescheduleFollowMessageForReservation(rsv('r1', { reservation_date: '2026-09-12' }), NOW);
+    expect(readRows()[0]).toMatchObject({ status: 'skipped', skip_reason: 'store_disabled' });
+  });
+});
+
+describe('restoreFollowMessageForUser（再予約のキャンセルで元の予定を復活）', () => {
+  it('新しい予約をキャンセルすると、差し替えられていた古い予定が scheduled に戻る', async () => {
+    writeReservations([{ id: 'r1', status: 'pending' }, { id: 'r2', status: 'cancelled' }]);
+    await repo.scheduleFollowMessageForReservation(rsv('r1'), NOW);
+    await repo.scheduleFollowMessageForReservation(rsv('r2', { reservation_date: '2026-09-20' }), NOW);
+    await repo.cancelFollowMessageForReservation('r2', NOW);
+    const restored = await repo.restoreFollowMessageForUser('st1', 'U1', NOW);
+    expect(restored?.reservation_id).toBe('r1');
+    const rows = readRows();
+    expect(rows.find((r) => r.reservation_id === 'r1').status).toBe('scheduled');
+    expect(rows.find((r) => r.reservation_id === 'r2').status).toBe('cancelled');
+  });
+
+  it('元の予約もキャンセル済み・有効な予定が既にある場合は復活しない', async () => {
+    writeReservations([{ id: 'r1', status: 'cancelled' }, { id: 'r2', status: 'pending' }]);
+    await repo.scheduleFollowMessageForReservation(rsv('r1'), NOW);
+    await repo.scheduleFollowMessageForReservation(rsv('r2', { reservation_date: '2026-09-20' }), NOW);
+    await repo.cancelFollowMessageForReservation('r2', NOW);
+    expect(await repo.restoreFollowMessageForUser('st1', 'U1', NOW)).toBeNull();
+    await repo.scheduleFollowMessageForReservation(rsv('r3', { reservation_date: '2026-09-21' }), NOW);
+    expect(await repo.restoreFollowMessageForUser('st1', 'U1', NOW)).toBeNull();
+    expect(await repo.restoreFollowMessageForUser('st1', null, NOW)).toBeNull();
+  });
+});
+
+describe('applyFollowSettingsToScheduledRows（設定変更を未送信予定に反映）', () => {
+  it('何日後・時刻を変えると未送信行が再計算され、送信済みは変わらない', async () => {
+    writeReservations([
+      { id: 'r1', status: 'pending', reservation_date: '2026-09-10', created_at: '2026-09-08T02:00:00Z' },
+      { id: 'r2', status: 'pending', reservation_date: '2026-09-12', created_at: '2026-09-08T02:00:00Z' },
+    ]);
+    await repo.scheduleFollowMessageForReservation(rsv('r1'), NOW);
+    await repo.scheduleFollowMessageForReservation(rsv('r2', { line_user_id: 'U2', reservation_date: '2026-09-12' }), NOW);
+    const rows0 = readRows();
+    rows0.find((r) => r.reservation_id === 'r2').status = 'sent';
+    fs.writeFileSync(path.join(tmpDir, 'data', 'follow_messages.json'), JSON.stringify(rows0));
+
+    writeStores({ follow_days_after: 30, follow_time: '21:00' });
+    expect(await repo.applyFollowSettingsToScheduledRows('st1', NOW)).toBe(1);
+    const rows = readRows();
+    expect(rows.find((r) => r.reservation_id === 'r1')).toMatchObject({ scheduled_at: '2026-10-10T12:00:00.000Z', status: 'scheduled' });
+    expect(rows.find((r) => r.reservation_id === 'r2').status).toBe('sent');
+  });
+
+  it('基準日を受付日に変えると created_at 基準になる。計算結果が過去でも scheduled のまま', async () => {
+    writeReservations([{ id: 'r1', status: 'pending', reservation_date: '2026-09-10', created_at: '2026-08-01T02:00:00Z' }]);
+    await repo.scheduleFollowMessageForReservation(rsv('r1', { created_at: '2026-08-01T02:00:00Z' }), NOW);
+    writeStores({ follow_base: 'created_at', follow_days_after: 1 });
+    expect(await repo.applyFollowSettingsToScheduledRows('st1', NOW)).toBe(1);
+    expect(readRows()[0]).toMatchObject({ base_date: '2026-08-01', scheduled_at: '2026-08-02T03:00:00.000Z', status: 'scheduled' });
+  });
+
+  it('OFF の店舗は何もしない', async () => {
+    expect(await repo.applyFollowSettingsToScheduledRows('st2', NOW)).toBe(0);
+  });
+});
+
+describe('backfillFollowMessagesForStore（ON にしたとき未来の予約に予定を作る）', () => {
+  it('今日以降・LINE 経由・未キャンセルで行が無い予約に作る。同じ顧客は最新の予約が残る', async () => {
+    writeReservations([
+      { id: 'a', store_id: 'st1', line_user_id: 'U1', reservation_date: '2026-09-15', created_at: '2026-09-01T00:00:00Z', status: 'pending' },
+      { id: 'b', store_id: 'st1', line_user_id: 'U1', reservation_date: '2026-09-25', created_at: '2026-09-02T00:00:00Z', status: 'confirmed' },
+      { id: 'c', store_id: 'st1', line_user_id: 'U2', reservation_date: '2026-09-08', created_at: '2026-09-02T00:00:00Z', status: 'pending' },
+      { id: 'd', store_id: 'st1', line_user_id: 'U3', reservation_date: '2026-09-01', created_at: '2026-09-01T00:00:00Z', status: 'pending' },
+      { id: 'e', store_id: 'st1', line_user_id: null, reservation_date: '2026-09-20', created_at: '2026-09-01T00:00:00Z', status: 'pending' },
+      { id: 'f', store_id: 'st1', line_user_id: 'U4', reservation_date: '2026-09-20', created_at: '2026-09-01T00:00:00Z', status: 'cancelled' },
+      { id: 'g', store_id: 'st2', line_user_id: 'U5', reservation_date: '2026-09-20', created_at: '2026-09-01T00:00:00Z', status: 'pending' },
+    ]);
+    expect(await repo.backfillFollowMessagesForStore('st1', NOW)).toBe(3);
+    const rows = readRows();
+    expect(rows.find((r) => r.reservation_id === 'a').status).toBe('superseded');
+    expect(rows.find((r) => r.reservation_id === 'b').status).toBe('scheduled');
+    expect(rows.find((r) => r.reservation_id === 'c').status).toBe('scheduled');
+    for (const id of ['d', 'e', 'f', 'g']) expect(rows.find((r) => r.reservation_id === id)).toBeUndefined();
+    expect(await repo.backfillFollowMessagesForStore('st1', NOW)).toBe(0);
   });
 });
 

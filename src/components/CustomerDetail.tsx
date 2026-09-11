@@ -39,7 +39,7 @@ import { StatGrid, StatTile } from '@/components/customers/StatTile';
 import { determineSegmentForList, getSegmentBadgeVariant, getSegmentLabel } from '@/components/CustomerList';
 
 import type { LotteryEntryEffectiveStatus, LotteryEntryView } from '@/types/lottery';
-import { FOLLOW_MESSAGE_SKIP_REASON_LABELS, FOLLOW_MESSAGE_STATUS_LABELS, type FollowMessageSummary } from '@/types/follow-message';
+import { FOLLOW_MESSAGE_SKIP_REASON_LABELS, FOLLOW_MESSAGE_STATUS_LABELS, REMINDER_LOG_STATUS_LABELS, type FollowMessageSummary, type ReminderLogSummary } from '@/types/follow-message';
 
 const LOTTERY_STATUS_LABELS: Record<LotteryEntryEffectiveStatus, string> = {
   entered: '応募', provisional: '応募', drawn: '当選', lost: 'はずれ', redeemed: '引換済み', cancelled: '取り消し', expired: '期限切れ',
@@ -121,6 +121,18 @@ function followBadge(summary: FollowMessageSummary | null | undefined): { label:
     : summary.status === 'failed' ? 'bg-red-50 text-red-600 border-red-200'
     : 'bg-muted text-muted-foreground';
   return { label: reason && summary.status === 'skipped' ? `${label}（${reason}）` : label, className, title };
+}
+/** 予約履歴に出すリマインダー送信記録のバッジ */
+function reminderBadge(summary: ReminderLogSummary | null | undefined): { label: string; className: string; title: string } | null {
+  if (!summary) return null;
+  const label = REMINDER_LOG_STATUS_LABELS[summary.status] || `リマインダー: ${summary.status}`;
+  const when = summary.status === 'sent' && summary.sent_at ? `送信: ${new Date(summary.sent_at).toLocaleString('ja-JP')}` : '';
+  const title = [summary.skip_reason || '', when, summary.status === 'failed' && summary.last_error ? summary.last_error.slice(0, 120) : ''].filter(Boolean).join(' / ');
+  const className = summary.status === 'sent'
+    ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20'
+    : summary.status === 'failed' ? 'bg-red-50 text-red-600 border-red-200'
+    : 'bg-muted text-muted-foreground';
+  return { label, className, title };
 }
 function visitMenus(visit: CustomerVisit): string {
   if (!visit.treatment_menus || !Array.isArray(visit.treatment_menus)) return '-';
@@ -574,12 +586,15 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                             <p className="font-medium tabular-nums">{formatDateTime(reservation.reservation_date, reservation.reservation_time)}</p>
                             <p className="text-sm text-muted-foreground truncate">{reservation.menu_name}</p>
                             {(() => {
+                              const rb = reminderBadge(reservation.reminder_log);
                               const fb = followBadge(reservation.follow_message);
-                              return fb ? (
-                                <Badge variant="outline" className={`mt-1 text-[11px] font-normal ${fb.className}`} title={fb.title} data-slot="status-chip">
-                                  {fb.label}
-                                </Badge>
-                              ) : null;
+                              if (!rb && !fb) return null;
+                              return (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {rb && <Badge variant="outline" className={`text-[11px] font-normal ${rb.className}`} title={rb.title} data-slot="status-chip">{rb.label}</Badge>}
+                                  {fb && <Badge variant="outline" className={`text-[11px] font-normal ${fb.className}`} title={fb.title} data-slot="status-chip">{fb.label}</Badge>}
+                                </div>
+                              );
                             })()}
                           </div>
                           <Badge variant="outline" className={`shrink-0 ${getStatusBadgeClass(reservation.status)}`}>{getStatusLabel(reservation.status)}</Badge>

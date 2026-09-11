@@ -169,16 +169,23 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - メール本文に `〒{postal_code} {address}` を差し込むため `stores.postal_code` カラム追加
 
 **LINE リマインダー機能:**
-- 翌日の予約に対して LINE Flex メッセージで自動リマインド
-- Supabase Edge Function `send-reminders` が pg_cron（毎時実行）でトリガー
-- 店舗ごとに ON/OFF + 送信時刻指定が可能（`stores.reminder_enabled` / `stores.reminder_time`、デフォルト 19:00）
-- マイグレーション: `20260411100000_add_reminder_settings.sql` / `20260411100001_update_cron_hourly.sql`
+- 予約日の N 日前（`stores.reminder_days_before`、既定 1）に LINE Flex メッセージで自動リマインド
+- Supabase Edge Function `send-reminders` が pg_cron（毎時 0 分）でトリガー
+- 店舗ごとに ON/OFF + 送信時刻指定が可能（`stores.reminder_enabled` / `stores.reminder_time`、デフォルト 19:00）。`PUT /api/stores/{storeId}` で `HH:00` / 1〜30 日 / 文面の型を検証（DB にも CHECK）
+- **送信記録 `reminder_logs`**（1 予約 × 対象日 = 1 行。`sending / sent / failed / skipped`）: 送信前に行を確保（sending）してから push するので二重送信しない。`X-Line-Retry-Key` に行 ID（UUID）。失敗は 3 回まで再試行、10 分以上 sending のままの行は再確保
+- 判定は「現在時刻(JST) >= reminder_time」（完全一致ではない）。cron が 1 回止まっても同じ日のうちなら次の回で回収する。対象日は「今日 + N 日」なので前日分を翌日に送ることはない。純粋ロジックは `src/lib/follow-message-scheduler.ts`（`isReminderTimeReached` / `reminderTargetDate`）
+- トークンが空文字の店舗は抽出時に除外。店舗編集画面でトークン未設定なら赤い警告を表示。顧客詳細の予約履歴に「リマインダー送信済み / 失敗」バッジ（`reservations[].reminder_log`）
+- 1 件ごとに try/catch + 10 秒タイムアウト。店舗・予約の取得は 1000 件ずつページング
+- マイグレーション: `20260411100000_add_reminder_settings.sql` / `20260411100001_update_cron_hourly.sql` / `20260911000000_message_delivery_reliability.sql`
+- **cron の登録はマイグレーションに含めない**（テンプレの URL・仮キーがそのまま登録される事故が起きたため）。各プロジェクトの Dashboard から手動登録（`docs/フォローメッセージ_リリース手順.md`）
 
 **LINE フォローメッセージ機能（設計: `docs/フォローメッセージ機能_実装設計.md`）:**
 - 予約の「基準日（予約日 or 予約受付日）+ N 日後」に、お礼・次回予約案内の Flex メッセージを自動送信。リマインダーとは**独立**（`reminder_*` には触れない。カラム・Edge Function・cron ジョブすべて `follow_*` / `send-follow-messages` / `send_follow_messages` の別名）
 - 店舗設定: `stores.follow_enabled`（既定 false）/ `follow_base`（`'reservation_date' | 'created_at'`）/ `follow_days_after`（1〜60。選択肢は `FOLLOW_DAYS_AFTER_OPTIONS`）/ `follow_time`（HH:00）/ `follow_template`（`reminder_template` と同じ JSON）。テナント側 店舗編集ダイアログのリマインダー直下で設定。`PUT /api/stores/{storeId}` で値検証
 - **配信予定キュー方式**: `follow_messages` テーブル（1 予約 1 行。`status`: scheduled / sent / skipped / cancelled / superseded / failed、`skip_reason`）。予約成立時（`POST /api/reservations`）に `scheduleFollowMessageForReservation()` が同じ店舗・同じ LINE ユーザーの未送信行を `superseded` にして新予約基準で作り直す。キャンセル ↔ 復元・日時変更は `PATCH /api/reservations/{id}` と LINE Webhook で `cancel / schedule / reschedule` を同期
-- 送信: Edge Function `send-follow-messages`（pg_cron 毎時 5 分）。`scheduled_at <= now` の行を取り、店舗 OFF / トークン無し / 予約キャンセル / **基準日より後の再予約あり（rebooked）** / **同じ日に予約リマインダーが送られる（reminder_same_day）** を見送り。失敗は 3 回まで再試行。`attempt_count` の楽観ロックで二重送信を防止
+- 送信: Edge Function `send-follow-messages`（pg_cron 毎時 5 分）。`scheduled_at <= now` の行を取り、店舗 OFF / トークン無し / 予約キャンセル / **基準日より後の再予約あり（rebooked）** / **同じ日に予約リマインダーが送られる（reminder_same_day）** を見送り。行は `scheduled → sending`（`claimed_at`）で確保してから push（送信中の再起動でも二重送信しない。10 分以上 sending のままなら再確保）。`X-Line-Retry-Key` = 行 ID。通信例外も試行回数に数え 3 回で `failed`。200 件ずつ約 50 秒まで繰り返し処理。直近 3 日の LINE 予約で予定行が無いものを補完作成
+- 予約成立時の差し替え + 作成は DB 関数 `follow_message_schedule`（1 トランザクション）。再予約をキャンセルすると `follow_message_restore_for_user` が差し替えられていた予定を 1 件復活（元予約が有効・予定が未来のときだけ）
+- 店舗設定の変更: OFF → ON で今日以降の LINE 予約に予定を後付け（`backfillFollowMessagesForStore`）。基準日 / 何日後 / 時刻の変更は未送信行を再計算（`applyFollowSettingsToScheduledRows`。過去になった予定は次回実行で送る）。予約のメニュー等だけの編集では予定を触らず、予約日の変更時だけ再計算
 - 純粋ロジック（Vitest）: `src/lib/follow-message-scheduler.ts`。文面は `src/lib/reminder-template.ts` の `resolveMessageContent()` を共通化し `src/lib/follow-template.ts` がフォロー用デフォルトを与える。編集 UI は `MessageTemplateEditor.tsx`（`ReminderTemplateEditor` / `FollowTemplateEditor` はその薄いラッパー）。サーバー専用は `src/lib/follow-message-repository.ts`（local は `data/follow_messages.json`。送信はしない）
 - 顧客詳細 API の `reservations[].follow_message` に配信状態を同梱し、`CustomerDetail.tsx` の予約履歴にバッジ表示
 - マイグレーション: `20260908000000_add_follow_message.sql`。リリース手順: `docs/フォローメッセージ_リリース手順.md`
@@ -500,7 +507,8 @@ export async function GET(req, { params }) {
 - `admin_settings` - サービス全体の設定（Google API 認証情報など）
 - `lottery_forms` - 抽選フォーム（config: JSONB、後日抽選の進行状態 `deferred_draw_status`）
 - `lottery_entries` - 抽選履歴（1 行 = 1 回の抽選 / 1 口の応募。引換コード・QR トークン・引換状態）
-- `follow_messages` - LINE フォローメッセージの配信予定・結果（1 予約 1 行。`status` / `skip_reason` / `scheduled_at` / `sent_at`）
+- `follow_messages` - LINE フォローメッセージの配信予定・結果（1 予約 1 行。`status` / `skip_reason` / `scheduled_at` / `sent_at` / `claimed_at`）
+- `reminder_logs` - LINE 予約リマインダーの送信記録（1 予約 × 対象日 = 1 行。二重送信防止・後追い確認）
 
 **RLS（Row Level Security）:**
 - マスター管理者: `is_master_admin()` で全テーブルフルアクセス
@@ -526,7 +534,8 @@ export async function GET(req, { params }) {
 - `20260903000000_add_lottery.sql` - lottery_forms / lottery_entries テーブル・RLS・`lottery_insert_entry_checked` 関数
 - `20260903000001_add_store_line_channel_id.sql` - stores.line_channel_id 追加（ID トークン検証用）
 - `20260904000000_add_admin_visible_options.sql` - stores.admin_visible_options 追加（店舗管理者に表示する項目の個別設定）
-- `20260908000000_add_follow_message.sql` - stores.follow_* 5 カラム + follow_messages テーブル（フォローメッセージ配信予定）+ RLS + cron テンプレート
+- `20260908000000_add_follow_message.sql` - stores.follow_* 5 カラム + follow_messages テーブル（フォローメッセージ配信予定）+ RLS
+- `20260911000000_message_delivery_reliability.sql` - reminder_logs テーブル、stores.reminder_* の CHECK、follow_messages に sending / claimed_at、DB 関数 follow_message_schedule / follow_message_restore_for_user
 
 ## テンプレートシステム
 
