@@ -1,4 +1,24 @@
 // @ts-nocheck
+/**
+ * 予約リマインダー送信（Edge Function）
+ *
+ * pg_cron（毎時 0 分）から起動される。監査対応: docs/リマインダー・フォローメッセージ_送信動作監査レポート_完全版.md（修正パッケージ A）
+ *
+ * 動作:
+ *   1. reminder_enabled = true でトークンが空でない店舗を取得
+ *   2. 店舗ごとに「現在時刻(JST) >= reminder_time」なら対象。対象日 = 今日(JST) + reminder_days_before
+ *      （完全一致ではなく「以降」にしているので、cron が 1 回止まっても同じ日のうちなら次の回で回収できる。
+ *        日付が変わると対象日も変わるため、前日分を翌日に送ることはない）
+ *   3. 対象日の予約（キャンセル以外・line_user_id あり）を取得
+ *   4. reminder_logs に (reservation_id, target_date) で行を確保（sending）してから送信 → sent / failed
+ *      - 既に sent / skipped の予約は送らない（二重送信防止）
+ *      - failed は 3 回まで再試行。sending のまま 10 分以上経った行（前回の異常終了）は再確保できる
+ *      - X-Line-Retry-Key に reminder_logs.id（UUID）を付け、LINE 側でも重複を防ぐ
+ *   5. 1 件ごとに try/catch + 10 秒タイムアウト。1 件の通信失敗で残りを止めない
+ *
+ * ※ 文面テンプレートは src/lib/reminder-template.ts と同じロジック。変更時は両方を合わせること
+ * ※ 判定ロジックは src/lib/follow-message-scheduler.ts（isReminderTimeReached / reminderTargetDate）と同じ
+ */
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -7,31 +27,44 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// JST で今日から days 日後の日付文字列（YYYY-MM-DD）を返す
-function getDateStringJstAfterDays(days: number) {
-  const now = new Date();
-  const jstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
-  const target = new Date(jstNow);
-  target.setDate(jstNow.getDate() + days);
-  const yyyy = target.getFullYear();
-  const mm = String(target.getMonth() + 1).padStart(2, "0");
-  const dd = String(target.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+const MAX_ATTEMPTS = 3;
+const PAGE_SIZE = 1000;
+const STALE_SENDING_MS = 10 * 60 * 1000;
+const LINE_TIMEOUT_MS = 10 * 1000;
+
+// ===== 日付ユーティリティ（JST） =====
+function jstNow(): Date {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000);
+}
+function getTodayJst(): string {
+  const d = jstNow();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+function getCurrentHHMMJst(): string {
+  const d = jstNow();
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}
+function addDays(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split("-").map((s) => parseInt(s, 10));
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+function formatDateOnlyJapanese(dateStr: string): string {
+  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+  const d = new Date(dateStr);
+  const [year, month, day] = dateStr.split("-");
+  return `${year}年${month}月${day}日（${weekdays[d.getDay()]}）`;
 }
 
-// 店舗の reminder_days_before を 1〜30 の整数に正規化（未設定・不正値 = 1: 前日）
+// ===== 設定の正規化・判定（src/lib/follow-message-scheduler.ts と同じ） =====
+function normalizeReminderTime(v: unknown): string {
+  return typeof v === "string" && /^([01]\d|2[0-3]):00$/.test(v) ? v : "19:00";
+}
 function normalizeDaysBefore(value: unknown): number {
   const n = typeof value === "number" && isFinite(value) ? Math.floor(value) : 1;
   return n >= 1 && n <= 30 ? n : 1;
 }
-
-function formatDateOnlyJapanese(dateStr: string): string {
-  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
-  const d = new Date(dateStr);
-  const dayOfWeek = weekdays[d.getDay()];
-  // dateStr: "2026-04-03" → "2026年04月03日（木）"
-  const [year, month, day] = dateStr.split("-");
-  return `${year}年${month}月${day}日（${dayOfWeek}）`;
+function isReminderTimeReached(reminderTime: unknown, currentHHMM: string): boolean {
+  return currentHHMM >= normalizeReminderTime(reminderTime);
 }
 
 // ===== リマインダー文面テンプレート =====
@@ -129,196 +162,263 @@ function buildFlexMessage(template, ctx) {
   };
 }
 
-async function sendLinePush(
-  accessToken: string,
-  to: string,
-  flexMessage: Record<string, unknown>
-): Promise<{ ok: boolean; status: number; body: string }> {
-  const res = await fetch("https://api.line.me/v2/bot/message/push", {
-    method: "POST",
-    headers: {
+// ===== LINE push（タイムアウト付き。例外は投げず結果で返す） =====
+async function sendLinePush(accessToken: string, to: string, flexMessage: Record<string, unknown>, retryKey: string | null) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LINE_TIMEOUT_MS);
+  try {
+    const headers: Record<string, string> = {
       "Content-Type": "application/json; charset=UTF-8",
       Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({
-      to,
-      messages: [flexMessage],
-    }),
-  });
-  const body = await res.text();
-  return { ok: res.ok, status: res.status, body };
+    };
+    if (retryKey) headers["X-Line-Retry-Key"] = retryKey;
+    const res = await fetch("https://api.line.me/v2/bot/message/push", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ to, messages: [flexMessage] }),
+      signal: controller.signal,
+    });
+    const body = await res.text();
+    return { ok: res.ok, status: res.status, body };
+  } catch (e) {
+    return { ok: false, status: 0, body: e instanceof Error ? `${e.name}: ${e.message}` : String(e) };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-function getCurrentHourJst(): string {
-  const now = new Date();
-  const jstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
-  const hh = String(jstNow.getHours()).padStart(2, "0");
-  return `${hh}:00`;
+function json(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
+}
+
+/** ページングして全件取得（PostgREST の既定上限 1000 行を超えても取り逃さない） */
+async function fetchAll(buildQuery: (from: number, to: number) => any): Promise<any[]> {
+  const out: any[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await buildQuery(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    out.push(...(data || []));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return out;
+}
+
+/**
+ * reminder_logs の行を確保する。確保できたら行 id（= リトライキー）を返し、送らない場合は null。
+ * - 行が無い: sending で INSERT（一意制約の競合 = 他の実行が確保済み → null）
+ * - failed かつ attempt < MAX: 条件付き UPDATE で sending に（競合時は null）
+ * - sending が STALE 以上前: 前回の異常終了とみなし再確保
+ * - sent / skipped / 試行上限: null
+ */
+async function claimReminderLog(row, nowIso: string): Promise<{ id: string; attempt: number } | null> {
+  const { data: existing, error } = await supabase
+    .from("reminder_logs")
+    .select("id,status,attempt_count,claimed_at")
+    .eq("reservation_id", row.reservation_id)
+    .eq("target_date", row.target_date)
+    .maybeSingle();
+  if (error) { console.error(`記録取得エラー: ${error.message}`); return null; }
+
+  if (!existing) {
+    const { data: inserted, error: insErr } = await supabase
+      .from("reminder_logs")
+      .insert({
+        store_id: row.store_id,
+        reservation_id: row.reservation_id,
+        target_date: row.target_date,
+        line_user_id: row.line_user_id,
+        status: "sending",
+        attempt_count: 1,
+        claimed_at: nowIso,
+      })
+      .select("id")
+      .maybeSingle();
+    if (insErr) {
+      // 23505 = 一意制約違反（同時実行が先に確保）
+      if (insErr.code !== "23505") console.error(`記録作成エラー: ${insErr.message}`);
+      return null;
+    }
+    return inserted ? { id: inserted.id, attempt: 1 } : null;
+  }
+
+  if (existing.status === "sent" || existing.status === "skipped") return null;
+  const attempts = existing.attempt_count || 0;
+  if (existing.status === "failed" && attempts >= MAX_ATTEMPTS) return null;
+  if (existing.status === "sending") {
+    const claimedAt = existing.claimed_at ? new Date(existing.claimed_at).getTime() : 0;
+    if (Date.now() - claimedAt < STALE_SENDING_MS) return null; // 他の実行が処理中
+  }
+  const { data: claimed, error: updErr } = await supabase
+    .from("reminder_logs")
+    .update({ status: "sending", attempt_count: attempts + 1, claimed_at: nowIso })
+    .eq("id", existing.id)
+    .eq("status", existing.status)
+    .eq("attempt_count", attempts)
+    .select("id");
+  if (updErr || !claimed || claimed.length === 0) return null;
+  return { id: existing.id, attempt: attempts + 1 };
 }
 
 Deno.serve(async () => {
-  const currentHour = getCurrentHourJst();
-  console.log(`現在時刻(JST): ${currentHour}`);
+  const startedAt = Date.now();
+  const nowIso = new Date().toISOString();
+  const todayJst = getTodayJst();
+  const currentHHMM = getCurrentHHMMJst();
+  console.log(`リマインダー処理開始: today(JST)=${todayJst} now(JST)=${currentHHMM}`);
 
-  // リマインダーが有効かつ送信時刻が一致する店舗のみ取得
-  const { data: eligibleStores, error: storeError } = await supabase
-    .from("stores")
-    .select("id,name,line_channel_access_token,reminder_days_before,reminder_template")
-    .eq("reminder_enabled", true)
-    .eq("reminder_time", currentHour)
-    .not("line_channel_access_token", "is", null);
-
-  if (storeError) {
-    console.error("店舗取得エラー:", storeError.message);
-    return new Response(JSON.stringify({ error: "店舗取得に失敗しました" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+  // 1. リマインダー有効 & トークンあり の店舗
+  let stores;
+  try {
+    stores = await fetchAll((from, to) =>
+      supabase
+        .from("stores")
+        .select("id,name,line_channel_access_token,reminder_time,reminder_days_before,reminder_template")
+        .eq("reminder_enabled", true)
+        .not("line_channel_access_token", "is", null)
+        .neq("line_channel_access_token", "")
+        .order("id")
+        .range(from, to)
+    );
+  } catch (e) {
+    console.error("店舗取得エラー:", e);
+    return json({ error: "店舗取得に失敗しました" }, 500);
   }
 
-  if (!eligibleStores || eligibleStores.length === 0) {
-    console.log(`${currentHour} に送信対象の店舗がありません`);
-    return new Response(JSON.stringify({ sent: 0 }), {
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  const storeIds = eligibleStores.map((s) => s.id);
-  console.log(`対象店舗数: ${eligibleStores.length}件 (${storeIds.join(", ")})`);
-
-  // 店舗ごとの「何日前」設定からリマインド対象日を算出
-  // 例: 前日設定(1) → 明日の予約 / 2日前設定(2) → 2日後の予約 が対象
+  // 2. 送信時刻に達している店舗だけ対象。店舗ごとの対象日を決める
   const targetDateByStore = new Map<string, string>();
-  const targetDates = new Set<string>();
-  eligibleStores.forEach((s) => {
-    const days = normalizeDaysBefore(s.reminder_days_before);
-    const date = getDateStringJstAfterDays(days);
-    targetDateByStore.set(s.id, date);
-    targetDates.add(date);
-  });
-  console.log(`リマインド対象日: ${[...targetDates].join(", ")}`);
-
-  // 対象店舗のリマインド対象日の予約を取得
-  const { data: reservations, error } = await supabase
-    .from("reservations")
-    .select(
-      "id,store_id,reservation_date,reservation_time,menu_name,submenu_name,line_user_id,status,customer_name,staff_name"
-    )
-    .in("reservation_date", [...targetDates])
-    .neq("status", "cancelled")
-    .not("line_user_id", "is", null)
-    .in("store_id", storeIds);
-
-  if (error) {
-    console.error("予約取得エラー:", error.message);
-    return new Response(JSON.stringify({ error: "予約取得に失敗しました" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+  const storeMap = new Map();
+  for (const s of stores) {
+    if (!isReminderTimeReached(s.reminder_time, currentHHMM)) continue;
+    const daysBefore = normalizeDaysBefore(s.reminder_days_before);
+    targetDateByStore.set(s.id, addDays(todayJst, daysBefore));
+    storeMap.set(s.id, { token: s.line_channel_access_token, name: s.name || "店舗", daysBefore, template: s.reminder_template || null });
   }
+  if (storeMap.size === 0) {
+    console.log("送信時刻に達している店舗がありません");
+    return json({ sent: 0, already: 0, skipped: 0, failed: 0 });
+  }
+  const storeIds = [...storeMap.keys()];
+  const targetDates = [...new Set(targetDateByStore.values())];
+  console.log(`対象店舗数: ${storeIds.length}件 / 対象日: ${targetDates.join(", ")}`);
 
-  if (!reservations || reservations.length === 0) {
+  // 3. 対象日の予約
+  let reservations;
+  try {
+    reservations = await fetchAll((from, to) =>
+      supabase
+        .from("reservations")
+        .select("id,store_id,reservation_date,reservation_time,menu_name,submenu_name,line_user_id,status,customer_name,staff_name")
+        .in("reservation_date", targetDates)
+        .in("store_id", storeIds)
+        .neq("status", "cancelled")
+        .not("line_user_id", "is", null)
+        .order("id")
+        .range(from, to)
+    );
+  } catch (e) {
+    console.error("予約取得エラー:", e);
+    return json({ error: "予約取得に失敗しました" }, 500);
+  }
+  // 店舗ごとの対象日と一致するものだけ（店舗ごとに「何日前」が違うため）
+  reservations = reservations.filter((r) => r.line_user_id && r.reservation_date === targetDateByStore.get(r.store_id));
+  if (reservations.length === 0) {
     console.log("対象の予約がありません");
-    return new Response(JSON.stringify({ sent: 0 }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ sent: 0, already: 0, skipped: 0, failed: 0 });
   }
-
   console.log(`対象予約数: ${reservations.length}件`);
 
-  // {LINE名} 差し込み用に顧客の LINE 表示名を取得（無ければお名前にフォールバック）
+  // 4. {LINE名} 差し込み用の表示名
   const lineNameMap = new Map<string, string>();
   try {
-    const lineUserIds = [...new Set(reservations.map((r) => r.line_user_id).filter(Boolean))];
-    if (lineUserIds.length > 0) {
+    const lineUserIds = [...new Set(reservations.map((r) => r.line_user_id))];
+    for (let i = 0; i < lineUserIds.length; i += 500) {
       const { data: customers } = await supabase
         .from("customers")
         .select("store_id,line_user_id,line_display_name")
         .in("store_id", storeIds)
-        .in("line_user_id", lineUserIds);
+        .in("line_user_id", lineUserIds.slice(i, i + 500));
       (customers || []).forEach((c) => {
-        if (c.line_user_id && c.line_display_name) {
-          lineNameMap.set(`${c.store_id}:${c.line_user_id}`, c.line_display_name);
-        }
+        if (c.line_user_id && c.line_display_name) lineNameMap.set(`${c.store_id}:${c.line_user_id}`, c.line_display_name);
       });
     }
   } catch (e) {
     console.error("顧客取得エラー（LINE名はお名前で代替）:", e);
   }
 
-  const storeMap = new Map<
-    string,
-    { token: string; name: string; daysBefore: number; template: unknown }
-  >();
-  eligibleStores.forEach((store) => {
-    if (store.line_channel_access_token) {
-      storeMap.set(store.id, {
-        token: store.line_channel_access_token,
-        name: store.name || "店舗",
-        daysBefore: normalizeDaysBefore(store.reminder_days_before),
-        template: store.reminder_template || null,
+  // 5. 送信済み・見送り済みをまとめて除外（毎時の起動で同じ予約を何度も確保しに行かない）
+  const doneKeys = new Set<string>();
+  try {
+    const ids = reservations.map((r) => r.id);
+    for (let i = 0; i < ids.length; i += 500) {
+      const { data: logs } = await supabase
+        .from("reminder_logs")
+        .select("reservation_id,target_date,status,attempt_count")
+        .in("reservation_id", ids.slice(i, i + 500))
+        .in("target_date", targetDates);
+      (logs || []).forEach((l) => {
+        if (l.status === "sent" || l.status === "skipped" || (l.status === "failed" && (l.attempt_count || 0) >= MAX_ATTEMPTS)) {
+          doneKeys.add(`${l.reservation_id}:${l.target_date}`);
+        }
       });
     }
-  });
+  } catch (e) {
+    console.error("送信記録の取得エラー（個別確保で続行）:", e);
+  }
 
-  let sent = 0;
-  const errors: Array<{ reservationId: string; status: number; body: string }> =
-    [];
-
+  // 6. 送信
+  let sent = 0, skipped = 0, failed = 0, already = 0;
   for (const reservation of reservations) {
-    const storeInfo = storeMap.get(reservation.store_id);
-    if (!storeInfo || !reservation.line_user_id) continue;
+    try {
+      const storeInfo = storeMap.get(reservation.store_id);
+      if (!storeInfo) continue;
+      if (doneKeys.has(`${reservation.id}:${reservation.reservation_date}`)) { already++; continue; }
 
-    // この予約日がこの店舗のリマインド対象日と一致する場合のみ送信
-    // （複数店舗で異なる「何日前」設定があるため、まとめて取得した予約をここで振り分ける）
-    if (reservation.reservation_date !== targetDateByStore.get(reservation.store_id)) continue;
-
-    const menu = reservation.submenu_name
-      ? `${reservation.menu_name} > ${reservation.submenu_name}`
-      : reservation.menu_name || "未設定";
-
-    const timeOnly = String(reservation.reservation_time || "").slice(0, 5);
-    const dateOnly = formatDateOnlyJapanese(reservation.reservation_date);
-    const customerName = reservation.customer_name || "お客";
-
-    const flexMessage = buildFlexMessage(storeInfo.template, {
-      storeName: storeInfo.name,
-      daysBefore: storeInfo.daysBefore,
-      lineDisplayName: lineNameMap.get(`${reservation.store_id}:${reservation.line_user_id}`) || customerName,
-      customerName,
-      dateText: `${dateOnly} ${timeOnly}`,
-      dateOnly,
-      timeOnly,
-      menuText: menu,
-      staffName: reservation.staff_name || "",
-    });
-
-    const result = await sendLinePush(
-      storeInfo.token,
-      reservation.line_user_id,
-      flexMessage
-    );
-
-    if (result.ok) {
-      console.log(
-        `送信成功: reservation=${reservation.id} user=${reservation.line_user_id}`
+      const claim = await claimReminderLog(
+        { store_id: reservation.store_id, reservation_id: reservation.id, target_date: reservation.reservation_date, line_user_id: reservation.line_user_id },
+        nowIso
       );
-      sent += 1;
-    } else {
-      console.error(
-        `送信失敗: reservation=${reservation.id} status=${result.status} body=${result.body}`
-      );
-      errors.push({
-        reservationId: reservation.id,
-        status: result.status,
-        body: result.body,
+      if (!claim) { skipped++; continue; } // 送信済み / 他の実行が処理中 / 試行上限
+
+      const menu = reservation.submenu_name ? `${reservation.menu_name} > ${reservation.submenu_name}` : reservation.menu_name || "未設定";
+      const timeOnly = String(reservation.reservation_time || "").slice(0, 5);
+      const dateOnly = formatDateOnlyJapanese(reservation.reservation_date);
+      const customerName = reservation.customer_name || "お客";
+      const flexMessage = buildFlexMessage(storeInfo.template, {
+        storeName: storeInfo.name,
+        daysBefore: storeInfo.daysBefore,
+        lineDisplayName: lineNameMap.get(`${reservation.store_id}:${reservation.line_user_id}`) || customerName,
+        customerName,
+        dateText: `${dateOnly} ${timeOnly}`,
+        dateOnly,
+        timeOnly,
+        menuText: menu,
+        staffName: reservation.staff_name || "",
       });
+
+      const result = await sendLinePush(storeInfo.token, reservation.line_user_id, flexMessage, claim.id);
+      if (result.ok) {
+        const { error } = await supabase.from("reminder_logs")
+          .update({ status: "sent", sent_at: new Date().toISOString(), last_error: null })
+          .eq("id", claim.id);
+        if (error) console.error(`送信済み更新エラー: id=${claim.id} ${error.message}`);
+        console.log(`送信成功: reservation=${reservation.id}`);
+        sent++;
+      } else {
+        const lastError = `HTTP ${result.status}: ${result.body}`.slice(0, 500);
+        const { error } = await supabase.from("reminder_logs")
+          .update({ status: "failed", last_error: lastError })
+          .eq("id", claim.id);
+        if (error) console.error(`失敗更新エラー: id=${claim.id} ${error.message}`);
+        console.error(`送信失敗(${claim.attempt}/${MAX_ATTEMPTS}): reservation=${reservation.id} ${lastError}`);
+        failed++;
+      }
+    } catch (e) {
+      // 1 件の異常で残りを止めない
+      console.error(`予約処理エラー: reservation=${reservation.id}`, e);
+      failed++;
     }
   }
 
-  console.log(`送信結果: 成功=${sent}件 失敗=${errors.length}件`);
-
-  return new Response(JSON.stringify({ sent, errors: errors.length }), {
-    headers: { "Content-Type": "application/json" },
-  });
+  console.log(`送信結果: 成功=${sent}件 送信済み=${already}件 見送り=${skipped}件 失敗=${failed}件 (${Date.now() - startedAt}ms)`);
+  return json({ sent, already, skipped, failed });
 });

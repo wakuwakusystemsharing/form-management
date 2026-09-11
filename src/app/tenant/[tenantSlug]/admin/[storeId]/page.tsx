@@ -2597,6 +2597,11 @@ export default function StoreDetailPage() {
                   <p className="text-xs text-muted-foreground">
                     設定した日数前にLINEリマインドメッセージを送信します（通数を1消費します）
                   </p>
+                  {editingStore.reminder_enabled !== false && !(editingStore.line_channel_access_token || '').trim() && (
+                    <p className="text-xs text-red-600 font-medium">
+                      ⚠ LINE チャネルアクセストークンが未設定のため、この店舗にはリマインダーが送信されません。上の「LINE チャネルアクセストークン」を設定してください。
+                    </p>
+                  )}
                 </div>
                 {editingStore.reminder_enabled !== false && (
                   <div className="flex items-start gap-4">
@@ -2638,11 +2643,14 @@ export default function StoreDetailPage() {
                   </div>
                 )}
                 {editingStore.reminder_enabled !== false && (
-                  <p className="text-xs text-muted-foreground">
-                    {(editingStore.reminder_days_before || 1) === 1
-                      ? '翌日の予約がある顧客にリマインドが送信されます'
-                      : `${editingStore.reminder_days_before}日後の予約がある顧客にリマインドが送信されます`}
-                  </p>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>
+                      {(editingStore.reminder_days_before || 1) === 1
+                        ? '翌日の予約がある顧客にリマインドが送信されます'
+                        : `${editingStore.reminder_days_before}日後の予約がある顧客にリマインドが送信されます`}
+                    </p>
+                    <p>※ 送信は毎時 0 分にまとめて行います。設定時刻から数分以内に届きます。同じ予約には 1 回だけ送信されます。</p>
+                  </div>
                 )}
                 {editingStore.reminder_enabled !== false && (
                   <ReminderTemplateEditor
@@ -2675,6 +2683,11 @@ export default function StoreDetailPage() {
                   <p className="text-xs text-muted-foreground">
                     予約から設定した日数後に、お礼・次回予約のご案内を LINE で自動送信します（通数を1消費します）
                   </p>
+                  {editingStore.follow_enabled === true && !(editingStore.line_channel_access_token || '').trim() && (
+                    <p className="text-xs text-red-600 font-medium">
+                      ⚠ LINE チャネルアクセストークンが未設定のため、この店舗にはフォローメッセージが送信されません。
+                    </p>
+                  )}
                 </div>
                 {editingStore.follow_enabled === true && (
                   <>
@@ -2744,8 +2757,10 @@ export default function StoreDetailPage() {
                         {(editingStore.follow_base || 'reservation_date') === 'reservation_date' ? '予約日（来店日）' : '予約受付日'}
                         の{editingStore.follow_days_after || 7}日後 {editingStore.follow_time || '12:00'} にフォローメッセージが送信されます
                       </p>
+                      <p>※ 送信は毎時 5 分にまとめて行います。設定時刻から 10 分以内に届きます。</p>
                       <p>※ 送信日までに次の予約が入っている方には送りません。次の予約を基準に改めてフォローが予定されます。</p>
                       <p>※ 予約リマインダーと同じ日になる場合はフォローを送りません。</p>
+                      <p>※ 有効にすると、今日以降の LINE 予約にもフォローが予定されます。基準日・日数・時刻を変えると未送信の予定も新しい設定で計算し直します。</p>
                     </div>
                     <FollowTemplateEditor
                       storeName={editingStore.name}
