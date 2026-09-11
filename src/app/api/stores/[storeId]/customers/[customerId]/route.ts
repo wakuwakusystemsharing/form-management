@@ -4,7 +4,7 @@ import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient, createAuthenticatedClient, checkStoreAccess } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth-helper';
-import { getFollowMessageSummariesByReservationIds, getReminderLogSummariesByReservationIds } from '@/lib/follow-message-repository';
+import { getFollowMessageSummariesByReservationIds, getReminderLogSummariesByReservationIds, getReminderPlansForReservations } from '@/lib/follow-message-repository';
 import { Customer, CustomerUpdate } from '@/types/form';
 import { updateCustomer, deleteCustomer } from '@/lib/customer-utils';
 import { isContactMethod, normalizeTags } from '@/lib/customer-chart';
@@ -158,7 +158,8 @@ export async function GET(
       // フォローメッセージの配信状態を予約履歴に同梱
       const followMap = await getFollowMessageSummariesByReservationIds(reservations.map((r: any) => r.id));
       const reminderMap = await getReminderLogSummariesByReservationIds(reservations.map((r: any) => r.id));
-      reservations = reservations.map((r: any) => ({ ...r, follow_message: followMap[r.id] || null, reminder_log: reminderMap[r.id] || null }));
+      const reminderPlanMap = await getReminderPlansForReservations(storeId, reservations, reminderMap);
+      reservations = reservations.map((r: any) => ({ ...r, follow_message: followMap[r.id] || null, reminder_log: reminderMap[r.id] || null, reminder_plan: reminderPlanMap[r.id] || null }));
 
       return NextResponse.json({
         customer,
@@ -208,7 +209,8 @@ export async function GET(
     const reservationRows: any[] = reservations || [];
     const followMap = await getFollowMessageSummariesByReservationIds(reservationRows.map((r) => r.id));
     const reminderMap = await getReminderLogSummariesByReservationIds(reservationRows.map((r) => r.id));
-    const reservationsWithFollow = reservationRows.map((r) => ({ ...r, follow_message: followMap[r.id] || null, reminder_log: reminderMap[r.id] || null }));
+    const reminderPlanMap = await getReminderPlansForReservations(storeId, reservationRows, reminderMap);
+    const reservationsWithFollow = reservationRows.map((r) => ({ ...r, follow_message: followMap[r.id] || null, reminder_log: reminderMap[r.id] || null, reminder_plan: reminderPlanMap[r.id] || null }));
 
     return NextResponse.json({
       customer,
