@@ -169,3 +169,21 @@ describe('toLineRetryKey', () => {
     expect(toLineRetryKey(null)).toBeNull();
   });
 });
+
+import { computeReminderScheduledAt, formatJstShort } from '@/lib/follow-message-scheduler';
+
+describe('computeReminderScheduledAt / formatJstShort', () => {
+  it('予約日 - N 日 の HH:00 JST', () => {
+    // 2026-09-20 の 1 日前 19:00 JST = 2026-09-19T10:00Z
+    expect(computeReminderScheduledAt('2026-09-20', 1, '19:00')).toBe('2026-09-19T10:00:00.000Z');
+    // 2026-01-01 の 3 日前 09:00 JST = 2025-12-29T00:00Z
+    expect(computeReminderScheduledAt('2026-01-01', 3, '09:00')).toBe('2025-12-29T00:00:00.000Z');
+    expect(computeReminderScheduledAt('bad', 1, '19:00')).toBeNull();
+  });
+  it('表示形式', () => {
+    expect(formatJstShort('2026-09-19T10:00:00.000Z')).toBe('9/19（土）19:00');
+    expect(formatJstShort('2026-09-17T03:00:00.000Z')).toBe('9/17（木）12:00');
+    expect(formatJstShort(null)).toBe('');
+    expect(formatJstShort('x')).toBe('');
+  });
+});

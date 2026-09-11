@@ -81,3 +81,8 @@ export const REMINDER_LOG_STATUS_LABELS: Record<ReminderLogStatus, string> = {
   failed: 'リマインダー失敗',
   skipped: 'リマインダー見送り',
 };
+
+/** まだ送信記録が無い予約に対する、店舗設定から計算したリマインダーの送信予定（顧客詳細の表示用） */
+export interface ReminderPlanSummary {
+  scheduled_at: string;  // ISO（UTC）。予約日 - reminder_days_before 日 の reminder_time（JST）
+}

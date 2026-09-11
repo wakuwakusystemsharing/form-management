@@ -163,3 +163,26 @@ export function toLineRetryKey(id: string | null | undefined): string | null {
   }
   return null;
 }
+
+/**
+ * リマインダーの送信予定時刻: 予約日 - daysBefore 日 の reminderTime（JST）を UTC ISO で返す。
+ * （顧客詳細の「送信予定」表示用。実際の送信は Edge Function が「今日 + N 日 = 予約日」で判定する）
+ */
+export function computeReminderScheduledAt(reservationDate: string, daysBefore: unknown, reminderTime: unknown): string | null {
+  if (!isDateString(reservationDate)) return null;
+  const [y, m, d] = reservationDate.split('-').map((s) => parseInt(s, 10));
+  const hour = parseInt(normalizeReminderTime(reminderTime).slice(0, 2), 10);
+  const utcMs = Date.UTC(y, m - 1, d - normalizeReminderDaysBefore(daysBefore), hour, 0, 0) - JST_OFFSET_MINUTES * 60 * 1000;
+  const dt = new Date(utcMs);
+  return Number.isNaN(dt.getTime()) ? null : dt.toISOString();
+}
+
+/** 予定時刻を「9/18（木）12:00」の形にする（JST） */
+export function formatJstShort(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return '';
+  const jst = new Date(dt.getTime() + JST_OFFSET_MINUTES * 60 * 1000);
+  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+  return `${jst.getUTCMonth() + 1}/${jst.getUTCDate()}（${weekdays[jst.getUTCDay()]}）${String(jst.getUTCHours()).padStart(2, '0')}:${String(jst.getUTCMinutes()).padStart(2, '0')}`;
+}

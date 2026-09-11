@@ -39,7 +39,8 @@ import { StatGrid, StatTile } from '@/components/customers/StatTile';
 import { determineSegmentForList, getSegmentBadgeVariant, getSegmentLabel } from '@/components/CustomerList';
 
 import type { LotteryEntryEffectiveStatus, LotteryEntryView } from '@/types/lottery';
-import { FOLLOW_MESSAGE_SKIP_REASON_LABELS, FOLLOW_MESSAGE_STATUS_LABELS, REMINDER_LOG_STATUS_LABELS, type FollowMessageSummary, type ReminderLogSummary } from '@/types/follow-message';
+import { FOLLOW_MESSAGE_SKIP_REASON_LABELS, FOLLOW_MESSAGE_STATUS_LABELS, REMINDER_LOG_STATUS_LABELS, type FollowMessageSummary, type ReminderLogSummary, type ReminderPlanSummary } from '@/types/follow-message';
+import { formatJstShort } from '@/lib/follow-message-scheduler';
 
 const LOTTERY_STATUS_LABELS: Record<LotteryEntryEffectiveStatus, string> = {
   entered: '応募', provisional: '応募', drawn: '当選', lost: 'はずれ', redeemed: '引換済み', cancelled: '取り消し', expired: '期限切れ',
@@ -109,8 +110,14 @@ function getStatusLabel(status: string) {
 /** 予約履歴に出すフォローメッセージの状態バッジ（差替済みは表示しない） */
 function followBadge(summary: FollowMessageSummary | null | undefined): { label: string; className: string; title: string } | null {
   if (!summary || summary.status === 'superseded') return null;
-  const label = FOLLOW_MESSAGE_STATUS_LABELS[summary.status] || `フォロー: ${summary.status}`;
+  const baseLabel = FOLLOW_MESSAGE_STATUS_LABELS[summary.status] || `フォロー: ${summary.status}`;
   const reason = summary.skip_reason ? FOLLOW_MESSAGE_SKIP_REASON_LABELS[summary.skip_reason] : '';
+  // ラベルに日時を含める（予定: 送信予定日時 / 送信済み: 実際の送信日時）
+  const label = summary.status === 'sent' && summary.sent_at
+    ? `フォロー送信済み ${formatJstShort(summary.sent_at)}`
+    : (summary.status === 'scheduled' || summary.status === 'sending')
+      ? `フォロー ${formatJstShort(summary.scheduled_at)} 送信予定`
+      : baseLabel;
   const when = summary.status === 'sent' && summary.sent_at
     ? `送信: ${new Date(summary.sent_at).toLocaleString('ja-JP')}`
     : summary.status === 'scheduled' ? `予定: ${new Date(summary.scheduled_at).toLocaleString('ja-JP')}` : '';
@@ -120,12 +127,21 @@ function followBadge(summary: FollowMessageSummary | null | undefined): { label:
     : summary.status === 'scheduled' ? 'bg-sky-50 text-sky-700 border-sky-200'
     : summary.status === 'failed' ? 'bg-red-50 text-red-600 border-red-200'
     : 'bg-muted text-muted-foreground';
-  return { label: reason && summary.status === 'skipped' ? `${label}（${reason}）` : label, className, title };
+  return { label: reason && summary.status === 'skipped' ? `${baseLabel}（${reason}）` : label, className, title };
 }
-/** 予約履歴に出すリマインダー送信記録のバッジ */
-function reminderBadge(summary: ReminderLogSummary | null | undefined): { label: string; className: string; title: string } | null {
-  if (!summary) return null;
-  const label = REMINDER_LOG_STATUS_LABELS[summary.status] || `リマインダー: ${summary.status}`;
+/** 予約履歴に出すリマインダーのバッジ（送信記録があればその状態、無ければ店舗設定から計算した送信予定） */
+function reminderBadge(summary: ReminderLogSummary | null | undefined, plan: ReminderPlanSummary | null | undefined): { label: string; className: string; title: string } | null {
+  if (!summary) {
+    if (!plan) return null;
+    return {
+      label: `リマインダー ${formatJstShort(plan.scheduled_at)} 送信予定`,
+      className: 'bg-sky-50 text-sky-700 border-sky-200',
+      title: `予定: ${new Date(plan.scheduled_at).toLocaleString('ja-JP')}（店舗のリマインダー設定から計算）`,
+    };
+  }
+  const label = summary.status === 'sent' && summary.sent_at
+    ? `リマインダー送信済み ${formatJstShort(summary.sent_at)}`
+    : (REMINDER_LOG_STATUS_LABELS[summary.status] || `リマインダー: ${summary.status}`);
   const when = summary.status === 'sent' && summary.sent_at ? `送信: ${new Date(summary.sent_at).toLocaleString('ja-JP')}` : '';
   const title = [summary.skip_reason || '', when, summary.status === 'failed' && summary.last_error ? summary.last_error.slice(0, 120) : ''].filter(Boolean).join(' / ');
   const className = summary.status === 'sent'
@@ -586,7 +602,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                             <p className="font-medium tabular-nums">{formatDateTime(reservation.reservation_date, reservation.reservation_time)}</p>
                             <p className="text-sm text-muted-foreground truncate">{reservation.menu_name}</p>
                             {(() => {
-                              const rb = reminderBadge(reservation.reminder_log);
+                              const rb = reminderBadge(reservation.reminder_log, reservation.reminder_plan);
                               const fb = followBadge(reservation.follow_message);
                               if (!rb && !fb) return null;
                               return (
