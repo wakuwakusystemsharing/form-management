@@ -3,7 +3,7 @@
  * 旧形式と新形式の互換性を保つ
  */
 
-import { Form } from '@/types/form';
+import { Form, SpecialBusinessDay } from '@/types/form';
 
 /**
  * ✕にする時間帯の曜日指定を検証する。
@@ -33,6 +33,35 @@ function sanitizeMenuImageDisplay(raw: unknown): 'thumbnail' | 'hidden' {
  * 旧「フラット形式」(top-level form_name 等) と新 config.* 形式を統一
  */
 /** 追加で表示する分: 0〜59 の整数だけを残し、重複を除いて昇順にする */
+// 臨時営業日の正規化: "YYYY-MM-DD" + "HH:MM" のみ保持、終了 > 開始、日付で重複排除（先勝ち）、昇順
+export function sanitizeSpecialBusinessDays(v: unknown): SpecialBusinessDay[] {
+  if (!Array.isArray(v)) return [];
+  const normTime = (t: unknown): string | null => {
+    if (typeof t !== 'string') return null;
+    const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim());
+    if (!m) return null;
+    const h = parseInt(m[1], 10);
+    const mi = parseInt(m[2], 10);
+    if (h > 23 || mi > 59) return null;
+    return `${String(h).padStart(2, '0')}:${m[2]}`;
+  };
+  const seen = new Set<string>();
+  const out: SpecialBusinessDay[] = [];
+  for (const raw of v) {
+    if (!raw || typeof raw !== 'object') continue;
+    const r = raw as { date?: unknown; open?: unknown; close?: unknown };
+    const date = typeof r.date === 'string' ? r.date.trim() : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const open = normTime(r.open);
+    const close = normTime(r.close);
+    if (!open || !close || close <= open) continue;
+    if (seen.has(date)) continue;
+    seen.add(date);
+    out.push({ date, open, close });
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
 export function sanitizeExtraMinutes(v: unknown): number[] {
   if (!Array.isArray(v)) return [];
   const out = new Set<number>();
@@ -380,6 +409,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
                 : []
             };
           }
+          // 臨時営業日（未設定 = なし）
+          (base as Record<string, unknown>).special_business_days = sanitizeSpecialBusinessDays((base as { special_business_days?: unknown }).special_business_days);
           // 表示する希望日時（未設定 = 全て表示。最低1つは表示）
           {
             const vcRaw = (base as { visible_choices?: unknown }).visible_choices;
@@ -458,7 +489,11 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             open: typeof v?.open === 'string' && v.open ? v.open : '09:00',
             close: typeof v?.close === 'string' && v.close ? v.close : '18:00'
           };
-        })()
+        })(),
+        special_business_days: sanitizeSpecialBusinessDays(
+          existingConfig?.calendar_settings?.special_business_days
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.special_business_days
+        )
       },
       staff_selection: (() => {
         const ss = existingConfig?.staff_selection
