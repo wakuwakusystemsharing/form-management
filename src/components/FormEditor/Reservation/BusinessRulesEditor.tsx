@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Form, BusinessHours } from '@/types/form';
+import { Form, BusinessHours, SpecialBusinessDay } from '@/types/form';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
 import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 
@@ -158,6 +158,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     end_time: string;
     weekday_hours?: { [key: string]: { open: string; close: string; closed: boolean; custom?: boolean; custom_slots?: string[]; extra_slots?: ExtraSlot[] } };
     holiday_hours?: { enabled: boolean; open: string; close: string; custom?: boolean; custom_slots?: string[]; extra_slots?: ExtraSlot[] };
+    special_business_days?: SpecialBusinessDay[];
     required_choices?: number[];
     visible_choices?: number[];
     blocked_times?: string[];
@@ -178,6 +179,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         blocked_times: existing?.blocked_times || [],
         blocked_time_weekdays: existing?.blocked_time_weekdays || {},
         holiday_hours: existing?.holiday_hours || { enabled: false, open: '09:00', close: '18:00', custom: false, custom_slots: [] },
+        special_business_days: existing?.special_business_days || [],
       };
     })()
   );
@@ -594,6 +596,132 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         }
       }
     });
+  };
+
+  // 臨時営業日（カレンダー表示モード）: 曜日・祝日設定より優先して指定日を指定時間で受付
+  const handleSpecialBusinessDaysChange = (next: SpecialBusinessDay[]) => {
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          special_business_days: next
+        }
+      }
+    });
+  };
+
+  // 臨時営業日（日時選択モード）
+  const handleMdSpecialBusinessDaysChange = (next: SpecialBusinessDay[]) => {
+    const updatedSettings = { ...multipleDatesSettings, special_business_days: next };
+    setMultipleDatesSettings(updatedSettings);
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          multiple_dates_settings: updatedSettings
+        }
+      }
+    });
+  };
+
+  // 臨時営業日の編集 UI（両モード共通）
+  const renderSpecialBusinessDays = (days: SpecialBusinessDay[], onChange: (next: SpecialBusinessDay[]) => void, noteSuffix: string) => {
+    const update = (index: number, patch: Partial<SpecialBusinessDay>) => {
+      onChange(days.map((d, i) => (i === index ? { ...d, ...patch } : d)));
+    };
+    const dateLabel = (ymd: string): string => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+      if (!m) return '';
+      const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      if (Number.isNaN(d.getTime())) return '';
+      return `（${['日', '月', '火', '水', '木', '金', '土'][d.getDay()]}）`;
+    };
+    return (
+      <div className={`rounded-lg p-3 ${
+        theme === 'light'
+          ? 'border border-gray-300 bg-gray-50'
+          : 'border border-gray-700 bg-gray-900/50'
+      }`}>
+        <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+          <div className={`w-full sm:w-16 text-sm font-medium ${themeClasses.text.secondary} flex-shrink-0 sm:pt-1.5`}>
+            臨時営業日
+          </div>
+          <div className="flex-1 min-w-0 space-y-2">
+            {days.length === 0 && (
+              <span className={`inline-block px-2 py-1 text-xs rounded ${
+                theme === 'light'
+                  ? 'bg-gray-200 text-gray-600 border border-gray-300'
+                  : 'bg-gray-700 text-gray-400 border border-gray-600'
+              }`}>
+                未設定
+              </span>
+            )}
+            {days.map((day, index) => {
+              const invalid = !!day.open && !!day.close && day.close <= day.open;
+              return (
+                <div key={index} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-1">
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <input
+                      type="date"
+                      value={day.date}
+                      onChange={(e) => update(index, { date: e.target.value })}
+                      className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
+                    />
+                    <span className={`text-sm ${themeClasses.text.secondary} w-8 flex-shrink-0`}>{dateLabel(day.date)}</span>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <input
+                      type="time"
+                      value={day.open}
+                      onChange={(e) => update(index, { open: e.target.value })}
+                      className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
+                    />
+                    <span className={`text-sm ${themeClasses.text.secondary}`}>〜</span>
+                    <input
+                      type="time"
+                      value={day.close}
+                      onChange={(e) => update(index, { close: e.target.value })}
+                      className={`${themeClasses.timeInput} w-full sm:w-auto min-w-0 flex-shrink-0`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onChange(days.filter((_, i) => i !== index))}
+                      className={`ml-1 p-1.5 rounded ${theme === 'light' ? 'text-gray-500 hover:text-red-600 hover:bg-red-50' : 'text-gray-400 hover:text-red-400 hover:bg-red-900/30'}`}
+                      title="削除"
+                      aria-label="臨時営業日を削除"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                  </div>
+                  {invalid && (
+                    <span className="text-xs text-red-500">終了時間は開始時間より後にしてください</span>
+                  )}
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => onChange([...days, { date: '', open: '09:00', close: '18:00' }])}
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                theme === 'light'
+                  ? 'border border-[rgb(244,144,49)]/40 text-[rgb(200,100,10)] hover:bg-[rgb(244,144,49)] hover:text-white'
+                  : 'border border-cyan-500/40 text-cyan-300 hover:bg-cyan-600 hover:text-white'
+              }`}
+            >
+              ＋ 臨時営業日を追加
+            </button>
+          </div>
+        </div>
+        <p className={`text-xs ${themeClasses.text.tertiary} mt-2`}>
+          追加した日付は、上の曜日設定が定休日でも、祝日設定や「祝日を予約不可にする」の対象でも、指定した時間で{noteSuffix}。
+          日付または時間が未入力の行は保存時に無視されます。
+        </p>
+      </div>
+    );
   };
 
   // 祝日の受付時間（日時選択モード）。OFF = 曜日の設定に従う（既存挙動）
@@ -1205,6 +1333,13 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   予約ルール設定の「祝日を予約不可にする」がONの祝日はそちらが優先され✕になります。
                 </p>
               </div>
+
+              {/* 臨時営業日（曜日・祝日設定より優先して営業） */}
+              {renderSpecialBusinessDays(
+                form.config?.calendar_settings?.special_business_days || [],
+                handleSpecialBusinessDaysChange,
+                '営業（〇）になります'
+              )}
             </div>
                 </div>
               </div>
@@ -1813,6 +1948,13 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                         </div>
                       );
                     })()}
+
+                    {/* 臨時営業日（曜日・祝日設定より優先して受付） */}
+                    {renderSpecialBusinessDays(
+                      multipleDatesSettings.special_business_days || [],
+                      handleMdSpecialBusinessDaysChange,
+                      '受付します'
+                    )}
                   </div>
                 </div>
               </div>

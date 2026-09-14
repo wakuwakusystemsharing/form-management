@@ -590,6 +590,7 @@ export async function GET(req, { params }) {
 - `max_concurrent_reservations_per_user` - 同一ユーザーの未来予約最大件数（0 = 制限なし）
 - `holidays_as_closed` + `excluded_holiday_types` - 日本の祝日を予約不可にする（1980-2099 年計算）。除外配列で個別の祝日を ✕ 対象から外せる
 - `allow_exceed_business_hours` - 営業時間超過の予約を許可
+- `special_business_days?: Array<{ date: 'YYYY-MM-DD', open, close }>` - 臨時営業日。登録した日付は曜日設定が定休でも、祝日設定・「祝日を予約不可にする」の対象でも、この時間で営業（〇）にする（優先順位: 臨時営業日 > 祝日 > 曜日）。カレンダー表示モードは `calendar_settings.special_business_days`、第三希望日時モードは `multiple_dates_settings.special_business_days`（別々に設定）。編集 UI は営業時間・ルール → 各モードの祝日行の下「臨時営業日」（`renderSpecialBusinessDays`）。正規化は `sanitizeSpecialBusinessDays()`（不正行除去・日付で重複排除・昇順）。生成 HTML は `findSpecialBusinessDay()` / `getDayBusinessHours()` / `isCalendarDateBlockedAsHoliday()` / `isMdDateSelectable()`。✕にする時間帯（`blocked_times`）はそのまま適用される
 - `show_customer_name` / `show_customer_phone` - 入力欄の表示制御（false 時は LIFF 表示名/「未記入」を自動補完）
 - `show_menu_field` - メニュー欄の表示制御（false 時は希望日時/カレンダーをデフォルト表示）
 - `show_customer_email` - メールアドレス入力 2 欄（メイン+確認）の表示。Web 予約での自動メール送信に必須
