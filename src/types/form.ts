@@ -93,6 +93,13 @@ export interface BusinessHours {
   };
 }
 
+// 臨時営業日: 特定の日付を、曜日設定が定休でも指定時間で受付する
+export interface SpecialBusinessDay {
+  date: string;   // "YYYY-MM-DD"
+  open: string;   // "09:00"
+  close: string;  // "18:00"
+}
+
 export interface FormConfig {
   basic_info: {
     form_name: string;
@@ -247,6 +254,9 @@ export interface FormConfig {
       open: string;    // "09:00"
       close: string;   // "18:00"
     };
+    // 臨時営業日（カレンダー表示モード）。指定した日付は曜日設定が定休でも、
+    // 「祝日を予約不可にする」の対象祝日でも、この時間で受付する（曜日・祝日設定より優先）
+    special_business_days?: SpecialBusinessDay[];
     // 第三希望日時モード用設定
     multiple_dates_settings?: {
       time_interval: 10 | 15 | 20 | 30 | 45 | 60 | 120;   // 時間間隔（分）
@@ -281,6 +291,8 @@ export interface FormConfig {
         custom_slots?: string[];          // 例: ["10:00~12:00", "16:00以降"]
         extra_slots?: Array<{ label: string; after: string }>;  // 曜日別と同じ「追加の時間帯」
       };
+      // 臨時営業日（第三希望日時モード）。曜日・祝日設定より優先してこの時間で受付する
+      special_business_days?: SpecialBusinessDay[];
       // 表示する希望日時（1〜3）。未設定 = 全て表示。非表示の希望は必須選択でも送信時に無視される
       visible_choices?: number[];
     };
