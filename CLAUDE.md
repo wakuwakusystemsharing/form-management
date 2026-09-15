@@ -164,6 +164,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - お客様メール: `customer_email` 宛、From 表示名は店舗名、Reply-To は店舗オーナーのメアド
 - 店舗メール: `form.config.calendar_settings.notification_email` > `store.owner_email` の優先順位で決定
 - テンプレート: `src/lib/email-templates.ts`（`buildCustomerConfirmationEmail` / `buildStoreNotificationEmail`）
+- **メール本文の予約内容は「送信時の項目編集」（`config.line_message_items`）に従う**: `src/lib/reservation-detail-items.ts` の `buildReservationDetailItems(config, reservation)` が LINE メッセージと同じ項目・並び順（お名前 → 電話番号 → 担当スタッフ → 性別 → ご来店回数 → クーポン → カスタム項目 → メニュー → 合計金額 → 合計時間 → 希望日時 → メッセージ）で `{ label, value }` を返し、両テンプレートがそれを描画する。メニューはカテゴリー見出し / オプション行 / オプション所要時間の設定も反映。店舗向けメールの [お客様情報]（お名前 / 電話 / メール）は連絡用に常に載せる。`sendReservationEmails` に `form.config` と `customer_info` / `staff_name` / `booking_mode` を渡すこと
 - オーケストレーション: `src/lib/reservation-email.ts` の `sendReservationEmails`
 - 予約フォームに `show_customer_email` フィールド ON で確認用 2 欄入力 + 一致検証 + localStorage 保存
 - メール本文に `〒{postal_code} {address}` を差し込むため `stores.postal_code` カラム追加

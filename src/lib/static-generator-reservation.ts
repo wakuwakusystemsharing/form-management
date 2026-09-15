@@ -2738,6 +2738,8 @@ class BookingForm {
                 reservation_time2: this.state.selectedTime2 || null,
                 reservation_date3: this.state.selectedDate3 || null,
                 reservation_time3: this.state.selectedTime3 || null,
+                // お客様メッセージ（DB の message 列・Google カレンダー・Web 予約メールで使用）
+                message: (this.state.message || '').trim() || null,
                 customer_info: customerInfo,
                 line_user_id: this.state.lineUserId || null, // LINEユーザーID
                 line_display_name: this.state.lineDisplayName || null, // LINE表示名
@@ -2835,7 +2837,7 @@ class BookingForm {
             
             // メッセージ本文を構築（《ラベル》\\n値 形式）
             // 送信時の項目編集: LINE メッセージに含める項目（false = 非表示）。
-            // 表示のみの制御で、DB保存・Googleカレンダー・メール送信の内容には影響しない
+            // 表示の制御（Web 予約メールもサーバー側で同じ設定に従う）。DB保存・Googleカレンダーには影響しない
             // 項目の並び順は予約フォームの表示順（上から下）に合わせる
             const lineItems = this.config.line_message_items || {};
             const showLineItem = (key) => lineItems[key] !== false;
