@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReservationDetailItems, formatMenuText } from '../reservation-detail-items';
+import { buildReservationDetailItems, buildAdminReservationRows, formatMenuText } from '../reservation-detail-items';
 import { buildCustomerConfirmationEmail, buildStoreNotificationEmail } from '../email-templates';
 import { normalizeForm } from '../form-normalizer';
 
@@ -139,5 +139,57 @@ describe('メール本文が送信時の項目編集に従う', () => {
     const mail = buildCustomerConfirmationEmail({ store, reservation });
     expect(mail.body).toContain('■ メニュー');
     expect(mail.body).toContain('■ ご来店日時');
+  });
+});
+
+describe('buildAdminReservationRows（店舗管理画面の予約詳細）', () => {
+  it('送信時の項目編集が OFF でもすべて出し、追加質問の ID を表示名に変換する', () => {
+    const config = makeConfig(
+      { gender: false, custom_fields: false, message: false },
+      {
+        menu_structure: {
+          structure_type: 'category_based',
+          categories: [{ id: 'c1', name: 'ヘア', menus: [{ id: 'm1', name: 'カット', price: 4000, duration: 60, options: [
+            { id: 'o1', name: 'トリートメント', price: 1500, duration: 15, additional_questions: [{ id: 'aq1', title: '髪の悩み', type: 'text' }] },
+          ] }] }],
+          display_options: { show_price: true, show_duration: true, show_description: true, show_treatment_info: false },
+        },
+      }
+    );
+    const rows = buildAdminReservationRows(config, {
+      ...reservation,
+      message: '  よろしくお願いします ',
+      customer_info: {
+        gender: 'female',
+        visit_count: 'first',
+        coupon: 'c1',
+        custom_fields: { cf1: '静かな席希望', aq1: 'パサつき', cf2: '', unknown_id: '2026-09-30' },
+        total_price: 13500,
+        total_duration: 145,
+        preferred_date2: '2026-09-22',
+        preferred_time2: '10:00',
+      },
+    });
+    expect(rows).toEqual([
+      { label: '担当スタッフ', value: '佐藤' },
+      { label: '性別', value: '女性' },
+      { label: 'ご来店回数', value: '初めて' },
+      { label: 'クーポン', value: '初回10%OFF' },
+      { label: '髪の悩み', value: 'パサつき' },
+      { label: 'ご要望', value: '静かな席希望' },
+      { label: 'unknown_id', value: '2026-09-30' },
+      { label: '合計金額', value: '¥13,500' },
+      { label: '合計時間', value: '145分' },
+      { label: '第二希望日', value: '2026年09月22日（火） 10:00' },
+      { label: 'メッセージ', value: 'よろしくお願いします' },
+    ]);
+  });
+
+  it('customer_info が無くても担当スタッフとメッセージは出る', () => {
+    const rows = buildAdminReservationRows(undefined, { ...reservation, customer_info: null, staff_no_preference: true });
+    expect(rows).toEqual([
+      { label: '担当スタッフ', value: '指名なし（担当: 佐藤）' },
+      { label: 'メッセージ', value: 'よろしくお願いします' },
+    ]);
   });
 });
