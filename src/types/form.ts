@@ -355,7 +355,7 @@ export interface FormConfig {
   }>;
 
   // 送信時の項目編集: 予約送信時に LINE トークへ送るテキストの項目ごとの表示設定
-  // false = 非表示（未設定 = 表示）。表示のみの制御で、DB保存・Googleカレンダー・メールには影響しない
+  // false = 非表示（未設定 = 表示）。LINE メッセージと Web 予約メールの予約内容に適用（DB保存・Googleカレンダーには影響しない）
   line_message_items?: {
     name?: boolean;            // 《お名前》
     phone?: boolean;           // 《電話番号》
