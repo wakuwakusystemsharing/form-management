@@ -210,3 +210,119 @@ export function buildReservationDetailItems(config: FormConfigLike, reservation:
   }
   return out;
 }
+
+// ========== 店舗管理画面（予約詳細）用 ==========
+
+/** フォーム設定からカスタム項目・追加質問の定義を ID で引く（管理画面での表示ラベル・日付整形用） */
+function collectFieldDefs(config: FormConfigLike): Map<string, { title: string; type?: string }> {
+  const map = new Map<string, { title: string; type?: string }>();
+  const push = (list: unknown) => {
+    (Array.isArray(list) ? list : []).forEach((q) => {
+      const f = q as { id?: string; title?: string; type?: string };
+      if (f && f.id && f.title && !map.has(f.id)) {
+        map.set(f.id, { title: String(f.title).replace(/\s*\r?\n\s*/g, ' ').trim(), type: f.type });
+      }
+    });
+  };
+  const processMenu = (menu: unknown) => {
+    const m = menu as { additional_questions?: unknown; options?: Array<{ additional_questions?: unknown }> };
+    push(m?.additional_questions);
+    (m?.options || []).forEach((o) => push(o?.additional_questions));
+  };
+  const ms = config?.menu_structure as
+    | { categories?: Array<{ menus?: unknown[]; options?: Array<{ additional_questions?: unknown }> }>; menus?: unknown[] }
+    | undefined;
+  (ms?.categories || []).forEach((cat) => {
+    (cat.menus || []).forEach(processMenu);
+    (cat.options || []).forEach((o) => push(o?.additional_questions));
+  });
+  (ms?.menus || []).forEach(processMenu);
+  (config?.custom_fields || []).forEach((field) => {
+    push([field]);
+    ((field as { options?: Array<{ additional_questions?: unknown }> }).options || []).forEach((o) => push(o?.additional_questions));
+  });
+  return map;
+}
+
+function formatFieldValue(raw: unknown, type?: string): string {
+  const text = Array.isArray(raw) ? raw.join(', ') : raw == null ? '' : String(raw);
+  if (!text.trim()) return '';
+  if (type === 'date' || type === 'datetime') {
+    const dt = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(text);
+    if (dt) return `${dt[1]}年${dt[2]}月${dt[3]}日 ${dt[4]}:${dt[5]}`;
+    const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+    if (d) return `${d[1]}年${d[2]}月${d[3]}日`;
+  }
+  return text;
+}
+
+export interface AdminReservationInput extends DetailReservationInput {
+  customer_info?: (DetailReservationInput['customer_info'] & { custom_fields?: Record<string, unknown>; notes?: string }) | null;
+}
+
+/**
+ * 店舗管理画面の予約詳細に出す「予約内容」の行。
+ * 送信時の項目編集の ON/OFF は見ない（店舗は入力されたすべてを確認できる）。
+ * 並び順は LINE メッセージと同じ。お名前 / 電話番号 / 予約日時（第一希望）は基本情報の固定欄に出すため含めない。
+ * カスタム項目は customer_info.custom_fields（ID → 値）をフォーム定義（追加質問含む）で表示名に変換する
+ */
+export function buildAdminReservationRows(config: FormConfigLike, reservation: AdminReservationInput): DetailItem[] {
+  const info = reservation.customer_info || {};
+  const rows: DetailItem[] = [];
+  const optLabel = (
+    opts: Array<{ value: string; label: string }> | undefined,
+    v: unknown,
+    fallback: Record<string, string>
+  ): string => {
+    const s = v == null ? '' : String(v);
+    if (!s) return '';
+    return opts?.find((o) => o.value === s)?.label || fallback[s] || s;
+  };
+
+  if (reservation.staff_name) {
+    rows.push({
+      label: '担当スタッフ',
+      value: reservation.staff_no_preference ? `指名なし（担当: ${reservation.staff_name}）` : reservation.staff_name,
+    });
+  } else if (reservation.staff_no_preference) {
+    rows.push({ label: '担当スタッフ', value: '指名なし' });
+  }
+  const gender = info.gender_label || optLabel(config?.gender_selection?.options, info.gender, { male: '男性', female: '女性' });
+  if (gender) rows.push({ label: '性別', value: gender });
+  const visit = info.visit_count_label || optLabel(config?.visit_count_selection?.options, info.visit_count, { first: '初回', repeat: '2回目以降' });
+  if (visit) rows.push({ label: 'ご来店回数', value: visit });
+  const coupon = info.coupon_label || optLabel(config?.coupon_selection?.options, info.coupon, { use: '利用する', not_use: '利用しない' });
+  if (coupon) rows.push({ label: 'クーポン', value: coupon });
+
+  // カスタム項目（追加質問含む）: フォーム定義の順 → 定義に無いものは入力順
+  const defs = collectFieldDefs(config);
+  const raw = info.custom_fields && typeof info.custom_fields === 'object' ? (info.custom_fields as Record<string, unknown>) : null;
+  if (raw) {
+    const ids = [
+      ...Array.from(defs.keys()).filter((id) => Object.prototype.hasOwnProperty.call(raw, id)),
+      ...Object.keys(raw).filter((id) => !defs.has(id)),
+    ];
+    ids.forEach((id) => {
+      const def = defs.get(id);
+      const value = formatFieldValue(raw[id], def?.type);
+      if (value) rows.push({ label: def?.title || id, value });
+    });
+  } else if (info.custom_fields_labeled && typeof info.custom_fields_labeled === 'object') {
+    Object.entries(info.custom_fields_labeled).forEach(([title, v]) => {
+      const value = formatFieldValue(v);
+      if (value) rows.push({ label: title, value });
+    });
+  }
+
+  const totalPrice = Number(info.total_price || 0);
+  if (totalPrice > 0) rows.push({ label: '合計金額', value: `¥${totalPrice.toLocaleString()}` });
+  const totalDuration = Number(info.total_duration || 0);
+  if (totalDuration > 0) rows.push({ label: '合計時間', value: `${totalDuration}分` });
+  const second = formatJpDateTime(info.preferred_date2, info.preferred_time2);
+  if (second) rows.push({ label: '第二希望日', value: second });
+  const third = formatJpDateTime(info.preferred_date3, info.preferred_time3);
+  if (third) rows.push({ label: '第三希望日', value: third });
+  if ((reservation.message || '').trim()) rows.push({ label: 'メッセージ', value: String(reservation.message).trim() });
+  if (info.notes && String(info.notes).trim()) rows.push({ label: 'メモ', value: String(info.notes).trim() });
+  return rows;
+}
