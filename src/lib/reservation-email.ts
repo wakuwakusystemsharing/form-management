@@ -10,20 +10,9 @@
 import type { Store } from '@/types/store';
 import type { Form } from '@/types/form';
 import { sendEmail } from './email-sender';
-import { buildCustomerConfirmationEmail, buildStoreNotificationEmail } from './email-templates';
+import { buildCustomerConfirmationEmail, buildStoreNotificationEmail, type EmailReservationLike } from './email-templates';
 
-interface ReservationLike {
-  staff_name?: string | null;
-  id: string;
-  customer_name: string;
-  customer_phone: string;
-  customer_email?: string | null;
-  reservation_date: string;
-  reservation_time: string;
-  selected_menus?: any[] | null;
-  selected_options?: any[] | null;
-  message?: string | null;
-}
+type ReservationLike = EmailReservationLike;
 
 export async function sendReservationEmails({
   reservation,
@@ -32,7 +21,7 @@ export async function sendReservationEmails({
 }: {
   reservation: ReservationLike;
   store: Pick<Store, 'name' | 'address' | 'phone' | 'postal_code' | 'owner_email'>;
-  form: Pick<Form, 'config'>;
+  form: { config?: Partial<Form['config']> | null };
 }): Promise<void> {
   // お客様向けメール
   const customerEmail = (reservation.customer_email || '').trim();
@@ -43,7 +32,7 @@ export async function sendReservationEmails({
   );
   if (customerEmail) {
     try {
-      const built = buildCustomerConfirmationEmail({ store, reservation });
+      const built = buildCustomerConfirmationEmail({ store, reservation, form });
       const result = await sendEmail({
         to: customerEmail,
         subject: built.subject,
@@ -68,7 +57,7 @@ export async function sendReservationEmails({
   const storeRecipient = overrideEmail || (store.owner_email || '').trim();
   if (storeRecipient) {
     try {
-      const built = buildStoreNotificationEmail({ store, reservation });
+      const built = buildStoreNotificationEmail({ store, reservation, form });
       const result = await sendEmail({
         to: storeRecipient,
         subject: built.subject,
