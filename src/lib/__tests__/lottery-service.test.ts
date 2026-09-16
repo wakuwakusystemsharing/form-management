@@ -24,6 +24,8 @@ import { normalizeLotteryConfig, normalizeLotteryForm } from '@/lib/lottery-norm
 import {
   executeLotteryDraw,
   findMissingRequiredAnswers,
+  getPrizeStockStatus,
+  getUserWinResults,
   validateLotteryConfigForSave,
   type LotteryStoreInfo,
 } from '@/lib/lottery-service';
@@ -62,6 +64,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   repo.countPrizeEntries.mockResolvedValue({});
   repo.findLatestUserEntry.mockResolvedValue(null);
+  repo.listUserEntries.mockResolvedValue([]);
   repo.redeemCodeExists.mockResolvedValue(false);
   repo.updateLotteryEntry.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({ id: 'e1', ...patch }));
   customers.findCustomerByLineOrPhone.mockResolvedValue({ id: 'cust1' });
@@ -373,5 +376,54 @@ describe('selfRedeemEntry（お客様自身の使用済み操作）', () => {
     const { selfRedeemEntry } = await import('@/lib/lottery-service');
     const form = makeForm({}, { presentation: { allow_self_redeem: false } });
     expect(await selfRedeemEntry(form, store, user, 'e1', now)).toMatchObject({ ok: false, status: 403 });
+  });
+});
+
+describe('残り参加回数・当選一覧・在庫状況', () => {
+  const periodN = () => makeForm({}, { entry_rules: { limit: 'period_n', period_max: 3, require_friend: false, when_sold_out: 'lose', pre_questions: [] } });
+  const pastWin = (id: string, enteredAt: string, extra: Partial<LotteryEntry> = {}): LotteryEntry => ({
+    id, lottery_form_id: 'form1', store_id: 'st1', line_user_id: 'U123', line_display_name: '太郎', line_friend_flag: true, customer_id: null,
+    prize_id: 'a', prize_name: 'A賞', is_win: true, is_consolation: false, redeem_code: 'ABC234', qr_token: null, expires_at: null,
+    status: 'drawn', redeemed_at: null, redeemed_by: null, redeemed_note: null, answers: null, message_sent: false, push_sent: false,
+    user_agent: null, entered_at: enteredAt, created_at: enteredAt, updated_at: enteredAt, ...extra,
+  });
+
+  it('抽選結果に残り回数（上限 3 で 2 回目なら残り 1）が付く', async () => {
+    // 挿入後の履歴 = 過去 1 件 + 今回 1 件
+    repo.listUserEntries.mockResolvedValue([pastWin('e0', '2026-09-01T00:00:00Z'), pastWin('e1', now.toISOString())]);
+    const outcome = await executeLotteryDraw({ form: periodN(), store, user, lineFriendFlag: true, answers: null, userAgent: null, now, rng: () => 0.99 });
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) expect(outcome.response.remaining_entries).toBe(1);
+  });
+
+  it('1 回のみの設定では残り 0', async () => {
+    repo.listUserEntries.mockResolvedValue([pastWin('e1', now.toISOString())]);
+    const outcome = await executeLotteryDraw({ form: makeForm(), store, user, lineFriendFlag: true, answers: null, userAgent: null, now, rng: () => 0.99 });
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) expect(outcome.response.remaining_entries).toBe(0);
+  });
+
+  it('getUserWinResults: 当選（drawn / redeemed）だけを新しい順に返し、はずれ・応募中は含めない', async () => {
+    repo.listUserEntries.mockResolvedValue([
+      pastWin('old', '2026-09-01T00:00:00Z'),
+      pastWin('lost', '2026-09-02T00:00:00Z', { status: 'lost', prize_id: null, prize_name: null, is_win: false, redeem_code: null }),
+      pastWin('used', '2026-09-03T00:00:00Z', { status: 'redeemed', redeemed_at: '2026-09-04T00:00:00Z' }),
+      pastWin('new', '2026-09-05T00:00:00Z'),
+    ]);
+    const r = await getUserWinResults(periodN(), store, 'U123', now);
+    expect(r.wins.map((w) => w.entry.id)).toEqual(['new', 'used', 'old']);
+    expect(r.wins[1].entry.status).toBe('redeemed');
+    expect(r.wins[0].prize?.name).toBe('A賞');
+    expect(r.remaining_entries).toBe(0); // 4 件（cancelled 無し）≥ 上限 3
+  });
+
+  it('getPrizeStockStatus: 残念賞も含めて在庫 − 発行済みを返す', async () => {
+    repo.countPrizeEntries.mockResolvedValue({ a: 1, c: 4 });
+    const form = makeForm({}, { consolation_prize: { id: 'c', name: '残念賞', probability: 0, stock: 10 } });
+    expect(await getPrizeStockStatus(form)).toEqual([
+      { id: 'a', stock: 1, issued: 1, remaining: 0 },
+      { id: 'b', stock: null, issued: 0, remaining: null },
+      { id: 'c', stock: 10, issued: 4, remaining: 6 },
+    ]);
   });
 });

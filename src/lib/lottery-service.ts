@@ -17,6 +17,8 @@ import {
   getEntryLimitWindow,
   getPeriodState,
   isAllSoldOut,
+  computePrizeStockStatus,
+  computeRemainingEntries,
   isEntryExpired,
   secureRandomUnit,
   selectPrize,
@@ -35,7 +37,7 @@ import {
   type LotteryEntryPatch,
   type NewLotteryEntry,
 } from '@/lib/lottery-repository';
-import type { LotteryConfig, LotteryDrawResponse, LotteryEntry, LotteryForm, LotteryPrize } from '@/types/lottery';
+import type { LotteryConfig, LotteryDrawResponse, LotteryEntry, LotteryForm, LotteryPrize, LotteryPrizeStockStatus } from '@/types/lottery';
 
 // ---------------------------------------------------------------------------
 // 店舗情報（抽選で必要な列だけ）
@@ -141,7 +143,8 @@ export function toDrawResponse(
   form: LotteryForm,
   entry: LotteryEntry,
   storeName: string,
-  isExisting: boolean
+  isExisting: boolean,
+  remainingEntries: number | null = null
 ): LotteryDrawResponse {
   // 仮当選（provisional）は確定までお客様に賞品を見せない（応募済みとして返す）
   const isProvisional = entry.status === 'provisional';
@@ -171,7 +174,60 @@ export function toDrawResponse(
     message_text: messageText,
     second_message: second && second.enabled && second.text ? { enabled: true, text: second.text } : null,
     is_existing: isExisting,
+    remaining_entries: remainingEntries,
   };
+}
+
+/** ユーザーの履歴から残り参加回数を求めて結果に添える */
+async function toDrawResponseWithRemaining(
+  form: LotteryForm,
+  entry: LotteryEntry,
+  storeName: string,
+  isExisting: boolean,
+  lineUserId: string,
+  now: Date
+): Promise<LotteryDrawResponse> {
+  const entries = (await listUserEntries(form.id, lineUserId)) || [];
+  return toDrawResponse(form, entry, storeName, isExisting, computeRemainingEntries(form.config, entries, now));
+}
+
+/** 直近の結果（再訪時の再表示用）。残り参加回数付き */
+export async function getLatestUserResult(
+  form: LotteryForm,
+  store: LotteryStoreInfo,
+  lineUserId: string,
+  now: Date = new Date()
+): Promise<LotteryDrawResponse | null> {
+  const entries = (await listUserEntries(form.id, lineUserId)) || [];
+  const latest = entries[0];
+  if (!latest) return null;
+  return toDrawResponse(form, latest, store.name, true, computeRemainingEntries(form.config, entries, now));
+}
+
+/**
+ * このユーザーが当選した一覧（新しい順。残念賞を含む当選 = 賞品が付いた drawn / redeemed）。
+ * 複数回抽選できる設定で 2 回目以降に当選したとき、1 回目の当選内容を確認できるようにする
+ */
+export async function getUserWinResults(
+  form: LotteryForm,
+  store: LotteryStoreInfo,
+  lineUserId: string,
+  now: Date = new Date()
+): Promise<{ wins: LotteryDrawResponse[]; remaining_entries: number | null }> {
+  const entries = (await listUserEntries(form.id, lineUserId)) || [];
+  const remaining = computeRemainingEntries(form.config, entries, now);
+  const wins = entries
+    .filter((e) => !!e.prize_id && (e.status === 'drawn' || e.status === 'redeemed'))
+    .sort((a, b) => (a.entered_at < b.entered_at ? 1 : a.entered_at > b.entered_at ? -1 : 0))
+    .map((e) => toDrawResponse(form, e, store.name, true, remaining));
+  return { wins, remaining_entries: remaining };
+}
+
+/** 賞品ごとの現在の在庫状況（残念賞も含む）。フォームの「残り N」と編集画面の表示に使う */
+export async function getPrizeStockStatus(form: LotteryForm): Promise<LotteryPrizeStockStatus[]> {
+  const counts = await countPrizeEntries(form.id);
+  const prizes = [...form.config.prizes, ...(form.config.consolation_prize ? [form.config.consolation_prize] : [])];
+  return computePrizeStockStatus(prizes, counts);
 }
 
 // ---------------------------------------------------------------------------
@@ -267,7 +323,7 @@ export async function executeLotteryDraw(params: DrawParams): Promise<DrawOutcom
     ok: false,
     status: 409,
     error: getEntryLimitMessage(config.entry_rules.limit, config.lottery_type),
-    existing: latest ? toDrawResponse(form, latest, store.name, true) : undefined,
+    existing: latest ? toDrawResponse(form, latest, store.name, true, 0) : undefined,
   });
   if (latest && limit.max_entries !== null) {
     const windowStart = limit.window_start;
@@ -315,7 +371,7 @@ export async function executeLotteryDraw(params: DrawParams): Promise<DrawOutcom
     }
     const customerId = await linkCustomer(inserted.entry, user, params.lineFriendFlag);
     const entry = customerId ? await applyEntryPatch(inserted.entry, { customer_id: customerId }) : inserted.entry;
-    return { ok: true, status: 201, response: toDrawResponse(form, entry, store.name, false) };
+    return { ok: true, status: 201, response: await toDrawResponseWithRemaining(form, entry, store.name, false, user.userId, now) };
   }
 
   // ---- 即時抽選 ----
@@ -407,7 +463,7 @@ export async function executeLotteryDraw(params: DrawParams): Promise<DrawOutcom
     if (result.ok) entry = await applyEntryPatch(entry, { push_sent: true });
   }
 
-  return { ok: true, status: 201, response: toDrawResponse(form, entry, store.name, false) };
+  return { ok: true, status: 201, response: await toDrawResponseWithRemaining(form, entry, store.name, false, user.userId, now) };
 }
 
 // ---------------------------------------------------------------------------
@@ -434,12 +490,13 @@ export async function selfRedeemEntry(
     return { ok: false, status: 403, error: 'この抽選では店頭スタッフが引換を行います。画面をスタッフにご提示ください' };
   }
   const entries = await listUserEntries(form.id, user.userId);
+  const remaining = computeRemainingEntries(form.config, entries, now);
   const entry = entries.find((e) => e.id === entryId);
   if (!entry) {
     return { ok: false, status: 404, error: '当選情報が見つかりません' };
   }
   if (entry.status === 'redeemed') {
-    return { ok: true, response: toDrawResponse(form, entry, store.name, true) };
+    return { ok: true, response: toDrawResponse(form, entry, store.name, true, remaining) };
   }
   if (entry.status !== 'drawn' || !entry.prize_id) {
     return { ok: false, status: 400, error: 'この結果は使用済みにできません' };
@@ -453,5 +510,5 @@ export async function selfRedeemEntry(
     redeemed_by: null,
     redeemed_note: '本人操作（お客様がフォームで使用済みにしました）',
   });
-  return { ok: true, response: toDrawResponse(form, updated ?? { ...entry, status: 'redeemed', redeemed_at: now.toISOString() }, store.name, true) };
+  return { ok: true, response: toDrawResponse(form, updated ?? { ...entry, status: 'redeemed', redeemed_at: now.toISOString() }, store.name, true, remaining) };
 }
