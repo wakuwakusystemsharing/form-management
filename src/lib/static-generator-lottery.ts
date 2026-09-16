@@ -42,6 +42,7 @@ export class StaticLotteryGenerator {
       lose_probability: getLoseProbability(config.prizes),
       entry_rules: {
         limit: config.entry_rules.limit,
+        period_max: config.entry_rules.period_max ?? 1,
         require_friend: config.entry_rules.require_friend,
         pre_questions: config.entry_rules.pre_questions,
       },
@@ -92,6 +93,10 @@ export class StaticLotteryGenerator {
                 </div>
             </section>
 
+            <div class="my-wins-bar hidden" id="myWinsBar">
+                <button type="button" class="my-wins-button" onclick="openWinsList()">🎁 あなたが当選した一覧<span id="myWinsCount"></span></button>
+            </div>
+
             <section class="section">
                 <h2 class="field-label">賞品</h2>
                 <div class="prize-list" id="prizeList">
@@ -120,6 +125,17 @@ export class StaticLotteryGenerator {
 
     <div class="confetti-layer" id="confettiLayer" aria-hidden="true"></div>
 
+    <div class="wins-modal hidden" id="winsModal" role="dialog" aria-modal="true" aria-labelledby="winsModalTitle" onclick="if (event.target === this) closeWinsList()">
+        <div class="wins-modal-card">
+            <div class="wins-modal-head">
+                <h3 id="winsModalTitle">あなたが当選した一覧</h3>
+                <button type="button" class="wins-close" onclick="closeWinsList()" aria-label="閉じる">×</button>
+            </div>
+            <p class="wins-modal-hint">タップすると引換コード・QR コードを表示します</p>
+            <div class="wins-list" id="winsList"></div>
+        </div>
+    </div>
+
     ${isPreview ? '' : '<script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>'}
     <script>
         var FORM_CONFIG = ${this.embedJson(runtime)};
@@ -135,6 +151,7 @@ export class StaticLotteryGenerator {
             displayName: null,
             friendFlag: null,
             result: null,        // LotteryDrawResponse
+            wins: [],            // このユーザーの当選一覧（LotteryDrawResponse[]）
             revealed: false,
             busy: false,
             gateBlocked: false
@@ -146,9 +163,11 @@ export class StaticLotteryGenerator {
         ${this.generateDrawJS()}
         ${this.generateAnimationJS()}
         ${this.generateResultJS()}
+        ${this.generateStockAndWinsJS()}
 
         document.addEventListener('DOMContentLoaded', function () {
             initQuestions();
+            refreshStock();
             if (IS_PREVIEW) {
                 var banner = document.querySelector('.preview-banner');
                 if (banner) banner.setAttribute('role', 'status');
@@ -584,6 +603,7 @@ export class StaticLotteryGenerator {
             }
             try { sessionStorage.removeItem(STORAGE_KEY + '_tokenRetry'); } catch (e) {}
             await trySendPendingMessage();
+            await loadMyWins();
             await loadExistingResult();
         }
         function authBody(extra) {
@@ -602,8 +622,8 @@ export class StaticLotteryGenerator {
                 if (!res.ok) return;
                 var json = await res.json();
                 if (json && json.result) {
-                    var canRetry = FORM_CONFIG.lottery_type === 'instant' && FORM_CONFIG.entry_rules.limit !== 'once';
-                    showResult(json.result, { existing: true, canRetry: canRetry });
+                    // 「再度抽選する」はサーバーが返す残り回数（remaining_entries）で判定する
+                    showResult(json.result, { existing: true });
                 }
             } catch (e) { console.warn('my-result failed', e); }
         }`;
@@ -693,7 +713,9 @@ export class StaticLotteryGenerator {
                 else if (typeof prize.expires_in_days === 'number') expires = new Date(now.getTime() + (prize.expires_in_days + 1) * 86400000).toISOString();
             }
             var entry = { id: 'preview', status: prize ? 'drawn' : 'lost', is_win: !!prize && !consolation, is_consolation: consolation, prize_id: prize ? prize.id : null, prize_name: prize ? prize.name : null, redeem_code: code, qr_token: qr, expires_at: expires, entered_at: now.toISOString() };
-            return { entry: entry, prize: prize, message_text: renderTemplate(prize ? FORM_CONFIG.messages.win_text : FORM_CONFIG.messages.lose_text, entry, prize), second_message: null, is_existing: false };
+            // プレビューでは複数回参加できる設定なら「再度抽選する」ボタンを見せる
+            var previewRemaining = FORM_CONFIG.entry_rules.limit === 'once' ? 0 : 1;
+            return { entry: entry, prize: prize, message_text: renderTemplate(prize ? FORM_CONFIG.messages.win_text : FORM_CONFIG.messages.lose_text, entry, prize), second_message: null, is_existing: false, remaining_entries: previewRemaining };
         }
         function renderTemplate(template, entry, prize) {
             var values = {
@@ -961,11 +983,25 @@ export class StaticLotteryGenerator {
             if (opts.existing) {
                 html += '<p class="result-existing">' + (isEntry ? '応募済みです' : 'こちらは前回の結果です') + '（' + escapeHtml(formatDateJst(entry.entered_at)) + '）</p>';
             }
+            // 新しい当選は当選一覧にも即反映（サーバーからの再取得で上書きされる）
+            if (isWin && !opts.existing && entry.id && entry.id !== 'preview') {
+                var dup = false;
+                for (var wi = 0; wi < state.wins.length; wi++) if (state.wins[wi].entry && state.wins[wi].entry.id === entry.id) dup = true;
+                if (!dup) state.wins.unshift(result);
+                renderWinsBar();
+            }
+            // 再度抽選できるか: 即時抽選で、サーバーが返した残り回数が 1 以上（参加回数「期間中 N 回」で N ≥ 2 など）
+            var remaining = typeof result.remaining_entries === 'number' ? result.remaining_entries : null;
+            var canRetry = !isEntry && FORM_CONFIG.lottery_type === 'instant' && opts.canRetry !== false && remaining !== null && remaining > 0;
             html += '<div class="result-actions">';
-            if (opts.existing && opts.canRetry) {
-                html += '<button type="button" class="submit-button" onclick="retryDraw()">もう一度抽選する</button>';
-            } else if (!opts.existing || !result.__sent) {
+            if (!opts.existing || !result.__sent) {
                 html += '<button type="button" class="submit-button" id="sendButton" onclick="sendResult()">' + (IS_PREVIEW ? 'LINE に結果を送る（プレビュー）' : 'LINE に結果を送る') + '</button>';
+            }
+            if (canRetry) {
+                html += '<button type="button" class="secondary-button" onclick="retryDraw()">再度抽選する' + (remaining !== null ? '<small>あと ' + remaining + ' 回</small>' : '') + '</button>';
+            }
+            if (state.wins.length > 0) {
+                html += '<button type="button" class="secondary-button wins-button" onclick="openWinsList()">あなたが当選した一覧（' + state.wins.length + '件）</button>';
             }
             html += '</div>';
             panel.innerHTML = html;
@@ -978,9 +1014,11 @@ export class StaticLotteryGenerator {
             showFooter(false);
             setBusy(false);
             if (isWin && !entry.is_consolation && !opts.existing) launchConfetti();
-            if (!opts.existing || opts.canRetry === false) {
+            if (!opts.existing || opts.canRetry === false || opts.fromList) {
                 setTimeout(function () { if (panel.scrollIntoView) panel.scrollIntoView({ behavior: REDUCED_MOTION ? 'auto' : 'smooth', block: 'start' }); }, 100);
             }
+            // 抽選直後は在庫と当選一覧をサーバーの最新に合わせる
+            if (!opts.existing && !IS_PREVIEW) { refreshStock(); loadMyWins(); }
         }
         // ---- お客様自身の「使用済みにする」 ----
         function openRedeemConfirm() {
@@ -1029,6 +1067,7 @@ export class StaticLotteryGenerator {
                     return;
                 }
                 showResult(json.result, { existing: true, canRetry: false });
+                loadMyWins();
             } catch (err) {
                 console.error('self redeem failed', err);
                 closeRedeemConfirm();
@@ -1037,6 +1076,7 @@ export class StaticLotteryGenerator {
         }
 
         function retryDraw() {
+            refreshStock();
             var panel = $('resultPanel');
             if (panel) { panel.classList.add('hidden'); panel.innerHTML = ''; }
             var qsec = $('questionsSection');
@@ -1112,6 +1152,104 @@ export class StaticLotteryGenerator {
             } catch (err) {
                 console.error('pending resend failed', err);
             }
+        }`;
+  }
+
+  private generateStockAndWinsJS(): string {
+    return `
+        // ---- 在庫の最新化（静的 HTML の「残り N」はデプロイ時の値なので、サーバーから現在値を取り直す） ----
+        async function refreshStock() {
+            if (IS_PREVIEW) return;
+            try {
+                var res = await fetch(window.location.origin + '/api/lotteries/' + encodeURIComponent(FORM_CONFIG.form_id) + '/stock', { cache: 'no-store' });
+                if (!res.ok) return;
+                var json = await res.json();
+                if (!json || !Array.isArray(json.prizes)) return;
+                for (var i = 0; i < json.prizes.length; i++) applyStock(json.prizes[i]);
+            } catch (e) { console.warn('stock refresh failed', e); }
+        }
+        function applyStock(p) {
+            if (!p || !p.id) return;
+            var all = document.querySelectorAll('.prize-stock');
+            for (var i = 0; i < all.length; i++) {
+                var el = all[i];
+                if (!el.dataset || el.dataset.prizeStock !== p.id) continue;
+                if (FORM_CONFIG.lottery_type === 'deferred') {
+                    if (typeof p.stock === 'number') el.textContent = p.stock + '名';
+                    continue;
+                }
+                if (typeof p.remaining !== 'number') { el.textContent = ''; el.classList.remove('sold-out'); continue; }
+                el.textContent = p.remaining > 0 ? '残り' + p.remaining : '在庫なし';
+                el.classList.toggle('sold-out', p.remaining <= 0);
+                el.setAttribute('data-stock', String(p.remaining));
+            }
+        }
+        // ---- あなたが当選した一覧 ----
+        async function loadMyWins() {
+            if (IS_PREVIEW || !state.idToken && !state.lineUserId) return;
+            try {
+                var url = window.location.origin + '/api/lotteries/' + encodeURIComponent(FORM_CONFIG.form_id) + '/my-entries?id_token=' + encodeURIComponent(state.idToken || '')
+                    + (state.lineUserId ? '&line_user_id=' + encodeURIComponent(state.lineUserId) : '');
+                var res = await fetch(url, { cache: 'no-store' });
+                if (!res.ok) return;
+                var json = await res.json();
+                if (json && Array.isArray(json.wins)) {
+                    state.wins = json.wins;
+                    renderWinsBar();
+                    var modal = $('winsModal');
+                    if (modal && !modal.classList.contains('hidden')) renderWinsList();
+                }
+            } catch (e) { console.warn('my-entries failed', e); }
+        }
+        function renderWinsBar() {
+            var bar = $('myWinsBar');
+            var count = $('myWinsCount');
+            if (!bar) return;
+            bar.classList.toggle('hidden', state.wins.length === 0);
+            if (count) count.textContent = state.wins.length > 0 ? '（' + state.wins.length + '件）' : '';
+        }
+        function winStatusLabel(win) {
+            var e = win.entry || {};
+            if (e.status === 'redeemed') return { text: '使用済み', cls: 'used' };
+            if (win.is_expired) return { text: '期限切れ', cls: 'expired' };
+            return { text: '有効', cls: 'valid' };
+        }
+        function renderWinsList() {
+            var list = $('winsList');
+            if (!list) return;
+            if (state.wins.length === 0) { list.innerHTML = '<p class="wins-empty">当選はまだありません</p>'; return; }
+            var html = '';
+            for (var i = 0; i < state.wins.length; i++) {
+                var win = state.wins[i];
+                var e = win.entry || {};
+                var prize = win.prize || findPrize(e.prize_id) || { name: e.prize_name || '' };
+                var st = winStatusLabel(win);
+                html += '<button type="button" class="wins-item ' + st.cls + '" style="--rank:' + rankColor(prize) + '" onclick="showWinFromList(' + i + ')">';
+                html += '<div class="wins-item-main"><div class="wins-item-name">' + escapeHtml(prize.name || '') + (e.is_consolation ? ' <small>残念賞</small>' : '') + '</div>';
+                html += '<div class="wins-item-meta">' + escapeHtml(formatDateJst(e.entered_at)) + ' 当選' + (e.redeem_code ? ' ・ コード ' + escapeHtml(e.redeem_code) : '') + '</div>';
+                var exp = formatDateJst(e.expires_at);
+                if (exp) html += '<div class="wins-item-meta">有効期限 ' + escapeHtml(exp) + '</div>';
+                html += '</div><span class="wins-item-status">' + st.text + '</span></button>';
+            }
+            list.innerHTML = html;
+        }
+        function openWinsList() {
+            var modal = $('winsModal');
+            if (!modal) return;
+            renderWinsList();
+            modal.classList.remove('hidden');
+            document.body.classList.add('wins-open');
+        }
+        function closeWinsList() {
+            var modal = $('winsModal');
+            if (modal) modal.classList.add('hidden');
+            document.body.classList.remove('wins-open');
+        }
+        function showWinFromList(index) {
+            var win = state.wins[index];
+            if (!win) return;
+            closeWinsList();
+            showResult(win, { existing: true, fromList: true });
         }`;
   }
 
@@ -1235,6 +1373,7 @@ export class StaticLotteryGenerator {
         .prize-name small { display: block; font-size: 11px; color: #888; font-weight: 500; }
         .prize-desc { font-size: 12px; color: #555; margin-top: 2px; line-height: 1.4; }
         .prize-meta { font-size: 12px; color: #777; margin-top: 6px; }
+        .prize-stock.sold-out { color: #b91c1c; font-weight: 700; }
         .prize-note { font-size: 12px; color: #777; text-align: right; }
 
         /* 注意事項 */
@@ -1298,6 +1437,35 @@ export class StaticLotteryGenerator {
         .confirm-yes { background: var(--primary-color); color: var(--white); }
         .confirm-yes:disabled { opacity: .6; }
         .result-actions { margin-top: 18px; }
+        .result-actions .submit-button + .secondary-button, .result-actions .secondary-button + .secondary-button { margin-top: 10px; }
+        .secondary-button { display: block; width: 100%; min-height: 48px; padding: 10px 14px; font-size: 15px; font-weight: 700; color: var(--primary-color); background: var(--white); border: 2px solid var(--primary-color); border-radius: 6px; }
+        .secondary-button small { display: block; font-size: 11px; font-weight: 500; color: #888; margin-top: 2px; }
+        .secondary-button:active { background: #f1f3f5; }
+
+        /* あなたが当選した一覧 */
+        .my-wins-bar { margin: 0 0 14px; }
+        .my-wins-button { display: block; width: 100%; min-height: 44px; padding: 10px 14px; font-size: 14px; font-weight: 700; color: var(--primary-color); background: #fff8e6; border: 1px solid #f2d27a; border-radius: 8px; text-align: left; }
+        .my-wins-button span { color: #888; font-weight: 500; font-size: 12px; }
+        .wins-modal { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center; background: rgba(0,0,0,0.45); padding: 0; }
+        .wins-modal-card { width: 100%; max-width: 560px; max-height: 80vh; display: flex; flex-direction: column; background: var(--white); border-radius: 14px 14px 0 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 30px rgba(0,0,0,0.25); }
+        @media (min-width: 600px) { .wins-modal { align-items: center; padding: 20px; } .wins-modal-card { border-radius: 14px; } }
+        .wins-modal-head { display: flex; align-items: center; justify-content: space-between; }
+        .wins-modal-head h3 { margin: 0; font-size: 16px; font-weight: 700; }
+        .wins-close { width: 36px; height: 36px; border: 0; background: #f1f3f5; border-radius: 50%; font-size: 20px; line-height: 1; color: #555; }
+        .wins-modal-hint { margin: 6px 0 10px; font-size: 12px; color: #888; }
+        .wins-list { overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; gap: 8px; }
+        .wins-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px 12px; background: #fafafa; border: 1px solid #e5e7eb; border-left: 5px solid var(--rank); border-radius: 8px; }
+        .wins-item:active { background: #f1f3f5; }
+        .wins-item-main { flex: 1; min-width: 0; }
+        .wins-item-name { font-size: 15px; font-weight: 700; color: var(--rank); }
+        .wins-item-name small { font-size: 11px; color: #888; font-weight: 500; }
+        .wins-item-meta { font-size: 12px; color: #666; margin-top: 2px; }
+        .wins-item-status { flex: 0 0 auto; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #e6f4ea; color: #1e7b34; }
+        .wins-item.used .wins-item-status { background: #eee; color: #777; }
+        .wins-item.expired .wins-item-status { background: #fdecec; color: #b91c1c; }
+        .wins-item.used .wins-item-name, .wins-item.expired .wins-item-name { opacity: .6; }
+        .wins-empty { font-size: 13px; color: #888; text-align: center; padding: 20px 0; }
+        body.wins-open { overflow: hidden; }
 
         /* フッター（固定ボタン） */
         .form-footer { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: rgba(255,255,255,0.96); backdrop-filter: blur(6px); box-shadow: 0 -4px 20px rgba(0,0,0,0.08); z-index: 10; }

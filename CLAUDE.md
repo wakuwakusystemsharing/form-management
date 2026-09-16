@@ -246,6 +246,9 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - 本人確認: LIFF の ID トークンを `src/lib/line-verify.ts` で検証。チャネル ID は `stores.line_channel_id` → 環境変数 `NEXT_PUBLIC_LINE_CHANNEL_ID` の順（local は `line_user_id` の申告を許容）
 - LINE 通知: LIFF `sendMessages` 用テキストと Bot Flex 当選カードは `src/lib/lottery-line-message.ts`。push は `src/lib/line-push.ts`（はずれには送らない）
 - 引換: 6 桁コード（店舗内ユニーク）+ QR 方式（`qr_token`）。管理者ページから `redeem / unredeem / cancel / restore`
+- **在庫の最新化**: 静的 HTML の「残り N」はデプロイ時の値で、公開プロキシは 1 時間キャッシュするため、フォームは開いたとき・抽選直後・再抽選前に `GET /api/lotteries/{id}/stock`（公開・件数のみ）で `stock − 発行済み` を取り直して表示を差し替える（`refreshStock()` / `applyStock()`。0 は「在庫なし」赤字）。純粋ロジックは `computePrizeStockStatus()`、サーバーは `getPrizeStockStatus()`。編集画面「賞品と確率」の在庫欄の下に「現在の残り：N（当選 M 件）」を同じ API で表示（`LotteryPrizeEditor` の `stockStatus`）
+- **残り参加回数と再抽選**: 抽選結果（`LotteryDrawResponse.remaining_entries`）に `computeRemainingEntries()`（上限 − 対象期間の参加数。cancelled は数えない）を添え、即時抽選で 1 以上なら結果画面の「LINE に結果を送る」の下に「再度抽選する（あと N 回）」を出す。`my-result` の再表示も同じ値で判定（旧: `limit !== 'once'` の固定判定は廃止）
+- **あなたが当選した一覧**: `GET /api/lotteries/{id}/my-entries?id_token=`（ID トークン検証）が本人の当選（賞品付きの drawn / redeemed、新しい順）を `LotteryDrawResponse[]` で返す（`getUserWinResults()`）。フォームは LIFF 認証後に取得し、賞品一覧の上のバーと結果画面のボタン「あなたが当選した一覧（N件）」からモーダル（`#winsModal`）で表示。タップで `showResult(win, { existing: true, fromList: true })` により引換コード / QR を再表示。複数回抽選で 2 回目に当選しても 1 回目の内容を確認できる
 - お客様自身の「使用済みにする」: 当選画面のボタン → 確認ダイアログ → `PATCH /api/lotteries/{id}/my-result` に `{ redeem: true, entry_id }`（ID トークン検証。本人の当選で未引換・期限内のみ）→ `selfRedeemEntry()` が `redeemed` + 備考「本人操作」で更新。`presentation.allow_self_redeem`（既定 true）で店舗が無効化できる
 - 管理 API は `src/lib/store-access.ts` の `authorizeStoreAccess()` で保護（local はスキップ）。ローカルデータは `data/lottery_forms.json` / `data/lottery_entries.json`
 - 静的 HTML: `src/lib/static-generator-lottery.ts` の `StaticLotteryGenerator.generateHTML(form, 'production' | 'preview')`。演出はスクラッチ / ガチャ / シンプル。埋め込み JS はバッククォート不使用、設定 JSON は `\u003c` エスケープで埋め込む

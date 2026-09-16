@@ -10,6 +10,7 @@ import type {
   LotteryEntry,
   LotteryEntryEffectiveStatus,
   LotteryPrize,
+  LotteryPrizeStockStatus,
 } from '@/types/lottery';
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
@@ -261,6 +262,38 @@ export function getEntryLimitWindow(
     default:
       return { window_start: null, max_entries: 1 };
   }
+}
+
+/**
+ * このユーザーがあと何回参加できるか。履歴（cancelled は数えない）を回数制限の対象期間で数えて上限から引く。
+ * 制限なしのときは null
+ */
+export function computeRemainingEntries(
+  config: Pick<LotteryConfig, 'lottery_type' | 'entry_rules'>,
+  entries: Array<Pick<LotteryEntry, 'entered_at' | 'status'>>,
+  now: Date
+): number | null {
+  const window = getEntryLimitWindow(config, now);
+  if (window.max_entries === null) return null;
+  const used = entries.filter((e) => {
+    if (e.status === 'cancelled') return false;
+    if (!window.window_start) return true;
+    const t = new Date(e.entered_at);
+    return !Number.isNaN(t.getTime()) && t >= window.window_start;
+  }).length;
+  return Math.max(0, window.max_entries - used);
+}
+
+/** 賞品ごとの在庫状況（設定在庫 − 発行済み）。無制限は remaining = null */
+export function computePrizeStockStatus(
+  prizes: Array<Pick<LotteryPrize, 'id' | 'stock'>>,
+  issuedCounts: Record<string, number>
+): LotteryPrizeStockStatus[] {
+  return prizes.map((p) => {
+    const issued = issuedCounts[p.id] ?? 0;
+    const stock = typeof p.stock === 'number' && Number.isFinite(p.stock) ? p.stock : null;
+    return { id: p.id, stock, issued, remaining: stock === null ? null : Math.max(0, stock - issued) };
+  });
 }
 
 export function getEntryLimitMessage(limit: LotteryConfig['entry_rules']['limit'], lotteryType: LotteryConfig['lottery_type']): string {

@@ -482,7 +482,9 @@ export async function countPrizeEntries(formId: string): Promise<Record<string, 
 /** 同一ユーザーの履歴（新しい順。cancelled は除く） */
 export async function listUserEntries(formId: string, lineUserId: string): Promise<LotteryEntry[]> {
   if (isLocal()) {
-    return (await listEntriesForForm(formId)).filter((e) => e.line_user_id === lineUserId && e.status !== 'cancelled');
+    return (await listEntriesForForm(formId))
+      .filter((e) => e.line_user_id === lineUserId && e.status !== 'cancelled')
+      .sort((a, b) => (a.entered_at < b.entered_at ? 1 : a.entered_at > b.entered_at ? -1 : 0));
   }
   const client = requireAdminClient();
   const { data, error } = await client

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import type { LotteryPrize, LotteryType } from '@/types/lottery';
+import type { LotteryPrize, LotteryPrizeStockStatus, LotteryType } from '@/types/lottery';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,6 +19,8 @@ interface LotteryPrizeEditorProps {
   onConsolationChange: (prize: LotteryPrize | undefined) => void;
   /** 後日抽選で抽選実行後は賞品を変更できない */
   locked?: boolean;
+  /** 賞品 ID → 現在の在庫状況（GET /api/lotteries/[id]/stock）。未取得なら表示しない */
+  stockStatus?: Record<string, LotteryPrizeStockStatus>;
 }
 
 const RANK_PRESETS = [
@@ -48,6 +50,7 @@ export default function LotteryPrizeEditor({
   onChange,
   onConsolationChange,
   locked = false,
+  stockStatus,
 }: LotteryPrizeEditorProps) {
   const isInstant = lotteryType === 'instant';
   const errors = validatePrizes({ lottery_type: lotteryType, prizes, consolation_prize: consolationPrize });
@@ -120,6 +123,21 @@ export default function LotteryPrizeEditor({
           placeholder={isInstant ? '無制限' : '例：3'}
           disabled={locked}
         />
+        {isInstant && stockStatus && stockStatus[prize.id] && (() => {
+          const st = stockStatus[prize.id];
+          // 入力中の値で残りを計算（保存前でも「この在庫にすると残り N」が分かる）
+          const stock = typeof prize.stock === 'number' && Number.isFinite(prize.stock) ? prize.stock : null;
+          const remaining = stock === null ? null : Math.max(0, stock - st.issued);
+          return (
+            <p className="text-xs text-muted-foreground" data-slot="prize-stock-status">
+              現在の残り：
+              <strong className={remaining === 0 ? 'text-destructive' : 'text-foreground'}>
+                {remaining === null ? '無制限' : `${remaining}`}
+              </strong>
+              {`（当選 ${st.issued} 件）`}
+            </p>
+          );
+        })()}
       </div>
       <div className="space-y-1.5">
         <Label>有効期限（当選日から N 日。空 = 無期限）</Label>

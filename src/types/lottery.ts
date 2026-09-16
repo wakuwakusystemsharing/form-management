@@ -177,4 +177,14 @@ export interface LotteryDrawResponse {
   second_message: { enabled: boolean; text: string } | null;
   /** 回数制限などで新規に引けず、前回の結果を返した場合 true */
   is_existing: boolean;
+  /** このユーザーがあと何回抽選できるか（null = 制限なし / 不明）。0 なら「再度抽選する」を出さない */
+  remaining_entries?: number | null;
+}
+
+/** 賞品ごとの在庫状況（GET /api/lotteries/[id]/stock） */
+export interface LotteryPrizeStockStatus {
+  id: string;
+  stock: number | null;      // 設定上の在庫（null = 無制限）
+  issued: number;            // 発行済み（cancelled を除く当選数）
+  remaining: number | null;  // stock - issued（0 以上）。無制限は null
 }
