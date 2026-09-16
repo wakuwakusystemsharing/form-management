@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { findLatestUserEntry, getLotteryForm, updateLotteryEntry } from '@/lib/lottery-repository';
-import { getStoreForLottery, resolveLineUser, selfRedeemEntry, toDrawResponse } from '@/lib/lottery-service';
+import { getLatestUserResult, getStoreForLottery, resolveLineUser, selfRedeemEntry } from '@/lib/lottery-service';
 
 /**
  * 同一 LINE ユーザーの直近の抽選結果（再訪時の再表示用。公開 API・ID トークン検証あり）
@@ -36,7 +36,8 @@ export async function GET(
     const r = await resolve(request, id, body);
     if ('error' in r) return r.error;
     if (!r.entry) return NextResponse.json({ result: null });
-    return NextResponse.json({ result: toDrawResponse(r.form, r.entry, r.store.name, true) });
+    const result = await getLatestUserResult(r.form, r.store, r.user.userId);
+    return NextResponse.json({ result });
   } catch (error) {
     console.error('[API] Lottery my-result error:', error);
     return NextResponse.json({ error: '抽選結果の取得に失敗しました' }, { status: 500 });

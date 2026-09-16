@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeExpiresAt,
+  computePrizeStockStatus,
+  computeRemainingEntries,
   drawDeferredWinners,
   endOfDayJst,
   formatDateJst,
@@ -344,5 +346,46 @@ describe('drawDeferredWinners', () => {
     const a = drawDeferredWinners(deferredPrizes, ['e1', 'e2', 'e3'], makeRng([0, 0, 0]));
     const b = drawDeferredWinners(deferredPrizes, ['e1', 'e2', 'e3'], makeRng([0, 0, 0]));
     expect(a).toEqual(b);
+  });
+});
+
+describe('computeRemainingEntries（残り参加回数）', () => {
+  const now = new Date('2026-09-10T03:00:00Z'); // 12:00 JST
+  const entry = (enteredAt: string, status = 'drawn') => ({ entered_at: enteredAt, status: status as 'drawn' | 'cancelled' });
+
+  it('期間中 N 回: 上限 − 参加数（cancelled は数えない）。0 未満にはならない', () => {
+    const config = { lottery_type: 'instant' as const, entry_rules: { limit: 'period_n' as const, period_max: 3, require_friend: false, when_sold_out: 'lose' as const, pre_questions: [] } };
+    expect(computeRemainingEntries(config, [], now)).toBe(3);
+    expect(computeRemainingEntries(config, [entry('2026-09-01T00:00:00Z')], now)).toBe(2);
+    expect(computeRemainingEntries(config, [entry('2026-09-01T00:00:00Z'), entry('2026-09-02T00:00:00Z', 'cancelled')], now)).toBe(2);
+    expect(computeRemainingEntries(config, [entry('a'), entry('b'), entry('c'), entry('d')].map((e, i) => entry(`2026-09-0${i + 1}T00:00:00Z`)), now)).toBe(0);
+  });
+
+  it('1 日 1 回: 今日（JST）の参加だけを数える', () => {
+    const config = { lottery_type: 'instant' as const, entry_rules: { limit: 'daily' as const, require_friend: false, when_sold_out: 'lose' as const, pre_questions: [] } };
+    expect(computeRemainingEntries(config, [entry('2026-09-09T10:00:00Z')], now)).toBe(1); // 前日 19:00 JST
+    expect(computeRemainingEntries(config, [entry('2026-09-09T20:00:00Z')], now)).toBe(0); // 当日 05:00 JST
+  });
+
+  it('1 回のみ / 後日抽選は 1 回で 0', () => {
+    const once = { lottery_type: 'instant' as const, entry_rules: { limit: 'once' as const, require_friend: false, when_sold_out: 'lose' as const, pre_questions: [] } };
+    expect(computeRemainingEntries(once, [], now)).toBe(1);
+    expect(computeRemainingEntries(once, [entry('2026-01-01T00:00:00Z')], now)).toBe(0);
+    const deferred = { ...once, lottery_type: 'deferred' as const, entry_rules: { ...once.entry_rules, limit: 'period_n' as const, period_max: 5 } };
+    expect(computeRemainingEntries(deferred, [entry('2026-01-01T00:00:00Z', 'entered' as never)], now)).toBe(0);
+  });
+});
+
+describe('computePrizeStockStatus（在庫 − 発行済み）', () => {
+  it('無制限は remaining null、在庫ありは stock − issued（0 以上）', () => {
+    expect(computePrizeStockStatus([
+      { id: 'a', stock: 50 },
+      { id: 'b', stock: null },
+      { id: 'c', stock: 2 },
+    ], { a: 12, c: 5 })).toEqual([
+      { id: 'a', stock: 50, issued: 12, remaining: 38 },
+      { id: 'b', stock: null, issued: 0, remaining: null },
+      { id: 'c', stock: 2, issued: 5, remaining: 0 },
+    ]);
   });
 });

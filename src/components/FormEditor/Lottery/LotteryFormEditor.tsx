@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import type { LotteryConfig, LotteryForm } from '@/types/lottery';
+import React, { useEffect, useState } from 'react';
+import type { LotteryConfig, LotteryForm, LotteryPrizeStockStatus } from '@/types/lottery';
 import type { SurveyQuestion } from '@/types/survey';
 import SurveyQuestionEditor from '../Survey/SurveyQuestionEditor';
 import LotteryPrizeEditor from './LotteryPrizeEditor';
@@ -38,6 +38,22 @@ function localInputToIso(value: string): string | undefined {
 
 export default function LotteryFormEditor({ form, onUpdate, userRole = 'service_admin' }: LotteryFormEditorProps) {
   const [activeTab, setActiveTab] = useState<TabId>('basic');
+  // 賞品ごとの現在の在庫状況（当選数を差し引いた残り）。保存後にも取り直す
+  const [stockStatus, setStockStatus] = useState<Record<string, LotteryPrizeStockStatus> | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    if (!form.id) return undefined;
+    fetch(`/api/lotteries/${form.id}/stock`, { credentials: 'include', cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: { prizes?: LotteryPrizeStockStatus[] } | null) => {
+        if (cancelled || !json || !Array.isArray(json.prizes)) return;
+        const map: Record<string, LotteryPrizeStockStatus> = {};
+        json.prizes.forEach((p) => { map[p.id] = p; });
+        setStockStatus(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [form.id, form.updated_at]);
   const config = form.config;
   const isDeferred = config.lottery_type === 'deferred';
   const prizesLocked = isDeferred && form.deferred_draw_status !== 'accepting';
@@ -186,7 +202,13 @@ export default function LotteryFormEditor({ form, onUpdate, userRole = 'service_
               onUpdate({ ...form, config: next });
             }}
             locked={prizesLocked}
+            stockStatus={stockStatus}
           />
+          {config.lottery_type === 'instant' && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              在庫数を変更して「更新」すると、公開中の抽選フォームの「残り N」もすぐに新しい在庫で表示されます（フォームは開くたびに最新の在庫を取得します）。
+            </p>
+          )}
         </TabsContent>
 
         {/* 参加条件 */}

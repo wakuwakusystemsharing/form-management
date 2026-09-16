@@ -185,3 +185,88 @@ describe('lottery-qr', () => {
     expect(extractQrToken('')).toBeNull();
   });
 });
+
+describe('StaticLotteryGenerator: 在庫の最新化と当選一覧', () => {
+  it('在庫 API・当選一覧 API を呼ぶ JS と、当選一覧バー / モーダル / 再度抽選ボタンを含む', () => {
+    const html = gen.generateHTML(makeForm({ presentation: { show_stock: true }, entry_rules: { limit: 'period_n', period_max: 3, require_friend: false, when_sold_out: 'lose', pre_questions: [] } }), 'production');
+    expect(html).toContain("'/stock'");
+    expect(html).toContain("'/my-entries?id_token='");
+    expect(html).toContain('id="myWinsBar"');
+    expect(html).toContain('id="winsModal"');
+    expect(html).toContain('再度抽選する');
+    expect(html).toContain('あなたが当選した一覧');
+    expect(html).toContain('function refreshStock()');
+    expect(html).toContain('function loadMyWins()');
+    expect(html).toContain('"period_max":3');
+    // 「残り N」はデプロイ時の値を初期表示し、data-prize-stock で後から差し替える
+    expect(html).toContain('data-prize-stock="a" data-stock="3">残り3</span>');
+    // 再度抽選の判定はサーバーの remaining_entries を使う（旧: limit !== 'once' の固定判定は残さない）
+    expect(html).toContain('result.remaining_entries');
+    expect(html).not.toContain("FORM_CONFIG.entry_rules.limit !== 'once';");
+  });
+});
+
+describe('StaticLotteryGenerator: 埋め込み JS の動作（JSDOM）', () => {
+  async function loadPreview(config: Record<string, unknown> = {}) {
+    const { JSDOM, VirtualConsole } = await import('jsdom');
+    const html = gen.generateHTML(makeForm({ presentation: { show_stock: true }, ...config }), 'preview');
+    const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole: new VirtualConsole(), url: 'https://example.com/' });
+    await new Promise((r) => setTimeout(r, 30));
+    return dom.window as unknown as Window & Record<string, any>;
+  }
+  const win = (id: string, remaining: number, extra: Record<string, unknown> = {}) => ({
+    entry: { id, status: 'drawn', is_win: true, is_consolation: false, prize_id: 'a', prize_name: 'A賞', redeem_code: 'ABC234', qr_token: null, expires_at: null, entered_at: '2026-09-10T03:00:00Z', redeemed_at: null, ...extra },
+    is_expired: false, prize: null, message_text: 'x', second_message: null, is_existing: false, remaining_entries: remaining,
+  });
+
+  it('applyStock が「残り N」を最新の残数に差し替える（在庫なしは赤字）', async () => {
+    const w = await loadPreview();
+    const el = () => w.document.querySelector('.prize-stock[data-prize-stock="a"]') as HTMLElement;
+    expect(el().textContent).toBe('残り3');
+    w.applyStock({ id: 'a', stock: 60, issued: 22, remaining: 38 });
+    expect(el().textContent).toBe('残り38');
+    w.applyStock({ id: 'a', stock: 60, issued: 60, remaining: 0 });
+    expect(el().textContent).toBe('在庫なし');
+    expect(el().classList.contains('sold-out')).toBe(true);
+  });
+
+  it('当選後: 残り回数が 1 以上なら「再度抽選する」、当選があれば「あなたが当選した一覧」を表示', async () => {
+    const w = await loadPreview({ entry_rules: { limit: 'period_n', period_max: 3, require_friend: false, when_sold_out: 'lose', pre_questions: [] } });
+    w.state.wins = [win('e1', 2)];
+    w.showResult(win('e2', 2), { existing: false });
+    const panel = w.document.getElementById('resultPanel') as HTMLElement;
+    expect(panel.textContent).toContain('LINE に結果を送る');
+    expect(panel.textContent).toContain('再度抽選する');
+    // 今回の当選も一覧に即反映される（過去 1 件 + 今回 = 2 件）
+    expect(panel.textContent).toContain('あなたが当選した一覧（2件）');
+    // 一覧モーダル
+    w.openWinsList();
+    const list = w.document.getElementById('winsList') as HTMLElement;
+    expect(list.querySelectorAll('.wins-item').length).toBe(2);
+    expect(list.textContent).toContain('A賞');
+    expect(list.textContent).toContain('ABC234');
+    expect((w.document.getElementById('winsModal') as HTMLElement).classList.contains('hidden')).toBe(false);
+    w.closeWinsList();
+    expect((w.document.getElementById('winsModal') as HTMLElement).classList.contains('hidden')).toBe(true);
+  });
+
+  it('残り回数 0 のときは「再度抽選する」を出さない', async () => {
+    const w = await loadPreview();
+    w.state.wins = [];
+    w.showResult(win('e1', 0), { existing: false });
+    const panel = w.document.getElementById('resultPanel') as HTMLElement;
+    expect(panel.textContent).toContain('LINE に結果を送る');
+    expect(panel.textContent).not.toContain('再度抽選する');
+    // 初めての当選でも一覧ボタンは出る（今回の当選 1 件）
+    expect(panel.textContent).toContain('あなたが当選した一覧（1件）');
+  });
+
+  it('はずれのときは一覧ボタンを出さない（当選が無い場合）', async () => {
+    const w = await loadPreview();
+    w.state.wins = [];
+    w.showResult({ ...win('e1', 0), entry: { ...win('e1', 0).entry, status: 'lost', is_win: false, prize_id: null, prize_name: null, redeem_code: null } }, { existing: false });
+    const panel = w.document.getElementById('resultPanel') as HTMLElement;
+    expect(panel.textContent).not.toContain('あなたが当選した一覧');
+    expect((w.document.getElementById('myWinsBar') as HTMLElement).classList.contains('hidden')).toBe(true);
+  });
+});
