@@ -145,14 +145,16 @@ export default function PrivacyPage() {
             <li>
               リクエストするスコープ:
               <ul className="list-disc pl-5 space-y-1 mt-1">
-                <li><code>https://www.googleapis.com/auth/calendar</code></li>
-                <li><code>https://www.googleapis.com/auth/calendar.events</code></li>
+                <li><code>https://www.googleapis.com/auth/calendar.events</code>（予約イベントの作成・変更・削除および空き時間の確認）</li>
+                <li><code>https://www.googleapis.com/auth/calendar.calendarlist.readonly</code>（予約反映先カレンダーの選択。読み取り専用）</li>
+                <li><code>https://www.googleapis.com/auth/calendar.events.freebusy</code>（スタッフカレンダーの予定の有無の確認。予定の内容は取得しません）</li>
               </ul>
             </li>
             <li>取得するデータの種類:
               <ul className="list-disc pl-5 space-y-1 mt-1">
                 <li>連携アカウントが所有・閲覧できる Google カレンダーの一覧（カレンダー ID、名称、アクセス権限）</li>
                 <li>連携対象として選択されたカレンダー内のイベント情報（タイトル、開始・終了時刻、所要時間。出席者リストは取得しません）</li>
+                <li>スタッフ用カレンダーの予定が入っている時間帯（free/busy 情報。予定のタイトルや内容は取得しません）</li>
                 <li>OAuth リフレッシュトークン（Google API への継続アクセスを維持するため）</li>
               </ul>
             </li>
@@ -165,9 +167,10 @@ export default function PrivacyPage() {
           <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
             <li><code>calendarList.list</code>: 店舗管理者に対し、書き込み可能なカレンダーの一覧を提示し、予約反映先カレンダーを選択していただくため</li>
             <li><code>events.insert</code>: 顧客から入った予約をカレンダー上のイベントとして書き込むため</li>
-            <li><code>events.update</code>: 予約内容の変更時にイベントを更新するため</li>
+            <li><code>events.patch</code>: 予約内容の変更時にイベントを更新するため</li>
             <li><code>events.delete</code>: 予約キャンセル時にイベントを削除するため</li>
             <li><code>events.list</code>: 空き時間を計算し、二重予約を防止するため</li>
+            <li><code>freebusy.query</code>: スタッフ指名・担当割当の予約確定前に、スタッフ用カレンダーの予定の有無を確認し、二重予約を防止するため</li>
             <li>リフレッシュトークンは、上記 API 呼び出しのためのアクセストークン取得にのみ利用します</li>
           </ul>
           <p className="text-sm text-muted-foreground mt-2">

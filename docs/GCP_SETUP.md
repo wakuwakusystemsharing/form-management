@@ -73,11 +73,14 @@ GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","project_id":"...","privat
 ### 4-2. スコープを追加
 
 1. 「スコープを追加または削除」をクリック
-2. 以下のスコープを追加:
-   - `https://www.googleapis.com/auth/calendar`
+2. 以下の **3 つだけ** を追加（これ以外は登録しない）:
    - `https://www.googleapis.com/auth/calendar.events`
-   - `https://www.googleapis.com/auth/calendar.acls`
+   - `https://www.googleapis.com/auth/calendar.calendarlist.readonly`
+   - `https://www.googleapis.com/auth/calendar.events.freebusy`
 3. 「更新」→「保存して次へ」
+
+> **重要:** Google の OAuth 審査（最小スコープ要件）では、ここに登録したスコープとアプリが同意画面で要求するスコープ（`src/lib/google-oauth-scopes.ts` の `GOOGLE_CALENDAR_OAUTH_SCOPES`）が完全一致している必要があります。どちらかを変更したら必ず両方とプライバシーポリシー（`/privacy` の 10.1）を揃えてください。
+> `calendar`（フルアクセス）と `calendar.acls` は不要です。カレンダー作成・共有はサービスアカウントで行い、サービスアカウントは同意画面を経由しないためです。
 
 ### 4-3. テストユーザーを追加（公開前）
 
