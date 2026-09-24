@@ -4,11 +4,7 @@ import { getCurrentUser } from '@/lib/auth-helper';
 import { createAuthenticatedClient, createAdminClient } from '@/lib/supabase';
 import { checkStoreAccess } from '@/lib/supabase';
 import { shouldSkipAuth } from '@/lib/env';
-
-const SCOPES = [
-  'https://www.googleapis.com/auth/calendar',
-  'https://www.googleapis.com/auth/calendar.events',
-];
+import { GOOGLE_CALENDAR_OAUTH_SCOPES } from '@/lib/google-oauth-scopes';
 
 async function getOAuthCredentials(): Promise<{ clientId: string; clientSecret: string } | null> {
   const fromEnv =
@@ -95,7 +91,7 @@ export async function GET(request: NextRequest) {
   const url = oauth2.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
-    scope: SCOPES,
+    scope: GOOGLE_CALENDAR_OAUTH_SCOPES,
     state,
   });
 

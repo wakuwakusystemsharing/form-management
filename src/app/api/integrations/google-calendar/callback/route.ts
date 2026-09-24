@@ -3,11 +3,6 @@ import { google } from 'googleapis';
 import { createAdminClient } from '@/lib/supabase';
 import { encryptRefreshToken } from '@/lib/google-calendar-token';
 
-const SCOPES = [
-  'https://www.googleapis.com/auth/calendar',
-  'https://www.googleapis.com/auth/calendar.events',
-];
-
 async function getOAuthCredentials(): Promise<{ clientId: string; clientSecret: string } | null> {
   const fromEnv =
     process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET
