@@ -565,6 +565,13 @@ export async function GET(req, { params }) {
 **メニュー (`MenuItem` / `SubMenuItem` / `MenuOption`):**
 - `hide_price` / `hide_duration` - 料金・所要時間を非表示にするフラグ（任意）
 
+**アンケートの質問型「第三希望日時選択」（`SurveyQuestionType = 'multiple_dates'`）:**
+- 回答タイプの「日時選択」の下に追加。予約フォームの日時選択モード「第三希望日時選択」と**同じ設定・同じ選択 UI**（第一〜第三希望の日付 + 時間のプルダウン、曜日別受付時間 / カスタム / 追加の時間帯 / 祝日 / 臨時営業日 / ✕にする時間帯 / 追加で表示する分 / 選択可能日数 / 必須選択 / 非表示設定）
+- 設定は `SurveyQuestion.multiple_dates`（型 `MultipleDatesSettings` = `calendar_settings.multiple_dates_settings` と同じ。`src/types/form.ts`）。既定値・正規化は `src/lib/multiple-dates-settings.ts`（`createDefaultMultipleDatesSettings` / `normalizeMultipleDatesSettings` / `getVisibleChoices` / `getRequiredChoices`）。質問の「必須項目にする」が ON のときだけ `required_choices` を検証（第一希望は常に必須）、OFF なら全て任意
+- 回答は 1 つの文字列 `第一希望: 2026年10月01日（木） 10:00 / 第二希望: …`（`responses[q.title]`）。復元機能 ON なら選択した日付・時間を端末に保存し再訪時に復元
+- **設定 UI は共通コンポーネント** `src/components/FormEditor/Reservation/MultipleDatesSettingsEditor.tsx`（`InfoTooltip` / `ExtraMinutesPicker` / `buildTimeList` もここから export）。予約フォームの `BusinessRulesEditor` とアンケートの `SurveyQuestionEditor` が同じものを使う。抽選フォームの事前質問では `allowMultipleDates={false}` で出さない
+- **生成 HTML の共通ロジック** `src/lib/multiple-dates-runtime-js.ts`（`HOLIDAY_RUNTIME_JS` = 祝日判定、`MULTIPLE_DATES_RUNTIME_JS` = `mdGetWeekdayHours` / `mdIsDateSelectable` / `mdPopulateDateOptions` / `mdPopulateTimeOptions` / `mdInsertExtraSlots` / `mdGenerateTimeSlots` / `mdFormatDateTimeJa`）。予約フォーム（`BookingForm` の同名メソッドは薄いラッパー）とアンケート（`initMultipleDatesQuestions` / `collectMultipleDatesAnswer`）の両方が埋め込む。日付判定を直すときはこのファイルだけを直す
+
 **アンケートの選択肢タグ（`SurveyQuestionOption.tags`）:**
 - 質問項目の各選択肢の「タグ」ボタン（追加質問の左）で、その選択肢を選んで送信した回答者に付ける顧客タグを設定（`TagInput`。店舗で使用中のタグを候補表示）
 - `POST /api/surveys/submit` が回答保存後に `applySurveyTagsToCustomer()`（`src/lib/survey-tags-apply.ts`）を呼び、`line_user_id` で店舗内の顧客を検索してタグをマージ（顧客が無ければ何もしない。失敗しても送信は成功扱い）。回答 → タグの集計は `src/lib/survey-tags.ts` の `collectSurveyOptionTags()`（radio / select はラベル一致、checkbox は ", " 区切り）
