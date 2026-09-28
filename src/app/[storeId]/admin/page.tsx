@@ -5,6 +5,8 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { getSupabaseClient } from '@/lib/supabase';
 import ReservationInfoRows from '@/components/ReservationInfoRows';
+import StoreAdminGuide, { GuideHint } from '@/components/StoreAdminGuide';
+import { STORE_ADMIN_HINTS } from '@/lib/store-admin-guide';
 import type { AdminReservationInput } from '@/lib/reservation-detail-items';
 import { User } from '@supabase/supabase-js';
 import { Store } from '@/types/store';
@@ -610,36 +612,37 @@ export default function StoreAdminPage() {
       : stats.recentReservations;
     return (
           <div className="space-y-5 p-4 lg:p-6">
+            <StoreAdminGuide tab="dashboard" />
             {/* 統計カード */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <Card className="shadow-sm">
                 <CardContent className="p-4">
-                  <p className="text-xs font-medium text-muted-foreground mb-1">フォーム数</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-1" title="作成済みの予約フォームの数">フォーム数</p>
                   <div className="text-2xl font-bold text-[rgb(55,114,58)]">{stats.total}</div>
                 </CardContent>
               </Card>
               <Card className="shadow-sm">
                 <CardContent className="p-4">
-                  <p className="text-xs font-medium text-muted-foreground mb-1">公開中</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-1" title="お客様が実際に使える状態の予約フォームの数">公開中</p>
                   <div className="text-2xl font-bold text-[rgb(55,114,58)]">{stats.active}</div>
                 </CardContent>
               </Card>
               <Card className="shadow-sm">
                 <CardContent className="p-4">
-                  <p className="text-xs font-medium text-muted-foreground mb-1">アンケート</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-1" title="作成済みのアンケートフォームの数">アンケート</p>
                   <div className="text-2xl font-bold text-[rgb(55,114,58)]">{stats.surveys}</div>
                 </CardContent>
               </Card>
               <Card className="shadow-sm">
                 <CardContent className="p-4">
-                  <p className="text-xs font-medium text-muted-foreground mb-1">予約数</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-1" title="これまでに受け付けた予約の合計（キャンセルを除く）">予約数</p>
                   <div className="text-2xl font-bold text-[rgb(55,114,58)]">{stats.reservations}</div>
                 </CardContent>
               </Card>
               {lotteryForms.length > 0 && (
                 <Card className="shadow-sm">
                   <CardContent className="p-4">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">本日の抽選参加</p>
+                    <p className="text-xs font-medium text-muted-foreground mb-1" title="今日、抽選に参加したお客様の数">本日の抽選参加</p>
                     <div className="text-2xl font-bold text-[rgb(55,114,58)]">{lotteryTodayCount ?? '–'}</div>
                   </CardContent>
                 </Card>
@@ -657,6 +660,7 @@ export default function StoreAdminPage() {
                     </Button>
                   </a>
         </div>
+                <GuideHint text={STORE_ADMIN_HINTS.dashboardRecent} className="mt-2" />
               </CardHeader>
               <CardContent>
                 <div className="mb-3">
@@ -863,6 +867,7 @@ export default function StoreAdminPage() {
       case 'reservations':
         return (
           <div className="space-y-5 p-4 lg:p-6">
+            <StoreAdminGuide tab="reservations" />
             <Card className="shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle className="text-base">予約管理</CardTitle>
@@ -873,6 +878,7 @@ export default function StoreAdminPage() {
                 {adminOptions.reservation_forms && (
                 <div className="space-y-4">
                   <h3 className="text-lg font-semibold">フォーム管理</h3>
+                  <GuideHint text={STORE_ADMIN_HINTS.reservationForms} />
                   {filteredForms.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -1029,6 +1035,7 @@ export default function StoreAdminPage() {
                     </TabsContent>
 
                     <TabsContent value="list" className="space-y-6">
+                      <GuideHint text={STORE_ADMIN_HINTS.reservationList} />
                       <div className="mb-2">
                         <SearchBar
                           value={reservationSearchQuery}
@@ -1172,11 +1179,13 @@ export default function StoreAdminPage() {
               <h2 className="text-lg font-semibold">アンケート管理</h2>
               <p className="text-sm text-muted-foreground">アンケートフォームの編集・管理を行います</p>
             </div>
+            <StoreAdminGuide tab="surveys" />
             <div className="space-y-6">
               {/* フォーム管理セクション */}
               {adminOptions.survey_forms && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-muted-foreground">フォーム管理</h3>
+                <GuideHint text={STORE_ADMIN_HINTS.surveyForms} />
                   {surveyForms.filter(survey => {
                     if (!formSearchQuery) return true;
                     const query = formSearchQuery.toLowerCase();
@@ -1300,7 +1309,7 @@ export default function StoreAdminPage() {
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
                       <CardTitle className="text-base">回答一覧</CardTitle>
-                      <CardDescription>アンケートの回答を確認します</CardDescription>
+                      <CardDescription>{STORE_ADMIN_HINTS.surveyResponses}</CardDescription>
                         </div>
                         <Select 
                           value={selectedSurveyFormId || 'all'} 
@@ -1416,6 +1425,7 @@ export default function StoreAdminPage() {
             params.set('customersView', v);
             router.push(`/${storeId}/admin?tab=customers&${params.toString()}`);
           }} className="space-y-3 md:space-y-6">
+            <StoreAdminGuide tab="customers" />
             {/* 切替 + 件数を 1 行に（スマホ: 高さ 44px） */}
             <div className="flex items-center justify-between gap-3">
               <TabsList className="h-11 md:h-10 flex-1 md:flex-none grid grid-cols-2 md:inline-flex">
@@ -1474,6 +1484,7 @@ export default function StoreAdminPage() {
               <h2 className="text-lg font-semibold">抽選管理</h2>
               <p className="text-sm text-muted-foreground">抽選フォームの編集と、抽選履歴・当選の引換を行います</p>
             </div>
+            <StoreAdminGuide tab="lotteries" />
             <div className="grid grid-cols-3 gap-3">
               {(() => {
                 const totals = lotteryForms.reduce(
@@ -1484,9 +1495,9 @@ export default function StoreAdminPage() {
                 const redeemRate = totals.wins > 0 ? Math.round((totals.redeemed / totals.wins) * 100) : 0;
                 return (
                   <>
-                    <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground mb-1">参加数</p><div className="text-2xl font-bold text-[rgb(55,114,58)]">{totals.entries}</div></CardContent></Card>
-                    <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground mb-1">当選数（当選率）</p><div className="text-2xl font-bold text-[rgb(55,114,58)]">{totals.wins}<span className="text-sm font-normal text-muted-foreground ml-1">{winRate}%</span></div></CardContent></Card>
-                    <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground mb-1">引換数（引換率）</p><div className="text-2xl font-bold text-[rgb(55,114,58)]">{totals.redeemed}<span className="text-sm font-normal text-muted-foreground ml-1">{redeemRate}%</span></div></CardContent></Card>
+                    <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground mb-1" title="すべての抽選フォームの参加（応募）数の合計">参加数</p><div className="text-2xl font-bold text-[rgb(55,114,58)]">{totals.entries}</div></CardContent></Card>
+                    <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground mb-1" title="当選した数と、参加数に対する割合">当選数（当選率）</p><div className="text-2xl font-bold text-[rgb(55,114,58)]">{totals.wins}<span className="text-sm font-normal text-muted-foreground ml-1">{winRate}%</span></div></CardContent></Card>
+                    <Card className="shadow-sm"><CardContent className="p-4"><p className="text-xs font-medium text-muted-foreground mb-1" title="店頭で引き換え済みの数と、当選数に対する割合">引換数（引換率）</p><div className="text-2xl font-bold text-[rgb(55,114,58)]">{totals.redeemed}<span className="text-sm font-normal text-muted-foreground ml-1">{redeemRate}%</span></div></CardContent></Card>
                   </>
                 );
               })()}
@@ -1494,6 +1505,7 @@ export default function StoreAdminPage() {
             {adminOptions.lottery_forms && (
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-muted-foreground">フォーム管理</h3>
+              <GuideHint text={STORE_ADMIN_HINTS.lotteryForms} />
               <LotteryFormList
                 storeId={storeId}
                 forms={lotteryForms}
@@ -1507,7 +1519,8 @@ export default function StoreAdminPage() {
             {lotteryForms.filter((f) => f.config.lottery_type === 'deferred').map((f) => (
               <LotteryDeferredPanel key={f.id} storeId={storeId} form={f} onChanged={() => setLotteryRefreshKey((k) => k + 1)} />
             ))}
-            <div className="border-t pt-5">
+            <div className="border-t pt-5 space-y-3">
+              <GuideHint text={STORE_ADMIN_HINTS.lotteryEntries} />
               <LotteryEntryList
                 storeId={storeId}
                 forms={lotteryForms}
@@ -1521,11 +1534,12 @@ export default function StoreAdminPage() {
       case 'settings':
         return (
           <div className="space-y-4 p-4 lg:p-6">
+            <StoreAdminGuide tab="settings" />
             <UiStyleSettings />
             <Card className="shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle className="text-base">店舗設定</CardTitle>
-                <CardDescription>店舗の基本情報を確認・編集します</CardDescription>
+                <CardDescription>店舗の基本情報を確認します。{STORE_ADMIN_HINTS.storeSettings}</CardDescription>
               </CardHeader>
               <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
