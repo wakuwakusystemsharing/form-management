@@ -1,6 +1,7 @@
-import { StaticDeploy } from './form';
+import { StaticDeploy, MultipleDatesSettings } from './form';
 
-export type SurveyQuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select';
+// multiple_dates = 第三希望日時選択（予約フォームの日時選択モードと同じ設定・同じ選択 UI。第一〜第三希望の日付 + 時間）
+export type SurveyQuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select' | 'multiple_dates';
 
 /** 選択肢ごとの追加質問で使える回答タイプ */
 export type SurveyFollowUpType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'select';
@@ -35,6 +36,9 @@ export interface SurveyQuestion {
   placeholder?: string;
   allow_other?: boolean; // radio/checkbox/select: 選択肢の最後に「その他」+ 理由入力欄を表示
   restore_enabled?: boolean; // 回答内容を端末の localStorage に保存し、再訪時に復元する（他ユーザーには共有されない）
+  // type = 'multiple_dates' の設定（予約フォームの multiple_dates_settings と同じ形。未設定は既定値で補完）。
+  // required が true のときは required_choices（第一希望は常に必須）を検証する。false なら全て任意
+  multiple_dates?: MultipleDatesSettings;
 }
 
 /**

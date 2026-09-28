@@ -4,6 +4,7 @@
  */
 
 import { computeAccentColor, hexToRgb } from './color-utils';
+import { HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS } from './multiple-dates-runtime-js';
 import { FormConfig } from '@/types/form';
 
 export class StaticReservationGenerator {
@@ -252,71 +253,8 @@ const SUBMIT_LABEL = ${JSON.stringify(submitLabel)};
 // 公式 LINE（LINE アプリ内）以外のブラウザからの予約を制限する
 const LINE_ONLY = ${lineOnly ? 'true' : 'false'};
 
-// ========== 祝日判定ロジック（1980-2099年対応）==========
-function calcVernalEquinox(year) {
-    return Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
-}
-function calcAutumnalEquinox(year) {
-    return Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
-}
-function nthWeekday(year, month, n, dayOfWeek) {
-    const first = new Date(year, month - 1, 1);
-    const offset = (dayOfWeek - first.getDay() + 7) % 7;
-    return 1 + offset + (n - 1) * 7;
-}
-// 当日が「主祝日」かどうかを判定し type id を返す（祝日でなければ null）
-function getHolidayType(date) {
-    const y = date.getFullYear(), m = date.getMonth() + 1, d = date.getDate();
-    if (m === 1 && d === 1) return 'new_year';
-    if (m === 1 && d === nthWeekday(y, 1, 2, 1)) return 'coming_of_age';
-    if (m === 2 && d === 11) return 'national_foundation';
-    if (m === 2 && d === 23) return 'emperor_birthday';
-    if (m === 3 && d === calcVernalEquinox(y)) return 'vernal_equinox';
-    if (m === 4 && d === 29) return 'showa';
-    if (m === 5 && d === 3) return 'constitution';
-    if (m === 5 && d === 4) return 'greenery';
-    if (m === 5 && d === 5) return 'childrens';
-    if (m === 7 && d === nthWeekday(y, 7, 3, 1)) return 'marine';
-    if (m === 8 && d === 11) return 'mountain';
-    if (m === 9 && d === nthWeekday(y, 9, 3, 1)) return 'respect_for_aged';
-    if (m === 9 && d === calcAutumnalEquinox(y)) return 'autumnal_equinox';
-    if (m === 10 && d === nthWeekday(y, 10, 2, 1)) return 'sports';
-    if (m === 11 && d === 3) return 'culture';
-    if (m === 11 && d === 23) return 'labor_thanksgiving';
-    return null;
-}
-// 振替休日: 当日は祝日ではないが、前を遡って最初の日曜が主祝日であれば true
-// 当日と最初の日曜の間が「日曜でなく祝日でもない」と途中で false（連続でないとダメ）
-function isSubstituteHoliday(date) {
-    if (getHolidayType(date)) return false;
-    const cur = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    let safety = 0;
-    while (safety++ < 10) {
-        cur.setDate(cur.getDate() - 1);
-        if (cur.getDay() === 0) {
-            return !!getHolidayType(cur);
-        }
-        if (!getHolidayType(cur)) return false;
-    }
-    return false;
-}
-// 国民の休日: 当日が祝日でも日曜でもなく、前後とも「主祝日 or 振替」
-function isNationalDay(date) {
-    if (getHolidayType(date)) return false;
-    if (date.getDay() === 0) return false;
-    const yesterday = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
-    const tomorrow = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-    const yIsHoliday = !!getHolidayType(yesterday) || isSubstituteHoliday(yesterday);
-    const tIsHoliday = !!getHolidayType(tomorrow) || isSubstituteHoliday(tomorrow);
-    return yIsHoliday && tIsHoliday;
-}
-function getEffectiveHolidayType(date) {
-    const t = getHolidayType(date);
-    if (t) return t;
-    if (isSubstituteHoliday(date)) return 'substitute';
-    if (isNationalDay(date)) return 'national_day';
-    return null;
-}
+${HOLIDAY_RUNTIME_JS}
+${MULTIPLE_DATES_RUNTIME_JS}
 function formatDateTimeForDisplay(value) {
     // "2026-04-30T15:08[:00]" → "2026年04月30日 15:08"
     // "2026-04-30"            → "2026年04月30日"
@@ -331,12 +269,6 @@ function formatDateTimeForDisplay(value) {
 function oneLine(s) {
     return String(s == null ? '' : s).replace(/\\s*\\r?\\n\\s*/g, ' ').trim();
 }
-// ローカル時刻ベースで YYYY-MM-DD を生成（toISOString は UTC 変換で日付が前日にズレるため使わない）
-function formatLocalYmd(d) {
-    return d.getFullYear() + '-' +
-        String(d.getMonth() + 1).padStart(2, '0') + '-' +
-        String(d.getDate()).padStart(2, '0');
-}
 function shouldBlockAsHoliday(date) {
     if (!FORM_CONFIG.calendar_settings || !FORM_CONFIG.calendar_settings.holidays_as_closed) return false;
     const type = getEffectiveHolidayType(date);
@@ -346,15 +278,9 @@ function shouldBlockAsHoliday(date) {
 }
 // ========== 祝日判定ロジックここまで ==========
 
-// 臨時営業日: 設定リストから当日分（YYYY-MM-DD 一致）を返す。無ければ null
+// 臨時営業日: 設定リストから当日分（YYYY-MM-DD 一致）を返す。無ければ null（共通ロジックの別名）
 function findSpecialBusinessDay(list, date) {
-    if (!Array.isArray(list) || !date) return null;
-    const ymd = formatLocalYmd(date);
-    for (let i = 0; i < list.length; i++) {
-        const e = list[i];
-        if (e && typeof e === 'object' && e.date === ymd && typeof e.open === 'string' && typeof e.close === 'string') return e;
-    }
-    return null;
+    return mdFindSpecialBusinessDay(list, date);
 }
 
 class BookingForm {
@@ -3467,229 +3393,42 @@ class BookingForm {
         }
     }
 
+    // 第三希望日時モードのロジックは共通ランタイム（multiple-dates-runtime-js.ts）に集約。
+    // ここでは既存の呼び出し口（テスト・他メソッドから参照）を残し、予約フォーム固有の
+    // 予約受付開始日 / 開始時間 / 祝日を予約不可 の設定だけを渡す
     getWeekdayHours(settings, dayOfWeek, date) {
-        // 臨時営業日: 登録された日付は曜日・祝日設定より優先してこの時間で受付
-        const sp = date ? findSpecialBusinessDay(settings && settings.special_business_days, date) : null;
-        if (sp) {
-            return { open: sp.open, close: sp.close, closed: false, custom: false, custom_slots: [], extra_slots: [], special: true };
-        }
-        // 祝日の受付時間: 設定 ON かつ当日が祝日なら曜日設定より優先
-        // （「祝日を予約不可にする」が ON の場合は呼び出し元の shouldBlockAsHoliday が優先して除外する）
-        const hh = settings.holiday_hours;
-        if (date && hh && hh.enabled === true && getEffectiveHolidayType(date)) {
-            return {
-                open: hh.open || '09:00',
-                close: hh.close || '18:00',
-                closed: false,
-                custom: hh.custom === true,
-                custom_slots: Array.isArray(hh.custom_slots) ? hh.custom_slots : [],
-                extra_slots: Array.isArray(hh.extra_slots) ? hh.extra_slots : []
-            };
-        }
-        // weekday_hours がある場合はそちらを優先
-        if (settings.weekday_hours && settings.weekday_hours[String(dayOfWeek)]) {
-            const wh = settings.weekday_hours[String(dayOfWeek)];
-            return {
-                open: wh.open,
-                close: wh.close,
-                closed: wh.closed,
-                custom: wh.custom === true,
-                custom_slots: Array.isArray(wh.custom_slots) ? wh.custom_slots : [],
-                extra_slots: Array.isArray(wh.extra_slots) ? wh.extra_slots : []
-            };
-        }
-        // レガシー互換: exclude_weekdays + start_time/end_time
-        return {
-            open: settings.start_time || '09:00',
-            close: settings.end_time || '18:00',
-            closed: (settings.exclude_weekdays || []).includes(dayOfWeek),
-            custom: false,
-            custom_slots: [],
-            extra_slots: []
-        };
+        return mdGetWeekdayHours(settings, dayOfWeek, date);
     }
 
-    // 第三希望日時モードで日付を選択肢に出せるか: 定休曜日は ✕（祝日の受付時間 ON の祝日は受付）、
-    // 「祝日を予約不可にする」対象の祝日は ✕。臨時営業日はどちらにも優先して受付
     isMdDateSelectable(settings, date) {
-        const hours = this.getWeekdayHours(settings, date.getDay(), date);
-        if (hours.closed) return false;
-        if (hours.special) return true;
-        if (typeof shouldBlockAsHoliday === 'function' && shouldBlockAsHoliday(date)) return false;
-        return true;
+        return mdIsDateSelectable(settings, date, shouldBlockAsHoliday);
     }
 
     populateDateOptions(index, settings) {
-        const select = document.getElementById(\`date\${index}_day\`);
-        if (!select) return;
-
-        const today = new Date();
-
-        // デフォルトオプション
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = '日付を選択';
-        select.appendChild(defaultOption);
-
-        // 予約受付開始日（0 = 当日から）より前の日付は選択肢に含めない
-        for (let i = this.getMinAdvanceDays(); i < settings.date_range_days; i++) {
-            const date = new Date(today);
-            date.setDate(today.getDate() + i);
-
-            // 定休日・祝日チェック（臨時営業日は定休曜日・予約不可の祝日でも受付）
-            if (!this.isMdDateSelectable(settings, date)) {
-                continue;
-            }
-
-            const option = document.createElement('option');
-            option.value = formatLocalYmd(date);
-            option.textContent = date.toLocaleDateString('ja-JP', {
-                month: 'numeric',
-                day: 'numeric',
-                weekday: 'short'
-            });
-            select.appendChild(option);
-        }
+        mdPopulateDateOptions(document.getElementById('date' + index + '_day'), settings, {
+            minAdvanceDays: this.getMinAdvanceDays(),
+            isHolidayBlocked: shouldBlockAsHoliday
+        });
     }
 
     populateTimeOptions(index, settings, selectedDateStr) {
-        const select = document.getElementById(\`date\${index}_time\`);
-        if (!select) return;
-
-        // 既存オプションをクリア
-        select.innerHTML = '';
-
-        // デフォルトオプション
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = '時間を選択';
-        select.appendChild(defaultOption);
-
-        // 選択された日付の曜日に基づいて時間スロットを生成
-        let startTime = settings.start_time || '09:00';
-        let endTime = settings.end_time || '18:00';
-        let extraSlots = [];
-
-        if (selectedDateStr) {
-            const selectedDate = new Date(selectedDateStr + 'T00:00:00');
-            const dayOfWeek = selectedDate.getDay();
-            const hours = this.getWeekdayHours(settings, dayOfWeek, selectedDate);
-            startTime = hours.open;
-            endTime = hours.close;
-            extraSlots = hours.extra_slots || [];
-            // カスタム受付時間: 自由入力の時間帯テキストをそのまま選択肢にする
-            // （時間の解釈ができないため、✕時間帯・予約受付開始時間のフィルタは適用しない）
-            if (hours.custom && hours.custom_slots.length > 0) {
-                hours.custom_slots
-                    .map(t => String(t).trim())
-                    .filter(Boolean)
-                    .forEach(text => {
-                        const option = document.createElement('option');
-                        option.value = text;
-                        option.textContent = text;
-                        select.appendChild(option);
-                    });
-                return;
-            }
-        }
-
-        // 時間スロット生成
-        const timeSlots = this.generateTimeSlots(startTime, endTime, settings.time_interval, settings.extra_minutes);
-
-        // デフォルトで✕にする時間帯は選択肢から除外（"9:00" → "09:00" に正規化）
-        // 曜日指定がある時刻は選択日の曜日が対象のときのみ除外（指定なし = 全曜日除外の既存挙動）
-        const normalizeBlocked = (t) => { const m = /^([0-9]{1,2}):([0-9]{2})/.exec(t || ''); return m ? String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2] : ''; };
-        const blockedTimes = new Set((settings.blocked_times || [])
-            .map(normalizeBlocked)
-            .filter(Boolean));
-        const blockedWeekdaysMap = {};
-        Object.entries(settings.blocked_time_weekdays || {}).forEach(([t, days]) => {
-            const key = normalizeBlocked(t);
-            if (key && Array.isArray(days) && days.length > 0) blockedWeekdaysMap[key] = days;
-        });
-        const selectedDayOfWeek = selectedDateStr ? new Date(selectedDateStr + 'T00:00:00').getDay() : null;
-        const isBlockedForSelectedDay = (time) => {
-            if (!blockedTimes.has(time)) return false;
-            const days = blockedWeekdaysMap[time];
-            if (!days) return true;
-            // 日付未選択の段階では曜日が確定しないため、曜日指定のある時刻は除外しない
-            return selectedDayOfWeek !== null && days.indexOf(selectedDayOfWeek) !== -1;
-        };
-
-        // 予約受付開始時間: 現在時刻から N 時間後より前の時間は選択肢に出さない（0 = 制限なし）
-        const minAdvHoursRaw = this.config.calendar_settings?.min_advance_hours;
-        const minAdvThreshold = (typeof minAdvHoursRaw === 'number' && minAdvHoursRaw > 0)
-            ? Date.now() + minAdvHoursRaw * 3600000
-            : 0;
-
-        const visibleSlots = timeSlots.filter(time => {
-            if (isBlockedForSelectedDay(time)) return false;
-            if (minAdvThreshold && selectedDateStr) {
-                const slotMs = new Date(selectedDateStr + 'T' + time + ':00').getTime();
-                if (Number.isFinite(slotMs) && slotMs < minAdvThreshold) return false;
-            }
-            return true;
-        });
-        // 追加の時間帯（午前中 など）を指定位置に差し込む。'HH:MM' 指定はその時刻の直後
-        // （その時刻が✕などで消えている場合は、それより後の最初の時刻の前）
-        const finalSlots = this.insertExtraSlots(visibleSlots, timeSlots, extraSlots);
-        finalSlots.forEach(time => {
-            const option = document.createElement('option');
-            option.value = time;
-            option.textContent = time;
-            select.appendChild(option);
+        mdPopulateTimeOptions(document.getElementById('date' + index + '_time'), settings, selectedDateStr, {
+            minAdvanceHours: this.config.calendar_settings?.min_advance_hours
         });
     }
 
     insertExtraSlots(visibleSlots, allSlots, extraSlots) {
-        const result = visibleSlots.slice();
-        const labels = (extraSlots || [])
-            .map(s => ({ label: String((s && s.label) || '').trim(), after: String((s && s.after) || 'end') }))
-            .filter(s => s.label && result.indexOf(s.label) === -1);
-        // 先頭・末尾は順序を保って前後に付ける
-        labels.filter(s => s.after === 'start').forEach((s, i) => result.splice(i, 0, s.label));
-        labels.filter(s => s.after !== 'start' && s.after !== 'end').forEach(s => {
-            const idx = result.indexOf(s.after);
-            if (idx !== -1) { result.splice(idx + 1, 0, s.label); return; }
-            // 指定時刻が表示されていない: 指定時刻より後の最初の表示時刻の前に入れる（無ければ末尾）
-            const order = allSlots.indexOf(s.after);
-            let insertAt = result.length;
-            for (let i = 0; i < result.length; i++) {
-                const pos = allSlots.indexOf(result[i]);
-                if (pos !== -1 && (order === -1 ? result[i] > s.after : pos > order)) { insertAt = i; break; }
-            }
-            result.splice(insertAt, 0, s.label);
-        });
-        labels.filter(s => s.after === 'end').forEach(s => result.push(s.label));
-        return result;
+        return mdInsertExtraSlots(visibleSlots, allSlots, extraSlots);
     }
-    
-    // 「追加で表示する分」: 営業時間内の毎時 extraMinutes の分を時間間隔の行に加える（分単位の数値配列で受け取り、昇順・重複なしで返す）
+
     addExtraMinuteSlots(baseMinutes, startMin, endMin, extraMinutes) {
-        const set = new Set(baseMinutes);
-        const extras = Array.isArray(extraMinutes) ? extraMinutes.filter(n => Number.isInteger(n) && n >= 0 && n <= 59) : [];
-        if (extras.length > 0) {
-            for (let h = Math.floor(startMin / 60); h * 60 < endMin; h++) {
-                extras.forEach(mm => {
-                    const m = h * 60 + mm;
-                    if (m >= startMin && m < endMin) set.add(m);
-                });
-            }
-        }
-        return Array.from(set).sort((a, b) => a - b);
+        return mdAddExtraMinuteSlots(baseMinutes, startMin, endMin, extraMinutes);
     }
 
     generateTimeSlots(startTime, endTime, interval, extraMinutes) {
-        const [startHour, startMin] = startTime.split(':').map(Number);
-        const [endHour, endMin] = endTime.split(':').map(Number);
-        const start = startHour * 60 + startMin;
-        const end = endHour * 60 + endMin;
-        const base = [];
-        for (let m = start; m < end; m += interval) base.push(m);
-        return this.addExtraMinuteSlots(base, start, end, extraMinutes)
-            .map(m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'));
+        return mdGenerateTimeSlots(startTime, endTime, interval, extraMinutes);
     }
-    
+
     updateDateTime(index) {
         const daySelect = document.getElementById(\`date\${index}_day\`);
         const timeSelect = document.getElementById(\`date\${index}_time\`);

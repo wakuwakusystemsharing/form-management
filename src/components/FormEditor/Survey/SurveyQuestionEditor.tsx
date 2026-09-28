@@ -11,6 +11,8 @@ import {
 } from './SurveyContentBlockEditor';
 import { Button } from '@/components/ui/button';
 import TagInput from '@/components/customers/TagInput';
+import MultipleDatesSettingsEditor from '../Reservation/MultipleDatesSettingsEditor';
+import { createDefaultMultipleDatesSettings, normalizeMultipleDatesSettings } from '@/lib/multiple-dates-settings';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -38,9 +40,11 @@ interface SurveyQuestionEditorProps {
   onContentBlocksChange?: (blocks: SurveyContentBlock[]) => void;
   /** 画像アップロード先の店舗 ID（contentBlocks を使う場合に必須） */
   storeId?: string;
+  /** 回答タイプに「第三希望日時選択」を出すか（既定 true。抽選フォームの事前質問では使わない） */
+  allowMultipleDates?: boolean;
 }
 
-export default function SurveyQuestionEditor({ questions, onChange, contentBlocks, onContentBlocksChange, storeId }: SurveyQuestionEditorProps) {
+export default function SurveyQuestionEditor({ questions, onChange, contentBlocks, onContentBlocksChange, storeId, allowMultipleDates = true }: SurveyQuestionEditorProps) {
   const [deleteIndex, setDeleteIndex] = React.useState<number | null>(null);
   // 説明文の文字色ツールバー用（質問 ID → textarea）
   const descriptionRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
@@ -225,7 +229,11 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                     <Label>回答タイプ</Label>
                     <Select
                       value={q.type}
-                      onValueChange={(value) => updateQuestion(index, { type: value as SurveyQuestionType })}
+                      onValueChange={(value) => updateQuestion(index, {
+                        type: value as SurveyQuestionType,
+                        // 第三希望日時選択に切り替えたときは予約フォームと同じ既定設定を用意する
+                        ...(value === 'multiple_dates' && !q.multiple_dates ? { multiple_dates: createDefaultMultipleDatesSettings() } : {}),
+                      })}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -235,6 +243,7 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                         <SelectItem value="textarea">テキスト入力 (複数行)</SelectItem>
                         <SelectItem value="date">日付選択</SelectItem>
                         <SelectItem value="datetime">日時選択</SelectItem>
+                        {allowMultipleDates && <SelectItem value="multiple_dates">第三希望日時選択</SelectItem>}
                         <SelectItem value="select">ドロップダウン選択</SelectItem>
                         <SelectItem value="radio">単一選択 (ボタン)</SelectItem>
                         <SelectItem value="checkbox">複数選択 (ボタン)</SelectItem>
@@ -285,6 +294,23 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                   />
                   <ColoredTextPreview text={q.description || ''} accentColor="#9ca3af" />
                 </div>
+
+                {/* 第三希望日時選択の設定（予約フォームの日時選択モードと同じ） */}
+                {q.type === 'multiple_dates' && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      予約フォームの「第三希望日時選択」と同じ設定です。回答は「第一希望: 2026年10月01日（木） 10:00 / 第二希望: …」の形で保存されます。
+                      「必須項目にする」がオンのときは下の「必須選択」でチェックした希望が必須になります（第一希望は常に必須）。
+                    </p>
+                    <MultipleDatesSettingsEditor
+                      settings={normalizeMultipleDatesSettings(q.multiple_dates)}
+                      onChange={(next) => updateQuestion(index, { multiple_dates: next })}
+                      theme="light"
+                      title="第三希望日時の設定"
+                      specialDayNote="選べます"
+                    />
+                  </div>
+                )}
 
                 {/* 選択肢設定 (radio/checkbox/select) */}
                 {(q.type === 'radio' || q.type === 'checkbox' || q.type === 'select') && (

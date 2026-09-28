@@ -1,6 +1,8 @@
 import { SurveyConfig, SurveyQuestion, SurveyFollowUpQuestion } from '@/types/survey';
 import { computeAccentColor } from './color-utils';
 import { renderColoredTextHtml } from './colored-text';
+import { HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS } from './multiple-dates-runtime-js';
+import { getRequiredChoices, getVisibleChoices, normalizeMultipleDatesSettings } from './multiple-dates-settings';
 
 /**
  * アンケートフォーム用静的HTMLジェネレータ
@@ -12,6 +14,11 @@ export class StaticSurveyGenerator {
   generateHTML(config: SurveyConfig, surveyFormId?: string, storeId?: string): string {
     const safeConfig: SurveyConfig = JSON.parse(JSON.stringify(config));
     
+    // 第三希望日時選択の設定は欠損を既定値で補完してから埋め込む（予約フォームと同じ規則）
+    safeConfig.questions = (safeConfig.questions || []).map((q) =>
+      q.type === 'multiple_dates' ? { ...q, multiple_dates: normalizeMultipleDatesSettings(q.multiple_dates) } : q
+    );
+
     // CSS生成
     const css = this.generateCSS(safeConfig);
     
@@ -88,6 +95,99 @@ export class StaticSurveyGenerator {
         const SURVEY_STORAGE_KEY = ${JSON.stringify(`survey_${surveyFormId || safeConfig.basic_info.title || 'default'}`)};
         // ドロップダウンの「その他」用の内部値
         const OTHER_OPTION_VALUE = ${JSON.stringify(StaticSurveyGenerator.OTHER_OPTION_VALUE)};
+
+        ${HOLIDAY_RUNTIME_JS}
+        ${MULTIPLE_DATES_RUNTIME_JS}
+
+        // ---- 質問型「第三希望日時選択」（予約フォームの日時選択モードと同じ設定・同じ選択 UI） ----
+        var MD_CHOICE_LABELS = { 1: '第一希望', 2: '第二希望', 3: '第三希望' };
+        function mdQuestionVisible(q) {
+            var raw = q.multiple_dates && q.multiple_dates.visible_choices;
+            var vc = Array.isArray(raw) ? raw.filter(function (n) { return n === 1 || n === 2 || n === 3; }) : [1, 2, 3];
+            return vc.length > 0 ? vc : [1, 2, 3];
+        }
+        function mdQuestionRequired(q) {
+            var raw = q.multiple_dates && q.multiple_dates.required_choices;
+            var rc = Array.isArray(raw) ? raw.filter(function (n) { return n === 1 || n === 2 || n === 3; }) : [1, 2, 3];
+            if (rc.indexOf(1) === -1) rc.unshift(1);
+            return rc;
+        }
+        function mdSelectedPair(q, idx) {
+            var day = document.getElementById(q.id + '_' + idx + '_day');
+            var time = document.getElementById(q.id + '_' + idx + '_time');
+            return [day ? day.value : '', time ? time.value : ''];
+        }
+        // 日付 / 時間の変更をプレースホルダー表示と hidden に反映（復元機能 ON なら端末に保存）
+        function mdOnChange(q, idx) {
+            var pair = mdSelectedPair(q, idx);
+            var hidden = document.getElementById(q.id + '_' + idx);
+            var placeholder = document.getElementById(q.id + '_ph_' + idx);
+            var daySelect = document.getElementById(q.id + '_' + idx + '_day');
+            if (hidden) hidden.value = (pair[0] && pair[1]) ? pair[0] + 'T' + pair[1] : '';
+            if (placeholder) {
+                if (pair[0] && pair[1] && daySelect) {
+                    placeholder.textContent = daySelect.options[daySelect.selectedIndex].textContent + ' ' + pair[1];
+                    placeholder.style.color = '#374151';
+                    placeholder.style.fontWeight = 'bold';
+                } else {
+                    placeholder.textContent = '⇩タップして日時を入力⇩';
+                    placeholder.style.color = '#6b7280';
+                    placeholder.style.fontWeight = 'normal';
+                }
+            }
+            if (q.restore_enabled === true) {
+                var payload = { md: {} };
+                mdQuestionVisible(q).forEach(function (i) { payload.md[i] = mdSelectedPair(q, i); });
+                saveSurveyAnswer(q.id, payload);
+            }
+        }
+        // 送信値: 「第一希望: 2026年10月01日（木） 10:00 / 第二希望: …」。required なら必須の希望を検証
+        function collectMultipleDatesAnswer(q) {
+            var visible = mdQuestionVisible(q);
+            var required = q.required ? mdQuestionRequired(q).filter(function (n) { return visible.indexOf(n) !== -1; }) : [];
+            var parts = [];
+            for (var i = 0; i < visible.length; i++) {
+                var idx = visible[i];
+                var pair = mdSelectedPair(q, idx);
+                var filled = !!(pair[0] && pair[1]);
+                if (!filled && required.indexOf(idx) !== -1) {
+                    return { error: q.title + 'の' + MD_CHOICE_LABELS[idx] + '日時を選択してください。', value: '' };
+                }
+                if (filled) parts.push(MD_CHOICE_LABELS[idx] + ': ' + mdFormatDateTimeJa(pair[0], pair[1]));
+            }
+            return { error: null, value: parts.join(' / ') };
+        }
+        function initMultipleDatesQuestions() {
+            var saved = loadSurveySaved();
+            SURVEY_QUESTIONS.forEach(function (q) {
+                if (q.type !== 'multiple_dates') return;
+                var settings = q.multiple_dates || {};
+                var data = q.restore_enabled === true && saved[q.id] && saved[q.id].md ? saved[q.id].md : null;
+                mdQuestionVisible(q).forEach(function (idx) {
+                    var daySelect = document.getElementById(q.id + '_' + idx + '_day');
+                    var timeSelect = document.getElementById(q.id + '_' + idx + '_time');
+                    if (!daySelect || !timeSelect) return;
+                    mdPopulateDateOptions(daySelect, settings, {});
+                    mdPopulateTimeOptions(timeSelect, settings, '', {});
+                    daySelect.addEventListener('change', function () {
+                        mdPopulateTimeOptions(timeSelect, settings, daySelect.value, {});
+                        mdOnChange(q, idx);
+                    });
+                    timeSelect.addEventListener('change', function () { mdOnChange(q, idx); });
+                    // 復元（保存済みの日付が選択肢に残っている場合のみ）
+                    var restored = data && Array.isArray(data[idx]) ? data[idx] : null;
+                    if (restored && restored[0]) {
+                        daySelect.value = restored[0];
+                        if (daySelect.value === restored[0]) {
+                            mdPopulateTimeOptions(timeSelect, settings, restored[0], {});
+                            if (restored[1]) timeSelect.value = restored[1];
+                            mdOnChange(q, idx);
+                        }
+                    }
+                });
+            });
+        }
+        document.addEventListener('DOMContentLoaded', initMultipleDatesQuestions);
 
         // 復元機能: 回答をこの端末の localStorage にのみ保存する（サーバーには送らない）
         function loadSurveySaved() {
@@ -393,6 +493,14 @@ export class StaticSurveyGenerator {
                 if (q.type === 'text' || q.type === 'textarea' || q.type === 'date' || q.type === 'datetime') {
                     const input = document.getElementById(q.id);
                     if (input) value = input.value;
+                } else if (q.type === 'multiple_dates') {
+                    const md = collectMultipleDatesAnswer(q);
+                    if (md.error) {
+                        alert(md.error);
+                        hasError = true;
+                        return;
+                    }
+                    value = md.value;
                 } else if (q.type === 'select') {
                     const input = document.getElementById(q.id);
                     if (input) value = input.value === OTHER_OPTION_VALUE ? getOtherReasonText(q.id) : input.value;
@@ -579,6 +687,9 @@ export class StaticSurveyGenerator {
       case 'datetime':
         fieldHtml = `<div class="date-inputs date-input-wrap"><input type="datetime-local" id="${q.id}" class="input"><span class="date-input-hint">タップしてご選択ください</span></div>`;
         break;
+      case 'multiple_dates':
+        fieldHtml = this.renderMultipleDatesField(q);
+        break;
       case 'select': {
         let opts = (q.options || []).map((opt, i) =>
           `<option value="${this.escapeHtml(opt.value || opt.label)}" data-opt-index="${i}">${this.escapeHtml(opt.label)}</option>`
@@ -615,6 +726,34 @@ export class StaticSurveyGenerator {
             ${fieldHtml}
         </div>
     `;
+  }
+
+  /**
+   * 第三希望日時選択: 予約フォームの第三希望日時モードと同じ見た目（日付 / 時間のプルダウン + 選択内容の表示）。
+   * 選択肢の中身は埋め込み JS（mdPopulateDateOptions / mdPopulateTimeOptions）が設定に従って生成する
+   */
+  private renderMultipleDatesField(q: SurveyQuestion): string {
+    const settings = q.multiple_dates;
+    const visible = getVisibleChoices(settings);
+    const required = q.required ? getRequiredChoices(settings) : [];
+    const labels: Record<number, string> = { 1: '第一希望日時', 2: '第二希望日時', 3: '第三希望日時' };
+    return `<div class="md-choices" data-question-md="${q.id}">` + visible.map((idx) => {
+      const mark = required.includes(idx)
+        ? '<span class="required">必須</span>'
+        : '<span class="md-optional">（任意）</span>';
+      return `
+            <div class="md-choice" id="${q.id}_choice_${idx}">
+                <div class="md-choice-label">${labels[idx]} ${mark}</div>
+                <div class="datetime-wrapper" style="text-align:center;">
+                    <span class="placeholder" id="${q.id}_ph_${idx}" style="color:#6b7280;font-size:0.875rem;display:block;margin-bottom:0.5rem;">⇩タップして日時を入力⇩</span>
+                    <input type="hidden" id="${q.id}_${idx}">
+                    <div class="dt-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
+                        <select id="${q.id}_${idx}_day" class="input datetime-input" aria-label="日付を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
+                        <select id="${q.id}_${idx}_time" class="input datetime-input" aria-label="時間を選択" style="padding:0.75rem;border:1px solid #d1d5db;border-radius:0.375rem;font-size:1rem;"></select>
+                    </div>
+                </div>
+            </div>`;
+    }).join('') + '</div>';
   }
 
   /** ドロップダウンの「その他」を表す内部値（送信時は「その他（理由）」に変換） */
@@ -734,6 +873,11 @@ export class StaticSurveyGenerator {
             line-height: 1.4;
             margin-bottom: 15px;
         }
+        .md-choices { display: flex; flex-direction: column; gap: 14px; }
+        .md-choice { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; background: #fafafa; }
+        .md-choice-label { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+        .md-optional { font-size: 11px; color: #6b7280; font-weight: normal; }
+        .md-choice select.datetime-input { width: 100%; min-height: 44px; background: #fff; }
         .required {
             margin-left: auto;
             background: var(--required-bg);
