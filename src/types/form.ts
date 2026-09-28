@@ -418,6 +418,9 @@ export interface StaticDeploy {
   environment?: AppEnvironment;
 }
 
+/** 第三希望日時選択の設定（予約フォームの calendar_settings.multiple_dates_settings と、アンケートの質問型で共用） */
+export type MultipleDatesSettings = NonNullable<FormConfig['calendar_settings']['multiple_dates_settings']>;
+
 export interface Form {
   id: string;          // 16文字のランダム英数文字列
   store_id: string;    // 6文字のランダム文字列 (全環境共通)

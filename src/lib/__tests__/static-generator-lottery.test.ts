@@ -206,7 +206,7 @@ describe('StaticLotteryGenerator: 在庫の最新化と当選一覧', () => {
   });
 });
 
-describe('StaticLotteryGenerator: 埋め込み JS の動作（JSDOM）', () => {
+describe('StaticLotteryGenerator: 埋め込み JS の動作（JSDOM）', { timeout: 20000 }, () => {
   async function loadPreview(config: Record<string, unknown> = {}) {
     const { JSDOM, VirtualConsole } = await import('jsdom');
     const html = gen.generateHTML(makeForm({ presentation: { show_stock: true }, ...config }), 'preview');

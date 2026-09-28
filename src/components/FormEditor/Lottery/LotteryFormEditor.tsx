@@ -257,6 +257,7 @@ export default function LotteryFormEditor({ form, onUpdate, userRole = 'service_
               <SurveyQuestionEditor
                 questions={config.entry_rules.pre_questions}
                 onChange={(questions: SurveyQuestion[]) => setRules({ pre_questions: questions })}
+                allowMultipleDates={false}
               />
             </div>
           </div>
