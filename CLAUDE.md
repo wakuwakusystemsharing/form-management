@@ -229,6 +229,11 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - `?tab=customers&customerId=...` で顧客詳細を直接開ける
 - PC 表示は従来どおり（`md:` 以上で Card・テーブル・ヘッダー右上のボタン）
 
+**店舗管理者ページの「このページの使い方」（説明表示）:**
+- 各タブ（ダッシュボード / 予約管理 / 顧客管理 / アンケート管理 / 抽選管理 / 設定）の冒頭に折りたたみの説明カード `StoreAdminGuide`（`src/components/StoreAdminGuide.tsx`、`data-slot="guide"`）を表示。初回は開いた状態、閉じると端末ごとに記憶（localStorage `store_admin_guide_open_{tab}`）
+- 見出しの下の 1 行ヒントは `GuideHint`（`data-slot="guide-hint"`）。文言はすべて `src/lib/store-admin-guide.ts`（`STORE_ADMIN_GUIDES` = タブごとの intro / items / tips、`STORE_ADMIN_HINTS` = 見出し下の 1 行）で管理し、画面の見出し・ボタン名と同じ言葉を使う（Vitest で主要項目名の一致を検証）
+- 店舗に URL だけを渡しても解説なしで使えるようにするのが目的。項目を追加・改名したときはここも更新する
+
 **店舗管理者に表示するメニュー（タブ）の制御:**
 - `stores.admin_visible_tabs` JSONB（`null` = すべて表示）。値は `['dashboard','reservations','customers','surveys','lotteries','settings']` の部分集合
 - テナント側 店舗ページ → 設定タブ → `StoreAdminMenuSettings.tsx` で ON/OFF（最低 1 つ必須。全選択時は `null` で保存）
