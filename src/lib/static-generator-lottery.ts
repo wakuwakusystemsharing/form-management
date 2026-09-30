@@ -8,6 +8,7 @@
  * 設計書: docs/抽選フォーム_実装設計.md（4. 画面デザイン案 / 8. 静的 HTML）
  */
 import type { LotteryConfig, LotteryForm } from '@/types/lottery';
+import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import type { SurveyQuestion } from '@/types/survey';
 import { computeAccentColor } from './color-utils';
 import { renderColoredTextHtml } from './colored-text';
@@ -47,6 +48,7 @@ export class StaticLotteryGenerator {
         pre_questions: config.entry_rules.pre_questions,
       },
       presentation: config.presentation,
+      advanced: config.advanced ?? { no_lose: false, redistribute_on_sold_out: false },
       messages: {
         win_text: config.messages.win_text,
         lose_text: config.messages.lose_text,
@@ -93,6 +95,8 @@ export class StaticLotteryGenerator {
                 </div>
             </section>
 
+            <div class="closed-banner hidden" id="closedBanner" role="status"></div>
+
             <div class="my-wins-bar hidden" id="myWinsBar">
                 <button type="button" class="my-wins-button" onclick="openWinsList()">🎁 あなたが当選した一覧<span id="myWinsCount"></span></button>
             </div>
@@ -103,7 +107,7 @@ export class StaticLotteryGenerator {
                     ${config.prizes.map((p, i) => this.renderPrizeCard(p, i, config)).join('\n')}
                     ${config.consolation_prize ? this.renderPrizeCard(config.consolation_prize, -1, config, true) : ''}
                 </div>
-                ${config.presentation.show_probability ? `<p class="prize-note">はずれ ${this.escapeHtml(String(getLoseProbability(config.prizes)))}%</p>` : ''}
+                ${config.presentation.show_probability ? `<p class="prize-note" id="loseNote">はずれ <span id="loseNoteValue">${this.escapeHtml(String(getLoseProbability(config.prizes)))}</span>%</p>` : ''}
             </section>
 
             ${this.renderNotice(config)}
@@ -152,11 +156,13 @@ export class StaticLotteryGenerator {
             friendFlag: null,
             result: null,        // LotteryDrawResponse
             wins: [],            // このユーザーの当選一覧（LotteryDrawResponse[]）
+            closed: false,       // はずれ 0% で全賞品の在庫が尽きた（抽選終了）
             revealed: false,
             busy: false,
             gateBlocked: false
         };
 
+        ${BIRTHDAY_RUNTIME_JS}
         ${this.generateHelpersJS()}
         ${this.generateQuestionsJS()}
         ${this.generateLiffJS()}
@@ -167,6 +173,7 @@ export class StaticLotteryGenerator {
 
         document.addEventListener('DOMContentLoaded', function () {
             initQuestions();
+            bdInitAll();
             refreshStock();
             if (IS_PREVIEW) {
                 var banner = document.querySelector('.preview-banner');
@@ -240,7 +247,9 @@ export class StaticLotteryGenerator {
       ? prize.rank_color!
       : ['#d4af37', '#a8a9ad', '#cd7f32'][index] || '#6b7280';
     const meta: string[] = [];
-    if (config.presentation.show_probability && config.lottery_type === 'instant' && !isConsolation) meta.push(`${prize.probability}%`);
+    if (config.presentation.show_probability && config.lottery_type === 'instant' && !isConsolation) {
+      meta.push(`<span class="prize-prob" data-prize-prob="${this.escapeAttr(prize.id)}">${prize.probability}%</span>`);
+    }
     if (config.presentation.show_stock && prize.stock !== null && prize.stock !== undefined) {
       meta.push(`<span class="prize-stock" data-prize-stock="${this.escapeAttr(prize.id)}" data-stock="${prize.stock}">${config.lottery_type === 'deferred' ? `${prize.stock}名` : `残り${prize.stock}`}</span>`);
     }
@@ -289,6 +298,9 @@ export class StaticLotteryGenerator {
       case 'datetime':
         field = `<input type="datetime-local" id="q-${id}" class="input">`;
         break;
+      case 'birthday':
+        field = renderBirthdayFieldHtml(`q-${id}`);
+        break;
       case 'select': {
         const opts = (q.options || []).map((o) => `<option value="${this.escapeAttr(o.value)}">${this.escapeHtml(o.label)}</option>`).join('');
         const other = q.allow_other ? `<option value="${OTHER_OPTION_VALUE}">その他</option>` : '';
@@ -333,6 +345,8 @@ export class StaticLotteryGenerator {
     switch (fu.type) {
       case 'textarea':
         return `<textarea id="${fid}" class="input" rows="2" placeholder="入力してください"></textarea>`;
+      case 'birthday':
+        return renderBirthdayFieldHtml(fid);
       case 'select':
         return `<select id="${fid}" class="input"><option value="">選択してください</option>${(fu.options || []).map((o) => `<option value="${this.escapeAttr(o.value)}">${this.escapeHtml(o.label)}</option>`).join('')}</select>`;
       case 'radio':
@@ -633,6 +647,7 @@ export class StaticLotteryGenerator {
     return `
         async function startDraw() {
             if (state.busy || state.gateBlocked) return;
+            if (state.closed) { alert(FORM_CONFIG_CLOSED_MESSAGE); return; }
             var collected = collectAnswers();
             if (collected.error) { alert(collected.error); return; }
             setBusy(true);
@@ -1166,7 +1181,37 @@ export class StaticLotteryGenerator {
                 var json = await res.json();
                 if (!json || !Array.isArray(json.prizes)) return;
                 for (var i = 0; i < json.prizes.length; i++) applyStock(json.prizes[i]);
+                if (json.odds) applyOdds(json.odds);
+                if (json.all_sold_out && json.closed_message) showClosed(json.closed_message);
             } catch (e) { console.warn('stock refresh failed', e); }
+        }
+        // 現在の当選確率（在庫切れの再配分 / はずれ 0% で設定値から変わっていれば「現在 X%」と表示）
+        function applyOdds(odds) {
+            var els = document.querySelectorAll('.prize-prob');
+            for (var i = 0; i < els.length; i++) {
+                var el = els[i];
+                var id = el.dataset ? el.dataset.prizeProb : null;
+                if (!id || !odds.prizes || typeof odds.prizes[id] !== 'number') continue;
+                el.textContent = (odds.changed ? '現在 ' : '') + odds.prizes[id] + '%';
+                el.classList.toggle('changed', !!odds.changed);
+            }
+            var lose = $('loseNoteValue');
+            if (lose && typeof odds.lose === 'number') {
+                lose.textContent = String(odds.lose);
+                var note = $('loseNote');
+                if (note) note.classList.toggle('changed', !!odds.changed);
+            }
+        }
+        // はずれ 0% で全賞品の在庫が尽きた: 案内を出して抽選ボタンを隠す（当選一覧は見られる）
+        var FORM_CONFIG_CLOSED_MESSAGE = '賞品がなくなったので抽選は終了いたしました。';
+        function showClosed(message) {
+            state.closed = true;
+            FORM_CONFIG_CLOSED_MESSAGE = message || FORM_CONFIG_CLOSED_MESSAGE;
+            var banner = $('closedBanner');
+            if (banner) { banner.textContent = FORM_CONFIG_CLOSED_MESSAGE; banner.classList.remove('hidden'); }
+            var hint = $('stageHint');
+            if (hint) hint.textContent = FORM_CONFIG_CLOSED_MESSAGE;
+            showFooter(false);
         }
         function applyStock(p) {
             if (!p || !p.id) return;
@@ -1374,6 +1419,8 @@ export class StaticLotteryGenerator {
         .prize-desc { font-size: 12px; color: #555; margin-top: 2px; line-height: 1.4; }
         .prize-meta { font-size: 12px; color: #777; margin-top: 6px; }
         .prize-stock.sold-out { color: #b91c1c; font-weight: 700; }
+        .prize-prob.changed, .prize-note.changed { color: var(--primary-color); font-weight: 700; }
+        .closed-banner { margin: 0 0 14px; padding: 12px 14px; border-radius: 8px; background: #fdecec; border: 1px solid #f5b5b5; color: #b91c1c; font-size: 14px; font-weight: 700; text-align: center; }
         .prize-note { font-size: 12px; color: #777; text-align: right; }
 
         /* 注意事項 */
@@ -1386,6 +1433,7 @@ export class StaticLotteryGenerator {
         .question { margin-bottom: 22px; }
         .question-desc { font-size: 13px; color: #666; margin: -6px 0 10px; }
         .input { width: 100%; padding: 14px; border: 1px solid #ccc; border-radius: 2px; font-size: 16px; background: #fafafa; font-family: inherit; }
+        ${BIRTHDAY_CSS}
         .input:focus { outline: none; border-color: var(--primary-color); background: var(--white); box-shadow: 0 0 0 1px var(--primary-color); }
         .other-input, .follow-up { margin-top: 10px; }
         .follow-up { padding: 10px; background: #f7f8fa; border-radius: 6px; }

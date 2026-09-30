@@ -4,6 +4,7 @@
  */
 
 import { Form, SpecialBusinessDay } from '@/types/form';
+import { resolveCancelRules } from './cancel-rules';
 
 /**
  * ✕にする時間帯の曜日指定を検証する。
@@ -539,6 +540,10 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           cancel_done_heading: pick(raw?.cancel_done_heading)
         };
       })(),
+      // キャンセルルール設定（欠損は既定値: 制限なし / 表示なし / 通知なし）
+      cancel_rules: resolveCancelRules({
+        cancel_rules: existingConfig?.cancel_rules ?? (typedConfig as Form['config'])?.cancel_rules,
+      }),
       // 店舗側手動予約フォームの項目設定（boolean 以外は未設定扱い）
       manual_form_settings: (() => {
         const raw = (existingConfig as { manual_form_settings?: unknown } | undefined)?.manual_form_settings

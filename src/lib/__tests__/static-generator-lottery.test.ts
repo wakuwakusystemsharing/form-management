@@ -117,7 +117,7 @@ describe('StaticLotteryGenerator', () => {
     const on = gen.generateHTML(makeForm({ presentation: { show_probability: true, show_stock: true } }), 'production');
     expect(on).toContain('data-prize-stock="a"');
     expect(on).toContain('残り3');
-    expect(on).toContain('はずれ 70%');
+    expect(on).toContain('はずれ <span id="loseNoteValue">70</span>%');
   });
 
   it('後日抽選: ボタン文言と締切バッジ', () => {
@@ -269,4 +269,33 @@ describe('StaticLotteryGenerator: 埋め込み JS の動作（JSDOM）', { timeo
     expect(panel.textContent).not.toContain('あなたが当選した一覧');
     expect((w.document.getElementById('myWinsBar') as HTMLElement).classList.contains('hidden')).toBe(true);
   });
+});
+
+describe('StaticLotteryGenerator: 詳細設定（現在の確率 / 抽選終了）', () => {
+  it('確率表示の span と抽選終了バナー、確率変動の JS を含む', () => {
+    const html = gen.generateHTML(makeForm({ presentation: { show_probability: true }, advanced: { no_lose: true, redistribute_on_sold_out: true } }), 'production');
+    expect(html).toContain('"advanced":{"no_lose":true,"redistribute_on_sold_out":true}');
+    expect(html).toContain('data-prize-prob="a">10%</span>');
+    expect(html).toContain('id="loseNoteValue">70</span>');
+    expect(html).toContain('id="closedBanner"');
+    expect(html).toContain('function applyOdds(');
+    expect(html).toContain('function showClosed(');
+    expect(html).toContain('賞品がなくなったので抽選は終了いたしました。');
+  });
+
+  it('applyOdds / showClosed が画面を更新し、抽選が終了状態になる', async () => {
+    const { JSDOM, VirtualConsole } = await import('jsdom');
+    const html = gen.generateHTML(makeForm({ presentation: { show_probability: true }, advanced: { no_lose: true, redistribute_on_sold_out: true } }), 'preview');
+    const dom = new JSDOM(html, { runScripts: 'dangerously', pretendToBeVisual: true, virtualConsole: new VirtualConsole(), url: 'https://example.com/' });
+    await new Promise((r) => setTimeout(r, 30));
+    const w = dom.window as unknown as Window & Record<string, any>;
+    w.applyOdds({ prizes: { a: 0, b: 30 }, lose: 70, changed: true });
+    expect(w.document.querySelector('.prize-prob[data-prize-prob="b"]')?.textContent).toBe('現在 30%');
+    expect(w.document.getElementById('loseNoteValue')?.textContent).toBe('70');
+    w.showClosed('賞品がなくなったので抽選は終了いたしました。');
+    expect(w.state.closed).toBe(true);
+    const banner = w.document.getElementById('closedBanner') as HTMLElement;
+    expect(banner.classList.contains('hidden')).toBe(false);
+    expect(banner.textContent).toBe('賞品がなくなったので抽選は終了いたしました。');
+  }, 20000);
 });

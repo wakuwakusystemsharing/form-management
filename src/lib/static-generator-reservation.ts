@@ -4,7 +4,7 @@
  */
 
 import { computeAccentColor, hexToRgb } from './color-utils';
-import { HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS } from './multiple-dates-runtime-js';
+import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { FormConfig } from '@/types/form';
 
 export class StaticReservationGenerator {
@@ -238,6 +238,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
             ${this.renderAgreementField(safeConfig)}
 
             ${this.renderContentBlocksAt(safeConfig, 'submit', 'above')}
+            ${this.renderCancelPolicy(safeConfig)}
             <button type="button" id="submit-button" class="submit-button">${this.escapeHtml(submitLabel)}</button>
             ${this.renderContentBlocksAt(safeConfig, 'submit', 'below')}
         </div>
@@ -255,13 +256,14 @@ const LINE_ONLY = ${lineOnly ? 'true' : 'false'};
 
 ${HOLIDAY_RUNTIME_JS}
 ${MULTIPLE_DATES_RUNTIME_JS}
+${BIRTHDAY_RUNTIME_JS}
 function formatDateTimeForDisplay(value) {
     // "2026-04-30T15:08[:00]" → "2026年04月30日 15:08"
     // "2026-04-30"            → "2026年04月30日"
     if (!value || typeof value !== 'string') return value;
-    const dt = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    const dt = value.match(/^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})/);
     if (dt) return dt[1] + '年' + dt[2] + '月' + dt[3] + '日 ' + dt[4] + ':' + dt[5];
-    const date = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const date = value.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
     if (date) return date[1] + '年' + date[2] + '月' + date[3] + '日';
     return value;
 }
@@ -759,6 +761,8 @@ class BookingForm {
                 const el = document.getElementById('custom-field-' + field.id);
                 if (el) {
                     el.value = val;
+                    // 誕生日選択は hidden の値をプルダウンに反映する（選択肢に無い値は空に戻る）
+                    if (field.type === 'birthday') bdSyncFromHidden(el);
                     // select や date は値が選択肢/形式に合わないと反映されないため、反映確認後に state 更新
                     if (el.value === val) this.state.customFields[field.id] = val;
                 }
@@ -864,8 +868,9 @@ class BookingForm {
     // 非表示になった追加質問の入力欄をリセットする
     clearAdditionalQuestionInputs(field) {
         const el = document.getElementById('custom-field-' + field.id);
-        if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime' || field.type === 'select')) {
+        if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime' || field.type === 'select' || field.type === 'birthday')) {
             el.value = '';
+            if (field.type === 'birthday') bdSyncFromHidden(el);
         }
         if (field.type === 'radio') {
             document.querySelectorAll('input[name="custom-field-' + field.id + '"]').forEach(radio => {
@@ -986,11 +991,12 @@ class BookingForm {
         
         // カスタムフィールド（メニュー/オプションの追加質問も同じ仕組みで値を保持する）
         const listenerFields = (this.config.custom_fields || []).concat(this.getAdditionalQuestionEntries().map(function(e) { return e.field; }));
+        bdInitAll();
         if (listenerFields.length > 0) {
             const self = this;
             listenerFields.forEach(function(field) {
                 const el = document.getElementById('custom-field-' + field.id);
-                if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime')) {
+                if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime' || field.type === 'birthday')) {
                     el.addEventListener('input', function() {
                         self.state.customFields[field.id] = el.value;
                         self.persistCustomField(field, el.value);
@@ -2608,7 +2614,7 @@ class BookingForm {
                 allLabeledFields.forEach(field => {
                     const val = this.state.customFields[field.id];
                     if (val) {
-                        const display = (field.type === 'date' || field.type === 'datetime') ? formatDateTimeForDisplay(val) : val;
+                        const display = (field.type === 'date' || field.type === 'datetime' || field.type === 'birthday') ? formatDateTimeForDisplay(val) : val;
                         labeledFields[oneLine(field.title)] = display;
                     }
                 });
@@ -2817,7 +2823,7 @@ class BookingForm {
             const customFieldDisplayValue = (field) => {
                 const value = this.state.customFields?.[field.id];
                 if (!value) return null;
-                return (field.type === 'date' || field.type === 'datetime') ? formatDateTimeForDisplay(value) : value;
+                return (field.type === 'date' || field.type === 'datetime' || field.type === 'birthday') ? formatDateTimeForDisplay(value) : value;
             };
             const msgFieldHasPlacement = (field) => !!(field.placement
                 && typeof field.placement.anchor === 'string'
@@ -3637,6 +3643,14 @@ if (document.readyState === 'loading') {
                 <div class="date-input-wrap"><input type="datetime-local" id="${id}" class="input" data-field-id="${field.id}"><span class="date-input-hint">タップしてご選択ください</span></div>
             </div>`;
       }
+      if (field.type === 'birthday') {
+        // 年 / 月 / 日の 3 つのプルダウン。値は hidden（id = custom-field-{id}）に "YYYY-MM-DD" で入る
+        return `
+            <div class="field" id="custom-field-wrap-${field.id}">
+                <label class="field-label">${label}</label>
+                ${renderBirthdayFieldHtml(id, `data-field-id="${field.id}"`)}
+            </div>`;
+      }
       if (field.type === 'select' && field.options?.length) {
         const optionsHtml = field.options.map(opt =>
           `<option value="${this.escapeHtml(opt.value)}">${this.escapeHtml(opt.label)}</option>`
@@ -3648,6 +3662,20 @@ if (document.readyState === 'loading') {
             </div>`;
       }
       return '';
+  }
+
+  // キャンセルルール設定: キャンセル規定の文言を送信ボタンの上に表示（表示 ON かつ文言あり）
+  private renderCancelPolicy(config: FormConfig): string {
+    const rules = config.cancel_rules;
+    const text = typeof rules?.policy_text === 'string' ? rules.policy_text.trim() : '';
+    if (!rules || rules.show_policy_on_form !== true || !text) return '';
+    const hours = typeof rules.deadline_hours === 'number' && rules.deadline_hours > 0 ? rules.deadline_hours : 0;
+    return `
+            <div class="cancel-policy" id="cancel-policy">
+                <div class="cancel-policy-title">キャンセルについて</div>
+                <div class="cancel-policy-text">${this.escapeHtmlWithBreaks(text)}</div>
+                ${hours > 0 ? `<div class="cancel-policy-deadline">LINE からのキャンセルはご予約日時の ${hours} 時間前まで受け付けています</div>` : ''}
+            </div>`;
   }
 
   // 店舗側手動予約フォーム: お客様選択欄（友だち一覧はクライアント側で /line-friends から取得）
@@ -4426,6 +4454,11 @@ if (document.readyState === 'loading') {
             font-weight: bold !important;
             box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
         }
+        ${BIRTHDAY_CSS}
+        /* キャンセル規定（送信ボタンの上） */
+        .cancel-policy { margin: 0 0 1rem; padding: 0.75rem 0.9rem; border: 1px solid #f1c9a5; background: #fff7ef; border-radius: 0.375rem; font-size: 0.8rem; color: #444; line-height: 1.6; }
+        .cancel-policy-title { font-weight: 700; color: var(--primary-color); margin-bottom: 0.25rem; }
+        .cancel-policy-deadline { margin-top: 0.4rem; font-size: 0.75rem; color: #b45309; }
         /* 日付・日時入力: スマホで横幅をページに収める + 未選択時ヒント */
         input[type="date"].input,
         input[type="datetime-local"].input {

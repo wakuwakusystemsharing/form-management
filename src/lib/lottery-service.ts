@@ -17,8 +17,11 @@ import {
   getEntryLimitWindow,
   getPeriodState,
   isAllSoldOut,
+  computeEffectiveOdds,
   computePrizeStockStatus,
   computeRemainingEntries,
+  LOTTERY_CLOSED_MESSAGE,
+  selectPrizeEffective,
   isEntryExpired,
   secureRandomUnit,
   selectPrize,
@@ -230,6 +233,21 @@ export async function getPrizeStockStatus(form: LotteryForm): Promise<LotteryPri
   return computePrizeStockStatus(prizes, counts);
 }
 
+/** 在庫状況 + 現在の当選確率（詳細設定の再配分 / はずれ 0% を反映）+ 抽選終了かどうか */
+export async function getLotteryLiveStatus(form: LotteryForm): Promise<{
+  prizes: LotteryPrizeStockStatus[];
+  odds: ReturnType<typeof computeEffectiveOdds>;
+  all_sold_out: boolean;
+  closed_message: string | null;
+}> {
+  const prizes = await getPrizeStockStatus(form);
+  const counts: Record<string, number> = {};
+  prizes.forEach((p) => { counts[p.id] = p.issued; });
+  const odds = computeEffectiveOdds(form.config, counts);
+  const closed = form.config.lottery_type === 'instant' && form.config.advanced?.no_lose === true && odds.all_sold_out;
+  return { prizes, odds, all_sold_out: closed, closed_message: closed ? LOTTERY_CLOSED_MESSAGE : null };
+}
+
 // ---------------------------------------------------------------------------
 // 抽選の実行
 // ---------------------------------------------------------------------------
@@ -376,16 +394,29 @@ export async function executeLotteryDraw(params: DrawParams): Promise<DrawOutcom
 
   // ---- 即時抽選 ----
   const counts = await countPrizeEntries(form.id);
+  // 詳細設定: はずれ 0% / 在庫切れ時の確率変動が ON なら、現在の在庫を踏まえた確率で選ぶ
+  const noLose = config.advanced?.no_lose === true;
+  const useEffective = noLose || config.advanced?.redistribute_on_sold_out === true;
+  if (noLose && computeEffectiveOdds(config, counts).all_sold_out) {
+    return { ok: false, status: 410, error: LOTTERY_CLOSED_MESSAGE };
+  }
   if (config.entry_rules.when_sold_out === 'close' && isAllSoldOut(config.prizes, counts)) {
     return { ok: false, status: 410, error: 'この抽選は終了しました（賞品がなくなりました）' };
   }
 
-  const selection = selectPrize(config.prizes, rng(), counts);
-  let prize: LotteryPrize | null = selection.prize;
+  let prize: LotteryPrize | null = null;
   let isConsolation = false;
-  if (!prize && config.consolation_prize) {
-    prize = config.consolation_prize;
-    isConsolation = true;
+  if (useEffective) {
+    const sel = selectPrizeEffective(config, rng(), counts);
+    prize = sel.prize;
+    isConsolation = sel.is_consolation;
+  } else {
+    const selection = selectPrize(config.prizes, rng(), counts);
+    prize = selection.prize;
+    if (!prize && config.consolation_prize) {
+      prize = config.consolation_prize;
+      isConsolation = true;
+    }
   }
 
   const buildEntry = async (p: LotteryPrize | null, consolation: boolean): Promise<NewLotteryEntry> => {
@@ -414,6 +445,28 @@ export async function executeLotteryDraw(params: DrawParams): Promise<DrawOutcom
     max_entries: limit.max_entries,
     entry: entryToInsert,
   });
+
+  // はずれ 0%: 同時アクセスで在庫が尽きた場合は在庫を取り直して選び直す（最大 3 回）。全部なくなったら終了
+  if (!inserted.ok && inserted.reason === 'sold_out' && noLose) {
+    for (let attempt = 0; attempt < 3 && !inserted.ok && inserted.reason === 'sold_out'; attempt++) {
+      const fresh = await countPrizeEntries(form.id);
+      const sel = selectPrizeEffective(config, rng(), fresh);
+      if (sel.all_sold_out) return { ok: false, status: 410, error: LOTTERY_CLOSED_MESSAGE };
+      prize = sel.prize;
+      isConsolation = sel.is_consolation;
+      entryToInsert = await buildEntry(prize, isConsolation);
+      inserted = await insertLotteryEntryChecked({
+        form_id: form.id,
+        line_user_id: user.userId,
+        prize_id: entryToInsert.prize_id,
+        prize_stock: prize ? prize.stock : null,
+        window_start: limit.window_start,
+        max_entries: limit.max_entries,
+        entry: entryToInsert,
+      });
+    }
+    if (!inserted.ok && inserted.reason === 'sold_out') return { ok: false, status: 410, error: LOTTERY_CLOSED_MESSAGE };
+  }
 
   // 同時アクセスで在庫が尽きた場合は「はずれ」（残念賞があれば残念賞）として記録し直す
   if (!inserted.ok && inserted.reason === 'sold_out' && !isConsolation) {
