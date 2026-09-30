@@ -197,6 +197,7 @@ const AdditionalQuestionsEditor: React.FC<{
                     <option value="textarea">テキスト入力 (複数行)</option>
                     <option value="date">日付選択</option>
                     <option value="datetime">日時選択</option>
+                    <option value="birthday">誕生日選択</option>
                     <option value="select">ドロップダウン選択</option>
                     <option value="radio">単一選択 (ボタン)</option>
                     <option value="checkbox">複数選択 (ボタン)</option>
@@ -3705,7 +3706,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     value={field.type}
                     onChange={(e) => {
                       const currentFields = [...(form.config?.custom_fields || [])];
-                      const newType = e.target.value as 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select';
+                      const newType = e.target.value as NonNullable<Form['config']['custom_fields']>[number]['type'];
                       const needsOptions = newType === 'radio' || newType === 'checkbox' || newType === 'select';
                       currentFields[index] = {
                         ...currentFields[index],
@@ -3727,6 +3728,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     <option value="textarea">テキスト入力 (複数行)</option>
                     <option value="date">日付選択</option>
                     <option value="datetime">日時選択</option>
+                    <option value="birthday">誕生日選択</option>
                     <option value="select">ドロップダウン選択</option>
                     <option value="radio">単一選択 (ボタン)</option>
                     <option value="checkbox">複数選択 (ボタン)</option>

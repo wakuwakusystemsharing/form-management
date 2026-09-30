@@ -247,7 +247,7 @@ function collectFieldDefs(config: FormConfigLike): Map<string, { title: string; 
 function formatFieldValue(raw: unknown, type?: string): string {
   const text = Array.isArray(raw) ? raw.join(', ') : raw == null ? '' : String(raw);
   if (!text.trim()) return '';
-  if (type === 'date' || type === 'datetime') {
+  if (type === 'date' || type === 'datetime' || type === 'birthday') {
     const dt = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(text);
     if (dt) return `${dt[1]}年${dt[2]}月${dt[3]}日 ${dt[4]}:${dt[5]}`;
     const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);

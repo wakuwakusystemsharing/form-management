@@ -1,7 +1,7 @@
 import { SurveyConfig, SurveyQuestion, SurveyFollowUpQuestion } from '@/types/survey';
 import { computeAccentColor } from './color-utils';
 import { renderColoredTextHtml } from './colored-text';
-import { HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS } from './multiple-dates-runtime-js';
+import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { getRequiredChoices, getVisibleChoices, normalizeMultipleDatesSettings } from './multiple-dates-settings';
 
 /**
@@ -98,6 +98,8 @@ export class StaticSurveyGenerator {
 
         ${HOLIDAY_RUNTIME_JS}
         ${MULTIPLE_DATES_RUNTIME_JS}
+        ${BIRTHDAY_RUNTIME_JS}
+        document.addEventListener('DOMContentLoaded', function () { bdInitAll(); });
 
         // ---- 質問型「第三希望日時選択」（予約フォームの日時選択モードと同じ設定・同じ選択 UI） ----
         var MD_CHOICE_LABELS = { 1: '第一希望', 2: '第二希望', 3: '第三希望' };
@@ -260,7 +262,10 @@ export class StaticSurveyGenerator {
                     });
                 } else {
                     const el = document.getElementById('fu-' + q.id + '-' + i);
-                    if (el && typeof data.v === 'string') el.value = data.v;
+                    if (el && typeof data.v === 'string') {
+                        el.value = data.v;
+                        if (fu.type === 'birthday') bdSyncFromHidden(el);
+                    }
                 }
             });
         }
@@ -321,6 +326,7 @@ export class StaticSurveyGenerator {
                     // 復元
                     if (data && typeof data.v === 'string' && data.v !== '') {
                         el.value = data.v;
+                        if (q.type === 'birthday') bdSyncFromHidden(el);
                     }
                     // 入力の保存
                     el.addEventListener('input', function () {
@@ -474,9 +480,9 @@ export class StaticSurveyGenerator {
 
         function formatDateTimeForDisplay(value) {
             if (!value || typeof value !== 'string') return value;
-            const dt = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+            const dt = value.match(/^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})/);
             if (dt) return dt[1] + '年' + dt[2] + '月' + dt[3] + '日 ' + dt[4] + ':' + dt[5];
-            const date = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            const date = value.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
             if (date) return date[1] + '年' + date[2] + '月' + date[3] + '日';
             return value;
         }
@@ -490,7 +496,7 @@ export class StaticSurveyGenerator {
             for (const q of questions) {
                 let value = '';
 
-                if (q.type === 'text' || q.type === 'textarea' || q.type === 'date' || q.type === 'datetime') {
+                if (q.type === 'text' || q.type === 'textarea' || q.type === 'date' || q.type === 'datetime' || q.type === 'birthday') {
                     const input = document.getElementById(q.id);
                     if (input) value = input.value;
                 } else if (q.type === 'multiple_dates') {
@@ -529,7 +535,7 @@ export class StaticSurveyGenerator {
                 
                 formData[q.title] = value;
                 // メッセージ表示用は date/datetime のみ日本語整形
-                formDataDisplay[q.title] = (q.type === 'date' || q.type === 'datetime') ? formatDateTimeForDisplay(value) : value;
+                formDataDisplay[q.title] = (q.type === 'date' || q.type === 'datetime' || q.type === 'birthday') ? formatDateTimeForDisplay(value) : value;
 
                 // 選択中の選択肢に紐づく追加質問の回答を親質問の直後に追加
                 if (q.type === 'radio' || q.type === 'checkbox' || q.type === 'select') {
@@ -690,6 +696,9 @@ export class StaticSurveyGenerator {
       case 'multiple_dates':
         fieldHtml = this.renderMultipleDatesField(q);
         break;
+      case 'birthday':
+        fieldHtml = renderBirthdayFieldHtml(q.id);
+        break;
       case 'select': {
         let opts = (q.options || []).map((opt, i) =>
           `<option value="${this.escapeHtml(opt.value || opt.label)}" data-opt-index="${i}">${this.escapeHtml(opt.label)}</option>`
@@ -800,6 +809,8 @@ export class StaticSurveyGenerator {
       }
       case 'textarea':
         return `<textarea id="${fieldId}" class="input" rows="3" placeholder="入力してください"></textarea>`;
+      case 'birthday':
+        return renderBirthdayFieldHtml(fieldId);
       case 'text':
       default:
         return `<textarea id="${fieldId}" class="input" rows="1" placeholder="入力してください"></textarea>`;
@@ -929,6 +940,7 @@ export class StaticSurveyGenerator {
             background-color: var(--accent-color);
             color: var(--white);
         }
+        ${BIRTHDAY_CSS}
         /* 日付・日時入力: スマホで横幅をページに収める + 未選択時ヒント */
         input[type="date"].input,
         input[type="datetime-local"].input {

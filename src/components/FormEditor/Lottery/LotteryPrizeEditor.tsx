@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import type { LotteryPrize, LotteryPrizeStockStatus, LotteryType } from '@/types/lottery';
+import type { LotteryConfig, LotteryPrize, LotteryPrizeStockStatus, LotteryType } from '@/types/lottery';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
-import { generateLotteryId, getLoseProbability, validatePrizes } from '@/lib/lottery-engine';
+import { computeEffectiveOdds, generateLotteryId, getLoseProbability, validatePrizes } from '@/lib/lottery-engine';
 
 interface LotteryPrizeEditorProps {
   lotteryType: LotteryType;
@@ -21,6 +21,9 @@ interface LotteryPrizeEditorProps {
   locked?: boolean;
   /** 賞品 ID → 現在の在庫状況（GET /api/lotteries/[id]/stock）。未取得なら表示しない */
   stockStatus?: Record<string, LotteryPrizeStockStatus>;
+  /** 詳細設定（はずれ 0% / 在庫切れ時の確率変動）。onAdvancedChange が無ければ表示しない */
+  advanced?: LotteryConfig['advanced'];
+  onAdvancedChange?: (advanced: NonNullable<LotteryConfig['advanced']>) => void;
 }
 
 const RANK_PRESETS = [
@@ -51,8 +54,22 @@ export default function LotteryPrizeEditor({
   onConsolationChange,
   locked = false,
   stockStatus,
+  advanced,
+  onAdvancedChange,
 }: LotteryPrizeEditorProps) {
   const isInstant = lotteryType === 'instant';
+  const adv = { no_lose: advanced?.no_lose === true, redistribute_on_sold_out: advanced?.redistribute_on_sold_out === true };
+  // 現在の当選確率（在庫状況が取れているときだけ。在庫切れの再配分 / はずれ 0% を反映）
+  const odds = (() => {
+    if (!isInstant || !stockStatus) return null;
+    const counts: Record<string, number> = {};
+    Object.values(stockStatus).forEach((st) => { counts[st.id] = st.issued; });
+    return computeEffectiveOdds({ prizes, consolation_prize: consolationPrize, advanced: adv }, counts);
+  })();
+  const totalDraws = (() => {
+    const stocks = [...prizes, ...(consolationPrize ? [consolationPrize] : [])].map((p) => p.stock);
+    return stocks.every((v): v is number => typeof v === 'number' && Number.isFinite(v)) ? stocks.reduce((a, b) => a + b, 0) : null;
+  })();
   const errors = validatePrizes({ lottery_type: lotteryType, prizes, consolation_prize: consolationPrize });
   const loseProbability = getLoseProbability(prizes);
   const totalProbability = Math.round(prizes.reduce((s, p) => s + (p.probability || 0), 0) * 100) / 100;
@@ -107,6 +124,13 @@ export default function LotteryPrizeEditor({
             onChange={(e) => patch({ probability: numberOrNull(e.target.value) ?? 0 })}
             disabled={locked}
           />
+          {odds && typeof odds.prizes[prize.id] === 'number' && (odds.changed || adv.no_lose || adv.redistribute_on_sold_out) && (
+            <p className="text-xs text-muted-foreground" data-slot="prize-odds-now">
+              現在の当選確率：
+              <strong className={odds.prizes[prize.id] !== prize.probability ? 'text-[rgb(200,100,10)]' : 'text-foreground'}>{odds.prizes[prize.id]}%</strong>
+              {odds.prizes[prize.id] !== prize.probability && '（在庫状況により変動中）'}
+            </p>
+          )}
         </div>
       )}
       <div className="space-y-1.5">
@@ -194,10 +218,71 @@ export default function LotteryPrizeEditor({
         </p>
       )}
 
+      {isInstant && onAdvancedChange && (
+        <details className="rounded-md border bg-muted/30 px-3 py-2 text-sm" data-slot="lottery-advanced">
+          <summary className="cursor-pointer select-none font-medium">
+            詳細設定
+            {(adv.no_lose || adv.redistribute_on_sold_out) && (
+              <span className="ml-2 text-xs font-normal text-[rgb(200,100,10)]">
+                {[adv.no_lose ? 'はずれ0%' : null, adv.redistribute_on_sold_out ? '確率変動' : null].filter(Boolean).join(' / ')} ON
+              </span>
+            )}
+          </summary>
+          <div className="mt-3 space-y-3">
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="adv_no_lose"
+                checked={adv.no_lose}
+                onCheckedChange={(checked) => onAdvancedChange({ ...adv, no_lose: checked === true })}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="adv_no_lose" className="cursor-pointer">はずれ0%にする</Label>
+                <p className="text-xs text-muted-foreground">
+                  はずれ分の確率は残念賞へ、残念賞が無い（または在庫切れ）ときは残っている賞品へ繰り上げます。
+                  賞品と残念賞の在庫数の合計がこの抽選フォームで抽選できる合計回数になり、全ユーザー合わせて在庫が尽きると
+                  「賞品がなくなったので抽選は終了いたしました。」と表示して抽選できなくなります（フォームを開いた時点で表示）。
+                </p>
+                {adv.no_lose && (
+                  <p className="text-xs">
+                    抽選できる合計回数：
+                    <strong>{totalDraws === null ? '上限なし（在庫が無制限の賞品があります）' : `${totalDraws} 回`}</strong>
+                    {odds && totalDraws !== null && (
+                      <span className="text-muted-foreground">
+                        {'（残り '}
+                        {Math.max(0, totalDraws - Object.values(stockStatus || {}).reduce((a, st) => a + st.issued, 0))}
+                        {' 回）'}
+                      </span>
+                    )}
+                    {odds?.all_sold_out && <span className="ml-1 text-destructive">在庫が尽きたため現在は抽選終了です</span>}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="adv_redistribute"
+                checked={adv.redistribute_on_sold_out}
+                onCheckedChange={(checked) => onAdvancedChange({ ...adv, redistribute_on_sold_out: checked === true })}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="adv_redistribute" className="cursor-pointer">賞品の在庫が0になったら他の賞品の当選確率を変動させる</Label>
+                <p className="text-xs text-muted-foreground">
+                  在庫切れになった賞品の確率を、残っている賞品へ設定した確率の比で上乗せします（例: A賞 10% が在庫切れ → B賞 20% / C賞 10% なら B賞 26.67% / C賞 13.33%）。
+                  変動中は各賞品の下に「現在の当選確率」が表示され、フォームでも確率表示が ON なら「現在 X%」と出ます。
+                </p>
+              </div>
+            </div>
+          </div>
+        </details>
+      )}
+
       {isInstant && (
         <div className={`rounded-md border px-3 py-2 text-sm ${totalProbability > 100 ? 'border-destructive bg-destructive/10 text-destructive' : 'bg-muted/50'}`}>
           当選確率の合計 <strong>{totalProbability}%</strong> ／ はずれ <strong>{loseProbability}%</strong>
           {totalProbability > 100 && '（100% を超えています）'}
+          {odds && odds.changed && (
+            <span className="ml-2 text-xs text-[rgb(200,100,10)]">現在: はずれ {odds.lose}%{odds.consolation !== null ? `（残念賞 ${odds.consolation}%）` : ''}</span>
+          )}
         </div>
       )}
 

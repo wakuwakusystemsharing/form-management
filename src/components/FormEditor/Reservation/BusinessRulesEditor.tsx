@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Form, BusinessHours, SpecialBusinessDay } from '@/types/form';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
 import { getThemeClasses, ThemeType } from '../FormEditorTheme';
+import { CANCEL_DEADLINE_OPTIONS, resolveCancelRules, type CancelRules } from '@/lib/cancel-rules';
 import MultipleDatesSettingsEditor, { ExtraMinutesPicker, InfoTooltip } from './MultipleDatesSettingsEditor';
 import type { MultipleDatesSettings } from '@/types/form';
 
@@ -119,6 +120,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     businessHours: true,
     bookingRules: true,
     dateTimeMode: true,
+    cancelRules: true,
     reservationSummary: true
   });
 
@@ -545,11 +547,23 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     );
   };
 
-  const toggleSection = (section: 'businessHours' | 'bookingRules' | 'dateTimeMode' | 'reservationSummary') => {
+  const toggleSection = (section: 'businessHours' | 'bookingRules' | 'dateTimeMode' | 'cancelRules' | 'reservationSummary') => {
     setExpandedSections(prev => ({
       ...prev,
       [section]: !prev[section]
     }));
+  };
+
+  // キャンセルルール設定
+  const cancelRules = resolveCancelRules(form.config);
+  const handleCancelRulesChange = (patch: Partial<CancelRules>) => {
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        cancel_rules: { ...cancelRules, ...patch }
+      }
+    });
   };
 
   // 通知編集: LINE 自動応答メッセージの文言（空欄 = デフォルト文言）
@@ -1644,6 +1658,129 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 </p>
               )}
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* キャンセルルール設定 */}
+      <div className={themeClasses.card} data-slot="cancel-rules">
+        <button
+          onClick={() => toggleSection('cancelRules')}
+          className={`w-full flex items-center justify-between p-4 text-left transition-colors ${
+            theme === 'light' ? 'hover:bg-gray-100' : 'hover:bg-gray-700'
+          }`}
+        >
+          <div className="flex items-center space-x-2">
+            <svg className={`w-5 h-5 ${themeClasses.text.primary}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3 className={`text-lg font-medium ${themeClasses.text.primary}`}>キャンセルルール設定</h3>
+          </div>
+          <svg
+            className={`w-5 h-5 ${themeClasses.text.secondary} transform transition-transform ${expandedSections.cancelRules ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {expandedSections.cancelRules && (
+          <div className={`p-4 border-t ${themeClasses.divider} space-y-5`}>
+            <p className={`text-xs ${themeClasses.text.secondary}`}>
+              お客様が公式 LINE の「予約をキャンセル」で行うキャンセルのルールです。店舗管理画面からのキャンセルには制限はかかりません。
+            </p>
+
+            {/* キャンセル期限 */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>キャンセル期限</label>
+                <InfoTooltip
+                  theme={theme}
+                  text={'予約日時の何時間前までお客様自身でキャンセルできるかを設定します。\n期限を過ぎた予約は LINE の一覧でキャンセルボタンが出ず、「店舗へご連絡ください」と案内します（店舗の電話番号が登録されていれば番号も表示）。'}
+                />
+              </div>
+              <select
+                value={cancelRules.deadline_hours}
+                onChange={(e) => handleCancelRulesChange({ deadline_hours: parseInt(e.target.value, 10) || 0 })}
+                className={themeClasses.input}
+              >
+                {CANCEL_DEADLINE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                {cancelRules.deadline_hours > 0
+                  ? `例: 予約が 9/20（土）14:00 の場合、${cancelRules.deadline_hours} 時間前の ${(() => {
+                      const d = new Date(Date.UTC(2026, 8, 20, 14 - 9, 0) - cancelRules.deadline_hours * 3600000);
+                      const jst = new Date(d.getTime() + 9 * 3600000);
+                      const dow = ['日', '月', '火', '水', '木', '金', '土'][jst.getUTCDay()];
+                      return `${jst.getUTCMonth() + 1}/${jst.getUTCDate()}（${dow}）${String(jst.getUTCHours()).padStart(2, '0')}:${String(jst.getUTCMinutes()).padStart(2, '0')}`;
+                    })()} まで LINE からキャンセルできます`
+                  : 'お客様はいつでも LINE からキャンセルできます'}
+              </p>
+            </div>
+
+            {/* キャンセル規定の表示 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>キャンセル規定をフォームに表示</label>
+                  <InfoTooltip
+                    theme={theme}
+                    text={'ONにすると、予約フォームの「予約する」ボタンの上に「キャンセルについて」として下の文言を表示します。\nキャンセル期限を設定していれば「LINE からのキャンセルは○時間前まで」も自動で添えます。'}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCancelRulesChange({ show_policy_on_form: !cancelRules.show_policy_on_form })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    cancelRules.show_policy_on_form ? themeClasses.toggle.enabled : themeClasses.toggle.disabled
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    cancelRules.show_policy_on_form ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+              <textarea
+                value={cancelRules.policy_text}
+                onChange={(e) => handleCancelRulesChange({ policy_text: e.target.value })}
+                rows={3}
+                placeholder={'例: 当日のキャンセルはキャンセル料（施術料金の 50%）を頂戴します。\nご予定が変わった場合はお早めにご連絡ください。'}
+                className={`w-full ${themeClasses.textarea} text-sm rounded-md px-3 py-2`}
+              />
+              <p className={`text-xs ${themeClasses.text.tertiary}`}>
+                キャンセル料の有無や連絡方法など、お客様に予約前に知っておいてほしいことを書いてください（改行できます）。
+              </p>
+            </div>
+
+            {/* キャンセル時の店舗通知 */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>お客様がキャンセルしたら店舗にメールで通知</label>
+                <InfoTooltip
+                  theme={theme}
+                  text={'ONにすると、お客様が LINE の「予約をキャンセル」でキャンセルしたとき、店舗側通知メールの宛先（未設定ならオーナーのメール）へ「【予約キャンセル】」のメールを送ります。\n空き枠にすぐ気づけるので、キャンセル待ちのお客様への連絡に役立ちます。'}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => handleCancelRulesChange({ notify_store_on_cancel: !cancelRules.notify_store_on_cancel })}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  cancelRules.notify_store_on_cancel ? themeClasses.toggle.enabled : themeClasses.toggle.disabled
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  cancelRules.notify_store_on_cancel ? 'translate-x-6' : 'translate-x-1'
+                }`} />
+              </button>
+            </div>
+            {cancelRules.notify_store_on_cancel && (
+              <p className={`text-xs ${themeClasses.text.tertiary}`}>
+                通知先: {form.config?.calendar_settings?.notification_email || '店舗オーナーのメールアドレス（店舗設定）'}
+              </p>
+            )}
           </div>
         )}
       </div>

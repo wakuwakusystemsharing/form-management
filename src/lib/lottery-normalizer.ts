@@ -116,6 +116,7 @@ export function normalizeLotteryConfig(raw: unknown): LotteryConfig {
   const basic = obj(c.basic_info);
   const rules = obj(c.entry_rules);
   const pres = obj(c.presentation);
+  const adv = obj(c.advanced);
   const msgs = obj(c.messages);
   const ui = obj(c.ui_settings);
   const deferred = obj(c.deferred);
@@ -164,6 +165,10 @@ export function normalizeLotteryConfig(raw: unknown): LotteryConfig {
     ui_settings: {
       submit_button_text: str(ui.submit_button_text) || LOTTERY_DEFAULT_SUBMIT_TEXT,
       theme_color: themeColor,
+    },
+    advanced: {
+      no_lose: bool(adv.no_lose, false),
+      redistribute_on_sold_out: bool(adv.redistribute_on_sold_out, false),
     },
   };
 

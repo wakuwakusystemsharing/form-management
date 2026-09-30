@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  computeEffectiveOdds,
   computeExpiresAt,
   computePrizeStockStatus,
   computeRemainingEntries,
+  LOTTERY_CLOSED_MESSAGE,
+  selectPrizeEffective,
   drawDeferredWinners,
   endOfDayJst,
   formatDateJst,
@@ -387,5 +390,56 @@ describe('computePrizeStockStatus（在庫 − 発行済み）', () => {
       { id: 'b', stock: null, issued: 0, remaining: null },
       { id: 'c', stock: 2, issued: 5, remaining: 0 },
     ]);
+  });
+});
+
+describe('computeEffectiveOdds / selectPrizeEffective（詳細設定）', () => {
+  const prizes = [
+    { id: 'a', name: 'A', probability: 10, stock: 1 },
+    { id: 'b', name: 'B', probability: 20, stock: 5 },
+    { id: 'c', name: 'C', probability: 10, stock: null },
+  ];
+  const consolation = { id: 'x', name: '残念賞', probability: 0, stock: 3 };
+
+  it('設定 OFF: 在庫切れの賞品の分は「はずれ」へ（設定確率を守る）', () => {
+    const odds = computeEffectiveOdds({ prizes, advanced: { no_lose: false, redistribute_on_sold_out: false } }, { a: 1 });
+    expect(odds.prizes).toEqual({ a: 0, b: 20, c: 10 });
+    expect(odds.lose).toBe(70);
+    expect(odds.changed).toBe(true);
+    expect(odds.all_sold_out).toBe(false);
+  });
+
+  it('確率変動 ON: 在庫切れの確率を残りの賞品へ設定確率の比で上乗せ', () => {
+    const odds = computeEffectiveOdds({ prizes, advanced: { no_lose: false, redistribute_on_sold_out: true } }, { a: 1 });
+    expect(odds.prizes).toEqual({ a: 0, b: 26.67, c: 13.33 });
+    expect(odds.lose).toBe(60);
+    expect(computeEffectiveOdds({ prizes, advanced: { no_lose: false, redistribute_on_sold_out: true } }, {}).changed).toBe(false);
+  });
+
+  it('はずれ 0%: はずれ分は残念賞へ、残念賞が尽きたら残りの賞品へ繰り上げ。全部尽きたら終了', () => {
+    const cfg = { prizes: prizes.map((p) => ({ ...p, stock: p.id === 'c' ? 2 : p.stock })), consolation_prize: consolation, advanced: { no_lose: true, redistribute_on_sold_out: false } };
+    const withConsolation = computeEffectiveOdds(cfg, {});
+    expect(withConsolation.consolation).toBe(60);
+    expect(withConsolation.total_draws).toBe(1 + 5 + 2 + 3);
+    const noConsolation = computeEffectiveOdds(cfg, { x: 3 });
+    expect(noConsolation.consolation).toBeNull();
+    expect(noConsolation.lose).toBe(0);
+    expect(noConsolation.prizes).toEqual({ a: 25, b: 50, c: 25 });
+    const done = computeEffectiveOdds(cfg, { a: 1, b: 5, c: 2, x: 3 });
+    expect(done.all_sold_out).toBe(true);
+    expect(done.lose).toBe(0);
+    expect(selectPrizeEffective(cfg, 0.5, { a: 1, b: 5, c: 2, x: 3 })).toEqual({ prize: null, is_consolation: false, all_sold_out: true });
+    expect(LOTTERY_CLOSED_MESSAGE).toBe('賞品がなくなったので抽選は終了いたしました。');
+  });
+
+  it('selectPrizeEffective: 現在の確率の累積で選ぶ（はずれ 0% なら必ず何かが当たる）', () => {
+    const cfg = { prizes, consolation_prize: consolation, advanced: { no_lose: true, redistribute_on_sold_out: true } };
+    expect(selectPrizeEffective(cfg, 0.05, {}).prize?.id).toBe('a');
+    expect(selectPrizeEffective(cfg, 0.25, {}).prize?.id).toBe('b');
+    expect(selectPrizeEffective(cfg, 0.35, {}).prize?.id).toBe('c');
+    expect(selectPrizeEffective(cfg, 0.99, {})).toMatchObject({ prize: { id: 'x' }, is_consolation: true });
+    const late = computeEffectiveOdds(cfg, { a: 1, x: 3 });
+    expect(late.prizes).toEqual({ a: 0, b: 66.67, c: 33.33 });
+    expect(selectPrizeEffective(cfg, 0.999, { a: 1, x: 3 }).prize?.id).toBe('c');
   });
 });

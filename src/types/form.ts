@@ -1,8 +1,11 @@
 // メニュー / オプションが選択されたときにフォーム上へ表示される追加質問
 // （詳細設定のカスタムフィールドと同じ回答タイプをサポート）
+// 回答タイプ（カスタムフィールド / 追加質問 共通）。birthday = 誕生日選択（年 / 月 / 日を別々のプルダウンで選択。値は "YYYY-MM-DD"）
+export type CustomFieldType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'birthday' | 'select';
+
 export interface AdditionalQuestion {
   id: string;
-  type: 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select';
+  type: CustomFieldType;
   title: string;
   required: boolean;
   options?: Array<{
@@ -170,7 +173,7 @@ export interface FormConfig {
   };
   custom_fields?: Array<{
     id: string;
-    type: 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select';
+    type: CustomFieldType;
     title: string;
     required: boolean;
     options?: Array<{
@@ -341,6 +344,14 @@ export interface FormConfig {
     confirmation_footer?: string;    // 【ご予約確認】内のフッター（デフォルト: 予約完了いたしました。\nご来店心よりお待ちしております。）
     cancel_select_prompt?: string;   // 【予約キャンセル】内の案内文（デフォルト: キャンセルする予約を選択してください）
     cancel_done_heading?: string;    // 【キャンセル完了】内の見出し（デフォルト: 予約をキャンセルしました）
+  };
+
+  // キャンセルルール設定（営業時間・ルール → 予約ルール設定とご予約内容の間）。純粋ロジックは src/lib/cancel-rules.ts
+  cancel_rules?: {
+    deadline_hours?: number;          // 予約日時の何時間前までお客様自身（LINE）でキャンセルできるか。0 / 未設定 = いつでも
+    policy_text?: string;             // キャンセル規定の文言（フォームの送信ボタンの上に表示）
+    show_policy_on_form?: boolean;    // 上の文言をフォームに表示する
+    notify_store_on_cancel?: boolean; // お客様が LINE でキャンセルしたとき店舗へメール通知（notification_email > owner_email）
   };
 
   // フォーム上の任意の位置に表示する画像/テキストブロック（詳細設定 → 画像orテキスト設置）

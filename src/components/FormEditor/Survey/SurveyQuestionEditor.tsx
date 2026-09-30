@@ -243,6 +243,7 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                         <SelectItem value="textarea">テキスト入力 (複数行)</SelectItem>
                         <SelectItem value="date">日付選択</SelectItem>
                         <SelectItem value="datetime">日時選択</SelectItem>
+                        <SelectItem value="birthday">誕生日選択</SelectItem>
                         {allowMultipleDates && <SelectItem value="multiple_dates">第三希望日時選択</SelectItem>}
                         <SelectItem value="select">ドロップダウン選択</SelectItem>
                         <SelectItem value="radio">単一選択 (ボタン)</SelectItem>
@@ -442,6 +443,7 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                                       <SelectContent>
                                         <SelectItem value="text">テキスト入力 (1行)</SelectItem>
                                         <SelectItem value="textarea">テキスト入力 (複数行)</SelectItem>
+                                        <SelectItem value="birthday">誕生日選択</SelectItem>
                                         <SelectItem value="select">ドロップダウン選択</SelectItem>
                                         <SelectItem value="radio">単一選択 (ボタン)</SelectItem>
                                         <SelectItem value="checkbox">複数選択 (ボタン)</SelectItem>

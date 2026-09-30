@@ -203,6 +203,8 @@ export default function LotteryFormEditor({ form, onUpdate, userRole = 'service_
             }}
             locked={prizesLocked}
             stockStatus={stockStatus}
+            advanced={config.advanced}
+            onAdvancedChange={(advanced) => setConfig({ advanced })}
           />
           {config.lottery_type === 'instant' && (
             <p className="mt-3 text-xs text-muted-foreground">

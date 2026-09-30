@@ -390,3 +390,124 @@ export function drawDeferredWinners(
   }
   return winners;
 }
+
+// ---------------------------------------------------------------------------
+// 詳細設定: はずれ 0% / 在庫切れ時の確率変動
+// ---------------------------------------------------------------------------
+
+/** はずれ 0% で全賞品の在庫が尽きたときにお客様へ出す文言（フォーム・API 共通） */
+export const LOTTERY_CLOSED_MESSAGE = '賞品がなくなったので抽選は終了いたしました。';
+
+export interface EffectiveOdds {
+  /** 賞品 ID → 現在の当選確率（%）。在庫切れは 0 */
+  prizes: Record<string, number>;
+  /** 残念賞の現在の確率（%）。残念賞が無い / 在庫切れなら null */
+  consolation: number | null;
+  /** 何も当たらない確率（%） */
+  lose: number;
+  /** 抽選できる賞品（残念賞含む）が 1 つも残っていない */
+  all_sold_out: boolean;
+  /** 設定値から確率が変わっている（在庫切れの再配分 / はずれ 0% の繰り上げ） */
+  changed: boolean;
+  /** はずれ 0% のときの抽選できる合計回数（= 在庫の合計）。無制限の賞品があれば null */
+  total_draws: number | null;
+}
+
+type OddsConfig = Pick<LotteryConfig, 'prizes' | 'consolation_prize' | 'advanced'>;
+
+/**
+ * 現在の在庫（発行数）を踏まえた当選確率を求める。
+ * - 通常: 在庫切れの賞品に当たった分は「はずれ」（残念賞があれば残念賞）になる（設定した確率を守る）
+ * - 在庫切れ時に確率を変動: 在庫切れの賞品の確率を、残っている賞品へ設定確率の比で上乗せする
+ * - はずれ 0%: はずれ分は残念賞へ。残念賞が無い / 在庫切れなら残っている賞品へ比例配分。
+ *   全部なくなったら all_sold_out（抽選終了）
+ */
+export function computeEffectiveOdds(config: OddsConfig, issuedCounts: Record<string, number>): EffectiveOdds {
+  const redistribute = config.advanced?.redistribute_on_sold_out === true;
+  const noLose = config.advanced?.no_lose === true;
+  const prizes = config.prizes.map((p) => ({
+    id: p.id,
+    base: typeof p.probability === 'number' && p.probability > 0 ? p.probability : 0,
+    available: !isPrizeSoldOut(p, issuedCounts[p.id] ?? 0),
+  }));
+  const baseTotal = prizes.reduce((s, p) => s + p.base, 0);
+  let lose = Math.max(0, 100 - baseTotal);
+  const odds: Record<string, number> = {};
+  prizes.forEach((p) => { odds[p.id] = p.available ? p.base : 0; });
+
+  const soldSum = prizes.filter((p) => !p.available).reduce((s, p) => s + p.base, 0);
+  const availSum = () => prizes.filter((p) => p.available).reduce((s, p) => s + odds[p.id], 0);
+  if (soldSum > 0) {
+    if (redistribute && availSum() > 0) {
+      const total = availSum();
+      prizes.filter((p) => p.available).forEach((p) => { odds[p.id] += soldSum * (odds[p.id] / total); });
+    } else {
+      lose += soldSum;
+    }
+  }
+
+  const consolation = config.consolation_prize;
+  const consolationAvailable = !!consolation && !isPrizeSoldOut(consolation, issuedCounts[consolation.id] ?? 0);
+  let consolationPct: number | null = consolationAvailable ? lose : null;
+  if (noLose) {
+    if (!consolationAvailable && lose > 0) {
+      const total = availSum();
+      if (total > 0) {
+        prizes.filter((p) => p.available).forEach((p) => { odds[p.id] += lose * (odds[p.id] / total); });
+        lose = 0;
+      }
+    }
+  }
+  const anyPrize = prizes.some((p) => p.available && odds[p.id] > 0);
+  const allSoldOut = !anyPrize && !consolationAvailable;
+  if (allSoldOut) { lose = noLose ? 0 : 100; consolationPct = null; }
+
+  const round = (v: number) => Math.round(v * 100) / 100;
+  Object.keys(odds).forEach((id) => { odds[id] = round(odds[id]); });
+  lose = round(lose);
+  if (consolationPct !== null) consolationPct = round(consolationPct);
+
+  const changed = prizes.some((p) => round(p.base) !== odds[p.id]) || (noLose && Math.max(0, 100 - baseTotal) !== lose && !allSoldOut);
+
+  let totalDraws: number | null = null;
+  if (noLose) {
+    const stocks = [...config.prizes, ...(consolation ? [consolation] : [])].map((p) => p.stock);
+    totalDraws = stocks.every((s): s is number => typeof s === 'number' && Number.isFinite(s))
+      ? stocks.reduce((s, v) => s + v, 0)
+      : null;
+  }
+  return { prizes: odds, consolation: consolationPct, lose, all_sold_out: allSoldOut, changed, total_draws: totalDraws };
+}
+
+export interface EffectiveSelection {
+  prize: LotteryPrize | null;
+  is_consolation: boolean;
+  all_sold_out: boolean;
+}
+
+/** computeEffectiveOdds の確率で 1 つ選ぶ（はずれ 0% / 確率変動が ON のときの抽選） */
+export function selectPrizeEffective(config: OddsConfig, random: number, issuedCounts: Record<string, number>): EffectiveSelection {
+  const odds = computeEffectiveOdds(config, issuedCounts);
+  if (odds.all_sold_out) return { prize: null, is_consolation: false, all_sold_out: true };
+  const r = Math.min(Math.max(random, 0), 0.999999999) * 100;
+  let cumulative = 0;
+  for (const prize of config.prizes) {
+    const p = odds.prizes[prize.id] ?? 0;
+    if (p <= 0) continue;
+    cumulative += p;
+    if (r < cumulative) return { prize, is_consolation: false, all_sold_out: false };
+  }
+  if (config.consolation_prize && odds.consolation !== null && odds.consolation > 0) {
+    cumulative += odds.consolation;
+    if (r < cumulative) return { prize: config.consolation_prize, is_consolation: true, all_sold_out: false };
+  }
+  // 丸め誤差で末尾に落ちた場合: はずれ 0% なら残っている賞品の最後のものにする
+  if (config.advanced?.no_lose === true) {
+    if (config.consolation_prize && odds.consolation !== null && odds.consolation > 0) {
+      return { prize: config.consolation_prize, is_consolation: true, all_sold_out: false };
+    }
+    const last = [...config.prizes].reverse().find((p) => (odds.prizes[p.id] ?? 0) > 0);
+    if (last) return { prize: last, is_consolation: false, all_sold_out: false };
+  }
+  return { prize: null, is_consolation: false, all_sold_out: false };
+}

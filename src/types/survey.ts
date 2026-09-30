@@ -1,10 +1,11 @@
 import { StaticDeploy, MultipleDatesSettings } from './form';
 
 // multiple_dates = 第三希望日時選択（予約フォームの日時選択モードと同じ設定・同じ選択 UI。第一〜第三希望の日付 + 時間）
-export type SurveyQuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select' | 'multiple_dates';
+// birthday = 誕生日選択（年 / 月 / 日を別々のプルダウンで選択。値は "YYYY-MM-DD"）
+export type SurveyQuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'birthday' | 'select' | 'multiple_dates';
 
 /** 選択肢ごとの追加質問で使える回答タイプ */
-export type SurveyFollowUpType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'select';
+export type SurveyFollowUpType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'birthday' | 'select';
 
 /**
  * 選択肢ごとの追加質問。
