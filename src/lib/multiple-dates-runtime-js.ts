@@ -289,3 +289,131 @@ function mdFormatDateTimeJa(dateStr, timeStr) {
 }
 // ========== 第三希望日時選択ここまで ==========
 `;
+
+/**
+ * 誕生日選択（年 / 月 / 日を別々のプルダウンで選ぶ）
+ *
+ * マークアップ（各ジェネレータが出力）:
+ *   <div class="birthday-field" data-birthday-for="{hiddenId}">
+ *     <input type="hidden" id="{hiddenId}" ...>
+ *     <select class="input birthday-select" data-part="y"></select><span class="birthday-unit">年</span>
+ *     <select class="input birthday-select" data-part="m"></select><span class="birthday-unit">月</span>
+ *     <select class="input birthday-select" data-part="d"></select><span class="birthday-unit">日</span>
+ *   </div>
+ * 3 つとも選ぶと hidden に "YYYY-MM-DD" が入り、input / change イベントを発火する
+ * （既存の「入力欄の値を読む / 保存する / 復元する」コードがそのまま使える）。
+ * 復元などで hidden の値を直接書き換えたときは bdSyncFromHidden(hidden) でプルダウンに反映する
+ */
+export const BIRTHDAY_RUNTIME_JS = `
+// ========== 誕生日選択（年 / 月 / 日プルダウン）==========
+var BD_YEAR_SPAN = 100;
+function bdPad(n) { return String(n).padStart(2, '0'); }
+function bdDaysInMonth(y, m) {
+    if (!y || !m) return 31;
+    return new Date(Number(y), Number(m), 0).getDate();
+}
+function bdFill(select, values, placeholder, current) {
+    var prev = current !== undefined ? current : select.value;
+    select.innerHTML = '';
+    var ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = placeholder;
+    select.appendChild(ph);
+    for (var i = 0; i < values.length; i++) {
+        var o = document.createElement('option');
+        o.value = String(values[i]);
+        o.textContent = String(values[i]);
+        select.appendChild(o);
+    }
+    if (prev && values.map(String).indexOf(String(prev)) !== -1) select.value = String(prev);
+}
+function bdParts(container) {
+    return {
+        y: container.querySelector('select[data-part="y"]'),
+        m: container.querySelector('select[data-part="m"]'),
+        d: container.querySelector('select[data-part="d"]')
+    };
+}
+// 年（今年 → 100 年前）・月・日の選択肢を作る（何度呼んでも安全）
+function bdEnsure(container) {
+    if (!container || container.dataset.bdReady === '1') return;
+    var p = bdParts(container);
+    if (!p.y || !p.m || !p.d) return;
+    var thisYear = new Date().getFullYear();
+    var years = [];
+    for (var y = thisYear; y >= thisYear - BD_YEAR_SPAN; y--) years.push(y);
+    var months = [];
+    for (var m = 1; m <= 12; m++) months.push(m);
+    var days = [];
+    for (var d = 1; d <= 31; d++) days.push(d);
+    bdFill(p.y, years, '----');
+    bdFill(p.m, months, '--');
+    bdFill(p.d, days, '--');
+    var onChange = function () { bdCommit(container); };
+    p.y.addEventListener('change', onChange);
+    p.m.addEventListener('change', onChange);
+    p.d.addEventListener('change', onChange);
+    container.dataset.bdReady = '1';
+}
+// 3 つの選択から hidden の値（YYYY-MM-DD）を作り、既存コード向けに input / change を発火
+function bdCommit(container) {
+    var p = bdParts(container);
+    if (!p.y || !p.m || !p.d) return;
+    // 月・年に合わせて日の選択肢を作り直す（2 月 → 28 / 29 日まで）
+    var maxDay = bdDaysInMonth(p.y.value, p.m.value);
+    var days = [];
+    for (var d = 1; d <= maxDay; d++) days.push(d);
+    bdFill(p.d, days, '--');
+    var hidden = document.getElementById(container.dataset.birthdayFor || '');
+    if (!hidden) return;
+    var next = (p.y.value && p.m.value && p.d.value) ? p.y.value + '-' + bdPad(p.m.value) + '-' + bdPad(p.d.value) : '';
+    if (hidden.value === next) return;
+    hidden.value = next;
+    hidden.dispatchEvent(new Event('input', { bubbles: true }));
+    hidden.dispatchEvent(new Event('change', { bubbles: true }));
+}
+// hidden の値（復元など）をプルダウンに反映する
+function bdSyncFromHidden(hidden) {
+    if (!hidden) return;
+    var container = hidden.closest ? hidden.closest('.birthday-field') : null;
+    if (!container) return;
+    bdEnsure(container);
+    var p = bdParts(container);
+    var m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(hidden.value || '');
+    if (!m) { p.y.value = ''; p.m.value = ''; p.d.value = ''; bdCommit(container); return; }
+    p.y.value = String(Number(m[1]));
+    p.m.value = String(Number(m[2]));
+    var maxDay = bdDaysInMonth(p.y.value, p.m.value);
+    var days = [];
+    for (var d = 1; d <= maxDay; d++) days.push(d);
+    bdFill(p.d, days, '--');
+    p.d.value = String(Number(m[3]));
+    // 選択肢に無い値（未来の年など）は反映されないので hidden も空に戻す
+    if (!p.y.value || !p.m.value || !p.d.value) { hidden.value = ''; }
+}
+function bdInitAll(root) {
+    var list = (root || document).querySelectorAll('.birthday-field');
+    for (var i = 0; i < list.length; i++) bdEnsure(list[i]);
+}
+// ========== 誕生日選択ここまで ==========
+`;
+
+/** 誕生日選択のマークアップ（3 ジェネレータ共通）。hiddenAttrs は hidden input に付ける追加属性（data-field-id 等） */
+export function renderBirthdayFieldHtml(hiddenId: string, hiddenAttrs = ''): string {
+  return `<div class="birthday-field" data-birthday-for="${hiddenId}">`
+    + `<input type="hidden" id="${hiddenId}"${hiddenAttrs ? ' ' + hiddenAttrs : ''}>`
+    + `<select class="input birthday-select" data-part="y" aria-label="年"></select><span class="birthday-unit">年</span>`
+    + `<select class="input birthday-select" data-part="m" aria-label="月"></select><span class="birthday-unit">月</span>`
+    + `<select class="input birthday-select" data-part="d" aria-label="日"></select><span class="birthday-unit">日</span>`
+    + `</div>`;
+}
+
+/** 誕生日選択の見た目（3 ジェネレータ共通。各フォームの .input のデザインに合わせて横並びにする） */
+export const BIRTHDAY_CSS = `
+        .birthday-field { display: flex; align-items: center; gap: 6px; width: 100%; max-width: 100%; }
+        .birthday-field .birthday-select { flex: 1 1 0; min-width: 0; width: auto; min-height: 48px; padding-left: 10px; padding-right: 26px; -webkit-appearance: none; appearance: none;
+            background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23666' stroke-width='1.6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 8px center; }
+        .birthday-field .birthday-select[data-part="y"] { flex: 1.7 1 0; }
+        .birthday-field .birthday-unit { flex: 0 0 auto; font-size: 14px; color: #555; }
+`;

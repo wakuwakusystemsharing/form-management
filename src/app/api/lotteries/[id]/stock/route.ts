@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getLotteryForm } from '@/lib/lottery-repository';
-import { getPrizeStockStatus } from '@/lib/lottery-service';
+import { getLotteryLiveStatus } from '@/lib/lottery-service';
 
 /**
  * GET /api/lotteries/[id]/stock - 賞品ごとの現在の在庫状況（公開・認証なし）
@@ -19,9 +19,18 @@ export async function GET(
     if (!form) {
       return NextResponse.json({ error: '抽選フォームが見つかりません' }, { status: 404 });
     }
-    const prizes = await getPrizeStockStatus(form);
+    const live = await getLotteryLiveStatus(form);
     return NextResponse.json(
-      { prizes, show_stock: form.config.presentation.show_stock, updated_at: new Date().toISOString() },
+      {
+        prizes: live.prizes,
+        // 現在の当選確率（在庫切れの再配分 / はずれ 0% を反映。changed が true なら設定値から変わっている）
+        odds: live.odds,
+        // はずれ 0% で全賞品の在庫が尽きた（フォームは抽選終了の案内を出す）
+        all_sold_out: live.all_sold_out,
+        closed_message: live.closed_message,
+        show_stock: form.config.presentation.show_stock,
+        updated_at: new Date().toISOString(),
+      },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (error) {

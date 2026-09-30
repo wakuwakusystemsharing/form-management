@@ -251,6 +251,10 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - 本人確認: LIFF の ID トークンを `src/lib/line-verify.ts` で検証。チャネル ID は `stores.line_channel_id` → 環境変数 `NEXT_PUBLIC_LINE_CHANNEL_ID` の順（local は `line_user_id` の申告を許容）
 - LINE 通知: LIFF `sendMessages` 用テキストと Bot Flex 当選カードは `src/lib/lottery-line-message.ts`。push は `src/lib/line-push.ts`（はずれには送らない）
 - 引換: 6 桁コード（店舗内ユニーク）+ QR 方式（`qr_token`）。管理者ページから `redeem / unredeem / cancel / restore`
+- **詳細設定（賞品と確率タブ → 当選確率の合計の上、折りたたみ）** `config.advanced`（`no_lose` / `redistribute_on_sold_out`。既定 false、即時抽選のみ）
+  - はずれ 0%（`no_lose`）: はずれ分は残念賞へ、残念賞が無い / 在庫切れなら残っている賞品へ比例配分。賞品 + 残念賞の在庫合計 = 抽選できる合計回数（`total_draws`。無制限の賞品があれば null）。全部尽きると `GET /stock` が `all_sold_out: true` + `closed_message` を返し、フォームは開いた時点で赤いバナー「賞品がなくなったので抽選は終了いたしました。」（`LOTTERY_CLOSED_MESSAGE`）を出して抽選ボタンを隠す。抽選 API も 410 で同じ文言。同時アクセスで在庫が尽きたら在庫を取り直して最大 3 回選び直す
+  - 在庫切れ時の確率変動（`redistribute_on_sold_out`）: 在庫切れ賞品の確率を残っている賞品へ設定確率の比で上乗せ
+  - 計算は `computeEffectiveOdds(config, issuedCounts)`（`changed` = 設定値から変わっている）/ 抽選は `selectPrizeEffective`（どちらかが ON のときだけ使う。OFF は従来の `selectPrize`）。`/stock` の `odds` でフォームは「現在 X%」（`applyOdds`）、編集画面は各賞品の下に「現在の当選確率」と合計回数 / 残り回数を表示（`LotteryPrizeEditor` の `advanced` / `onAdvancedChange`）
 - **在庫の最新化**: 静的 HTML の「残り N」はデプロイ時の値で、公開プロキシは 1 時間キャッシュするため、フォームは開いたとき・抽選直後・再抽選前に `GET /api/lotteries/{id}/stock`（公開・件数のみ）で `stock − 発行済み` を取り直して表示を差し替える（`refreshStock()` / `applyStock()`。0 は「在庫なし」赤字）。純粋ロジックは `computePrizeStockStatus()`、サーバーは `getPrizeStockStatus()`。編集画面「賞品と確率」の在庫欄の下に「現在の残り：N（当選 M 件）」を同じ API で表示（`LotteryPrizeEditor` の `stockStatus`）
 - **残り参加回数と再抽選**: 抽選結果（`LotteryDrawResponse.remaining_entries`）に `computeRemainingEntries()`（上限 − 対象期間の参加数。cancelled は数えない）を添え、即時抽選で 1 以上なら結果画面の「LINE に結果を送る」の下に「再度抽選する（あと N 回）」を出す。`my-result` の再表示も同じ値で判定（旧: `limit !== 'once'` の固定判定は廃止）
 - **あなたが当選した一覧**: `GET /api/lotteries/{id}/my-entries?id_token=`（ID トークン検証）が本人の当選（賞品付きの drawn / redeemed、新しい順）を `LotteryDrawResponse[]` で返す（`getUserWinResults()`）。フォームは LIFF 認証後に取得し、賞品一覧の上のバーと結果画面のボタン「あなたが当選した一覧（N件）」からモーダル（`#winsModal`）で表示。タップで `showResult(win, { existing: true, fromList: true })` により引換コード / QR を再表示。複数回抽選で 2 回目に当選しても 1 回目の内容を確認できる
@@ -594,7 +598,8 @@ export async function GET(req, { params }) {
 - `follow_up?: { enabled, title, type: 'text'|'textarea'|'radio'|'checkbox'|'select', required?, options? }` - その選択肢が選ばれたときだけ表示する追加質問。回答は `responses` に `follow_up.title` をキーとして親質問の直後に追加（同名キーがある場合は `（選択肢名）` を付加）。復元機能 ON 時は追加質問の入力も localStorage に保存
 
 **カスタムフィールド (`config.custom_fields[]`):**
-- `type`: `'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'select'`
+- `type`: `CustomFieldType` = `'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'birthday' | 'select'`（追加質問 `AdditionalQuestion` も同じ）
+- **誕生日選択（`birthday`）**: 年 / 月 / 日を別々のプルダウンで選ぶ（年は今年 → 100 年前、日は年月に合わせて 28〜31 日）。予約フォームのカスタムフィールド・追加質問、アンケートの質問・選択肢の追加質問、抽選の事前質問すべてで使える。値は hidden input（既存の id）に `"YYYY-MM-DD"` で入り、`input` / `change` を発火するので既存の値取得・復元・必須チェックがそのまま使える。表示は `formatDateTimeForDisplay` で `YYYY年MM月DD日`。共通実装は `src/lib/multiple-dates-runtime-js.ts` の `BIRTHDAY_RUNTIME_JS`（`bdInitAll` / `bdSyncFromHidden`）/ `renderBirthdayFieldHtml()` / `BIRTHDAY_CSS`。復元などで hidden を直接書き換えたら `bdSyncFromHidden(hidden)` を呼ぶ
 - 選択肢（`radio` / `checkbox` / `select`）ごとに `options[].additional_questions?: AdditionalQuestion[]`（その選択肢が選ばれたときだけ表示する追加質問。メニュー / オプションの追加質問と同じ型・同じ仕組み）。編集 UI は選択肢行の「追加質問」ボタン → モーダル（`AdditionalQuestionsEditor`）。生成 HTML では親項目の直下に `aq-wrap-{id}`（`data-owner-field`）として描画し、`getAdditionalQuestionEntries()` の `ownerType: 'custom_option'`（`ownerId` = 親フィールド ID、`ownerValue` = 選択肢の value）で表示・必須チェック・LINE メッセージ（親項目の直後に《質問名》）を制御。入れ子は不可
 
 **カレンダー設定 (`config.calendar_settings`):**
@@ -614,6 +619,12 @@ export async function GET(req, { params }) {
 - `notification_email` - Web 予約の店舗側通知メール宛先（空時は `store.owner_email`）
 - `multiple_dates_settings` - 希望日時モードの時間間隔・選択日数・曜日別時間設定
   - `weekday_hours[day].extra_slots?: Array<{ label, after }>` - 通常の時間リストに差し込む追加の選択肢（例: 午前中 / 午後 / 16:00以降）。`after` は `'start'`（先頭）/ `'end'`（末尾）/ `'HH:MM'`（その時刻の直後。✕で消えている時刻なら次の時刻の前）。編集 UI は曜日行と祝日行の「＋ 時間帯を追加」（`holiday_hours.extra_slots` も同形式）。生成 HTML は `insertExtraSlots()`。`custom`（カスタム受付時間）が ON のときは custom_slots が優先され extra_slots は使わない
+
+**キャンセルルール設定 (`config.cancel_rules`。営業時間・ルール → 予約ルール設定とご予約内容の間):**
+- `deadline_hours`（0 = いつでも）: 予約日時（JST）の N 時間前までお客様自身が LINE の「予約をキャンセル」でキャンセルできる。期限後は一覧にボタンを出さず「店舗へご連絡ください（TEL）」の案内、「キャンセル: N」で来ても案内だけ返して取り消さない。**店舗管理画面（`PATCH /api/reservations/{id}`）からのキャンセルには適用しない**
+- `policy_text` + `show_policy_on_form`: キャンセル規定の文言を予約フォームの送信ボタンの上に「キャンセルについて」として表示（`renderCancelPolicy`。期限があれば「LINE からのキャンセルは N 時間前まで」を自動で添える）
+- `notify_store_on_cancel`: お客様が LINE でキャンセルしたとき、`calendar_settings.notification_email` > `stores.owner_email` へ「【予約キャンセル】」メール（`buildCancelNotificationEmail`、Resend。API キー未設定ならスキップ）
+- 純粋ロジックは `src/lib/cancel-rules.ts`（`resolveCancelRules` / `isCancelAllowed` / `buildCancelDeadlineMessage` / `buildCancelNotificationEmail`、選択肢 `CANCEL_DEADLINE_OPTIONS`）。Webhook は `getFormConfigByFormId` でフォーム設定を取り、`stores` から `owner_email` / `phone` も取得
 
 **店舗側手動予約フォームの項目設定 (`config.manual_form_settings`):**
 - `show_customer_name` / `require_customer_name` / `show_customer_phone` / `require_customer_phone`。**手動フォーム（`generateHTML(..., 'manual')`）だけ**に適用し、通常フォームの `calendar_settings.show_customer_*` は変えない。生成時に `safeConfig.calendar_settings` へ上書きし、任意は内部フラグ `customer_name_optional` / `customer_phone_optional`（保存しない）で「（任意）」表示 + 必須チェックをスキップ。空のときは名前 = LINE 表示名 → 「未記入」、電話 = 「未記入」で補う

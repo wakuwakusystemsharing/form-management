@@ -427,3 +427,37 @@ describe('残り参加回数・当選一覧・在庫状況', () => {
     ]);
   });
 });
+
+describe('詳細設定（はずれ 0% / 確率変動）の抽選', () => {
+  const advForm = (advanced: { no_lose: boolean; redistribute_on_sold_out: boolean }) => makeForm({}, {
+    prizes: [
+      { id: 'a', name: 'A賞', probability: 10, stock: 1 },
+      { id: 'b', name: 'B賞', probability: 20, stock: 2 },
+    ],
+    advanced,
+  });
+
+  it('はずれ 0%: 在庫が尽きていれば 410 + 終了メッセージ（抽選を記録しない）', async () => {
+    repo.countPrizeEntries.mockResolvedValue({ a: 1, b: 2 });
+    const outcome = await executeLotteryDraw({ form: advForm({ no_lose: true, redistribute_on_sold_out: false }), store, user, lineFriendFlag: true, answers: null, userAgent: null, now, rng: () => 0.5 });
+    expect(outcome).toEqual({ ok: false, status: 410, error: '賞品がなくなったので抽選は終了いたしました。' });
+    expect(repo.insertLotteryEntryChecked).not.toHaveBeenCalled();
+  });
+
+  it('はずれ 0%: 設定上は「はずれ」の乱数でも残っている賞品が当たる', async () => {
+    repo.countPrizeEntries.mockResolvedValue({ a: 1 });
+    const outcome = await executeLotteryDraw({ form: advForm({ no_lose: true, redistribute_on_sold_out: false }), store, user, lineFriendFlag: true, answers: null, userAgent: null, now, rng: () => 0.95 });
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.response.entry.prize_id).toBe('b');
+      expect(outcome.response.entry.is_win).toBe(true);
+    }
+  });
+
+  it('設定 OFF のときは従来どおり「はずれ」になる', async () => {
+    repo.countPrizeEntries.mockResolvedValue({ a: 1 });
+    const outcome = await executeLotteryDraw({ form: advForm({ no_lose: false, redistribute_on_sold_out: false }), store, user, lineFriendFlag: true, answers: null, userAgent: null, now, rng: () => 0.95 });
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) expect(outcome.response.entry.status).toBe('lost');
+  });
+});

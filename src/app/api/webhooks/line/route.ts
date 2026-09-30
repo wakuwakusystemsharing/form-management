@@ -4,6 +4,8 @@ import { createReservationEvent, deleteCalendarEvent, listCalendarEvents } from 
 import { normalizeForm } from '@/lib/form-normalizer';
 import { deleteCustomerVisitByReservation, recalculateCustomerStats } from '@/lib/customer-utils';
 import { cancelFollowMessageForReservation, restoreFollowMessageForUser } from '@/lib/follow-message-repository';
+import { buildCancelDeadlineMessage, buildCancelNotificationEmail, isCancelAllowed, resolveCancelRules, type CancelRules } from '@/lib/cancel-rules';
+import { sendEmail } from '@/lib/email-sender';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -272,13 +274,9 @@ function resolveNotificationMessages(config: any): NotificationMessages {
   };
 }
 
-// 予約レコードの form_id からフォームの通知文言を取得（取得失敗時はデフォルト）
-async function getNotificationMessagesByFormId(
-  adminClient: any,
-  storeId: string,
-  formId: string | null | undefined
-): Promise<NotificationMessages> {
-  if (!adminClient || !formId) return DEFAULT_NOTIFICATION_MESSAGES;
+// 予約レコードの form_id から正規化済みフォーム設定を取得（取得失敗時は null）
+async function getFormConfigByFormId(adminClient: any, storeId: string, formId: string | null | undefined): Promise<any | null> {
+  if (!adminClient || !formId) return null;
   try {
     const { data } = await adminClient
       .from('reservation_forms')
@@ -286,11 +284,36 @@ async function getNotificationMessagesByFormId(
       .eq('store_id', storeId)
       .eq('id', formId)
       .single();
-    if (!data) return DEFAULT_NOTIFICATION_MESSAGES;
-    return resolveNotificationMessages(normalizeForm(data).config);
+    return data ? normalizeForm(data).config : null;
   } catch {
-    return DEFAULT_NOTIFICATION_MESSAGES;
+    return null;
   }
+}
+
+// 予約レコードの form_id からフォームの通知文言を取得（取得失敗時はデフォルト）
+async function getNotificationMessagesByFormId(
+  adminClient: any,
+  storeId: string,
+  formId: string | null | undefined
+): Promise<NotificationMessages> {
+  const config = await getFormConfigByFormId(adminClient, storeId, formId);
+  return config ? resolveNotificationMessages(config) : DEFAULT_NOTIFICATION_MESSAGES;
+}
+
+// キャンセルルール（フォームごと。取得失敗時は既定 = 制限なし）。同じ Webhook 内でフォームごとにキャッシュ
+async function getCancelRulesByFormId(
+  adminClient: any,
+  storeId: string,
+  formId: string | null | undefined,
+  cache: Map<string, CancelRules>
+): Promise<CancelRules> {
+  const key = formId || '';
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const config = await getFormConfigByFormId(adminClient, storeId, formId);
+  const rules = resolveCancelRules(config);
+  cache.set(key, rules);
+  return rules;
 }
 
 // 送信テキスト1行目の【フォーム名】からフォームの通知文言を取得（一致なしはデフォルト）
@@ -402,7 +425,7 @@ export async function POST(req: NextRequest) {
 
   const { data: store, error: storeError } = await (adminClient as any)
     .from('stores')
-    .select('id, name, line_channel_access_token, google_calendar_id')
+    .select('id, name, line_channel_access_token, google_calendar_id, owner_email, phone')
     .eq('id', storeId)
     .single();
 
@@ -536,6 +559,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    // キャンセルルール: 期限を過ぎた予約はボタンを出さず案内文にする
+    const rulesCache = new Map<string, CancelRules>();
+    const cancelAllowedList: Array<{ allowed: boolean; rules: CancelRules }> = [];
+    for (const r of reservations as any[]) {
+      const rules = await getCancelRulesByFormId(adminClient, storeId, r.form_id, rulesCache);
+      cancelAllowedList.push({ allowed: isCancelAllowed(rules, r.reservation_date, r.reservation_time).allowed, rules });
+    }
+
     const eventList: object[] = [];
     reservations.forEach((r: any, index: number) => {
       const menu = r.submenu_name ? `${r.menu_name} > ${r.submenu_name}` : r.menu_name;
@@ -544,6 +575,22 @@ export async function POST(req: NextRequest) {
       const timeText = h && m ? `${parseInt(h)}時${parseInt(m)}分` : timeMinutes;
       if (index > 0) {
         eventList.push({ type: 'separator', margin: 'lg' });
+      }
+      const allowInfo = cancelAllowedList[index];
+      if (allowInfo && !allowInfo.allowed) {
+        eventList.push(
+          {
+            type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
+            contents: [
+              { type: 'text', text: '📅 日時', size: 'sm', color: themeColor, weight: 'bold' },
+              { type: 'text', text: `${formatDate(r.reservation_date)} ${timeText}`, size: 'sm', wrap: true },
+              { type: 'text', text: '📋 メニュー', size: 'sm', color: themeColor, weight: 'bold', margin: 'md' },
+              { type: 'text', text: `・${menu}`, size: 'sm', wrap: true },
+              { type: 'text', text: `キャンセル期限（${allowInfo.rules.deadline_hours} 時間前）を過ぎています。${store.phone ? `店舗（TEL: ${store.phone}）` : '店舗'}まで直接ご連絡ください。`, size: 'xs', wrap: true, color: '#b45309', margin: 'md' }
+            ]
+          }
+        );
+        return;
       }
       eventList.push(
         {
@@ -623,10 +670,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    // キャンセルルール: 期限を過ぎていれば案内して終了（店舗管理画面からのキャンセルには適用しない）
+    const targetFormConfig = await getFormConfigByFormId(adminClient, storeId, (target as { form_id?: string | null }).form_id);
+    const cancelRules = resolveCancelRules(targetFormConfig);
+    const cancelCheck = isCancelAllowed(cancelRules, target.reservation_date, target.reservation_time);
+    if (!cancelCheck.allowed) {
+      await replyFlexMessage(replyToken, accessToken, 'キャンセル期限を過ぎています', [
+        makeSimpleBubble('キャンセル期限を過ぎています', buildCancelDeadlineMessage(cancelRules, cancelCheck.deadline, store.phone), store.name, themeColor)
+      ]);
+      return NextResponse.json({ success: true });
+    }
+
     await (adminClient as any)
       .from('reservations')
       .update({ status: 'cancelled' })
       .eq('id', target.id);
+
+    // キャンセルルール: 店舗へメール通知（宛先: フォームの店舗側通知メール > オーナーのメール。失敗しても続行）
+    if (cancelRules.notify_store_on_cancel) {
+      const recipient = (targetFormConfig?.calendar_settings?.notification_email || '').trim() || (store.owner_email || '').trim();
+      if (recipient) {
+        try {
+          const mail = buildCancelNotificationEmail({ storeName: store.name || '', reservation: target, cancelledAt: new Date() });
+          const result = await sendEmail({ to: recipient, subject: mail.subject, body: mail.body, fromName: store.name || undefined });
+          if (!result.ok) console.warn('[LINE Webhook] cancel notify mail skipped/failed:', result.error);
+        } catch (e) {
+          console.error('[LINE Webhook] cancel notify mail error:', e);
+        }
+      }
+    }
 
     // フォローメッセージの配信予定を取り消す（失敗しても続行）
     await cancelFollowMessageForReservation(target.id);

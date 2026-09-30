@@ -100,6 +100,13 @@ export interface LotteryConfig {
     submit_button_text: string;
     theme_color: string;
   };
+  /** 詳細設定（賞品と確率タブ。即時抽選のみ） */
+  advanced?: {
+    /** はずれ 0%: はずれ分は残念賞 → 残っている賞品へ繰り上げ。全賞品の在庫合計 = 抽選できる合計回数。尽きたら「賞品がなくなったので抽選は終了いたしました。」 */
+    no_lose: boolean;
+    /** 賞品の在庫が 0 になったら、その確率を残っている賞品へ設定確率の比で上乗せする */
+    redistribute_on_sold_out: boolean;
+  };
 }
 
 export interface LotteryForm {
