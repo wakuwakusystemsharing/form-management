@@ -3214,6 +3214,33 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
               <span className={themeClasses.text.secondary}>来店回数選択を必須にする</span>
             </label>
 
+            {/* 見出しの文言（フォームのバナー・ご予約内容・LINE メッセージに使う） */}
+            <div className="mt-3">
+              <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>項目の見出し（空欄 = 「ご来店回数」）</label>
+              <input
+                type="text"
+                value={form.config?.visit_count_selection?.label || ''}
+                maxLength={30}
+                onChange={(e) => {
+                  onUpdate({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      visit_count_selection: {
+                        ...form.config?.visit_count_selection,
+                        label: e.target.value
+                      }
+                    }
+                  });
+                }}
+                placeholder="例: ご利用回数 / 来院回数 / ご来店は何回目ですか？"
+                className={`w-full ${themeClasses.input} text-sm`}
+              />
+              <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                予約フォームの項目名、ご予約内容の表示、LINE メッセージの《見出し》、メール・管理画面の項目名に使われます。
+              </p>
+            </div>
+
             {/* 選択肢の編集（ボタン名・追加時間・メニュー表示設定） */}
             <div className="mt-3 space-y-2">
               <div className="flex items-center justify-between">

@@ -573,6 +573,10 @@ export async function GET(req, { params }) {
 
 **メニュー (`MenuItem` / `SubMenuItem` / `MenuOption`):**
 - `hide_price` / `hide_duration` - 料金・所要時間を非表示にするフラグ（任意）
+- メニュー / サブメニューの画像は `ImageCropperModal.tsx` でトリミングしてアップロード。アスペクト比は `CROP_ASPECTS`（16:9 / 4:3 / 1:1 / 3:4 / 9:16。幅 720px 基準）から選べる。フォーム側の表示（ボタン左のサムネイル = 36px 円形、詳細モーダル = `max-height: 320px; height: auto`）は画像の形をそのまま保つ
+
+**ご来店回数選択 (`config.visit_count_selection`):**
+- `label?: string` - フォームに出す見出し（空 / 未設定 = 「ご来店回数」）。フォームの項目名、ご予約内容の行、LINE メッセージの《見出し》、メール・管理画面の項目名（`reservation-detail-items.ts`）に共通で使う。編集 UI はメニュー構成 → 詳細設定 → ご来店回数選択の「項目の見出し」。Webhook の送信テキスト解析は `《ご来店回数》` 固定のまま（`details.visitCount` は未使用のため影響なし）
 
 **アンケートの質問型「第三希望日時選択」（`SurveyQuestionType = 'multiple_dates'`）:**
 - 回答タイプの「日時選択」の下に追加。予約フォームの日時選択モード「第三希望日時選択」と**同じ設定・同じ選択 UI**（第一〜第三希望の日付 + 時間のプルダウン、曜日別受付時間 / カスタム / 追加の時間帯 / 祝日 / 臨時営業日 / ✕にする時間帯 / 追加で表示する分 / 選択可能日数 / 必須選択 / 非表示設定）

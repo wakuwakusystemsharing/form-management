@@ -145,6 +145,7 @@ export interface FormConfig {
   visit_count_selection: {
     enabled: boolean;           // ご来店回数選択を有効にするか
     required: boolean;          // ご来店回数選択を必須にするか
+    label?: string;             // フォームに表示する見出し（空 / 未設定 = 「ご来店回数」。ご予約内容・LINE メッセージ・メールにも使う）
     options: Array<{
       value: string;            // "first", "repeat"
       label: string;            // "初回", "2回目以降"（編集可能）

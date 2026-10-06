@@ -283,6 +283,11 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       visit_count_selection: {
         enabled: existingConfig?.visit_count_selection?.enabled ?? (typedConfig?.visit_count_selection as Form['config']['visit_count_selection'])?.enabled ?? ((typedConfig?.ui_settings as Record<string, unknown>)?.show_visit_count as boolean) ?? ((typedUiSettings?.show_visit_count as boolean) ?? false),
         required: existingConfig?.visit_count_selection?.required ?? false,
+        // 見出し（空 / 未設定 = 「ご来店回数」。表示側で既定にする）
+        label: (() => {
+          const v = existingConfig?.visit_count_selection?.label ?? (typedConfig?.visit_count_selection as Form['config']['visit_count_selection'])?.label;
+          return typeof v === 'string' ? v : '';
+        })(),
         options: (() => {
           const raw = existingConfig?.visit_count_selection?.options
             || (typedConfig?.visit_count_selection as Form['config']['visit_count_selection'])?.options;

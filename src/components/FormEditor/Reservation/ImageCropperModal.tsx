@@ -19,6 +19,15 @@ interface ImageCropperModalProps {
   theme?: ThemeType;
 }
 
+/** トリミングのアスペクト比。出力サイズは幅 720px を基準に高さを比率で決める（縦長は高さ基準） */
+export const CROP_ASPECTS: Array<{ id: string; label: string; ratio: number; width: number; height: number }> = [
+  { id: 'wide', label: '16:9 ワイド', ratio: 16 / 9, width: 720, height: 405 },
+  { id: 'standard', label: '4:3', ratio: 4 / 3, width: 720, height: 540 },
+  { id: 'square', label: '1:1 正方形', ratio: 1, width: 720, height: 720 },
+  { id: 'portrait', label: '3:4 縦長', ratio: 3 / 4, width: 720, height: 960 },
+  { id: 'tall', label: '9:16 縦長ワイド', ratio: 9 / 16, width: 720, height: 1280 },
+];
+
 const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   isOpen,
   onClose,
@@ -31,6 +40,14 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<CroppedAreaPixels | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  // アスペクト比（既定 16:9。正方形・縦長の画像は比率を変えて見切れないようにする）
+  const [aspectId, setAspectId] = useState<string>('wide');
+  const aspect = CROP_ASPECTS.find((a) => a.id === aspectId) || CROP_ASPECTS[0];
+  const selectAspect = (id: string) => {
+    setAspectId(id);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+  };
 
   const onCropComplete = useCallback((croppedArea: CroppedAreaPixels, croppedAreaPixels: CroppedAreaPixels) => {
     setCroppedAreaPixels(croppedAreaPixels);
@@ -55,9 +72,9 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             return;
           }
 
-          // Output size: 720x405px (16:9, 2x for high quality)
-          const width = 720;
-          const height = 405;
+          // 出力サイズ: 選択したアスペクト比（幅 720px 基準。縦長は 720×960 / 720×1280）
+          const width = aspect.width;
+          const height = aspect.height;
           canvas.width = width;
           canvas.height = height;
 
@@ -138,13 +155,37 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
           </div>
 
           <div className="space-y-4">
+            {/* アスペクト比の選択 */}
+            <div className="space-y-2">
+              <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>画像の形（アスペクト比）</label>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="アスペクト比">
+                {CROP_ASPECTS.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={aspectId === a.id}
+                    onClick={() => selectAspect(a.id)}
+                    disabled={isProcessing}
+                    className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${
+                      aspectId === a.id
+                        ? (theme === 'light' ? 'bg-[rgb(244,144,49)] border-[rgb(244,144,49)] text-white' : 'bg-cyan-600 border-cyan-600 text-white')
+                        : (theme === 'light' ? 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50' : 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700')
+                    }`}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Cropper container */}
             <div className="relative w-full" style={{ height: '400px' }}>
               <Cropper
                 image={imageUrl}
                 crop={crop}
                 zoom={zoom}
-                aspect={16 / 9}
+                aspect={aspect.ratio}
                 onCropChange={setCrop}
                 onCropComplete={onCropComplete}
                 onZoomChange={setZoom}
@@ -175,14 +216,14 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             {/* Preview section */}
             <div className="space-y-2">
               <p className={`text-sm font-medium ${themeClasses.text.secondary}`}>
-                プレビュー (16:9 ワイド)
+                プレビュー（{aspect.label}）
               </p>
               <div className={`p-4 rounded-lg text-center ${themeClasses.card}`}>
                 <p className={`text-sm ${themeClasses.text.secondary}`}>
                   ✓ トリミングが完了したら「確定」ボタンを押してください
                 </p>
                 <p className={`text-xs ${themeClasses.text.tertiary} mt-2`}>
-                  16:9 アスペクト比でフォームに表示されます（アップロードは720×405px）
+                  {aspect.label} でアップロードされます（{aspect.width}×{aspect.height}px）。フォームでは画像の形のまま表示されます
                 </p>
               </div>
             </div>
@@ -190,7 +231,7 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             {/* Info message */}
             <div className={`p-3 rounded-lg ${themeClasses.highlight}`}>
               <p className={`text-xs ${themeClasses.text.secondary}`}>
-                💡 16:9（ワイド）のアスペクト比で固定されています。トリミング領域をドラッグして調整してください。
+                💡 正方形や縦長の写真は上の「画像の形」を切り替えると見切れずに使えます。画像をドラッグ・ズームして位置を調整してください。
               </p>
             </div>
           </div>

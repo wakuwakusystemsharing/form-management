@@ -55,6 +55,12 @@ export interface DetailItem {
 
 type FormConfigLike = Partial<Form['config']> | null | undefined;
 
+/** ご来店回数選択の見出し（フォーム設定。空 = 「ご来店回数」） */
+function visitCountLabel(config: FormConfigLike): string {
+  const raw = config?.visit_count_selection?.label;
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : 'ご来店回数';
+}
+
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
 /** "2026-04-30" + "14:30:00" → "2026年04月30日（木） 14:30" */
@@ -162,7 +168,7 @@ export function buildReservationDetailItems(config: FormConfigLike, reservation:
   }
   if (show('visit_count') && config?.visit_count_selection?.enabled) {
     const v = info.visit_count_label || info.visit_count;
-    if (v) out.push({ label: 'ご来店回数', value: v });
+    if (v) out.push({ label: visitCountLabel(config), value: v });
   }
   if (show('coupon') && config?.coupon_selection?.enabled) {
     const v = info.coupon_label || info.coupon;
@@ -290,7 +296,7 @@ export function buildAdminReservationRows(config: FormConfigLike, reservation: A
   const gender = info.gender_label || optLabel(config?.gender_selection?.options, info.gender, { male: '男性', female: '女性' });
   if (gender) rows.push({ label: '性別', value: gender });
   const visit = info.visit_count_label || optLabel(config?.visit_count_selection?.options, info.visit_count, { first: '初回', repeat: '2回目以降' });
-  if (visit) rows.push({ label: 'ご来店回数', value: visit });
+  if (visit) rows.push({ label: visitCountLabel(config), value: visit });
   const coupon = info.coupon_label || optLabel(config?.coupon_selection?.options, info.coupon, { use: '利用する', not_use: '利用しない' });
   if (coupon) rows.push({ label: 'クーポン', value: coupon });
 
