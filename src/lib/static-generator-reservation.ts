@@ -164,6 +164,11 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
     </div>
     `}
     <div id="treatment-text"></div>
+    <div id="image-lightbox" class="image-lightbox" role="dialog" aria-modal="true" aria-label="画像の拡大表示" style="display:none;">
+        <button type="button" class="image-lightbox-close" onclick="window.bookingForm.closeImageLightbox()">閉じる ×</button>
+        <img id="image-lightbox-img" src="" alt="" onclick="event.stopPropagation()">
+        <div class="image-lightbox-hint">画面をタップすると閉じます</div>
+    </div>
 
     <div class="form-container">
         <div class="form-header">
@@ -1045,6 +1050,15 @@ class BookingForm {
             });
         }
         
+        // ボタン左の小さな画像をタップしたら拡大表示（メニューの選択は起こさない）
+        document.querySelectorAll('.menu-item-thumb img').forEach(img => {
+            img.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.openImageLightbox(img.getAttribute('src'));
+            });
+        });
+
         // メニュー選択
         document.querySelectorAll('.menu-item').forEach(item => {
             item.addEventListener('click', (e) => {
@@ -1382,7 +1396,7 @@ class BookingForm {
         if (!desc && !image) { this.closeDetailPopup(); return; }
         const parts = [];
         parts.push('<div class="t-title-row"><i class="fas fa-star t-icon"></i><span class="t-title">' + this.escapeHtmlText(item.name || '') + '</span></div>');
-        if (image) parts.push('<div class="t-image"><img src="' + this.escapeHtmlText(image) + '" alt="" loading="lazy"></div>');
+        if (image) parts.push('<div class="t-image"><img src="' + this.escapeHtmlText(image) + '" alt="" loading="lazy" onclick="window.bookingForm.openImageLightbox(this.src)" title="タップで拡大"></div>');
         if ((item.duration || 0) > 0 && !item.hide_duration) {
             parts.push('<div class="t-time-row"><i class="fas fa-clock t-icon"></i> 所要時間：' + item.duration + '分</div>');
         }
@@ -1412,6 +1426,29 @@ class BookingForm {
     closeDetailPopup() {
         const popup = document.getElementById('treatment-text');
         if (popup) popup.style.display = 'none';
+    }
+
+    // 画像の拡大表示（ボタン左の小さな画像 / 詳細モーダルの画像をタップ）。画面サイズに合わせて最大で表示する
+    openImageLightbox(src) {
+        if (!src) return;
+        const box = document.getElementById('image-lightbox');
+        const img = document.getElementById('image-lightbox-img');
+        if (!box || !img) return;
+        img.src = src;
+        box.style.display = 'flex';
+        document.body.classList.add('lightbox-open');
+        if (!this._lightboxBound) {
+            this._lightboxBound = true;
+            box.addEventListener('click', () => this.closeImageLightbox());
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.closeImageLightbox(); });
+        }
+    }
+    closeImageLightbox() {
+        const box = document.getElementById('image-lightbox');
+        const img = document.getElementById('image-lightbox-img');
+        if (box) box.style.display = 'none';
+        if (img) img.src = '';
+        document.body.classList.remove('lightbox-open');
     }
 
     // ご予約内容欄の日時表示用: '2026-07-09','12:30' → '2026年07月09日 12時30分'
@@ -4849,7 +4886,15 @@ if (document.readyState === 'loading') {
         .t-title { letter-spacing: 0.05em; }
         .t-icon { margin-right: 6px; }
         .t-image { text-align: center; }
-        .t-image img { max-width: 100%; max-height: 320px; height: auto; border-radius: 4px; display: inline-block; }
+        .t-image img { max-width: 100%; max-height: 320px; height: auto; border-radius: 4px; display: inline-block; cursor: zoom-in; }
+        /* 画像の拡大表示（ライトボックス） */
+        .menu-item-thumb img { cursor: zoom-in; }
+        .image-lightbox { position: fixed; inset: 0; z-index: 3000; background: rgba(0, 0, 0, 0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 56px 12px 40px; box-sizing: border-box; cursor: zoom-out; }
+        .image-lightbox img { max-width: min(92vw, 960px); max-height: calc(100vh - 110px); width: auto; height: auto; object-fit: contain; border-radius: 6px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); background: #fff; cursor: default; }
+        .image-lightbox-close { position: absolute; top: 10px; right: 12px; min-height: 44px; padding: 0 16px; border: 1px solid rgba(255,255,255,0.6); border-radius: 22px; background: rgba(0,0,0,0.5); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
+        .image-lightbox-close:hover { background: rgba(255,255,255,0.15); }
+        .image-lightbox-hint { margin-top: 10px; color: rgba(255,255,255,0.75); font-size: 12px; }
+        body.lightbox-open { overflow: hidden; }
         .t-time-row {
             display: flex;
             align-items: center;
