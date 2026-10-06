@@ -2314,7 +2314,8 @@ class BookingForm {
         }
         if (this.state.visitCount) {
             const label = this.config.visit_count_selection?.options.find(o => o.value === this.state.visitCount)?.label;
-            items.push(\`<div class="summary-item"><span><strong>ご来店回数:</strong> \${label}</span><button class="summary-edit-button" data-field="visit-count-field">修正</button></div>\`);
+            const visitTitle = (typeof this.config.visit_count_selection?.label === 'string' && this.config.visit_count_selection.label.trim()) ? this.config.visit_count_selection.label.trim() : 'ご来店回数';
+            items.push(\`<div class="summary-item"><span><strong>\${visitTitle}:</strong> \${label}</span><button class="summary-edit-button" data-field="visit-count-field">修正</button></div>\`);
         }
         if (this.state.coupon) {
             const label = this.config.coupon_selection?.options.find(o => o.value === this.state.coupon)?.label;
@@ -2808,7 +2809,8 @@ class BookingForm {
             // ご来店回数（有効時のみ表示）
             if (this.config.visit_count_selection?.enabled && this.state.visitCount && showLineItem('visit_count')) {
                 const visitLabel = this.config.visit_count_selection.options.find(o => o.value === this.state.visitCount)?.label;
-                addMsgSegment('visit_count', '《ご来店回数》\\n' + (visitLabel || this.state.visitCount || ''));
+                const visitMsgTitle = (typeof this.config.visit_count_selection?.label === 'string' && this.config.visit_count_selection.label.trim()) ? this.config.visit_count_selection.label.trim() : 'ご来店回数';
+                addMsgSegment('visit_count', '《' + visitMsgTitle + '》\\n' + (visitLabel || this.state.visitCount || ''));
             }
 
             // クーポン（有効時のみ表示）
@@ -3545,13 +3547,19 @@ if (document.readyState === 'loading') {
     return `
             <!-- 来店回数選択 -->
             <div class="field" id="visit-count-field">
-                <label class="field-label">ご来店回数 ${visitSel.required ? '<span class="required">*</span>' : ''}</label>
+                <label class="field-label">${this.escapeHtml(this.getVisitCountLabel(config))} ${visitSel.required ? '<span class="required">*</span>' : ''}</label>
                 <div class="button-group">
                     ${visitSel.options?.map(opt =>
                         `<button type="button" class="choice-button visit-count-button" data-value="${opt.value}">${opt.label}</button>`
                     ).join('') || ''}
                 </div>
             </div>`;
+  }
+
+  // ご来店回数選択の見出し（フォーム・ご予約内容・LINE メッセージで共通。空 = 既定「ご来店回数」）
+  private getVisitCountLabel(config: FormConfig): string {
+    const raw = config.visit_count_selection?.label;
+    return typeof raw === 'string' && raw.trim() ? raw.trim() : 'ご来店回数';
   }
 
   private renderCouponField(config: FormConfig): string {
@@ -4841,7 +4849,7 @@ if (document.readyState === 'loading') {
         .t-title { letter-spacing: 0.05em; }
         .t-icon { margin-right: 6px; }
         .t-image { text-align: center; }
-        .t-image img { max-width: 100%; max-height: 200px; height: auto; border-radius: 4px; display: inline-block; }
+        .t-image img { max-width: 100%; max-height: 320px; height: auto; border-radius: 4px; display: inline-block; }
         .t-time-row {
             display: flex;
             align-items: center;
