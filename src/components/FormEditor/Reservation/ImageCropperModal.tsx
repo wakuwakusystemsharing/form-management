@@ -28,6 +28,20 @@ export const CROP_ASPECTS: Array<{ id: string; label: string; ratio: number; wid
   { id: 'tall', label: '9:16 縦長ワイド', ratio: 9 / 16, width: 720, height: 1280 },
 ];
 
+/** 自由形（スライダーで比率を調整）: 横長は幅 720px、縦長は高さ 960px を基準に出力サイズを決める */
+export const FREE_ASPECT_ID = 'free';
+export const FREE_RATIO_MIN = 0.5;   // 1:2（縦長）
+export const FREE_RATIO_MAX = 2.5;   // 5:2（横長）
+export function freeOutputSize(ratio: number): { width: number; height: number } {
+  const r = Math.min(FREE_RATIO_MAX, Math.max(FREE_RATIO_MIN, ratio));
+  return r >= 1
+    ? { width: 720, height: Math.round(720 / r) }
+    : { width: Math.round(960 * r), height: 960 };
+}
+export function formatFreeRatio(ratio: number): string {
+  return ratio >= 1 ? `${(Math.round(ratio * 100) / 100)}:1` : `1:${(Math.round((1 / ratio) * 100) / 100)}`;
+}
+
 const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   isOpen,
   onClose,
@@ -42,7 +56,13 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   // アスペクト比（既定 16:9。正方形・縦長の画像は比率を変えて見切れないようにする）
   const [aspectId, setAspectId] = useState<string>('wide');
-  const aspect = CROP_ASPECTS.find((a) => a.id === aspectId) || CROP_ASPECTS[0];
+  // 自由形の比率（幅 ÷ 高さ）。1 = 正方形、> 1 横長、< 1 縦長
+  const [freeRatio, setFreeRatio] = useState<number>(1);
+  const isFree = aspectId === FREE_ASPECT_ID;
+  const fixed = CROP_ASPECTS.find((a) => a.id === aspectId) || CROP_ASPECTS[0];
+  const aspect = isFree
+    ? { id: FREE_ASPECT_ID, label: `自由（${formatFreeRatio(freeRatio)}）`, ratio: freeRatio, ...freeOutputSize(freeRatio) }
+    : fixed;
   const selectAspect = (id: string) => {
     setAspectId(id);
     setCrop({ x: 0, y: 0 });
@@ -159,7 +179,7 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             <div className="space-y-2">
               <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>画像の形（アスペクト比）</label>
               <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="アスペクト比">
-                {CROP_ASPECTS.map((a) => (
+                {[...CROP_ASPECTS, { id: FREE_ASPECT_ID, label: '自由形' }].map((a) => (
                   <button
                     key={a.id}
                     type="button"
@@ -177,6 +197,31 @@ const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
                   </button>
                 ))}
               </div>
+              {isFree && (
+                <div className="space-y-1">
+                  <label className={`block text-xs ${themeClasses.text.secondary}`}>
+                    枠の形: {freeRatio >= 1 ? '横長' : '縦長'}（{formatFreeRatio(freeRatio)}）— 左へ動かすと縦長、右へ動かすと横長
+                  </label>
+                  <input
+                    type="range"
+                    min={FREE_RATIO_MIN}
+                    max={FREE_RATIO_MAX}
+                    step="0.01"
+                    value={freeRatio}
+                    onChange={(e) => { setFreeRatio(parseFloat(e.target.value)); setCrop({ x: 0, y: 0 }); }}
+                    disabled={isProcessing}
+                    aria-label="枠の縦横比"
+                    className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${theme === 'light' ? 'bg-gray-300' : 'bg-gray-600'}`}
+                  />
+                  <div className="flex gap-2">
+                    {[{ l: '縦長 1:2', v: 0.5 }, { l: '縦長 3:4', v: 0.75 }, { l: '正方形', v: 1 }, { l: '横長 4:3', v: 4 / 3 }, { l: '横長 2:1', v: 2 }].map((pr) => (
+                      <button key={pr.l} type="button" onClick={() => { setFreeRatio(pr.v); setCrop({ x: 0, y: 0 }); }} className={`px-2 py-0.5 text-[11px] rounded border ${theme === 'light' ? 'border-gray-300 text-gray-600 hover:bg-gray-50' : 'border-gray-600 text-gray-300 hover:bg-gray-700'}`}>
+                        {pr.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Cropper container */}

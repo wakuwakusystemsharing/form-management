@@ -56,10 +56,12 @@ export async function POST(request: NextRequest) {
     // ファイル拡張子取得
     const ext = file.name.split('.').pop() || 'jpg';
 
-    // パス生成
+    // パス生成（アップロードごとに別のファイル名にする。同じ名前で上書きすると、画像は 1 年キャッシュされるため
+    // 新しい形でトリミングし直しても古い画像が表示され続ける。古い画像は oldImageUrl で削除する）
+    const stamp = Date.now().toString(36);
     const newPath = menuId
-      ? `menu_images/${storeId}/${menuId}.${ext}`
-      : `submenu_images/${storeId}/${submenuId}.${ext}`;
+      ? `menu_images/${storeId}/${menuId}_${stamp}.${ext}`
+      : `submenu_images/${storeId}/${submenuId}_${stamp}.${ext}`;
 
     // 古い画像を削除（存在する場合）
     if (oldImageUrl) {
