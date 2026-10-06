@@ -573,7 +573,9 @@ export async function GET(req, { params }) {
 
 **メニュー (`MenuItem` / `SubMenuItem` / `MenuOption`):**
 - `hide_price` / `hide_duration` - 料金・所要時間を非表示にするフラグ（任意）
-- メニュー / サブメニューの画像は `ImageCropperModal.tsx` でトリミングしてアップロード。アスペクト比は `CROP_ASPECTS`（16:9 / 4:3 / 1:1 / 3:4 / 9:16。幅 720px 基準）から選べる。フォーム側の表示（ボタン左のサムネイル = 36px 円形、詳細モーダル = `max-height: 320px; height: auto`）は画像の形をそのまま保つ
+- メニュー / サブメニューの画像は `ImageCropperModal.tsx` でトリミングしてアップロード。アスペクト比は `CROP_ASPECTS`（16:9 / 4:3 / 1:1 / 3:4 / 9:16。幅 720px 基準）+ 「自由形」（スライダーで 1:2〜5:2。`freeOutputSize()` で横長は幅 720 / 縦長は高さ 960）。フォーム側の表示（ボタン左のサムネイル = 56px 角丸、詳細モーダル = `max-height: 320px; height: auto`）は画像の形をそのまま保つ
+- **画像 URL はアップロードごとに変える**（`/api/upload/menu-image` が `{menuId}_{stamp}.{ext}`）。Storage の画像は 1 年キャッシュ（`cacheControl: 31536000`）のため、同じファイル名で上書きすると古い形の画像が表示され続ける。古い画像は `oldImageUrl` で削除
+- **画像の拡大表示**: ボタン左のサムネイルと詳細モーダルの画像をタップするとライトボックス（`#image-lightbox`。`openImageLightbox` / `closeImageLightbox`、閉じるボタン・背景タップ・Esc で閉じる）で画面サイズに合わせて表示。サムネイルのタップはメニュー選択を起こさない（`stopPropagation`）
 
 **ご来店回数選択 (`config.visit_count_selection`):**
 - `label?: string` - フォームに出す見出し（空 / 未設定 = 「ご来店回数」）。フォームの項目名、ご予約内容の行、LINE メッセージの《見出し》、メール・管理画面の項目名（`reservation-detail-items.ts`）に共通で使う。編集 UI はメニュー構成 → 詳細設定 → ご来店回数選択の「項目の見出し」。Webhook の送信テキスト解析は `《ご来店回数》` 固定のまま（`details.visitCount` は未使用のため影響なし）
