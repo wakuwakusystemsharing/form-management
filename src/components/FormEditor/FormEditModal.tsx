@@ -15,7 +15,8 @@ import MenuStructureEditor from './Reservation/MenuStructureEditor';
 import BusinessRulesEditor from './Reservation/BusinessRulesEditor';
 import SurveyFormEditor from './Survey/SurveyFormEditor';
 import LotteryFormEditor from './Lottery/LotteryFormEditor';
-import { Eye, Save, Upload } from 'lucide-react';
+import FormSyncDialog from './FormSyncDialog';
+import { Copy, Eye, Save, Upload } from 'lucide-react';
 
 export type EditableForm = Form | SurveyForm | LotteryForm;
 
@@ -48,6 +49,8 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
   );
   const [isSaving, setIsSaving] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  // 「更新して他のフォームにも反映」ダイアログ（予約フォームのみ）
+  const [syncOpen, setSyncOpen] = useState(false);
   const previewUrlRef = useRef<string | null>(null);
   const { toast } = useToast();
 
@@ -58,6 +61,11 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
 
   const isSurvey = (form: EditableForm): form is SurveyForm => {
     return !!form.config && 'questions' in form.config && !isLotteryForm(form);
+  };
+
+  const handleSaveDeployAndSync = async () => {
+    const ok = await handleSaveAndDeploy();
+    if (ok) setSyncOpen(true);
   };
 
   const handleSave = async () => {
@@ -80,13 +88,14 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
     }
   };
 
-  const handleSaveAndDeploy = async () => {
+  const handleSaveAndDeploy = async (): Promise<boolean> => {
+    let succeeded = false;
     try {
       setIsSaving(true);
-      
+
       // まず保存
       await onSave(editingForm);
-      
+
       // 静的HTMLを再デプロイ
       const endpoint = isLotteryForm(editingForm)
         ? `/api/lotteries/${editingForm.id}/deploy`
@@ -105,9 +114,10 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
           formId: editingForm.id
         }),
       });
-      
+
       if (deployResponse.ok) {
         const result = await deployResponse.json();
+        succeeded = true;
         toast({
           title: '更新しました',
           description: `${result.environment === 'local' ? 'ローカル' : '本番環境'}にデプロイされました。`,
@@ -136,6 +146,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
     } finally {
       setIsSaving(false);
     }
+    return succeeded;
   };
 
   const handlePreview = async () => {
@@ -236,6 +247,18 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
               <Upload className="mr-2 h-4 w-4" />
               {isSaving ? '更新中...' : '更新'}
             </Button>
+            {!isLotteryForm(editingForm) && !isSurvey(editingForm) && (
+              <Button
+                variant="outline"
+                onClick={handleSaveDeployAndSync}
+                disabled={isSaving}
+                title="このフォームを更新したあと、同じ店舗の他の予約フォームにも同じ設定を反映します"
+                className="flex-1 sm:flex-initial"
+              >
+                <Copy className="mr-2 h-4 w-4" />
+                更新して他のフォームにも反映
+              </Button>
+            )}
           </div>
         </DialogHeader>
 
@@ -269,7 +292,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
                   </TabsList>
                 </Tabs>
               </div>
-              
+
               <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                 <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)}>
                   <TabsContent value="basic" className="mt-0">
@@ -312,6 +335,14 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
           </Button>
         </div>
       </DialogContent>
+      {!isLotteryForm(editingForm) && !isSurvey(editingForm) && (
+        <FormSyncDialog
+          open={syncOpen}
+          onOpenChange={setSyncOpen}
+          storeId={storeId}
+          sourceForm={editingForm as Form}
+        />
+      )}
     </Dialog>
   );
 };

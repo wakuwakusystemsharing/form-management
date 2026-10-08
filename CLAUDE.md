@@ -192,6 +192,11 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - 顧客詳細 API の `reservations[].follow_message` に配信状態を同梱し、`CustomerDetail.tsx` の予約履歴にバッジ表示
 - マイグレーション: `20260908000000_add_follow_message.sql`。リリース手順: `docs/フォローメッセージ_リリース手順.md`
 
+**予約フォーム「更新して他のフォームにも反映」（設計: `docs/予約フォーム_他フォームへの設定反映_実装設計.md`）:**
+- フォーム編集モーダルの「更新」の右のボタン（予約フォームのみ）。編集中のフォームを保存＆デプロイしてから `FormSyncDialog.tsx` を開き、**同じ店舗の予約フォーム**にセクション単位（`FORM_SYNC_SECTIONS`）で設定をコピーして自動で再デプロイする
+- 純粋ロジックは `src/lib/form-sync.ts` の `buildSyncedConfig(source, target, sections)`。`form_type` / `line_message_items`（送信時の項目編集）/ `basic_info` のフォーム名・LIFF ID・`line_only`・`second_message` / `calendar_settings` の `show_customer_email`・`notification_email` は**常に反映先のまま**
+- サーバー側の新 API は無し（反映先ごとに `GET /api/forms/{id}` → `PUT /api/forms/{id}` → `POST /api/forms/{id}/deploy` を順に呼ぶ）。反映先の選択は localStorage `form_sync_targets_{sourceId}` に記憶
+
 **プレビュー機能:**
 - `POST /api/preview/generate` - 保存前のフォーム編集状態からプレビュー HTML を生成
 - `formType`: `'reservation'` または `'survey'` を指定
