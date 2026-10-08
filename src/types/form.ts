@@ -146,6 +146,8 @@ export interface FormConfig {
     enabled: boolean;           // ご来店回数選択を有効にするか
     required: boolean;          // ご来店回数選択を必須にするか
     label?: string;             // フォームに表示する見出し（空 / 未設定 = 「ご来店回数」。ご予約内容・LINE メッセージ・メールにも使う）
+    // 選択するまでカテゴリーとメニューを非表示にする（未設定 = true。ご来店回数選択が ON のときだけ意味を持つ）
+    hide_menu_until_selected?: boolean;
     options: Array<{
       value: string;            // "first", "repeat"
       label: string;            // "初回", "2回目以降"（編集可能）
@@ -210,6 +212,8 @@ export interface FormConfig {
     categories: MenuCategory[];
     menus?: MenuItem[];  // Simple structure用のメニューリスト
     allow_cross_category_selection?: boolean;  // カテゴリーまたいでの複数選択を許可
+    // 複数選択できるメニューの上限（allow_cross_category_selection が ON のとき。未設定 = 3。1 以上）
+    max_cross_category_selections?: number;
     display_options: {
       show_price: boolean;
       show_duration: boolean;
