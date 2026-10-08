@@ -953,6 +953,8 @@ class BookingForm {
                 document.querySelectorAll('.visit-count-button').forEach(b => b.classList.remove('selected'));
                 btn.classList.add('selected');
                 this.state.visitCount = btn.dataset.value;
+                // 「選択するまでカテゴリーとメニューは非表示にする」: 選択したのでメニュー欄を表示
+                this.applyVisitMenuVisibility();
                 // 選択肢ごとのメニュー表示設定を適用（非表示対象の選択は解除される）
                 this.applyStaffMenuVisibility();
                 // 選択肢ごとのカスタムフィールド表示設定を適用（非表示になった項目の入力はクリア）
@@ -1087,6 +1089,13 @@ class BookingForm {
                         delete this.state.selectedSubMenus[menuId];
                         delete this.state.selectedOptions[menuId];
                     } else {
+                        // 複数選択の上限（未設定 = 3）。上限に達していたら選択せず案内する
+                        const maxSel = this.getMaxCrossSelections();
+                        const totalSelected = Object.values(this.state.selectedMenus || {}).reduce((n, ids) => n + (ids ? ids.length : 0), 0);
+                        if (totalSelected >= maxSel) {
+                            alert('メニューは ' + maxSel + ' つまで選択できます。別のメニューを選ぶ場合は、選択中のメニューをタップして解除してください。');
+                            return;
+                        }
                         const next = [...currentInCat, menuId];
                         this.state.selectedMenus = { ...this.state.selectedMenus, [categoryId]: next };
                         this.state.selectedMenu = menu;
@@ -2280,6 +2289,7 @@ class BookingForm {
                         
                         if (selectionData.visitCount) {
                             this.state.visitCount = selectionData.visitCount;
+                            this.applyVisitMenuVisibility();
                             const visitBtn = document.querySelector(\`.visit-count-button[data-value="\${selectionData.visitCount}"]\`);
                             if (visitBtn) {
                                 document.querySelectorAll('.visit-count-button').forEach(btn => btn.classList.remove('selected'));
@@ -3505,6 +3515,26 @@ class BookingForm {
         this.updateSummary();
     }
     
+    // カテゴリーまたいでの複数選択の上限（未設定 = 3、1 以上）
+    getMaxCrossSelections() {
+        const v = this.config.menu_structure?.max_cross_category_selections;
+        return (typeof v === 'number' && isFinite(v) && v >= 1) ? Math.floor(v) : 3;
+    }
+
+    // ご来店回数選択「選択するまでカテゴリーとメニューは非表示にする」（未設定 = ON）。
+    // ご来店回数選択が ON で未選択のあいだはメニュー欄（カテゴリー・メニュー）を隠し、選択したら表示する
+    isMenuHiddenUntilVisitSelected() {
+        const vc = this.config.visit_count_selection;
+        if (!vc || vc.enabled !== true) return false;
+        if (vc.hide_menu_until_selected === false) return false;
+        return !this.state.visitCount;
+    }
+    applyVisitMenuVisibility() {
+        const field = document.getElementById('menu-field');
+        if (!field) return;
+        field.style.display = this.isMenuHiddenUntilVisitSelected() ? 'none' : '';
+    }
+
     toggleCalendarVisibility() {
         const bookingMode = this.config.calendar_settings?.booking_mode || 'calendar';
         // この関数は (1) 初回ロード時、(2) メニュー/サブメニュー選択時、(3) 前回メニュー復元時に呼ばれる。
@@ -3888,9 +3918,10 @@ if (document.readyState === 'loading') {
                             </div>`;
     };
 
+    const hiddenUntilVisit = config.visit_count_selection?.enabled === true && config.visit_count_selection?.hide_menu_until_selected !== false;
     return `
-            <!-- メニュー選択 -->
-            <div class="field" id="menu-field">
+            <!-- メニュー選択（ご来店回数「選択するまで非表示」が ON なら選択まで隠す） -->
+            <div class="field" id="menu-field"${hiddenUntilVisit ? ' style="display:none;"' : ''}>
                 <label class="field-label">メニューをお選びください</label>
                 ${config.menu_structure.categories.map((category, idx) => `
                     ${multiCat ? `
