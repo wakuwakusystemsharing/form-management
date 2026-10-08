@@ -577,7 +577,11 @@ export async function GET(req, { params }) {
 - **画像 URL はアップロードごとに変える**（`/api/upload/menu-image` が `{menuId}_{stamp}.{ext}`）。Storage の画像は 1 年キャッシュ（`cacheControl: 31536000`）のため、同じファイル名で上書きすると古い形の画像が表示され続ける。古い画像は `oldImageUrl` で削除
 - **画像の拡大表示**: ボタン左のサムネイルと詳細モーダルの画像をタップするとライトボックス（`#image-lightbox`。`openImageLightbox` / `closeImageLightbox`、閉じるボタン・背景タップ・Esc で閉じる）で画面サイズに合わせて表示。サムネイルのタップはメニュー選択を起こさない（`stopPropagation`）
 
+**カテゴリーまたいでの複数選択 (`config.menu_structure`):**
+- `allow_cross_category_selection` ON のとき `max_cross_category_selections`（既定 3、1〜20）で同時に選べるメニュー数を制限。生成 HTML の `getMaxCrossSelections()` が上限で選択を止め「メニューは N つまで選択できます」と案内。編集 UI はトグルの下の「選択できるメニューの数（上限）」
+
 **ご来店回数選択 (`config.visit_count_selection`):**
+- `hide_menu_until_selected?: boolean`（既定 true）- ご来店回数選択が ON のとき、選択肢をタップするまでメニュー欄（`#menu-field` = カテゴリーとメニュー）を隠す。初期 HTML で `display:none`、`applyVisitMenuVisibility()` が選択 / 復元時に表示。編集 UI は「来店回数選択を必須にする」の下のチェック
 - `label?: string` - フォームに出す見出し（空 / 未設定 = 「ご来店回数」）。フォームの項目名、ご予約内容の行、LINE メッセージの《見出し》、メール・管理画面の項目名（`reservation-detail-items.ts`）に共通で使う。編集 UI はメニュー構成 → 詳細設定 → ご来店回数選択の「項目の見出し」。Webhook の送信テキスト解析は `《ご来店回数》` 固定のまま（`details.visitCount` は未使用のため影響なし）
 
 **アンケートの質問型「第三希望日時選択」（`SurveyQuestionType = 'multiple_dates'`）:**

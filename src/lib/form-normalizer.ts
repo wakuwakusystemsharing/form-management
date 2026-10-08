@@ -283,6 +283,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       visit_count_selection: {
         enabled: existingConfig?.visit_count_selection?.enabled ?? (typedConfig?.visit_count_selection as Form['config']['visit_count_selection'])?.enabled ?? ((typedConfig?.ui_settings as Record<string, unknown>)?.show_visit_count as boolean) ?? ((typedUiSettings?.show_visit_count as boolean) ?? false),
         required: existingConfig?.visit_count_selection?.required ?? false,
+        // 選択するまでカテゴリーとメニューを非表示（未設定 = true）
+        hide_menu_until_selected: (() => {
+          const v = existingConfig?.visit_count_selection?.hide_menu_until_selected
+            ?? (typedConfig?.visit_count_selection as Form['config']['visit_count_selection'])?.hide_menu_until_selected;
+          return v !== false;
+        })(),
         // 見出し（空 / 未設定 = 「ご来店回数」。表示側で既定にする）
         label: (() => {
           const v = existingConfig?.visit_count_selection?.label ?? (typedConfig?.visit_count_selection as Form['config']['visit_count_selection'])?.label;
@@ -328,6 +334,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         structure_type: (existingConfig?.menu_structure?.structure_type || (typedConfig?.menu_structure as Form['config']['menu_structure'])?.structure_type || 'category_based') as Form['config']['menu_structure']['structure_type'],
         categories: (existingConfig?.menu_structure?.categories || (typedConfig?.menu_structure as Form['config']['menu_structure'])?.categories || typedMenuStructure?.categories || []) as Form['config']['menu_structure']['categories'],
         allow_cross_category_selection: existingConfig?.menu_structure?.allow_cross_category_selection ?? (typedConfig?.menu_structure as Form['config']['menu_structure'])?.allow_cross_category_selection ?? (typedMenuStructure?.allow_cross_category_selection as boolean) ?? false,
+        // 複数選択の上限（1 以上の整数。未設定 / 不正は 3）
+        max_cross_category_selections: (() => {
+          const v = existingConfig?.menu_structure?.max_cross_category_selections
+            ?? (typedConfig?.menu_structure as Form['config']['menu_structure'])?.max_cross_category_selections;
+          return typeof v === 'number' && Number.isFinite(v) && v >= 1 ? Math.floor(v) : 3;
+        })(),
         display_options: {
           show_price: existingConfig?.menu_structure?.display_options?.show_price ?? true,
           show_duration: existingConfig?.menu_structure?.display_options?.show_duration ?? true,

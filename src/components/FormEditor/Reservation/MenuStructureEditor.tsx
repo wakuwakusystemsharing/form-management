@@ -2233,6 +2233,38 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             </div>
           </label>
         </div>
+        {form.config?.menu_structure?.allow_cross_category_selection && (
+          <div className={`mt-3 pt-3 border-t ${themeClasses.divider}`}>
+            <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>選択できるメニューの数（上限）</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={20}
+                step={1}
+                value={form.config?.menu_structure?.max_cross_category_selections ?? 3}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  onUpdate({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      menu_structure: {
+                        ...form.config?.menu_structure,
+                        max_cross_category_selections: Number.isFinite(n) && n >= 1 ? Math.min(20, n) : 3
+                      }
+                    }
+                  });
+                }}
+                className={`w-24 ${themeClasses.input} text-sm`}
+              />
+              <span className={`text-sm ${themeClasses.text.secondary}`}>つまで</span>
+            </div>
+            <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+              お客様が同時に選べるメニューの数です（既定 3）。上限に達すると「メニューは N つまで選択できます」と案内し、追加で選べなくなります。
+            </p>
+          </div>
+        )}
       </div>
 
       {/* スタッフ選択設定 */}
@@ -3213,6 +3245,33 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
               />
               <span className={themeClasses.text.secondary}>来店回数選択を必須にする</span>
             </label>
+            <label className="flex items-center text-sm mt-2">
+              <input
+                type="checkbox"
+                checked={form.config?.visit_count_selection?.hide_menu_until_selected !== false}
+                onChange={(e) => {
+                  onUpdate({
+                    ...form,
+                    config: {
+                      ...form.config,
+                      visit_count_selection: {
+                        ...form.config?.visit_count_selection,
+                        hide_menu_until_selected: e.target.checked
+                      }
+                    }
+                  });
+                }}
+                className={`h-4 w-4 text-orange-600 focus:ring-orange-500 rounded mr-2 ${
+                  theme === 'light'
+                    ? 'bg-gray-100 border-gray-300'
+                    : 'bg-gray-700 border-gray-600'
+                }`}
+              />
+              <span className={themeClasses.text.secondary}>選択するまでカテゴリーとメニューは非表示にする</span>
+            </label>
+            <p className={`text-xs ${themeClasses.text.tertiary} ml-6`}>
+              ONにすると、お客様が来店回数の選択肢をタップするまでカテゴリーとメニューを隠し、タップしたら表示します（既定 ON）。
+            </p>
 
             {/* 見出しの文言（フォームのバナー・ご予約内容・LINE メッセージに使う） */}
             <div className="mt-3">
