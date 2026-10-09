@@ -142,7 +142,7 @@ export default function WallSettingsCard({ storeId, onSaved }: { storeId: string
           <div className="space-y-1">
             <label className="text-sm font-medium" htmlFor="wall-liff-id">LIFF ID</label>
             <Input id="wall-liff-id" value={settings.liff_id} placeholder="例: 2001234567-AbCdEfGh" onChange={(e) => set({ liff_id: e.target.value.trim() })} />
-            <p className="text-xs text-muted-foreground">LINE Developers で LIFF アプリを作成し、エンドポイント URL に下の「ページの URL」を設定してください（サイズは Full 推奨）。</p>
+            <p className="text-xs text-muted-foreground">LINE Developers で LIFF アプリを作成し、エンドポイント URL に下の「ページの URL」を設定してください（サイズは Full 推奨）。LIFF アプリは、店舗設定の「LINE ログインチャネル ID」に登録したチャネルと同じ LINE ログインチャネルに作ってください（違うチャネルだと本人確認に失敗し、付箋を貼れません）。</p>
           </div>
           <div className="grid gap-2 text-sm">
             <div className="flex flex-wrap items-center gap-2">
