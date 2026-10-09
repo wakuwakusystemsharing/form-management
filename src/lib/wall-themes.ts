@@ -5,6 +5,7 @@
  * プリセットを増やすときは WALL_THEME_PRESETS に 1 件足す。
  * 背景の質感は画像ファイルを使わず、SVG（feTurbulence）の data URI で作る（LINE 内ブラウザでも軽く、追加の通信が無い）。
  */
+import { normalizeWallDailyMax } from './wall-rules';
 import type {
   WallAccessMode,
   WallBoardSettings,
@@ -223,6 +224,7 @@ export function normalizeWallSettings(storeId: string, raw: unknown): WallBoardS
     liff_id: typeof r.liff_id === 'string' ? r.liff_id.trim().slice(0, 64) : '',
     moderation: MODERATIONS.includes(r.moderation as WallModeration) ? (r.moderation as WallModeration) : 'instant',
     access_mode: ACCESS_MODES.includes(r.access_mode as WallAccessMode) ? (r.access_mode as WallAccessMode) : 'login',
+    daily_max: normalizeWallDailyMax(r.daily_max),
     theme: normalizeWallTheme(r.theme),
     ng_words: normalizeStoreNgWords(r.ng_words),
   };

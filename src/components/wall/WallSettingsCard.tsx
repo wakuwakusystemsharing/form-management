@@ -173,6 +173,24 @@ export default function WallSettingsCard({ storeId, onSaved }: { storeId: string
         </section>
 
         <section className="space-y-2">
+          <h4 className="text-sm font-semibold">1 人が 1 日に貼れる枚数</h4>
+          <div className="flex items-center gap-2 text-sm">
+            <select
+              aria-label="1 人が 1 日に貼れる枚数"
+              data-slot="select-trigger"
+              className="h-9 rounded-md border bg-background px-2"
+              value={settings.daily_max}
+              onChange={(e) => set({ daily_max: Number(e.target.value) })}
+            >
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>{n} 枚</option>
+              ))}
+            </select>
+            <span className="text-muted-foreground">まで（同じお客様・同じ日。自分で削除した分も数えます）</span>
+          </div>
+        </section>
+
+        <section className="space-y-2">
           <h4 className="text-sm font-semibold">見られる人・貼れる人</h4>
           {(Object.keys(WALL_ACCESS_MODE_LABELS) as WallAccessMode[]).map((m) => (
             <label key={m} className="flex items-center gap-2 text-sm">

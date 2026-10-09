@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { ColoredTextToolbar } from '@/components/FormEditor/Survey/SurveyContentBlockEditor';
+import { renderColoredTextHtml } from '@/lib/colored-text';
 import { Form, BusinessHours, SpecialBusinessDay } from '@/types/form';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
 import { getThemeClasses, ThemeType } from '../FormEditorTheme';
@@ -630,7 +632,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </button>
             </div>
             <p className={`text-xs ${themeClasses.text.tertiary} mb-4`}>
-              空欄の項目は標準の文言が使われます。保存するだけで反映されます（フォームの「更新」は不要）。
+              空欄の項目は標準の文言が使われます。保存するだけで反映されます（フォームの「更新」は不要）。改行はそのまま LINE に反映され、長い文は自動で折り返します。文字色は変えたい部分を選択してから色を押してください。
             </p>
 
             <div className="space-y-5">
@@ -639,26 +641,22 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   【ご予約確認】（予約完了時の自動応答）
                 </h4>
                 <div className="space-y-3">
-                  <div>
-                    <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>見出し</label>
-                    <input
-                      type="text"
-                      value={form.config?.notification_messages?.confirmation_heading || ''}
-                      onChange={(e) => handleNotificationMessageChange('confirmation_heading', e.target.value)}
-                      placeholder="ご予約を承りました"
-                      className={`w-full ${themeClasses.input} text-sm`}
-                    />
-                  </div>
-                  <div>
-                    <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>フッターメッセージ</label>
-                    <textarea
-                      value={form.config?.notification_messages?.confirmation_footer || ''}
-                      onChange={(e) => handleNotificationMessageChange('confirmation_footer', e.target.value)}
-                      placeholder={'予約完了いたしました。\nご来店心よりお待ちしております。'}
-                      rows={3}
-                      className={`w-full ${themeClasses.textarea} text-sm`}
-                    />
-                  </div>
+                  <NotificationMessageField
+                    label="見出し"
+                    value={form.config?.notification_messages?.confirmation_heading || ''}
+                    placeholder={'ご予約を承りました'}
+                    rows={2}
+                    onChange={(v) => handleNotificationMessageChange('confirmation_heading', v)}
+                    themeClasses={themeClasses}
+                  />
+                  <NotificationMessageField
+                    label="フッターメッセージ"
+                    value={form.config?.notification_messages?.confirmation_footer || ''}
+                    placeholder={'予約完了いたしました。\nご来店心よりお待ちしております。'}
+                    rows={3}
+                    onChange={(v) => handleNotificationMessageChange('confirmation_footer', v)}
+                    themeClasses={themeClasses}
+                  />
                 </div>
               </div>
 
@@ -667,26 +665,22 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   【予約キャンセル】（「予約をキャンセル」への自動応答）
                 </h4>
                 <div className="space-y-3">
-                  <div>
-                    <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>キャンセル選択の案内文</label>
-                    <input
-                      type="text"
-                      value={form.config?.notification_messages?.cancel_select_prompt || ''}
-                      onChange={(e) => handleNotificationMessageChange('cancel_select_prompt', e.target.value)}
-                      placeholder="キャンセルする予約を選択してください"
-                      className={`w-full ${themeClasses.input} text-sm`}
-                    />
-                  </div>
-                  <div>
-                    <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>キャンセル完了メッセージ</label>
-                    <input
-                      type="text"
-                      value={form.config?.notification_messages?.cancel_done_heading || ''}
-                      onChange={(e) => handleNotificationMessageChange('cancel_done_heading', e.target.value)}
-                      placeholder="予約をキャンセルしました"
-                      className={`w-full ${themeClasses.input} text-sm`}
-                    />
-                  </div>
+                  <NotificationMessageField
+                    label="キャンセル選択の案内文"
+                    value={form.config?.notification_messages?.cancel_select_prompt || ''}
+                    placeholder={'キャンセルする予約を選択してください'}
+                    rows={2}
+                    onChange={(v) => handleNotificationMessageChange('cancel_select_prompt', v)}
+                    themeClasses={themeClasses}
+                  />
+                  <NotificationMessageField
+                    label="キャンセル完了メッセージ"
+                    value={form.config?.notification_messages?.cancel_done_heading || ''}
+                    placeholder={'予約をキャンセルしました'}
+                    rows={2}
+                    onChange={(v) => handleNotificationMessageChange('cancel_done_heading', v)}
+                    themeClasses={themeClasses}
+                  />
                 </div>
               </div>
             </div>
@@ -2157,3 +2151,45 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
 };
 
 export default BusinessRulesEditor;
+
+/** 通知編集の 1 項目: 複数行 + 文字色ツールバー + LINE での表示イメージ */
+function NotificationMessageField({
+  label,
+  value,
+  placeholder,
+  rows,
+  onChange,
+  themeClasses,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  rows: number;
+  onChange: (v: string) => void;
+  themeClasses: { text: { secondary: string }; textarea: string };
+}) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  return (
+    <div className="space-y-1.5">
+      <label className={`block text-xs ${themeClasses.text.secondary}`}>{label}</label>
+      <textarea
+        ref={ref}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        className={`w-full ${themeClasses.textarea} text-sm`}
+      />
+      <ColoredTextToolbar getTextarea={() => ref.current} value={value} onChange={onChange} />
+      {value.trim() && (
+        <div>
+          <p className="text-[10px] text-muted-foreground mb-1">LINE での表示イメージ:</p>
+          <div
+            className="text-sm rounded border p-3 leading-relaxed text-center bg-white text-[#333]"
+            dangerouslySetInnerHTML={{ __html: renderColoredTextHtml(value) }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
