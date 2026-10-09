@@ -50,6 +50,9 @@ GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 GOOGLE_CALENDAR_TOKEN_ENCRYPTION_KEY=  # リフレッシュトークン暗号化用
 
+# 寄せ書きウォール（staging / production 必須。32 文字以上。変更しない）
+WALL_AUTHOR_HASH_SECRET=
+
 # Resend（Web 予約フォームの自動メール通知用、オプション）
 RESEND_API_KEY=                         # 未設定時はスキップ（local 開発で安全）
 EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-domain.com>
@@ -196,6 +199,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - フォーム編集モーダルの「更新」の右のボタン（予約フォームのみ）。編集中のフォームを保存＆デプロイしてから `FormSyncDialog.tsx` を開き、**同じ店舗の予約フォーム**にセクション単位（`FORM_SYNC_SECTIONS`）で設定をコピーして自動で再デプロイする
 - 純粋ロジックは `src/lib/form-sync.ts` の `buildSyncedConfig(source, target, sections)`。`form_type` / `line_message_items`（送信時の項目編集）/ `basic_info` のフォーム名・LIFF ID・`line_only`・`second_message` / `calendar_settings` の `show_customer_email`・`notification_email` は**常に反映先のまま**
 - サーバー側の新 API は無し（反映先ごとに `GET /api/forms/{id}` → `PUT /api/forms/{id}` → `POST /api/forms/{id}/deploy` を順に呼ぶ）。反映先の選択は localStorage `form_sync_targets_{sourceId}` に記憶
+- **元に戻す（スナップショット）**: `form_config_snapshots`（`20261008000000_add_form_config_snapshots.sql`。フォームごとに直近 20 件）。「更新」「反映先」「復元」の直前に `POST /api/forms/{id}/snapshots`（reason: update / sync / restore）で config 全体を保存。`GET .../snapshots` 一覧、`GET .../snapshots/{snapshotId}` で config 取得。復元は `restoreFormFromSnapshot()`（`FormSnapshotDialog.tsx`）が 復元前を保存 → PUT → deploy。反映結果の「元に戻す」、編集モーダルの「更新履歴」（差分セクション表示 + 確認）から実行。サーバー側は `src/lib/form-snapshots.ts`（local は `data/form_config_snapshots.json`）。戻すのは config のみ（種別・URL・公開状態は不変）
 
 **プレビュー機能:**
 - `POST /api/preview/generate` - 保存前のフォーム編集状態からプレビュー HTML を生成
@@ -240,13 +244,24 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - 店舗に URL だけを渡しても解説なしで使えるようにするのが目的。項目を追加・改名したときはここも更新する
 
 **店舗管理者に表示するメニュー（タブ）の制御:**
-- `stores.admin_visible_tabs` JSONB（`null` = すべて表示）。値は `['dashboard','reservations','customers','surveys','lotteries','settings']` の部分集合
+- `stores.admin_visible_tabs` JSONB（`null` = すべて表示）。値は `['dashboard','reservations','customers','surveys','lotteries','walls','settings']` の部分集合
 - テナント側 店舗ページ → 設定タブ → `StoreAdminMenuSettings.tsx` で ON/OFF（最低 1 つ必須。全選択時は `null` で保存）
 - 店舗管理者ページ: `StoreAdminLayout` の `visibleTabs` でサイドバー・下部ナビをフィルタし、非表示タブへの直接アクセスは先頭の表示タブへ `router.replace`。`admin/page.tsx` も非表示タブは描画しない
 - マスター管理者・システム管理者が開いた場合は常に全表示（`/api/auth/role` の判定を `isUpperAdminUser` に保持）。**同じブラウザにテナント管理者のセッションが残っていると店舗管理者ページは自動的にそのセッションで開く**ため、全表示になる。ページ上部に「〜として閲覧中」のバナーを出し、「店舗管理者の見え方で確認」（`previewAsStoreAdmin`、sessionStorage `store_admin_preview_{storeId}`）で店舗設定を適用した表示に切り替えられる
 - 定義・正規化は `src/lib/store-admin-tabs.ts`（`STORE_ADMIN_TABS` / `resolveVisibleTabs()`）
 - マイグレーション: `20260902000000_add_admin_visible_tabs.sql`
 - **項目単位の表示**: `stores.admin_visible_options` JSONB（`reservation_forms` / `survey_forms` / `lottery_forms` = 各タブの「フォーム管理」、`customer_reservation_history` = 顧客詳細の予約履歴・来店履歴・統計情報、`customer_lottery_history` = 顧客詳細の抽選履歴）。**未設定キーは親タブに連動**（予約管理 OFF → 顧客詳細の予約・来店・統計も非表示、抽選管理 OFF → 抽選履歴も非表示）。明示的に true/false を保存すると連動より優先。判定は `resolveAdminVisibleOptions(tabs, options, upperAdmin)`。設定 UI は `StoreAdminMenuSettings.tsx` の各タブ配下のチェック（「連動に戻す」で未設定へ）。マイグレーション: `20260904000000_add_admin_visible_options.sql`
+
+**寄せ書きウォール（匿名の付箋ボード。LINE LIFF 専用）:**
+- 要件定義: `docs/寄せ書きウォール_要件定義書.md`。店舗管理者ページ / テナント側 店舗ページの「寄せ書き」タブ（`walls`。抽選と設定の間）。お客様画面は Next.js ページ `/wall/{storeId}`（`src/components/wall/WallApp.tsx`。静的 HTML ではない）を店舗ごとの LIFF（`wall_boards.liff_id`）で開く
+- **匿名性**: 投稿者は `author_hash` = HMAC-SHA256(店舗 ID + LINE ユーザー ID, `WALL_AUTHOR_HASH_SECRET`)（`src/lib/wall-author-hash.ts`）だけを保存。API の型（`WallPublicPost` / `WallAdminPost`）に hash・ユーザー ID を含めない（Vitest で再帰的に検査）。`wall_posts` / `wall_reports` / `wall_consents` / `wall_moderation_logs` は RLS ポリシー無し（service_role のみ）、`wall_boards` だけ 3 階層ポリシー
+- 本人確認は LIFF ID トークン（`verifyLineIdToken`。local は `line_user_id` の申告を許容）。削除は本人のみ（他人の付箋は 404）。他店舗の付箋は取得・削除・通報・管理操作すべて 404
+- ルール（`src/lib/wall-rules.ts`）: 本文 140 文字 / 1 人 1 店舗 1 日 3 件（JST。本人削除分も数える）/ 30 秒間隔 / 通報 3 件で `review`（ボードから外す）/ 初回投稿時に同意文 + `WALL_TERMS_VERSION` を `wall_consents` に保存（未同意は 428）。投稿の判定と挿入は DB 関数 `wall_insert_post_checked`、通報は `wall_add_report`
+- 表示: 店舗設定 `moderation`（`instant` / `approval`）。NG ワード（`src/lib/wall-ng-words.ts` の共通語 + URL / メール / 電話 / @ID の形式 + 店舗の追加語）を含む付箋は `pending`（`pending_reason: 'ng_word'`）。閲覧・投稿範囲 `access_mode`（`login` / `friend_to_post` / `friend_only`）
+- 店舗の操作: 公開 / 非公開のみ。非公開の理由は `terms_violation`（規約違反）だけ受け付ける（低評価を理由に消せない）。操作は `wall_moderation_logs` に記録
+- 見た目はテーマ値だけで変える（`src/lib/wall-themes.ts`: プリセット cork / wood / paper / chalkboard、背景色、付箋色 3〜8、フォント、見出し・説明・例文）。付箋の色・傾き・ずれは投稿 ID から決定（`src/lib/wall-layout.ts`）。共通描画 `WallBoardView.tsx`（管理画面のプレビューでも使用）
+- API: お客様 `GET /api/walls/{storeId}` / `POST .../posts` / `DELETE .../posts/{postId}` / `POST .../posts/{postId}/report`。管理 `GET/PUT /api/stores/{storeId}/wall/settings` / `GET .../wall/posts?filter=` / `PATCH .../wall/posts/{postId}`（`{ action: 'publish' }` or `{ action: 'hide', reason: 'terms_violation' }`）/ `GET .../wall/stats`（ダッシュボードの確認待ち表示）
+- サーバー: `wall-service.ts`（業務ロジック）/ `wall-repository.ts`（local は `data/wall_*.json`）。マイグレーション: `20261009000000_add_wall.sql`
 
 **抽選フォーム機能（LINE LIFF 専用）:**
 - 設計書: `docs/抽選フォーム_実装設計.md`。即時抽選（その場で結果）と後日抽選（応募 → 管理画面で抽選 → 当選者へ Bot push）の 2 方式
@@ -528,6 +543,7 @@ export async function GET(req, { params }) {
 - `lottery_entries` - 抽選履歴（1 行 = 1 回の抽選 / 1 口の応募。引換コード・QR トークン・引換状態）
 - `follow_messages` - LINE フォローメッセージの配信予定・結果（1 予約 1 行。`status` / `skip_reason` / `scheduled_at` / `sent_at` / `claimed_at`）
 - `reminder_logs` - LINE 予約リマインダーの送信記録（1 予約 × 対象日 = 1 行。二重送信防止・後追い確認）
+- `wall_boards` / `wall_posts` / `wall_reports` / `wall_consents` / `wall_moderation_logs` - 寄せ書きウォール（ボード設定 / 付箋 / 通報 / 同意 / 公開操作の記録。投稿者は hash のみ）
 
 **RLS（Row Level Security）:**
 - マスター管理者: `is_master_admin()` で全テーブルフルアクセス
@@ -555,6 +571,7 @@ export async function GET(req, { params }) {
 - `20260904000000_add_admin_visible_options.sql` - stores.admin_visible_options 追加（店舗管理者に表示する項目の個別設定）
 - `20260908000000_add_follow_message.sql` - stores.follow_* 5 カラム + follow_messages テーブル（フォローメッセージ配信予定）+ RLS
 - `20260911000000_message_delivery_reliability.sql` - reminder_logs テーブル、stores.reminder_* の CHECK、follow_messages に sending / claimed_at、DB 関数 follow_message_schedule / follow_message_restore_for_user
+- `20261009000000_add_wall.sql` - 寄せ書きウォールの 5 テーブル・RLS・DB 関数 `wall_insert_post_checked` / `wall_add_report`
 
 ## テンプレートシステム
 

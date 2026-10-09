@@ -16,6 +16,8 @@ import FormEditModal, { type EditableForm, isLotteryForm } from '@/components/Fo
 import LotteryFormList from '@/components/LotteryFormList';
 import LotteryEntryList from '@/components/LotteryEntryList';
 import LotteryDeferredPanel from '@/components/LotteryDeferredPanel';
+import WallAdminPanel from '@/components/wall/WallAdminPanel';
+import type { WallStats } from '@/types/wall';
 import type { LotteryFormWithStats } from '@/types/lottery';
 import StoreAdminLayout from '@/components/StoreAdminLayout';
 import UiStyleSettings from '@/components/UiStyleSettings';
@@ -116,6 +118,8 @@ export default function StoreAdminPage() {
   const [lotteryForms, setLotteryForms] = useState<LotteryFormWithStats[]>([]);
   const [lotteryRefreshKey, setLotteryRefreshKey] = useState(0);
   const [lotteryTodayCount, setLotteryTodayCount] = useState<number | null>(null);
+  // ダッシュボード用: 寄せ書きの確認待ち（公開中の店舗のみ）
+  const [wallStats, setWallStats] = useState<WallStats | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   // 予約詳細モーダルの「予約内容を編集」モード
@@ -179,6 +183,7 @@ export default function StoreAdminPage() {
   // タブ内の項目単位の表示（フォーム管理 / 顧客詳細の履歴）。上位管理者はすべて表示
   const adminOptions = resolveAdminVisibleOptions(visibleTabsForUser, store?.admin_visible_options ?? null, !applyStoreSettings);
   const activeTab = visibleTabIds.includes(requestedTab as (typeof visibleTabIds)[number]) ? requestedTab : visibleTabIds[0];
+  const wallTabVisible = visibleTabIds.includes('walls');
 
   // ダッシュボード用: 本日（JST）の抽選参加数
   useEffect(() => {
@@ -198,6 +203,17 @@ export default function StoreAdminPage() {
     })();
     return () => { cancelled = true; };
   }, [storeId, user, lotteryRefreshKey]);
+
+  // ダッシュボード用: 寄せ書きの承認待ち / 通報で確認待ち
+  useEffect(() => {
+    if (!storeId || !user || activeTab !== 'dashboard') return;
+    let cancelled = false;
+    fetch(`/api/stores/${storeId}/wall/stats`, { credentials: 'include', cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => { if (!cancelled && json?.stats) setWallStats(json.stats); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [storeId, user, activeTab]);
 
   // 抽選フォームの集計を更新（引換・保存のあと）
   useEffect(() => {
@@ -648,6 +664,16 @@ export default function StoreAdminPage() {
                 </Card>
               )}
           </div>
+
+            {wallStats?.enabled && wallTabVisible && wallStats.pending + wallStats.review > 0 && (
+              <a
+                href={`/${storeId}/admin?tab=walls`}
+                className="flex items-center justify-between gap-3 rounded-lg border border-orange-300 bg-orange-50 px-4 py-3 text-sm text-orange-900"
+              >
+                <span>寄せ書きに確認が必要な付箋があります（承認待ち {wallStats.pending} 件 / 通報で確認待ち {wallStats.review} 件）</span>
+                <span className="shrink-0 font-medium underline">確認する</span>
+              </a>
+            )}
 
             {/* 最近の予約 */}
             <Card className="shadow-sm">
@@ -1531,6 +1557,17 @@ export default function StoreAdminPage() {
           </div>
         );
 
+      case 'walls':
+        return (
+          <div className="space-y-5 p-4 lg:p-6">
+            <div>
+              <h2 className="text-lg font-semibold">寄せ書き</h2>
+              <p className="text-sm text-muted-foreground">お客様が匿名で貼った付箋の確認と、寄せ書きボードの設定を行います</p>
+            </div>
+            <WallAdminPanel storeId={storeId} />
+          </div>
+        );
+
       case 'settings':
         return (
           <div className="space-y-4 p-4 lg:p-6">
@@ -1568,7 +1605,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView, customersRefreshKey, customersTotal, customersTagFilter, lotteryForms, lotteryTodayCount, adminOptions]);
+  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView, customersRefreshKey, customersTotal, customersTagFilter, lotteryForms, lotteryTodayCount, adminOptions, wallStats, wallTabVisible]);
 
   // 認証チェック中
   if (checkingAuth) {
