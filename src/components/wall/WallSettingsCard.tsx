@@ -42,7 +42,7 @@ function ColorInput({ value, onChange, label }: { value: string; onChange: (v: s
   );
 }
 
-export default function WallSettingsCard({ storeId, onSaved }: { storeId: string; onSaved?: () => void }) {
+export default function WallSettingsCard({ storeId, onSaved, embedded = false }: { storeId: string; onSaved?: () => void; /** モーダル内など、Card の枠と見出しを出さない */ embedded?: boolean }) {
   const { toast } = useToast();
   const [settings, setSettings] = useState<WallBoardSettings | null>(null);
   const [themeColor, setThemeColor] = useState<string | null>(null);
@@ -73,11 +73,12 @@ export default function WallSettingsCard({ storeId, onSaved }: { storeId: string
   }, [storeId, toast]);
 
   if (!settings) {
-    return (
-      <Card className="shadow-sm"><CardContent className="p-6 text-sm text-muted-foreground">
+    const loading = (
+      <p className="p-6 text-sm text-muted-foreground">
         <span data-slot="loading" className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent align-middle" /> 読み込み中…
-      </CardContent></Card>
+      </p>
     );
+    return embedded ? loading : <Card className="shadow-sm"><CardContent className="p-0">{loading}</CardContent></Card>;
   }
 
   const set = (patch: Partial<WallBoardSettings>) => setSettings({ ...settings, ...patch });
@@ -131,13 +132,8 @@ export default function WallSettingsCard({ storeId, onSaved }: { storeId: string
 
   const colors = settings.theme.note_colors;
 
-  return (
-    <Card className="shadow-sm">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-base">ボードの設定</CardTitle>
-        <CardDescription>公開するかどうか、表示のしかた、見た目を設定します。「保存」を押すとすぐお客様の画面に反映されます。</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+  const body = (
+    <>
         <section className="space-y-3">
           <label className="flex items-center gap-3">
             <input type="checkbox" className="h-5 w-5" checked={settings.enabled} onChange={(e) => set({ enabled: e.target.checked })} />
@@ -357,7 +353,17 @@ export default function WallSettingsCard({ storeId, onSaved }: { storeId: string
         <div className="flex justify-end">
           <Button onClick={save} disabled={saving}>{saving ? '保存中…' : '保存'}</Button>
         </div>
-      </CardContent>
+    </>
+  );
+
+  if (embedded) return <div className="space-y-6">{body}</div>;
+  return (
+    <Card className="shadow-sm">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base">ボードの設定</CardTitle>
+        <CardDescription>公開するかどうか、表示のしかた、見た目を設定します。「保存」を押すとすぐお客様の画面に反映されます。</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">{body}</CardContent>
     </Card>
   );
 }

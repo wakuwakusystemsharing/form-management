@@ -25,7 +25,7 @@ describe('store-admin-guide（店舗管理者ページの使い方の文言）',
     expect(titles('customers')).toEqual(expect.arrayContaining(['一覧', '分析', 'セグメント', '顧客詳細']));
     expect(titles('surveys')).toEqual(expect.arrayContaining(['フォーム管理', '回答一覧']));
     expect(titles('lotteries')).toEqual(expect.arrayContaining(['フォーム管理', '抽選履歴', '後日抽選の管理']));
-    expect(titles('walls')).toEqual(expect.arrayContaining(['付箋の確認', 'ボードの設定', '見た目', 'NGワード']));
+    expect(titles('walls')).toEqual(expect.arrayContaining(['付箋の確認', '寄せ書き設定画面を開く', '見た目', 'NGワード']));
     expect(titles('settings')).toEqual(expect.arrayContaining(['表示設定', 'アカウント情報']));
   });
 
