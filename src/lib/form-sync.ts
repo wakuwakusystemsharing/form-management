@@ -112,6 +112,42 @@ export function buildSyncedConfig(
   return out;
 }
 
+/** config のトップレベルキー → 画面上のセクション名（差分表示用） */
+export const CONFIG_SECTION_LABELS: Record<string, string> = {
+  basic_info: '基本情報',
+  form_type: 'フォームタイプ',
+  menu_structure: 'メニュー構成',
+  calendar_settings: '営業時間・ルール',
+  custom_fields: 'カスタム項目',
+  content_blocks: '画像orテキスト設置',
+  staff_selection: 'スタッフ選択',
+  gender_selection: '性別選択',
+  visit_count_selection: 'ご来店回数選択',
+  visit_options: 'ご来店回数の選択肢',
+  coupon_selection: 'クーポン選択',
+  manual_form_settings: '手動予約フォームの項目',
+  notification_messages: '通知メッセージ',
+  cancel_rules: 'キャンセルルール設定',
+  line_message_items: '送信時の項目編集',
+  reservation_summary: 'ご予約内容',
+  ui_settings: '表示設定',
+  validation_rules: '入力チェック',
+};
+
+/** 2 つの config で内容が違うセクション名の一覧（復元前の確認表示用） */
+export function diffConfigSections(a: Partial<FormConfig> | null | undefined, b: Partial<FormConfig> | null | undefined): string[] {
+  const keys = new Set<string>([...Object.keys(a || {}), ...Object.keys(b || {})]);
+  const changed: string[] = [];
+  for (const key of keys) {
+    const av = (a as Record<string, unknown> | null | undefined)?.[key];
+    const bv = (b as Record<string, unknown> | null | undefined)?.[key];
+    if (JSON.stringify(av ?? null) !== JSON.stringify(bv ?? null)) {
+      changed.push(CONFIG_SECTION_LABELS[key] || key);
+    }
+  }
+  return changed;
+}
+
 export interface SyncTargetSummary {
   id: string;
   name: string;

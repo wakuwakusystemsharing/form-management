@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import type { Form } from '@/types/form';
+import { restoreFormFromSnapshot } from './FormSnapshotDialog';
 import {
   FORM_SYNC_SECTIONS,
   FORM_SYNC_SECTION_IDS,
@@ -26,7 +27,7 @@ interface FormSyncDialogProps {
   onDone?: () => void;
 }
 
-type ResultRow = { id: string; name: string; ok: boolean; message: string };
+type ResultRow = { id: string; name: string; ok: boolean; message: string; snapshotId: string | null; restored?: boolean };
 
 const TARGETS_KEY = (sourceId: string) => `form_sync_targets_${sourceId}`;
 
@@ -43,6 +44,7 @@ export default function FormSyncDialog({ open, onOpenChange, storeId, sourceForm
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<string>('');
   const [results, setResults] = useState<ResultRow[] | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // 反映先の候補を読み込む（同じ店舗の予約フォームのみ）
   useEffect(() => {
@@ -90,12 +92,21 @@ export default function FormSyncDialog({ open, onOpenChange, storeId, sourceForm
     for (const id of selectedTargets) {
       const name = targets?.find((t) => t.id === id)?.name || id;
       setProgress(`「${name}」に反映中…`);
+      let snapshotId: string | null = null;
       try {
         // 1) 反映先の最新を取得
         const getRes = await fetch(`/api/forms/${id}`, { credentials: 'include', cache: 'no-store' });
         if (!getRes.ok) throw new Error('フォームの取得に失敗しました');
         const target = (await getRes.json()) as Form;
         if (target.store_id !== storeId) throw new Error('同じ店舗のフォームではありません');
+        // 1.5) 上書き前の状態をスナップショットに保存（「元に戻す」用。失敗しても反映は続行）
+        try {
+          const snapRes = await fetch(`/api/forms/${id}/snapshots`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+            body: JSON.stringify({ reason: 'sync', reason_label: `「${sourceName}」から反映前`, source_form_id: sourceForm.id }),
+          });
+          if (snapRes.ok) snapshotId = ((await snapRes.json()) as { snapshot: { id: string } }).snapshot.id;
+        } catch { /* ignore */ }
         // 2) 選択したセクションだけ差し替え（種別固有の項目・送信時の項目編集は反映先のまま）
         const config = buildSyncedConfig(sourceForm.config, target.config, sections);
         // 3) 保存
@@ -118,12 +129,12 @@ export default function FormSyncDialog({ open, onOpenChange, storeId, sourceForm
         });
         if (!deployRes.ok) {
           const err = await deployRes.json().catch(() => ({}));
-          rows.push({ id, name, ok: false, message: `保存はできましたが、更新（デプロイ）に失敗しました: ${err.error || '不明なエラー'}` });
+          rows.push({ id, name, ok: false, message: `保存はできましたが、更新（デプロイ）に失敗しました: ${err.error || '不明なエラー'}`, snapshotId });
           continue;
         }
-        rows.push({ id, name, ok: true, message: '反映して更新しました' });
+        rows.push({ id, name, ok: true, message: '反映して更新しました', snapshotId });
       } catch (e) {
-        rows.push({ id, name, ok: false, message: e instanceof Error ? e.message : '不明なエラー' });
+        rows.push({ id, name, ok: false, message: e instanceof Error ? e.message : '不明なエラー', snapshotId });
       }
     }
     setResults(rows);
@@ -150,10 +161,36 @@ export default function FormSyncDialog({ open, onOpenChange, storeId, sourceForm
             <ul className="space-y-2">
               {results.map((r) => (
                 <li key={r.id} className={`rounded-md border px-3 py-2 text-sm ${r.ok ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-700'}`}>
-                  <span className="font-medium">{r.name}</span>：{r.message}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span><span className="font-medium">{r.name}</span>：{r.message}</span>
+                    {r.snapshotId && !r.restored && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={restoringId !== null}
+                        onClick={async () => {
+                          if (!window.confirm(`「${r.name}」を反映前の状態に戻して更新します。よろしいですか？`)) return;
+                          setRestoringId(r.id);
+                          try {
+                            await restoreFormFromSnapshot(storeId, r.id, r.snapshotId!);
+                            setResults((prev) => (prev || []).map((x) => (x.id === r.id ? { ...x, ok: true, message: '反映前の状態に戻して更新しました', restored: true } : x)));
+                          } catch (e) {
+                            setResults((prev) => (prev || []).map((x) => (x.id === r.id ? { ...x, ok: false, message: e instanceof Error ? e.message : '元に戻せませんでした' } : x)));
+                          } finally {
+                            setRestoringId(null);
+                          }
+                        }}
+                      >
+                        {restoringId === r.id ? '戻しています…' : '元に戻す'}
+                      </Button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
+            <p className="text-xs text-muted-foreground">
+              「元に戻す」は反映直前の状態に戻して更新します。あとから戻したい場合は、各フォームの編集画面の「更新履歴」から行えます。
+            </p>
             <div className="flex justify-end">
               <Button onClick={() => onOpenChange(false)}>閉じる</Button>
             </div>

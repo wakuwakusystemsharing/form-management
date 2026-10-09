@@ -16,7 +16,8 @@ import BusinessRulesEditor from './Reservation/BusinessRulesEditor';
 import SurveyFormEditor from './Survey/SurveyFormEditor';
 import LotteryFormEditor from './Lottery/LotteryFormEditor';
 import FormSyncDialog from './FormSyncDialog';
-import { Copy, Eye, Save, Upload } from 'lucide-react';
+import FormSnapshotDialog from './FormSnapshotDialog';
+import { Copy, Eye, History, Save, Upload } from 'lucide-react';
 
 export type EditableForm = Form | SurveyForm | LotteryForm;
 
@@ -51,6 +52,19 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
   const [isPreviewing, setIsPreviewing] = useState(false);
   // 「更新して他のフォームにも反映」ダイアログ（予約フォームのみ）
   const [syncOpen, setSyncOpen] = useState(false);
+  // 「更新履歴から戻す」ダイアログ（予約フォームのみ）
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // 予約フォームの更新前に、上書き前の状態をスナップショットに保存する（元に戻す用。失敗しても更新は続行）
+  const snapshotBeforeUpdate = async (reason: 'update' | 'restore') => {
+    if (isLotteryForm(editingForm) || isSurvey(editingForm)) return;
+    try {
+      await fetch(`/api/forms/${editingForm.id}/snapshots`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ reason }),
+      });
+    } catch { /* ignore */ }
+  };
   const previewUrlRef = useRef<string | null>(null);
   const { toast } = useToast();
 
@@ -93,6 +107,8 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
     try {
       setIsSaving(true);
 
+      // 更新前の状態を保存（更新履歴から戻せるように）
+      await snapshotBeforeUpdate('update');
       // まず保存
       await onSave(editingForm);
 
@@ -248,16 +264,28 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
               {isSaving ? '更新中...' : '更新'}
             </Button>
             {!isLotteryForm(editingForm) && !isSurvey(editingForm) && (
-              <Button
-                variant="outline"
-                onClick={handleSaveDeployAndSync}
-                disabled={isSaving}
-                title="このフォームを更新したあと、同じ店舗の他の予約フォームにも同じ設定を反映します"
-                className="flex-1 sm:flex-initial"
-              >
-                <Copy className="mr-2 h-4 w-4" />
-                更新して他のフォームにも反映
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleSaveDeployAndSync}
+                  disabled={isSaving}
+                  title="このフォームを更新したあと、同じ店舗の他の予約フォームにも同じ設定を反映します"
+                  className="flex-1 sm:flex-initial"
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  更新して他のフォームにも反映
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setHistoryOpen(true)}
+                  disabled={isSaving}
+                  title="更新・反映・復元の直前の状態（直近 20 件）に戻せます"
+                  className="flex-1 sm:flex-initial"
+                >
+                  <History className="mr-2 h-4 w-4" />
+                  更新履歴
+                </Button>
+              </>
             )}
           </div>
         </DialogHeader>
@@ -336,12 +364,25 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
         </div>
       </DialogContent>
       {!isLotteryForm(editingForm) && !isSurvey(editingForm) && (
-        <FormSyncDialog
-          open={syncOpen}
-          onOpenChange={setSyncOpen}
-          storeId={storeId}
-          sourceForm={editingForm as Form}
-        />
+        <>
+          <FormSyncDialog
+            open={syncOpen}
+            onOpenChange={setSyncOpen}
+            storeId={storeId}
+            sourceForm={editingForm as Form}
+          />
+          <FormSnapshotDialog
+            open={historyOpen}
+            onOpenChange={setHistoryOpen}
+            storeId={storeId}
+            form={editingForm as Form}
+            onRestored={async (restored) => {
+              // 編集中の内容と一覧を復元後の状態にそろえる（サーバーには保存済み）
+              setEditingForm(restored);
+              try { await onSave(restored); } catch { /* 一覧側の更新失敗は無視（サーバーは復元済み） */ }
+            }}
+          />
+        </>
       )}
     </Dialog>
   );
