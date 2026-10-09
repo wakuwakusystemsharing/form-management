@@ -10,8 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { ChipFilter } from '@/components/customers/ChipTabs';
-import { WALL_REPORT_REASONS } from '@/lib/wall-rules';
-import type { WallAdminPost, WallPostStatus } from '@/types/wall';
+import { Input } from '@/components/ui/input';
+import { WALL_REACTIONS, WALL_REPORT_REASONS } from '@/lib/wall-rules';
+import type { WallAdminPost, WallPostStatus, WallReaction, WallTopic } from '@/types/wall';
 
 type Filter = 'all' | 'pending' | 'review' | 'reported' | 'published' | 'hidden' | 'deleted';
 
@@ -39,7 +40,16 @@ function formatDateTime(iso: string): string {
   return d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-export default function WallPostList({ storeId, refreshKey = 0, onChanged }: { storeId: string; refreshKey?: number; onChanged?: () => void }) {
+export interface WallPostListProps {
+  storeId: string;
+  refreshKey?: number;
+  onChanged?: () => void;
+  /** 外から渡す検索語（見どころの言葉をタップしたとき） */
+  search?: string;
+  onSearchChange?: (v: string) => void;
+}
+
+export default function WallPostList({ storeId, refreshKey = 0, onChanged, search: searchProp, onSearchChange }: WallPostListProps) {
   const { toast } = useToast();
   const [filter, setFilter] = useState<Filter>('all');
   const [posts, setPosts] = useState<WallAdminPost[]>([]);
@@ -47,12 +57,19 @@ export default function WallPostList({ storeId, refreshKey = 0, onChanged }: { s
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [hideTarget, setHideTarget] = useState<WallAdminPost | null>(null);
+  const [topics, setTopics] = useState<Array<WallTopic & { status: string }>>([]);
+  const [topicId, setTopicId] = useState('');
+  const [searchLocal, setSearchLocal] = useState('');
+  const search = searchProp ?? searchLocal;
+  const setSearch = (v: string) => { setSearchLocal(v); onSearchChange?.(v); };
 
   const load = useCallback(async (cursor: string | null) => {
     setLoading(true);
     try {
       const q = new URLSearchParams({ filter });
       if (cursor) q.set('cursor', cursor);
+      if (topicId) q.set('topic', topicId);
+      if (search.trim()) q.set('search', search.trim());
       const res = await fetch(`/api/stores/${encodeURIComponent(storeId)}/wall/posts?${q.toString()}`, { credentials: 'include', cache: 'no-store' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -66,9 +83,38 @@ export default function WallPostList({ storeId, refreshKey = 0, onChanged }: { s
     } finally {
       setLoading(false);
     }
-  }, [storeId, filter, toast]);
+  }, [storeId, filter, topicId, search, toast]);
 
   useEffect(() => { load(null); }, [load, refreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/stores/${encodeURIComponent(storeId)}/wall/topics`, { credentials: 'include', cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => { if (!cancelled && json?.topics) setTopics(json.topics); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [storeId, refreshKey]);
+
+  const react = async (post: WallAdminPost, reaction: WallReaction | null) => {
+    setBusyId(post.id);
+    try {
+      const res = await fetch(`/api/stores/${encodeURIComponent(storeId)}/wall/posts/${encodeURIComponent(post.id)}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'react', reaction }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { toast({ title: 'スタンプを付けられませんでした', description: json.error, variant: 'destructive' }); return; }
+      const updated = json.post as WallAdminPost;
+      setPosts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch {
+      toast({ title: 'スタンプを付けられませんでした', description: 'ネットワークエラー', variant: 'destructive' });
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const moderate = async (post: WallAdminPost, action: 'publish' | 'hide') => {
     setBusyId(post.id);
@@ -99,6 +145,16 @@ export default function WallPostList({ storeId, refreshKey = 0, onChanged }: { s
   return (
     <div className="space-y-3">
       <ChipFilter items={FILTERS} value={filter} onChange={setFilter} ariaLabel="付箋の絞り込み" />
+      <div className="flex flex-wrap items-center gap-2">
+        <Input value={search} placeholder="本文で検索" className="h-9 max-w-xs" onChange={(e) => setSearch(e.target.value)} aria-label="本文で検索" />
+        {topics.length > 0 && (
+          <select data-slot="select-trigger" className="h-9 rounded-md border bg-background px-2 text-sm" value={topicId} onChange={(e) => setTopicId(e.target.value)} aria-label="お題で絞り込み">
+            <option value="">すべてのお題</option>
+            {topics.map((t) => <option key={t.id} value={t.id}>{t.title}（{t.starts_on}〜）</option>)}
+          </select>
+        )}
+        {(search || topicId) && <Button size="sm" variant="ghost" onClick={() => { setSearch(''); setTopicId(''); }}>絞り込みを解除</Button>}
+      </div>
 
       {!loading && posts.length === 0 && (
         <p className="py-8 text-center text-sm text-muted-foreground">該当する付箋はありません</p>
@@ -117,6 +173,8 @@ export default function WallPostList({ storeId, refreshKey = 0, onChanged }: { s
                 {p.status === 'pending' && p.pending_reason === 'ng_word' && (
                   <Badge variant="outline" className="border-red-300 text-red-700">NGワード: {p.ng_hits.join('、')}</Badge>
                 )}
+                {p.topic_title && <Badge variant="outline">お題: {p.topic_title}</Badge>}
+                {p.empathy_count > 0 && <Badge variant="outline">わかる！ {p.empathy_count}</Badge>}
                 {p.report_count > 0 && (
                   <Badge variant="outline" className="border-orange-300 text-orange-700">
                     通報 {p.report_count} 件{reasons.length > 0 && `（${reasons.map((r) => `${r.label} ${p.report_reasons[r.id]}`).join(' / ')}）`}
@@ -126,6 +184,26 @@ export default function WallPostList({ storeId, refreshKey = 0, onChanged }: { s
               <p className="mt-2 whitespace-pre-wrap break-words text-sm">
                 {p.body ?? <span className="text-muted-foreground">（投稿者が削除したため本文は表示しません）</span>}
               </p>
+              {p.status !== 'deleted' && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="お店からのスタンプ">
+                  <span className="mr-1 text-xs text-muted-foreground">お店からのスタンプ:</span>
+                  {WALL_REACTIONS.map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={p.reaction === r.id}
+                      title={r.label}
+                      disabled={busyId === p.id}
+                      onClick={() => react(p, p.reaction === r.id ? null : r.id)}
+                      className={`h-8 w-8 rounded-full border text-base ${p.reaction === r.id ? 'border-primary bg-primary/10 ring-2 ring-primary/40' : 'bg-white hover:bg-muted'}`}
+                    >
+                      {r.emoji}
+                    </button>
+                  ))}
+                  {p.reaction && <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" disabled={busyId === p.id} onClick={() => react(p, null)}>外す</Button>}
+                </div>
+              )}
               {p.status !== 'deleted' && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {p.status !== 'published' && (

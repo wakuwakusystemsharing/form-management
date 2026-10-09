@@ -10,6 +10,7 @@ import { getAppEnvironment } from '@/lib/env';
 import { resolveLineChannelId, verifyLineIdToken } from '@/lib/line-verify';
 import { computeWallAuthorHash, WallSecretMissingError } from '@/lib/wall-author-hash';
 import { findNgWords } from '@/lib/wall-ng-words';
+import { buildWallInsights } from '@/lib/wall-insights';
 import { normalizeWallSettings, normalizeWallTheme, normalizeStoreNgWords } from '@/lib/wall-themes';
 import {
   decodeWallCursor,
@@ -22,6 +23,12 @@ import {
   WALL_PAGE_SIZE,
   WALL_REPORT_THRESHOLD,
   WALL_TERMS_VERSION,
+  WALL_NOTE_DECORATIONS,
+  WALL_LOOKUP_MAX,
+  WALL_TOPICS_MAX,
+  isWallDecoration,
+  isWallReaction,
+  jstToday,
 } from '@/lib/wall-rules';
 import {
   addWallReport,
@@ -37,6 +44,12 @@ import {
   saveWallBoard,
   saveWallConsent,
   updateWallPost,
+  toggleWallEmpathy,
+  getEmpathizedPostIds,
+  listWallTopics,
+  saveWallTopic,
+  deleteWallTopic,
+  listWallPostsForInsights,
   type WallStoreInfo,
 } from '@/lib/wall-repository';
 import type {
@@ -46,7 +59,11 @@ import type {
   WallPostStatus,
   WallPublicBoardResponse,
   WallPublicPost,
+  WallMyPost,
   WallStats,
+  WallTopic,
+  WallTopicPublic,
+  WallInsightsResponse,
 } from '@/types/wall';
 
 export type WallError = { ok: false; status: number; error: string; code?: string; detail?: string };
@@ -113,13 +130,47 @@ function newPostId(): string {
   return out;
 }
 
+export interface PublicPostContext {
+  /** 閲覧者が共感済みの付箋 ID */
+  empathized?: Set<string>;
+  /** お題 ID → 題名 */
+  topics?: Map<string, string>;
+  /** 共感の数を見せるか（false なら null） */
+  showCount?: boolean;
+}
+
 /** お客様向けの形（投稿者の情報は出さない） */
-export function toPublicPost(row: WallPostRow, viewerHash: string | null): WallPublicPost {
-  return { id: row.id, body: row.body, created_at: row.created_at, is_mine: !!viewerHash && row.author_hash === viewerHash };
+export function toPublicPost(row: WallPostRow, viewerHash: string | null, ctx: PublicPostContext = {}): WallPublicPost {
+  return {
+    id: row.id,
+    body: row.body,
+    created_at: row.created_at,
+    is_mine: !!viewerHash && row.author_hash === viewerHash,
+    reaction: row.reaction ?? null,
+    topic_id: row.topic_id ?? null,
+    topic_title: row.topic_id ? ctx.topics?.get(row.topic_id) ?? null : null,
+    note_color: row.note_color ?? null,
+    note_deco: row.note_deco ?? null,
+    empathy_count: ctx.showCount === false ? null : Number(row.empathy_count) || 0,
+    empathized: !!ctx.empathized?.has(row.id),
+  };
+}
+
+function toPublicTopic(t: WallTopic): WallTopicPublic {
+  return { id: t.id, title: t.title, description: t.description, ends_on: t.ends_on };
+}
+
+/** 今日（JST）開催中のお題（期間が重なる登録は保存時に弾くので最大 1 件） */
+function activeTopic(topics: WallTopic[], today: string): WallTopic | null {
+  return topics.find((t) => t.starts_on <= today && today <= t.ends_on) ?? null;
+}
+
+function topicTitleMap(topics: WallTopic[]): Map<string, string> {
+  return new Map(topics.map((t) => [t.id, t.title]));
 }
 
 /** 店舗管理向けの形（投稿者の情報は出さない。本人削除は本文も出さない） */
-export function toAdminPost(row: WallPostRow, reasons: WallAdminPost['report_reasons']): WallAdminPost {
+export function toAdminPost(row: WallPostRow, reasons: WallAdminPost['report_reasons'], topicTitles?: Map<string, string>): WallAdminPost {
   return {
     id: row.id,
     no: row.id.slice(0, 6).toUpperCase(),
@@ -130,6 +181,12 @@ export function toAdminPost(row: WallPostRow, reasons: WallAdminPost['report_rea
     report_count: row.report_count,
     report_reasons: reasons,
     hidden_reason: row.hidden_reason,
+    reaction: row.reaction ?? null,
+    topic_id: row.topic_id ?? null,
+    topic_title: row.topic_id ? topicTitles?.get(row.topic_id) ?? null : null,
+    empathy_count: Number(row.empathy_count) || 0,
+    note_color: row.note_color ?? null,
+    note_deco: row.note_deco ?? null,
     created_at: row.created_at,
   };
 }
@@ -169,10 +226,13 @@ export async function getPublicWall(
   const limitNum = Math.min(50, Math.max(1, Number(opts.limit) || WALL_PAGE_SIZE));
   let posts: WallPublicPost[] = [];
   let nextCursor: string | null = null;
+  const topics = board.enabled ? await listWallTopics(storeId) : [];
+  const topic = activeTopic(topics, jstToday());
   if (viewable) {
     const rows = await listWallPosts({ storeId, statuses: ['published'], cursor: decodeWallCursor(opts.cursor), limit: limitNum });
     const page = rows.slice(0, limitNum);
-    posts = page.map((r) => toPublicPost(r, viewerHash));
+    const empathized = viewerHash && board.empathy_enabled ? await getEmpathizedPostIds(page.map((r) => r.id), viewerHash) : undefined;
+    posts = page.map((r) => toPublicPost(r, viewerHash, { empathized, topics: topicTitleMap(topics), showCount: board.empathy_show_count }));
     if (rows.length > limitNum) {
       const last = page[page.length - 1];
       nextCursor = encodeWallCursor(last.created_at, last.id);
@@ -191,6 +251,11 @@ export async function getPublicWall(
         moderation: board.moderation,
         access_mode: board.access_mode,
         daily_max: board.daily_max,
+        empathy_enabled: board.empathy_enabled,
+        empathy_show_count: board.empathy_show_count,
+        customer_pick_enabled: board.customer_pick_enabled,
+        decorations: [...WALL_NOTE_DECORATIONS],
+        topic: topic ? toPublicTopic(topic) : null,
         theme: board.theme,
         terms_version: WALL_TERMS_VERSION,
         consent_text: WALL_CONSENT_TEXT,
@@ -207,6 +272,11 @@ export async function getPublicWall(
 export interface CreateWallPostInput extends WallViewerInput {
   body?: unknown;
   consent?: unknown;
+  /** 開催中のお題に答える場合はその ID */
+  topic_id?: unknown;
+  /** 貼る人が選んだ色（店舗の付箋色の中から）・飾り（固定セット）。店舗が許可しているときだけ */
+  note_color?: unknown;
+  note_deco?: unknown;
 }
 
 export interface CreateWallPostResult {
@@ -241,6 +311,28 @@ export async function createWallPost(storeId: string, input: CreateWallPostInput
     await saveWallConsent(storeId, h.hash, WALL_TERMS_VERSION);
   }
 
+  // お題（開催中のものだけ受け付ける）
+  let topicId: string | null = null;
+  if (typeof input.topic_id === 'string' && input.topic_id) {
+    const active = activeTopic(await listWallTopics(storeId), jstToday(now));
+    if (!active || active.id !== input.topic_id) return err(400, 'このお題は受付を終了しました。画面を開き直してください', { code: 'topic_closed' });
+    topicId = active.id;
+  }
+  // 色・飾り（店舗が「お客様が選べる」にしているときだけ）
+  let noteColor: string | null = null;
+  let noteDeco: string | null = null;
+  if (board.customer_pick_enabled) {
+    if (typeof input.note_color === 'string' && input.note_color) {
+      const c = input.note_color.toLowerCase();
+      if (!board.theme.note_colors.includes(c)) return err(400, '選べない色です');
+      noteColor = c;
+    }
+    if (typeof input.note_deco === 'string' && input.note_deco) {
+      if (!isWallDecoration(input.note_deco)) return err(400, '選べない飾りです');
+      noteDeco = input.note_deco;
+    }
+  }
+
   const ngHits = findNgWords(v.body, board.ng_words);
   const status: WallPostStatus = ngHits.length > 0 || board.moderation === 'approval' ? 'pending' : 'published';
   const pendingReason = ngHits.length > 0 ? 'ng_word' : board.moderation === 'approval' ? 'approval' : null;
@@ -250,7 +342,7 @@ export async function createWallPost(storeId: string, input: CreateWallPostInput
     authorHash: h.hash,
     now,
     dailyMax: board.daily_max,
-    post: { id: newPostId(), body: v.body, status, pending_reason: pendingReason, ng_hits: ngHits },
+    post: { id: newPostId(), body: v.body, status, pending_reason: pendingReason, ng_hits: ngHits, topic_id: topicId, note_color: noteColor, note_deco: noteDeco },
   });
   if (!inserted.ok) {
     if (inserted.reason === 'board_missing') return err(403, 'この寄せ書きは現在受け付けていません');
@@ -259,7 +351,7 @@ export async function createWallPost(storeId: string, input: CreateWallPostInput
   console.log(`[wall] post created store=${storeId} post=${inserted.post.id} status=${status}`);
   return {
     ok: true,
-    post: toPublicPost(inserted.post, h.hash),
+    post: toPublicPost(inserted.post, h.hash, { topics: topicId ? new Map([[topicId, (await listWallTopics(storeId)).find((t) => t.id === topicId)?.title ?? '']]) : undefined, showCount: board.empathy_show_count }),
     status: status === 'published' ? 'published' : 'pending',
     // NG ワードに当たったことは伝えない（承認制と同じ案内）
     message: status === 'published' ? '付箋を貼りました' : 'お店の確認後に表示されます',
@@ -301,6 +393,60 @@ export async function reportWallPost(storeId: string, postId: string, input: Wal
   return { ok: true, message: '通報を受け付けました。ご協力ありがとうございます' };
 }
 
+/** 共感を押す / 取り消す（公開中の付箋のみ。自分の付箋は不可） */
+export async function toggleWallEmpathyForViewer(storeId: string, postId: string, input: WallViewerInput): Promise<{ ok: true; empathized: boolean; empathy_count: number | null } | WallError> {
+  const loaded = await loadStoreAndBoard(storeId);
+  if (!loaded.ok) return loaded;
+  const { store, board } = loaded;
+  if (!board.enabled || !board.empathy_enabled) return err(404, '付箋が見つかりません');
+  if (!canView(board, isFriend(input))) return err(404, '付箋が見つかりません');
+  const user = await resolveLineUserId(input, store);
+  if (!user.ok) return user;
+  const h = authorHashOrError(storeId, user.userId);
+  if (!h.ok) return h;
+  const post = await getWallPost(storeId, postId);
+  if (!post || post.status !== 'published') return err(404, '付箋が見つかりません');
+  if (post.author_hash === h.hash) return err(400, 'ご自身の付箋には押せません');
+  const r = await toggleWallEmpathy(storeId, postId, h.hash);
+  if (!r.ok) return err(404, '付箋が見つかりません');
+  return { ok: true, empathized: r.empathized, empathy_count: board.empathy_show_count ? r.count : null };
+}
+
+/** 自分の付箋一覧（削除以外。状態付き。新しい順、最大 100） */
+export async function getMyWallPosts(storeId: string, input: WallViewerInput): Promise<{ ok: true; posts: WallMyPost[] } | WallError> {
+  const loaded = await loadStoreAndBoard(storeId);
+  if (!loaded.ok) return loaded;
+  const { store, board } = loaded;
+  if (!board.enabled) return err(403, 'この寄せ書きは現在受け付けていません');
+  const user = await resolveLineUserId(input, store);
+  if (!user.ok) return user;
+  const h = authorHashOrError(storeId, user.userId);
+  if (!h.ok) return h;
+  const rows = await listWallPosts({ storeId, statuses: ['published', 'pending', 'review', 'hidden'], cursor: null, limit: 100, authorHash: h.hash });
+  const topics = topicTitleMap(await listWallTopics(storeId));
+  const posts: WallMyPost[] = rows.slice(0, 100).map((r) => ({ ...toPublicPost(r, h.hash, { topics, showCount: board.empathy_show_count }), status: r.status as WallMyPost['status'] }));
+  return { ok: true, posts };
+}
+
+/** あとで読む用の照会: 渡した ID のうち今も公開中の付箋だけ返す（他店舗の ID は返らない） */
+export async function lookupWallPosts(storeId: string, ids: unknown, viewer: WallViewerInput): Promise<{ ok: true; posts: WallPublicPost[] } | WallError> {
+  const loaded = await loadStoreAndBoard(storeId);
+  if (!loaded.ok) return loaded;
+  const { store, board } = loaded;
+  if (!board.enabled || !canView(board, isFriend(viewer))) return err(404, '付箋が見つかりません');
+  const list = (Array.isArray(ids) ? ids : typeof ids === 'string' ? ids.split(',') : []).filter((x): x is string => typeof x === 'string' && /^[a-z0-9]{6,20}$/.test(x)).slice(0, WALL_LOOKUP_MAX);
+  if (list.length === 0) return { ok: true, posts: [] };
+  let viewerHash: string | null = null;
+  if (typeof viewer.id_token === 'string' || typeof viewer.line_user_id === 'string') {
+    const user = await resolveLineUserId(viewer, store);
+    if (user.ok) { const h = authorHashOrError(storeId, user.userId); if (h.ok) viewerHash = h.hash; }
+  }
+  const rows = await listWallPosts({ storeId, statuses: ['published'], cursor: null, limit: WALL_LOOKUP_MAX, ids: list });
+  const empathized = viewerHash && board.empathy_enabled ? await getEmpathizedPostIds(rows.map((r) => r.id), viewerHash) : undefined;
+  const topics = topicTitleMap(await listWallTopics(storeId));
+  return { ok: true, posts: rows.slice(0, WALL_LOOKUP_MAX).map((r) => toPublicPost(r, viewerHash, { empathized, topics, showCount: board.empathy_show_count })) };
+}
+
 // ---------------------------------------------------------------------------
 // 店舗管理
 // ---------------------------------------------------------------------------
@@ -310,7 +456,7 @@ const ALL_STATUSES: WallPostStatus[] = ['published', 'pending', 'review', 'hidde
 
 export async function listAdminWallPosts(
   storeId: string,
-  opts: { filter?: unknown; cursor?: unknown; limit?: unknown } = {}
+  opts: { filter?: unknown; cursor?: unknown; limit?: unknown; topic?: unknown; search?: unknown } = {}
 ): Promise<{ ok: true; posts: WallAdminPost[]; next_cursor: string | null } | WallError> {
   const store = await getWallStore(storeId);
   if (!store) return err(404, 'お店が見つかりません');
@@ -319,13 +465,16 @@ export async function listAdminWallPosts(
     : 'all';
   const statuses = filter === 'all' ? ALL_STATUSES : filter === 'reported' ? ALL_STATUSES.filter((s) => s !== 'deleted') : [filter as WallPostStatus];
   const limit = Math.min(100, Math.max(1, Number(opts.limit) || WALL_ADMIN_PAGE_SIZE));
-  const rows = await listWallPosts({ storeId, statuses, cursor: decodeWallCursor(opts.cursor), limit, reportedOnly: filter === 'reported' });
+  const topicId = typeof opts.topic === 'string' && opts.topic ? opts.topic : undefined;
+  const search = typeof opts.search === 'string' && opts.search.trim() ? opts.search.trim().slice(0, 50) : undefined;
+  const rows = await listWallPosts({ storeId, statuses, cursor: decodeWallCursor(opts.cursor), limit, reportedOnly: filter === 'reported', topicId, search });
   const page = rows.slice(0, limit);
   const reasons = await countWallReportReasons(page.map((r) => r.id));
+  const topics = topicTitleMap(await listWallTopics(storeId));
   const last = page[page.length - 1];
   return {
     ok: true,
-    posts: page.map((r) => toAdminPost(r, reasons[r.id])),
+    posts: page.map((r) => toAdminPost(r, reasons[r.id], topics)),
     next_cursor: rows.length > limit && last ? encodeWallCursor(last.created_at, last.id) : null,
   };
 }
@@ -336,7 +485,7 @@ export interface WallActor { user_id: string | null; email: string | null; role:
 export async function moderateWallPost(
   storeId: string,
   postId: string,
-  input: { action?: unknown; reason?: unknown },
+  input: { action?: unknown; reason?: unknown; reaction?: unknown },
   actor: WallActor
 ): Promise<{ ok: true; post: WallAdminPost } | WallError> {
   const post = await getWallPost(storeId, postId);
@@ -354,12 +503,17 @@ export async function moderateWallPost(
       status: 'hidden', hidden_reason: 'terms_violation', hidden_at: new Date().toISOString(), hidden_by: actor.user_id,
     });
     await logWallModeration({ store_id: storeId, post_id: postId, action: 'hide', reason: 'terms_violation', actor_user_id: actor.user_id, actor_email: actor.email, actor_role: actor.role });
+  } else if (input.action === 'react') {
+    // お店からの「ありがとう」（固定セットのスタンプ 1 つ。null で解除）
+    if (input.reaction !== null && input.reaction !== undefined && !isWallReaction(input.reaction)) return err(400, 'スタンプが正しくありません');
+    const reaction = isWallReaction(input.reaction) ? input.reaction : null;
+    updated = await updateWallPost(storeId, postId, { reaction, reaction_at: reaction ? new Date().toISOString() : null });
   } else {
     return err(400, '操作が正しくありません');
   }
   if (!updated) return err(404, '付箋が見つかりません');
   const reasons = await countWallReportReasons([postId]);
-  return { ok: true, post: toAdminPost(updated, reasons[postId]) };
+  return { ok: true, post: toAdminPost(updated, reasons[postId], topicTitleMap(await listWallTopics(storeId))) };
 }
 
 export async function getWallSettings(storeId: string): Promise<{ ok: true; settings: WallBoardSettings; store_name: string; theme_color: string | null } | WallError> {
@@ -404,4 +558,80 @@ export async function getWallStats(storeId: string, now: Date = new Date()): Pro
   const since = new Date(now.getTime() - 7 * 24 * 3600000);
   const c = await countWallStats(storeId, since);
   return { ok: true, stats: { enabled: loaded.board.enabled, ...c } };
+}
+
+// ---------------------------------------------------------------------------
+// お題（店舗管理）
+// ---------------------------------------------------------------------------
+
+export type WallTopicStatus = 'active' | 'upcoming' | 'ended';
+
+export function topicStatus(t: WallTopic, today: string): WallTopicStatus {
+  if (today < t.starts_on) return 'upcoming';
+  if (today > t.ends_on) return 'ended';
+  return 'active';
+}
+
+export async function listWallTopicsAdmin(storeId: string, now: Date = new Date()): Promise<{ ok: true; topics: Array<WallTopic & { status: WallTopicStatus }> } | WallError> {
+  const store = await getWallStore(storeId);
+  if (!store) return err(404, 'お店が見つかりません');
+  const today = jstToday(now);
+  const topics = await listWallTopics(storeId);
+  return { ok: true, topics: topics.map((t) => ({ ...t, status: topicStatus(t, today) })) };
+}
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+/** お題の作成 / 更新（期間の重なりは不可 = 開催中のお題は常に 1 つ） */
+export async function saveWallTopicAdmin(storeId: string, topicId: string | null, raw: unknown): Promise<{ ok: true; topic: WallTopic } | WallError> {
+  const store = await getWallStore(storeId);
+  if (!store) return err(404, 'お店が見つかりません');
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const title = typeof r.title === 'string' ? r.title.trim() : '';
+  const description = typeof r.description === 'string' ? r.description.trim() : '';
+  const startsOn = typeof r.starts_on === 'string' ? r.starts_on.trim() : '';
+  const endsOn = typeof r.ends_on === 'string' ? r.ends_on.trim() : '';
+  if (!title || [...title].length > 40) return err(400, 'お題は 1〜40 文字で入力してください');
+  if ([...description].length > 120) return err(400, '説明は 120 文字以内で入力してください');
+  if (!YMD.test(startsOn) || !YMD.test(endsOn) || Number.isNaN(Date.parse(startsOn)) || Number.isNaN(Date.parse(endsOn))) return err(400, '開始日・終了日を入力してください');
+  if (endsOn < startsOn) return err(400, '終了日は開始日以降にしてください');
+  const existing = await listWallTopics(storeId);
+  if (topicId && !existing.some((t) => t.id === topicId)) return err(404, 'お題が見つかりません');
+  if (!topicId && existing.length >= WALL_TOPICS_MAX) return err(400, `お題は ${WALL_TOPICS_MAX} 件までです。古いものを削除してください`);
+  const overlap = existing.find((t) => t.id !== topicId && t.starts_on <= endsOn && startsOn <= t.ends_on);
+  if (overlap) return err(400, `「${overlap.title}」（${overlap.starts_on}〜${overlap.ends_on}）と期間が重なっています。お題は同じ期間に 1 つだけ出せます`);
+  const now = new Date().toISOString();
+  const prev = topicId ? existing.find((t) => t.id === topicId) : undefined;
+  const topic: WallTopic = {
+    id: topicId ?? newPostId(),
+    store_id: storeId,
+    title,
+    description,
+    starts_on: startsOn,
+    ends_on: endsOn,
+    created_at: prev?.created_at ?? now,
+    updated_at: now,
+  };
+  const saved = await saveWallTopic(topic);
+  return { ok: true, topic: saved };
+}
+
+export async function deleteWallTopicAdmin(storeId: string, topicId: string): Promise<{ ok: true } | WallError> {
+  const store = await getWallStore(storeId);
+  if (!store) return err(404, 'お店が見つかりません');
+  const deleted = await deleteWallTopic(storeId, topicId);
+  if (!deleted) return err(404, 'お題が見つかりません');
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// 見どころ（店舗管理）
+// ---------------------------------------------------------------------------
+
+export async function getWallInsights(storeId: string, now: Date = new Date()): Promise<{ ok: true; insights: WallInsightsResponse } | WallError> {
+  const loaded = await loadStoreAndBoard(storeId);
+  if (!loaded.ok) return loaded;
+  const since = new Date(now.getTime() - 8 * 7 * 24 * 3600000);
+  const rows = await listWallPostsForInsights(storeId, since);
+  return { ok: true, insights: buildWallInsights(rows, now, { ngWords: loaded.board.ng_words }) };
 }

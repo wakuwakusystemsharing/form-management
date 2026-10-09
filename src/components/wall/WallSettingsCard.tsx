@@ -26,10 +26,11 @@ import {
 } from '@/lib/wall-themes';
 import type { WallAccessMode, WallBoardSettings, WallModeration, WallPublicPost, WallTheme } from '@/types/wall';
 
+const SAMPLE_BASE = { created_at: new Date().toISOString(), is_mine: false, reaction: null, topic_id: null, topic_title: null, note_color: null, note_deco: null, empathy_count: null, empathized: false } as const;
 const SAMPLE_POSTS: WallPublicPost[] = [
-  { id: 'sample-a1b2', body: 'スタッフさんがとても丁寧で、また来たくなりました！', created_at: new Date().toISOString(), is_mine: false },
-  { id: 'sample-c3d4', body: '季節のメニューおいしかったです🍰', created_at: new Date().toISOString(), is_mine: true },
-  { id: 'sample-e5f6', body: '店内の雰囲気が落ち着いていて好きです', created_at: new Date().toISOString(), is_mine: false },
+  { ...SAMPLE_BASE, id: 'sample-a1b2', body: 'スタッフさんがとても丁寧で、また来たくなりました！', reaction: 'thanks', empathy_count: 3 },
+  { ...SAMPLE_BASE, id: 'sample-c3d4', body: '季節のメニューおいしかったです🍰', is_mine: true, note_deco: '★' },
+  { ...SAMPLE_BASE, id: 'sample-e5f6', body: '店内の雰囲気が落ち着いていて好きです', topic_title: '今のお題' },
 ];
 
 function ColorInput({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
@@ -191,6 +192,28 @@ export default function WallSettingsCard({ storeId, onSaved }: { storeId: string
         </section>
 
         <section className="space-y-2">
+          <h4 className="text-sm font-semibold">「わかる！」（共感）ボタン</h4>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="h-4 w-4" checked={settings.empathy_enabled} onChange={(e) => set({ empathy_enabled: e.target.checked })} />
+            お客様が他の人の付箋に「わかる！」を押せるようにする
+          </label>
+          <label className={`flex items-center gap-2 text-sm ${settings.empathy_enabled ? '' : 'opacity-50'}`}>
+            <input type="checkbox" className="h-4 w-4" disabled={!settings.empathy_enabled} checked={settings.empathy_show_count} onChange={(e) => set({ empathy_show_count: e.target.checked })} />
+            押された数を付箋に小さく表示する（OFF にすると数はお店の管理画面でだけ見えます）
+          </label>
+          <p className="text-xs text-muted-foreground">1 人 1 付箋 1 回まで。誰が押したかはお客様にもお店にも表示されません。並び順には使いません。</p>
+        </section>
+
+        <section className="space-y-2">
+          <h4 className="text-sm font-semibold">付箋の色・飾りをお客様が選べる</h4>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="h-4 w-4" checked={settings.customer_pick_enabled} onChange={(e) => set({ customer_pick_enabled: e.target.checked })} />
+            貼るときに、下の「付箋の色」の中から色を選び、飾り（★ ♪ 🍀 など 8 種類から 1 つ）を付けられるようにする
+          </label>
+          <p className="text-xs text-muted-foreground">選ばなければ今までどおり自動で決まります。世界観を崩さないよう、色はお店が決めた色の中からだけ選べます。</p>
+        </section>
+
+        <section className="space-y-2">
           <h4 className="text-sm font-semibold">見られる人・貼れる人</h4>
           {(Object.keys(WALL_ACCESS_MODE_LABELS) as WallAccessMode[]).map((m) => (
             <label key={m} className="flex items-center gap-2 text-sm">
@@ -315,7 +338,7 @@ export default function WallSettingsCard({ storeId, onSaved }: { storeId: string
                   <p className="wall-subtitle">{settings.theme.subtitle}</p>
                 </header>
                 <div style={{ paddingBottom: 8 }}>
-                  <WallBoardView theme={settings.theme} posts={SAMPLE_POSTS} readOnly />
+                  <WallBoardView theme={settings.theme} posts={SAMPLE_POSTS} readOnly onEmpathy={settings.empathy_enabled && settings.empathy_show_count ? () => {} : undefined} />
                 </div>
               </div>
             </div>
