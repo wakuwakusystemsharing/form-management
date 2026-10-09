@@ -4,7 +4,17 @@
 import type { WallReportReason } from '@/types/wall';
 
 export const WALL_BODY_MAX = 140;
-export const WALL_DAILY_MAX = 3;
+/** 1 日の枚数の既定値（店舗設定 wall_boards.daily_max で変更。1〜10） */
+export const WALL_DAILY_MAX = 1;
+export const WALL_DAILY_MAX_MIN = 1;
+export const WALL_DAILY_MAX_MAX = 10;
+
+/** 店舗設定の値を 1〜10 の整数に丸める（不正は既定） */
+export function normalizeWallDailyMax(v: unknown): number {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
+  if (!Number.isFinite(n)) return WALL_DAILY_MAX;
+  return Math.min(WALL_DAILY_MAX_MAX, Math.max(WALL_DAILY_MAX_MIN, Math.round(n)));
+}
 export const WALL_MIN_INTERVAL_SEC = 30;
 export const WALL_REPORT_THRESHOLD = 3;
 export const WALL_PAGE_SIZE = 30;
@@ -59,8 +69,8 @@ export function checkWallRate(recentCreatedAt: string[], now: Date, dailyMax = W
   return { ok: true };
 }
 
-export function wallRateMessage(r: Exclude<WallRateResult, { ok: true }>): string {
-  if (r.reason === 'daily') return `本日の投稿は ${WALL_DAILY_MAX} 件までです。また明日お願いします`;
+export function wallRateMessage(r: Exclude<WallRateResult, { ok: true }>, dailyMax = WALL_DAILY_MAX): string {
+  if (r.reason === 'daily') return dailyMax === 1 ? '付箋は 1 日 1 枚まで貼れます。また明日お願いします' : `付箋は 1 日 ${dailyMax} 枚まで貼れます。また明日お願いします`;
   return `続けて貼るには少し時間をあけてください（あと ${r.retry_after} 秒ほど）`;
 }
 

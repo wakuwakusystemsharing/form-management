@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fnv1a, noteStyleFor } from '@/lib/wall-layout';
 import { findNgWords, normalizeForNgMatch } from '@/lib/wall-ng-words';
-import { checkWallRate, decodeWallCursor, encodeWallCursor, jstDayStart, validateWallBody } from '@/lib/wall-rules';
+import { checkWallRate, decodeWallCursor, encodeWallCursor, jstDayStart, normalizeWallDailyMax, validateWallBody } from '@/lib/wall-rules';
 import { DEFAULT_NOTE_COLORS, normalizeStoreNgWords, normalizeWallSettings, normalizeWallTheme } from '@/lib/wall-themes';
 import { computeWallAuthorHash } from '@/lib/wall-author-hash';
 
@@ -53,15 +53,21 @@ describe('wall-rules', () => {
     expect(validateWallBody(123).ok).toBe(false);
   });
 
-  it('1 日 3 件（JST の日付で判定）と 30 秒間隔', () => {
+  it('1 日 N 件（JST の日付で判定。既定 1）と 30 秒間隔', () => {
     const now = new Date('2026-10-09T03:00:00Z'); // 12:00 JST
+    // 既定は 1 日 1 件
+    expect(checkWallRate(['2026-10-09T01:00:00Z'], now)).toEqual({ ok: false, reason: 'daily' });
+    expect(normalizeWallDailyMax(undefined)).toBe(1);
+    expect(normalizeWallDailyMax('3')).toBe(3);
+    expect(normalizeWallDailyMax(99)).toBe(10);
+    expect(normalizeWallDailyMax(0)).toBe(1);
     expect(jstDayStart(now).toISOString()).toBe('2026-10-08T15:00:00.000Z');
     expect(checkWallRate([], now)).toEqual({ ok: true });
     // 前日（JST）の投稿は数えない
-    expect(checkWallRate(['2026-10-08T14:59:00Z', '2026-10-08T14:00:00Z', '2026-10-08T13:00:00Z'], now)).toEqual({ ok: true });
-    expect(checkWallRate(['2026-10-08T15:00:00Z', '2026-10-09T01:00:00Z', '2026-10-09T02:00:00Z'], now)).toEqual({ ok: false, reason: 'daily' });
-    expect(checkWallRate(['2026-10-09T02:59:50Z'], now)).toEqual({ ok: false, reason: 'interval', retry_after: 20 });
-    expect(checkWallRate(['2026-10-09T02:59:30Z'], now)).toEqual({ ok: true });
+    expect(checkWallRate(['2026-10-08T14:59:00Z', '2026-10-08T14:00:00Z', '2026-10-08T13:00:00Z'], now, 3)).toEqual({ ok: true });
+    expect(checkWallRate(['2026-10-08T15:00:00Z', '2026-10-09T01:00:00Z', '2026-10-09T02:00:00Z'], now, 3)).toEqual({ ok: false, reason: 'daily' });
+    expect(checkWallRate(['2026-10-09T02:59:50Z'], now, 3)).toEqual({ ok: false, reason: 'interval', retry_after: 20 });
+    expect(checkWallRate(['2026-10-09T02:59:30Z'], now, 3)).toEqual({ ok: true });
   });
 
   it('カーソルの往復と不正値', () => {
@@ -90,7 +96,8 @@ describe('wall-themes', () => {
 
   it('設定: 行が無い店舗は無効。NG ワードは空・30 文字超・重複を除く', () => {
     const s = normalizeWallSettings('st1', null);
-    expect(s).toMatchObject({ store_id: 'st1', enabled: false, moderation: 'instant', access_mode: 'login', ng_words: [] });
+    expect(s).toMatchObject({ store_id: 'st1', enabled: false, moderation: 'instant', access_mode: 'login', daily_max: 1, ng_words: [] });
+    expect(normalizeWallSettings('st1', { daily_max: 5 }).daily_max).toBe(5);
     expect(normalizeStoreNgWords([' a ', 'a', '', 'x'.repeat(31), 3])).toEqual(['a']);
   });
 });
