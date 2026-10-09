@@ -2570,7 +2570,7 @@ export default function StoreDetailPage() {
                   </p>
                 </div>
                 <div className="md:col-span-2 space-y-2">
-                  <Label htmlFor="edit_line_channel_id">LINE ログインチャネル ID（抽選フォーム用・任意）</Label>
+                  <Label htmlFor="edit_line_channel_id">LINE ログインチャネル ID（抽選フォーム・寄せ書き用・任意）</Label>
                   <Input
                     id="edit_line_channel_id"
                     placeholder="例：1234567890（未設定時はシステム共通のチャネル ID を使用）"
@@ -2579,7 +2579,7 @@ export default function StoreDetailPage() {
                     autoComplete="off"
                   />
                   <p className="text-xs text-muted-foreground">
-                    抽選フォームの本人確認（LINE ID トークン検証）に使います。この店舗の LIFF が独自の LINE チャネルに紐づく場合に設定してください。
+                    抽選フォームと寄せ書きの本人確認（LINE ID トークン検証）に使います。抽選・寄せ書きの LIFF アプリを作成した LINE ログインチャネルの「チャネル ID」を入れてください。両方の LIFF は同じチャネルに作る必要があります。
                   </p>
                 </div>
 
