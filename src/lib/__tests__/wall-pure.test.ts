@@ -81,6 +81,11 @@ describe('wall-themes', () => {
     expect(t.title).toBe('みんなの寄せ書き');
     expect(t.background_color).toBe('');
     expect(normalizeWallTheme({ note_colors: ['#AABBCC', '#112233', '#445566'] }).note_colors).toEqual(['#aabbcc', '#112233', '#445566']);
+    // 付箋のデザイン: 不正値は既定、正しい値は通る
+    expect(t).toMatchObject({ note_shape: 'square', note_pin: 'pin', note_texture: 'plain', note_text_color: '' });
+    expect(normalizeWallTheme({ note_shape: 'landscape', note_pin: 'tape', note_texture: 'grid', note_text_color: '#112233' }))
+      .toMatchObject({ note_shape: 'landscape', note_pin: 'tape', note_texture: 'grid', note_text_color: '#112233' });
+    expect(normalizeWallTheme({ note_shape: 'circle', note_text_color: 'red' })).toMatchObject({ note_shape: 'square', note_text_color: '' });
   });
 
   it('設定: 行が無い店舗は無効。NG ワードは空・30 文字超・重複を除く', () => {
