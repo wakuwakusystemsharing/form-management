@@ -11,13 +11,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import WallBoardView, { WALL_CSS, wallRootStyle } from './WallBoardView';
+import WallBoardView, { WALL_CSS, wallRootFrameAttr, wallRootStyle } from './WallBoardView';
 import {
   DEFAULT_NOTE_COLORS,
   WALL_ACCESS_MODE_LABELS,
   WALL_FONTS,
   WALL_MODERATION_LABELS,
   WALL_NG_WORDS_MAX,
+  WALL_NOTE_PINS,
+  WALL_NOTE_SHAPES,
+  WALL_NOTE_TEXTURES,
   WALL_THEME_PRESETS,
   wallThemeVars,
 } from '@/lib/wall-themes';
@@ -204,7 +207,7 @@ export default function WallSettingsCard({ storeId, onSaved }: { storeId: string
                     onClick={() => setTheme({ preset: p.id, background_color: '' })}
                     className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${settings.theme.preset === p.id ? 'border-primary ring-2 ring-primary/40' : ''}`}
                   >
-                    <span className="h-4 w-4 rounded-full border" style={{ background: p.background }} />
+                    <span className="h-4 w-4 rounded-full border" style={{ background: p.base_color }} />
                     {p.label}
                   </button>
                 ))}
@@ -233,6 +236,40 @@ export default function WallSettingsCard({ storeId, onSaved }: { storeId: string
                 <Button size="sm" variant="ghost" onClick={() => setTheme({ note_colors: [...DEFAULT_NOTE_COLORS] })}>既定の色に戻す</Button>
               </div>
             </div>
+            <div className="space-y-3 rounded-lg border p-3">
+              <span className="text-sm font-medium">付箋のデザイン</span>
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">形</span>
+                <div className="flex flex-wrap gap-2">
+                  {WALL_NOTE_SHAPES.map((o) => (
+                    <button key={o.id} type="button" title={o.description} onClick={() => setTheme({ note_shape: o.id })} className={`rounded-full border px-3 py-1 text-sm ${settings.theme.note_shape === o.id ? 'border-primary ring-2 ring-primary/40' : ''}`}>{o.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">留め方</span>
+                <div className="flex flex-wrap gap-2">
+                  {WALL_NOTE_PINS.map((o) => (
+                    <button key={o.id} type="button" onClick={() => setTheme({ note_pin: o.id })} className={`rounded-full border px-3 py-1 text-sm ${settings.theme.note_pin === o.id ? 'border-primary ring-2 ring-primary/40' : ''}`}>{o.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-muted-foreground">紙</span>
+                <div className="flex flex-wrap gap-2">
+                  {WALL_NOTE_TEXTURES.map((o) => (
+                    <button key={o.id} type="button" onClick={() => setTheme({ note_texture: o.id })} className={`rounded-full border px-3 py-1 text-sm ${settings.theme.note_texture === o.id ? 'border-primary ring-2 ring-primary/40' : ''}`}>{o.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-xs text-muted-foreground">文字色</span>
+                <ColorInput label="付箋の文字色" value={settings.theme.note_text_color} onChange={(v) => setTheme({ note_text_color: v })} />
+                {settings.theme.note_text_color && (
+                  <Button size="sm" variant="ghost" onClick={() => setTheme({ note_text_color: '' })}>既定の色に戻す</Button>
+                )}
+              </div>
+            </div>
             <div className="space-y-1">
               <span className="text-sm font-medium">文字の種類</span>
               <div className="flex flex-wrap gap-3">
@@ -254,7 +291,7 @@ export default function WallSettingsCard({ storeId, onSaved }: { storeId: string
             )}
             <style>{WALL_CSS}</style>
             <div className="overflow-hidden rounded-xl border">
-              <div className="wall-root" style={{ ...wallRootStyle(settings.theme, themeColor), minHeight: 0 }}>
+              <div className="wall-root is-preview" data-frame={wallRootFrameAttr(settings.theme)} style={{ ...wallRootStyle(settings.theme, themeColor), minHeight: 0 }}>
                 <header className="wall-header">
                   <h1 className="wall-title">{settings.theme.title}</h1>
                   <p className="wall-subtitle">{settings.theme.subtitle}</p>

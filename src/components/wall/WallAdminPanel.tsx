@@ -2,10 +2,12 @@
 
 /**
  * 寄せ書きウォール: 管理画面のタブ本体（店舗管理者ページ / テナント側 店舗ページで共通）
- * 上から 件数 → 付箋の確認 → ボードの設定
+ * 上から 件数 → ボードの設定 → 付箋の確認（ボタンで開く。既定は閉じている）
  */
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import StoreAdminGuide, { GuideHint } from '@/components/StoreAdminGuide';
 import { STORE_ADMIN_HINTS } from '@/lib/store-admin-guide';
 import WallPostList from './WallPostList';
@@ -15,6 +17,7 @@ import type { WallStats } from '@/types/wall';
 export default function WallAdminPanel({ storeId, showGuide = true }: { storeId: string; showGuide?: boolean }) {
   const [stats, setStats] = useState<WallStats | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [postsOpen, setPostsOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,14 +53,31 @@ export default function WallAdminPanel({ storeId, showGuide = true }: { storeId:
         ))}
       </div>
 
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-muted-foreground">付箋の確認</h3>
-        <GuideHint text={STORE_ADMIN_HINTS.wallPosts} />
-        <WallPostList storeId={storeId} refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} />
-      </div>
+      <WallSettingsCard storeId={storeId} onSaved={() => setRefreshKey((k) => k + 1)} />
 
-      <div className="border-t pt-5">
-        <WallSettingsCard storeId={storeId} onSaved={() => setRefreshKey((k) => k + 1)} />
+      <div className="space-y-3 border-t pt-5">
+        <Button
+          type="button"
+          variant={postsOpen ? 'secondary' : 'default'}
+          className="w-full justify-between sm:w-auto sm:min-w-64"
+          aria-expanded={postsOpen}
+          aria-controls="wall-post-list"
+          onClick={() => setPostsOpen((o) => !o)}
+        >
+          <span>
+            付箋の確認
+            {stats && stats.pending + stats.review > 0 && (
+              <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-800">要確認 {stats.pending + stats.review}</span>
+            )}
+          </span>
+          {postsOpen ? <ChevronUp /> : <ChevronDown />}
+        </Button>
+        {postsOpen && (
+          <div id="wall-post-list" className="space-y-3">
+            <GuideHint text={STORE_ADMIN_HINTS.wallPosts} />
+            <WallPostList storeId={storeId} refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} />
+          </div>
+        )}
       </div>
     </div>
   );
