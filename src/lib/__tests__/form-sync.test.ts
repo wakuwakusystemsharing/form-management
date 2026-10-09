@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeForm } from '@/lib/form-normalizer';
-import { FORM_SYNC_SECTION_IDS, buildSyncedConfig, listSyncTargets } from '@/lib/form-sync';
+import { FORM_SYNC_SECTION_IDS, buildSyncedConfig, diffConfigSections, listSyncTargets } from '@/lib/form-sync';
 
 const line = normalizeForm({
   id: 'line1', store_id: 'st1', status: 'active',
@@ -73,5 +73,14 @@ describe('form-sync: buildSyncedConfig', () => {
       normalizeForm({ id: 'other', store_id: 'st2', status: 'active', config: { basic_info: { form_name: '他店', liff_id: '', theme_color: '#000' } } }),
     ], 'line1', 'st1');
     expect(targets).toEqual([{ id: 'web1', name: 'Web予約', form_type: 'web', status: 'active' }]);
+  });
+});
+
+describe('form-sync: diffConfigSections（復元前の差分表示）', () => {
+  it('内容が違うセクションを画面上の名前で返す。同じなら空', () => {
+    expect(diffConfigSections(line.config, line.config)).toEqual([]);
+    const d = diffConfigSections(web.config, buildSyncedConfig(line.config, web.config, ['menu_structure', 'cancel_rules']));
+    expect(d.sort()).toEqual(['キャンセルルール設定', 'メニュー構成'].sort());
+    expect(diffConfigSections(null, { cancel_rules: { deadline_hours: 1 } })).toEqual(['キャンセルルール設定']);
   });
 });
