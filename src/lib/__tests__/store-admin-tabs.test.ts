@@ -3,9 +3,9 @@ import { normalizeAdminVisibleOptions, resolveAdminVisibleOptions, resolveVisibl
 
 describe('resolveVisibleTabs', () => {
   it('null / 不正値はすべて表示', () => {
-    expect(resolveVisibleTabs(null)).toEqual(['dashboard', 'reservations', 'customers', 'surveys', 'lotteries', 'settings']);
-    expect(resolveVisibleTabs('x')).toHaveLength(6);
-    expect(resolveVisibleTabs(['nope'])).toHaveLength(6);
+    expect(resolveVisibleTabs(null)).toEqual(['dashboard', 'reservations', 'customers', 'surveys', 'lotteries', 'walls', 'settings']);
+    expect(resolveVisibleTabs('x')).toHaveLength(7);
+    expect(resolveVisibleTabs(['nope'])).toHaveLength(7);
   });
   it('有効な ID だけを定義順で返す', () => {
     expect(resolveVisibleTabs(['settings', 'customers', 'zzz'])).toEqual(['customers', 'settings']);
