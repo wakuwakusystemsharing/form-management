@@ -60,7 +60,7 @@ afterAll(() => {
 });
 
 beforeEach(() => {
-  for (const f of ['wall_boards.json', 'wall_posts.json', 'wall_reports.json', 'wall_consents.json', 'wall_moderation_logs.json']) {
+  for (const f of ['wall_boards.json', 'wall_posts.json', 'wall_reports.json', 'wall_consents.json', 'wall_moderation_logs.json', 'wall_topics.json', 'wall_empathies.json']) {
     const p = path.join(tmpDir, 'data', f);
     if (fs.existsSync(p)) fs.unlinkSync(p);
   }
@@ -294,5 +294,110 @@ describe('ページング', () => {
     const page3 = page2.ok ? await svc.getPublicWall('st1', {}, { limit: 2, cursor: page2.data.next_cursor }) : null;
     expect(page2.ok && page2.data.posts.map((p) => p.id)).toEqual([ids[2], ids[1]]);
     expect(page3 && page3.ok && [page3.data.posts.map((p) => p.id), page3.data.next_cursor]).toEqual([[ids[0]], null]);
+  });
+});
+
+describe('追加機能: スタンプ・共感・お題・色と飾り・自分の付箋・あとで読む・見どころ', () => {
+  const ENGAGE_BOARD = { store_id: 'st1', enabled: true, moderation: 'instant', access_mode: 'login', daily_max: 5, empathy_enabled: true, empathy_show_count: true, customer_pick_enabled: true, theme: { note_colors: ['#fff3a3', '#ffd1dc', '#cdeefd'] }, ng_words: ['田中'] };
+
+  it('お店からのスタンプ: 固定セットだけ。お客様にも本人にも見え、誰が押したかの情報は無い', async () => {
+    const a = await post('st1', 'U_a', 'ありがとう');
+    expect(await svc.moderateWallPost('st1', a.post.id, { action: 'react', reaction: 'kiss' }, ACTOR)).toMatchObject({ ok: false, status: 400 });
+    const r = await svc.moderateWallPost('st1', a.post.id, { action: 'react', reaction: 'thanks' }, ACTOR);
+    expect(r.ok && r.post.reaction).toBe('thanks');
+    const wall = await svc.getPublicWall('st1', { line_user_id: 'U_b' });
+    expect(wall.ok && wall.data.posts[0].reaction).toBe('thanks');
+    expect(wall.ok && findForbiddenKeys(wall.data)).toEqual([]);
+    const off = await svc.moderateWallPost('st1', a.post.id, { action: 'react', reaction: null }, ACTOR);
+    expect(off.ok && off.post.reaction).toBeNull();
+  });
+
+  it('共感: 店舗 OFF なら 404、ON なら押す / 取り消す、自分の付箋は不可、押した人の hash は API に出ない', async () => {
+    const a = await post('st1', 'U_a', 'わかってほしい');
+    expect(await svc.toggleWallEmpathyForViewer('st1', a.post.id, { line_user_id: 'U_b' })).toMatchObject({ ok: false, status: 404 });
+    writeData('wall_boards.json', [ENGAGE_BOARD, { store_id: 'st2', enabled: true }]);
+    expect(await svc.toggleWallEmpathyForViewer('st1', a.post.id, { line_user_id: 'U_a' })).toMatchObject({ ok: false, status: 400 });
+    const on = await svc.toggleWallEmpathyForViewer('st1', a.post.id, { line_user_id: 'U_b' });
+    expect(on).toEqual({ ok: true, empathized: true, empathy_count: 1 });
+    const again = await svc.toggleWallEmpathyForViewer('st1', a.post.id, { line_user_id: 'U_b' });
+    expect(again).toEqual({ ok: true, empathized: false, empathy_count: 0 });
+    await svc.toggleWallEmpathyForViewer('st1', a.post.id, { line_user_id: 'U_b' });
+    await svc.toggleWallEmpathyForViewer('st1', a.post.id, { line_user_id: 'U_c' });
+    const asB = await svc.getPublicWall('st1', { line_user_id: 'U_b' });
+    expect(asB.ok && [asB.data.posts[0].empathy_count, asB.data.posts[0].empathized]).toEqual([2, true]);
+    const asD = await svc.getPublicWall('st1', { line_user_id: 'U_d' });
+    expect(asD.ok && [asD.data.posts[0].empathy_count, asD.data.posts[0].empathized]).toEqual([2, false]);
+    expect(asB.ok && findForbiddenKeys(asB.data)).toEqual([]);
+    expect(fs.readFileSync(path.join(tmpDir, 'data', 'wall_empathies.json'), 'utf-8')).not.toContain('U_b');
+    // 数を見せない設定なら null（押した状態は分かる）
+    writeData('wall_boards.json', [{ ...ENGAGE_BOARD, empathy_show_count: false }, { store_id: 'st2', enabled: true }]);
+    const hidden = await svc.getPublicWall('st1', { line_user_id: 'U_b' });
+    expect(hidden.ok && [hidden.data.posts[0].empathy_count, hidden.data.posts[0].empathized]).toEqual([null, true]);
+    // 他店舗の付箋には押せない
+    expect(await svc.toggleWallEmpathyForViewer('st2', a.post.id, { line_user_id: 'U_b' })).toMatchObject({ ok: false, status: 404 });
+  });
+
+  it('お題: 期間の重なりは不可。開催中のお題だけ付けられ、終了後は 400。管理一覧はお題で絞り込める', async () => {
+    const t1 = await svc.saveWallTopicAdmin('st1', null, { title: '秋のおすすめ', description: '', starts_on: '2026-10-01', ends_on: '2026-10-31' });
+    expect(t1.ok).toBe(true);
+    if (!t1.ok) return;
+    expect(await svc.saveWallTopicAdmin('st1', null, { title: '重なる', starts_on: '2026-10-20', ends_on: '2026-11-05' })).toMatchObject({ ok: false, status: 400 });
+    expect(await svc.saveWallTopicAdmin('st1', null, { title: '', starts_on: '2026-11-01', ends_on: '2026-11-30' })).toMatchObject({ ok: false, status: 400 });
+    expect(await svc.saveWallTopicAdmin('st1', null, { title: 'x', starts_on: '2026-11-30', ends_on: '2026-11-01' })).toMatchObject({ ok: false, status: 400 });
+    const t2 = await svc.saveWallTopicAdmin('st1', null, { title: '冬', starts_on: '2026-12-01', ends_on: '2026-12-31' });
+    expect(t2.ok).toBe(true);
+    const list = await svc.listWallTopicsAdmin('st1', new Date('2026-10-15T03:00:00Z'));
+    expect(list.ok && list.topics.map((t) => [t.title, t.status])).toEqual([['冬', 'upcoming'], ['秋のおすすめ', 'active']]);
+    // 開催中（2026-10-15）
+    const inTopic = await svc.createWallPost('st1', { line_user_id: 'U_t', body: 'パンケーキ', consent: CONSENT(), topic_id: t1.topic.id }, new Date('2026-10-15T03:00:00Z'));
+    expect(inTopic.ok && [inTopic.post.topic_id, inTopic.post.topic_title]).toEqual([t1.topic.id, '秋のおすすめ']);
+    const free = await svc.createWallPost('st1', { line_user_id: 'U_t2', body: '自由', consent: CONSENT() }, new Date('2026-10-15T03:01:00Z'));
+    expect(free.ok && free.post.topic_id).toBeNull();
+    // 終了後
+    expect(await svc.createWallPost('st1', { line_user_id: 'U_t3', body: 'x', consent: CONSENT(), topic_id: t1.topic.id }, new Date('2026-11-02T03:00:00Z'))).toMatchObject({ ok: false, status: 400, code: 'topic_closed' });
+    const admin = await svc.listAdminWallPosts('st1', { topic: t1.topic.id });
+    expect(admin.ok && admin.posts.map((p) => p.topic_title)).toEqual(['秋のおすすめ']);
+    // 削除するとラベルだけ外れる
+    expect(await svc.deleteWallTopicAdmin('st1', t1.topic.id)).toEqual({ ok: true });
+    expect(await svc.deleteWallTopicAdmin('st2', t2.ok ? t2.topic.id : '')).toMatchObject({ ok: false, status: 404 });
+    const after = await svc.listAdminWallPosts('st1', {});
+    expect(after.ok && after.posts.every((p) => p.topic_id === null)).toBe(true);
+  });
+
+  it('色・飾り: 店舗が許可したときだけ。色は付箋色の中から、飾りは固定セットから', async () => {
+    const no = await post('st1', 'U_p', 'おまかせ');
+    expect([no.post.note_color, no.post.note_deco]).toEqual([null, null]);
+    writeData('wall_boards.json', [ENGAGE_BOARD, { store_id: 'st2', enabled: true }]);
+    expect(await svc.createWallPost('st1', { line_user_id: 'U_p2', body: 'x', consent: CONSENT(), note_color: '#000000' }, tick())).toMatchObject({ ok: false, status: 400 });
+    expect(await svc.createWallPost('st1', { line_user_id: 'U_p3', body: 'x', consent: CONSENT(), note_deco: '💩' }, tick())).toMatchObject({ ok: false, status: 400 });
+    const ok = await svc.createWallPost('st1', { line_user_id: 'U_p4', body: '選んだ', consent: CONSENT(), note_color: '#FFD1DC', note_deco: '★' }, tick());
+    expect(ok.ok && [ok.post.note_color, ok.post.note_deco]).toEqual(['#ffd1dc', '★']);
+  });
+
+  it('自分の付箋一覧（状態付き）と、あとで読むの照会（公開中だけ・他店舗の ID は返らない）', async () => {
+    const a = await post('st1', 'U_m', '1枚目');
+    const ng = await post('st1', 'U_m', '店長の田中さん'); // pending
+    const other = await post('st2', 'U_x', '他店');
+    await svc.moderateWallPost('st1', a.post.id, { action: 'hide', reason: 'terms_violation' }, ACTOR);
+    const mine = await svc.getMyWallPosts('st1', { line_user_id: 'U_m' });
+    expect(mine.ok && mine.posts.map((p) => [p.body, p.status, p.is_mine])).toEqual([['店長の田中さん', 'pending', true], ['1枚目', 'hidden', true]]);
+    expect(mine.ok && findForbiddenKeys(mine)).toEqual([]);
+    const none = await svc.getMyWallPosts('st1', { line_user_id: 'U_nobody' });
+    expect(none.ok && none.posts).toEqual([]);
+    const b = await post('st1', 'U_n', '公開中');
+    const look = await svc.lookupWallPosts('st1', `${a.post.id},${ng.post.id},${b.post.id},${other.post.id}`, { line_user_id: 'U_m' });
+    expect(look.ok && look.posts.map((p) => p.id)).toEqual([b.post.id]);
+  });
+
+  it('見どころ: 週ごとの件数とよく出る言葉（NG ワードは除外）', async () => {
+    const now = new Date('2026-10-15T03:00:00Z');
+    await svc.createWallPost('st1', { line_user_id: 'I1', body: 'パンケーキが美味しい', consent: CONSENT() }, new Date('2026-10-14T01:00:00Z'));
+    await svc.createWallPost('st1', { line_user_id: 'I2', body: 'パンケーキとコーヒー', consent: CONSENT() }, new Date('2026-10-13T01:00:00Z'));
+    await svc.createWallPost('st1', { line_user_id: 'I3', body: '店長の田中さんのパンケーキ', consent: CONSENT() }, new Date('2026-10-06T01:00:00Z')); // NG → pending
+    const r = await svc.getWallInsights('st1', now);
+    expect(r.ok && r.insights.total_30d).toBe(2);
+    expect(r.ok && r.insights.weeks.slice(-2).map((w) => w.count)).toEqual([1, 2]);
+    expect(r.ok && r.insights.words[0]).toEqual({ word: 'パンケーキ', count: 2 });
+    expect(r.ok && r.insights.words.some((w) => w.word === '田中')).toBe(false);
   });
 });

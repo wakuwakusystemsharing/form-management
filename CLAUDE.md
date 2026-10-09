@@ -262,6 +262,14 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - 見た目はテーマ値だけで変える（`src/lib/wall-themes.ts`: プリセット cork / wood / paper / chalkboard、背景色、付箋色 3〜8、フォント、見出し・説明・例文）。付箋の色・傾き・ずれは投稿 ID から決定（`src/lib/wall-layout.ts`）。共通描画 `WallBoardView.tsx`（管理画面のプレビューでも使用）
 - API: お客様 `GET /api/walls/{storeId}` / `POST .../posts` / `DELETE .../posts/{postId}` / `POST .../posts/{postId}/report`。管理 `GET/PUT /api/stores/{storeId}/wall/settings` / `GET .../wall/posts?filter=` / `PATCH .../wall/posts/{postId}`（`{ action: 'publish' }` or `{ action: 'hide', reason: 'terms_violation' }`）/ `GET .../wall/stats`（ダッシュボードの確認待ち表示）
 - サーバー: `wall-service.ts`（業務ロジック）/ `wall-repository.ts`（local は `data/wall_*.json`）。マイグレーション: `20261009000000_add_wall.sql`
+- **追加機能（`20261011000000_add_wall_engagement.sql`。提案書 `docs/寄せ書きウォール_追加機能提案.md` の案 1・2・3・6・7・8。新設定はすべて既定 OFF）**
+  - お店からのスタンプ（案 1）: `wall_posts.reaction`（`WALL_REACTIONS` の 4 種のみ）。`PATCH .../wall/posts/{id}` に `{ action: 'react', reaction | null }`。付箋の左上に表示
+  - 「わかる！」共感（案 2）: `wall_boards.empathy_enabled` / `empathy_show_count`（数を見せない = API は `empathy_count: null`）。`POST /api/walls/{storeId}/posts/{id}/empathy` で押す / 取り消す（DB 関数 `wall_toggle_empathy`。`wall_empathies` は hash のみ・ポリシー無し）。自分の付箋は不可。並び順には使わない
+  - お題（案 3）: `wall_topics`（期間の重なりは保存時に拒否 = 開催中は常に 1 つ）。`GET/POST .../wall/topics`、`PUT/DELETE .../wall/topics/{id}`。お客様は「お題に答える / 自由に書く」を選び `topic_id` を送る（終了後は 400 `topic_closed`）。管理一覧は `?topic=` / `?search=`（本文の部分一致）で絞り込み
+  - 色・飾りをお客様が選ぶ（案 6）: `wall_boards.customer_pick_enabled`。`note_color` は店舗の `theme.note_colors` の中から、`note_deco` は `WALL_NOTE_DECORATIONS`（8 種固定）から
+  - 見どころまとめ（案 7）: `GET .../wall/insights`。純粋ロジック `src/lib/wall-insights.ts`（カタカナ / 漢字 / 英数字の 2 文字以上を含む付箋数で数える。ひらがなだけ・一般語・NG ワードは除外。外部 AI 不使用）。言葉をタップで「付箋の確認」を検索
+  - 自分の付箋 / あとで読む（案 8）: `GET /api/walls/{storeId}/my-posts`（状態付き）/ `GET .../posts/lookup?ids=`（公開中だけ返す）。保存は localStorage `wall_saved_{storeId}`（サーバーには送らない）
+  - UI: 管理は `WallTopicsCard.tsx` / `WallInsightsCard.tsx`、お客様は `WallApp.tsx`（お題バナー・自分の付箋・あとで読む・色と飾りの選択）、共通描画 `WallBoardView.tsx`
 
 **抽選フォーム機能（LINE LIFF 専用）:**
 - 設計書: `docs/抽選フォーム_実装設計.md`。即時抽選（その場で結果）と後日抽選（応募 → 管理画面で抽選 → 当選者へ Bot push）の 2 方式
@@ -543,7 +551,7 @@ export async function GET(req, { params }) {
 - `lottery_entries` - 抽選履歴（1 行 = 1 回の抽選 / 1 口の応募。引換コード・QR トークン・引換状態）
 - `follow_messages` - LINE フォローメッセージの配信予定・結果（1 予約 1 行。`status` / `skip_reason` / `scheduled_at` / `sent_at` / `claimed_at`）
 - `reminder_logs` - LINE 予約リマインダーの送信記録（1 予約 × 対象日 = 1 行。二重送信防止・後追い確認）
-- `wall_boards` / `wall_posts` / `wall_reports` / `wall_consents` / `wall_moderation_logs` - 寄せ書きウォール（ボード設定 / 付箋 / 通報 / 同意 / 公開操作の記録。投稿者は hash のみ）
+- `wall_boards` / `wall_posts` / `wall_reports` / `wall_consents` / `wall_moderation_logs` / `wall_topics` / `wall_empathies` - 寄せ書きウォール（ボード設定 / 付箋 / 通報 / 同意 / 公開操作の記録 / お題 / 共感。投稿者・共感した人は hash のみ）
 
 **RLS（Row Level Security）:**
 - マスター管理者: `is_master_admin()` で全テーブルフルアクセス
@@ -572,6 +580,8 @@ export async function GET(req, { params }) {
 - `20260908000000_add_follow_message.sql` - stores.follow_* 5 カラム + follow_messages テーブル（フォローメッセージ配信予定）+ RLS
 - `20260911000000_message_delivery_reliability.sql` - reminder_logs テーブル、stores.reminder_* の CHECK、follow_messages に sending / claimed_at、DB 関数 follow_message_schedule / follow_message_restore_for_user
 - `20261009000000_add_wall.sql` - 寄せ書きウォールの 5 テーブル・RLS・DB 関数 `wall_insert_post_checked` / `wall_add_report`
+- `20261010000000_add_wall_daily_max.sql` - wall_boards.daily_max
+- `20261011000000_add_wall_engagement.sql` - 寄せ書きの追加機能（wall_topics / wall_empathies、wall_posts の reaction / topic_id / note_color / note_deco / empathy_count、wall_boards の empathy_* / customer_pick_enabled、DB 関数 `wall_toggle_empathy`）
 
 ## テンプレートシステム
 
