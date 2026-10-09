@@ -14,6 +14,12 @@ export type WallPendingReason = 'approval' | 'ng_word';
 export type WallReportReason = 'abuse' | 'personal_info' | 'advertising' | 'other';
 export type WallThemePreset = 'cork' | 'wood' | 'paper' | 'chalkboard';
 export type WallFont = 'rounded' | 'standard' | 'handwriting';
+/** 付箋の形: 正方形 / 角丸 / 横長 */
+export type WallNoteShape = 'square' | 'rounded' | 'landscape';
+/** 付箋の留め方: 押しピン / マスキングテープ / マグネット / なし */
+export type WallNotePin = 'pin' | 'tape' | 'magnet' | 'none';
+/** 付箋の紙: 無地 / 罫線 / 方眼 */
+export type WallNoteTexture = 'plain' | 'lined' | 'grid';
 
 export interface WallTheme {
   preset: WallThemePreset;
@@ -22,6 +28,11 @@ export interface WallTheme {
   /** 付箋の色（HEX、3〜8 色） */
   note_colors: string[];
   font: WallFont;
+  note_shape: WallNoteShape;
+  note_pin: WallNotePin;
+  note_texture: WallNoteTexture;
+  /** 付箋の文字色（HEX）。空 = 既定の濃い茶色 */
+  note_text_color: string;
   title: string;
   subtitle: string;
   placeholder: string;

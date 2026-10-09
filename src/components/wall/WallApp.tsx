@@ -7,7 +7,7 @@
  * local 環境（NEXT_PUBLIC_APP_ENV=local）は LIFF を使わず、端末ごとの仮ユーザー ID で動く
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import WallBoardView, { WALL_CSS, wallRootStyle } from './WallBoardView';
+import WallBoardView, { WALL_CSS, wallRootFrameAttr, wallRootStyle } from './WallBoardView';
 import { WALL_BODY_MAX, WALL_REPORT_REASONS } from '@/lib/wall-rules';
 import { wallThemeVars } from '@/lib/wall-themes';
 import type { WallPublicBoardResponse, WallPublicPost, WallReportReason } from '@/types/wall';
@@ -297,7 +297,7 @@ export default function WallApp({ storeId }: { storeId: string }) {
   const remaining = WALL_BODY_MAX - [...body].length;
 
   return (
-    <div className="wall-root" style={theme ? wallRootStyle(theme, data?.board.theme_color) : undefined}>
+    <div className="wall-root" data-frame={theme ? wallRootFrameAttr(theme) : '0'} style={theme ? wallRootStyle(theme, data?.board.theme_color) : undefined}>
       <style>{WALL_CSS + APP_CSS}</style>
       {googleFont && (
          
