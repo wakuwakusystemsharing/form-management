@@ -160,12 +160,12 @@ export default function WallPostList({ storeId, refreshKey = 0, onChanged, searc
         <p className="py-8 text-center text-sm text-muted-foreground">該当する付箋はありません</p>
       )}
 
-      <ul className="space-y-2">
+      <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {posts.map((p) => {
           const st = STATUS_LABEL[p.status];
           const reasons = WALL_REPORT_REASONS.filter((r) => (p.report_reasons?.[r.id] ?? 0) > 0);
           return (
-            <li key={p.id} data-slot="list-item" className="rounded-lg border bg-white p-3">
+            <li key={p.id} data-slot="list-item" className="flex flex-col rounded-lg border bg-white p-3">
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-mono">No.{p.no}</span>
                 <span>{formatDateTime(p.created_at)}</span>
@@ -181,7 +181,7 @@ export default function WallPostList({ storeId, refreshKey = 0, onChanged, searc
                   </Badge>
                 )}
               </div>
-              <p className="mt-2 whitespace-pre-wrap break-words text-sm">
+              <p className="mt-2 flex-1 whitespace-pre-wrap break-words text-sm">
                 {p.body ?? <span className="text-muted-foreground">（投稿者が削除したため本文は表示しません）</span>}
               </p>
               {p.status !== 'deleted' && (
