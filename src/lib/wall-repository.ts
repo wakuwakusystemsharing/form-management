@@ -68,10 +68,17 @@ export async function getWallStore(storeId: string): Promise<WallStoreInfo | nul
       line_channel_id: typeof s.line_channel_id === 'string' ? s.line_channel_id : null,
     };
   }
-  const { data, error } = await client().from('stores').select('id, name, theme_color, line_channel_id').eq('id', storeId).maybeSingle();
+  // stores の列は環境で差がある（theme_color は local の JSON にしか無い）ため * で取り、あるものだけ使う
+  const { data, error } = await client().from('stores').select('*').eq('id', storeId).maybeSingle();
   if (error) throw new Error(`店舗の取得に失敗しました: ${error.message}`);
   if (!data) return null;
-  return { id: data.id, name: data.name || '', theme_color: data.theme_color || null, line_channel_id: data.line_channel_id || null };
+  const row = data as Record<string, unknown>;
+  return {
+    id: String(row.id),
+    name: typeof row.name === 'string' ? row.name : '',
+    theme_color: typeof row.theme_color === 'string' && row.theme_color ? row.theme_color : null,
+    line_channel_id: typeof row.line_channel_id === 'string' && row.line_channel_id ? row.line_channel_id : null,
+  };
 }
 
 // ---------------------------------------------------------------------------
