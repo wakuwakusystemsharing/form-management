@@ -69,7 +69,7 @@ beforeEach(() => {
     { id: 'st2', name: '店2' },
   ]);
   writeData('wall_boards.json', [
-    { store_id: 'st1', enabled: true, moderation: 'instant', access_mode: 'login', theme: {}, ng_words: ['田中'] },
+    { store_id: 'st1', enabled: true, moderation: 'instant', access_mode: 'login', daily_max: 3, theme: {}, ng_words: ['田中'] },
     { store_id: 'st2', enabled: true, moderation: 'instant', access_mode: 'login', theme: {}, ng_words: [] },
   ]);
 });
@@ -121,7 +121,7 @@ describe('お客様向け: 投稿・閲覧', () => {
     expect(again.ok).toBe(true);
   });
 
-  it('1 日 3 件（本人削除も数える）と 30 秒間隔', async () => {
+  it('店舗設定の枚数（ここでは 3）まで。本人削除も数える。30 秒間隔', async () => {
     const t0 = new Date('2026-10-10T01:00:00Z').getTime();
     const p1 = await post('st1', 'U_rate', '1', new Date(t0));
     const tooSoon = await svc.createWallPost('st1', { line_user_id: 'U_rate', body: '早すぎ', consent: CONSENT() }, new Date(t0 + 10_000));
@@ -130,7 +130,7 @@ describe('お客様向け: 投稿・閲覧', () => {
     await svc.deleteWallPost('st1', p1.post.id, { line_user_id: 'U_rate' });
     await post('st1', 'U_rate', '3', new Date(t0 + 80_000));
     const fourth = await svc.createWallPost('st1', { line_user_id: 'U_rate', body: '4', consent: CONSENT() }, new Date(t0 + 120_000));
-    expect(fourth).toMatchObject({ ok: false, status: 429, code: 'daily' });
+    expect(fourth).toMatchObject({ ok: false, status: 429, code: 'daily', error: '付箋は 1 日 3 枚まで貼れます。また明日お願いします' });
     // 翌日（JST）は貼れる
     const nextDay = await svc.createWallPost('st1', { line_user_id: 'U_rate', body: '翌日', consent: CONSENT() }, new Date('2026-10-10T16:00:00Z'));
     expect(nextDay.ok).toBe(true);
@@ -255,6 +255,17 @@ describe('店舗の公開 / 非公開', () => {
     expect(await svc.saveWallSettings('st1', { theme: { note_colors: ['#000000', '#111111'] } })).toMatchObject({ ok: false, status: 400 });
     expect(await svc.saveWallSettings('st1', { ng_words: ['x'.repeat(31)] })).toMatchObject({ ok: false, status: 400 });
     expect(await svc.saveWallSettings('st1', { liff_id: 'bad' })).toMatchObject({ ok: false, status: 400 });
+    expect(await svc.saveWallSettings('st1', { daily_max: 0 })).toMatchObject({ ok: false, status: 400 });
+    expect(await svc.saveWallSettings('st1', { daily_max: 11 })).toMatchObject({ ok: false, status: 400 });
+    const dm = await svc.saveWallSettings('st1', { daily_max: 2 });
+    expect(dm.ok && dm.settings.daily_max).toBe(2);
+    // 既定（未設定）は 1 日 1 枚
+    writeData('wall_boards.json', [{ store_id: 'st3', enabled: true }]);
+    writeData('stores.json', [...readData<Record<string, unknown>>('stores.json'), { id: 'st3', name: 'C' }]);
+    const one = await svc.createWallPost('st3', { line_user_id: 'U_one', body: '1', consent: CONSENT() }, new Date('2026-10-12T01:00:00Z'));
+    expect(one.ok).toBe(true);
+    const two = await svc.createWallPost('st3', { line_user_id: 'U_one', body: '2', consent: CONSENT() }, new Date('2026-10-12T01:01:00Z'));
+    expect(two).toMatchObject({ ok: false, status: 429, code: 'daily', error: '付箋は 1 日 1 枚まで貼れます。また明日お願いします' });
     const ok = await svc.saveWallSettings('st1', {
       enabled: true, liff_id: '1234567890-AbCdEfGh', moderation: 'approval', access_mode: 'friend_to_post',
       theme: { preset: 'chalkboard', note_colors: ['#AABBCC', '#112233', '#445566'], title: '黒板' }, ng_words: [' 競合店 ', '競合店'],

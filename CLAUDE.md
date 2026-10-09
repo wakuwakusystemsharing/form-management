@@ -256,7 +256,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - 要件定義: `docs/寄せ書きウォール_要件定義書.md`。店舗管理者ページ / テナント側 店舗ページの「寄せ書き」タブ（`walls`。抽選と設定の間）。お客様画面は Next.js ページ `/wall/{storeId}`（`src/components/wall/WallApp.tsx`。静的 HTML ではない）を店舗ごとの LIFF（`wall_boards.liff_id`）で開く
 - **匿名性**: 投稿者は `author_hash` = HMAC-SHA256(店舗 ID + LINE ユーザー ID, `WALL_AUTHOR_HASH_SECRET`)（`src/lib/wall-author-hash.ts`）だけを保存。API の型（`WallPublicPost` / `WallAdminPost`）に hash・ユーザー ID を含めない（Vitest で再帰的に検査）。`wall_posts` / `wall_reports` / `wall_consents` / `wall_moderation_logs` は RLS ポリシー無し（service_role のみ）、`wall_boards` だけ 3 階層ポリシー
 - 本人確認は LIFF ID トークン（`verifyLineIdToken`。local は `line_user_id` の申告を許容）。削除は本人のみ（他人の付箋は 404）。他店舗の付箋は取得・削除・通報・管理操作すべて 404
-- ルール（`src/lib/wall-rules.ts`）: 本文 140 文字 / 1 人 1 店舗 1 日 3 件（JST。本人削除分も数える）/ 30 秒間隔 / 通報 3 件で `review`（ボードから外す）/ 初回投稿時に同意文 + `WALL_TERMS_VERSION` を `wall_consents` に保存（未同意は 428）。投稿の判定と挿入は DB 関数 `wall_insert_post_checked`、通報は `wall_add_report`
+- ルール（`src/lib/wall-rules.ts`）: 本文 140 文字 / 1 人 1 店舗 1 日 N 件（`wall_boards.daily_max`、1〜10、既定 1。JST。本人削除分も数える。`20261010000000_add_wall_daily_max.sql`）/ 30 秒間隔 / 通報 3 件で `review`（ボードから外す）/ 初回投稿時に同意文 + `WALL_TERMS_VERSION` を `wall_consents` に保存（未同意は 428）。投稿の判定と挿入は DB 関数 `wall_insert_post_checked`、通報は `wall_add_report`
 - 表示: 店舗設定 `moderation`（`instant` / `approval`）。NG ワード（`src/lib/wall-ng-words.ts` の共通語 + URL / メール / 電話 / @ID の形式 + 店舗の追加語）を含む付箋は `pending`（`pending_reason: 'ng_word'`）。閲覧・投稿範囲 `access_mode`（`login` / `friend_to_post` / `friend_only`）
 - 店舗の操作: 公開 / 非公開のみ。非公開の理由は `terms_violation`（規約違反）だけ受け付ける（低評価を理由に消せない）。操作は `wall_moderation_logs` に記録
 - 見た目はテーマ値だけで変える（`src/lib/wall-themes.ts`: プリセット cork / wood / paper / chalkboard、背景色、付箋色 3〜8、フォント、見出し・説明・例文）。付箋の色・傾き・ずれは投稿 ID から決定（`src/lib/wall-layout.ts`）。共通描画 `WallBoardView.tsx`（管理画面のプレビューでも使用）
@@ -657,6 +657,11 @@ export async function GET(req, { params }) {
 - `policy_text` + `show_policy_on_form`: キャンセル規定の文言を予約フォームの送信ボタンの上に「キャンセルについて」として表示（`renderCancelPolicy`。期限があれば「LINE からのキャンセルは N 時間前まで」を自動で添える）
 - `notify_store_on_cancel`: お客様が LINE でキャンセルしたとき、`calendar_settings.notification_email` > `stores.owner_email` へ「【予約キャンセル】」メール（`buildCancelNotificationEmail`、Resend。API キー未設定ならスキップ）
 - 純粋ロジックは `src/lib/cancel-rules.ts`（`resolveCancelRules` / `isCancelAllowed` / `buildCancelDeadlineMessage` / `buildCancelNotificationEmail`、選択肢 `CANCEL_DEADLINE_OPTIONS`）。Webhook は `getFormConfigByFormId` でフォーム設定を取り、`stores` から `owner_email` / `phone` も取得
+
+**通知メッセージ (`config.notification_messages`。営業時間・ルール → 通知メッセージ → 通知編集):**
+- 【ご予約確認】の見出し / フッター、【予約キャンセル】の案内文 / キャンセル完了メッセージ。Webhook がサーバー側で参照（再デプロイ不要）
+- 複数行 OK（Flex は `wrap: true` で `
+` を折り返す）。文字色は `[color=#rrggbb]〜[/color]`（`ColoredTextToolbar`）。Flex では `src/lib/flex-colored-text.ts` の `flexText()` が色タグを `span` に展開し、常に `wrap: true` を付ける（長文が「…」で切れない）
 
 **店舗側手動予約フォームの項目設定 (`config.manual_form_settings`):**
 - `show_customer_name` / `require_customer_name` / `show_customer_phone` / `require_customer_phone`。**手動フォーム（`generateHTML(..., 'manual')`）だけ**に適用し、通常フォームの `calendar_settings.show_customer_*` は変えない。生成時に `safeConfig.calendar_settings` へ上書きし、任意は内部フラグ `customer_name_optional` / `customer_phone_optional`（保存しない）で「（任意）」表示 + 必須チェックをスキップ。空のときは名前 = LINE 表示名 → 「未記入」、電話 = 「未記入」で補う

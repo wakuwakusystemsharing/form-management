@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
 import { createReservationEvent, deleteCalendarEvent, listCalendarEvents } from '@/lib/google-calendar';
 import { normalizeForm } from '@/lib/form-normalizer';
+import { flexText } from '@/lib/flex-colored-text';
 import { deleteCustomerVisitByReservation, recalculateCustomerStats } from '@/lib/customer-utils';
 import { cancelFollowMessageForReservation, restoreFollowMessageForUser } from '@/lib/follow-message-repository';
 import { buildCancelDeadlineMessage, buildCancelNotificationEmail, isCancelAllowed, resolveCancelRules, type CancelRules } from '@/lib/cancel-rules';
@@ -632,7 +633,7 @@ export async function POST(req: NextRequest) {
         type: 'box',
         layout: 'vertical',
         contents: [
-          { type: 'text', text: cancelListMessages.cancel_select_prompt, size: 'sm', align: 'center', margin: 'md', color: '#555555' },
+          flexText(cancelListMessages.cancel_select_prompt, { size: 'sm', align: 'center', margin: 'md', color: '#555555' }),
           { type: 'box', layout: 'vertical', spacing: 'sm', contents: eventList }
         ],
         paddingAll: '20px'
@@ -774,7 +775,7 @@ export async function POST(req: NextRequest) {
         type: 'box',
         layout: 'vertical',
         contents: [
-          { type: 'text', text: cancelDoneMessages.cancel_done_heading, weight: 'bold', size: 'md', align: 'center', margin: 'lg' },
+          flexText(cancelDoneMessages.cancel_done_heading, { weight: 'bold', size: 'md', align: 'center', margin: 'lg' }),
           { type: 'separator', margin: 'lg' },
           {
             type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
@@ -849,14 +850,7 @@ export async function POST(req: NextRequest) {
     const bodyContents: object[] = [];
 
     // タイトル
-    bodyContents.push({
-      type: 'text',
-      text: notifMessages.confirmation_heading,
-      weight: 'bold',
-      size: 'md',
-      align: 'center',
-      margin: 'lg'
-    });
+    bodyContents.push(flexText(notifMessages.confirmation_heading, { weight: 'bold', size: 'md', align: 'center', margin: 'lg' }));
 
     bodyContents.push({ type: 'separator', margin: 'lg' });
 
@@ -910,15 +904,7 @@ export async function POST(req: NextRequest) {
     bodyContents.push({ type: 'separator', margin: 'xl' });
 
     // フッターメッセージ
-    bodyContents.push({
-      type: 'text',
-      text: notifMessages.confirmation_footer,
-      size: 'sm',
-      align: 'center',
-      margin: 'lg',
-      wrap: true,
-      color: '#555555'
-    });
+    bodyContents.push(flexText(notifMessages.confirmation_footer, { size: 'sm', align: 'center', margin: 'lg', color: '#555555' }));
 
     await replyFlexMessage(replyToken, accessToken, '予約通知', [{
       type: 'bubble',

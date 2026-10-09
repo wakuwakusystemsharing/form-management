@@ -190,6 +190,7 @@ export async function getPublicWall(
         liff_id: board.liff_id,
         moderation: board.moderation,
         access_mode: board.access_mode,
+        daily_max: board.daily_max,
         theme: board.theme,
         terms_version: WALL_TERMS_VERSION,
         consent_text: WALL_CONSENT_TEXT,
@@ -248,11 +249,12 @@ export async function createWallPost(storeId: string, input: CreateWallPostInput
     storeId,
     authorHash: h.hash,
     now,
+    dailyMax: board.daily_max,
     post: { id: newPostId(), body: v.body, status, pending_reason: pendingReason, ng_hits: ngHits },
   });
   if (!inserted.ok) {
     if (inserted.reason === 'board_missing') return err(403, 'この寄せ書きは現在受け付けていません');
-    return err(429, wallRateMessage(inserted), { code: inserted.reason });
+    return err(429, wallRateMessage(inserted, board.daily_max), { code: inserted.reason });
   }
   console.log(`[wall] post created store=${storeId} post=${inserted.post.id} status=${status}`);
   return {
@@ -384,6 +386,9 @@ export async function saveWallSettings(storeId: string, raw: unknown): Promise<{
   }
   if (Array.isArray(r.ng_words) && r.ng_words.some((w) => typeof w === 'string' && w.trim().length > 30)) {
     return err(400, 'NG ワードは 1 語 30 文字以内で指定してください');
+  }
+  if (r.daily_max !== undefined && (typeof r.daily_max !== 'number' || !Number.isInteger(r.daily_max) || r.daily_max < 1 || r.daily_max > 10)) {
+    return err(400, '1 日に貼れる枚数は 1〜10 の整数で指定してください');
   }
   if (typeof r.liff_id === 'string' && r.liff_id.trim() && !/^[0-9]{6,}-[A-Za-z0-9]{4,}$/.test(r.liff_id.trim())) {
     return err(400, 'LIFF ID の形式が正しくありません（例: 1234567890-AbCdEfGh）');

@@ -11,7 +11,7 @@ import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { normalizeWallSettings } from '@/lib/wall-themes';
-import { checkWallRate, jstDayStart, WALL_DAILY_MAX, WALL_MIN_INTERVAL_SEC } from '@/lib/wall-rules';
+import { checkWallRate, jstDayStart, WALL_MIN_INTERVAL_SEC } from '@/lib/wall-rules';
 import type { WallBoardSettings, WallPostRow, WallPostStatus, WallReportReason } from '@/types/wall';
 
 function isLocal(): boolean {
@@ -104,6 +104,7 @@ export async function saveWallBoard(settings: WallBoardSettings): Promise<WallBo
     liff_id: settings.liff_id || null,
     moderation: settings.moderation,
     access_mode: settings.access_mode,
+    daily_max: settings.daily_max,
     theme: settings.theme,
     ng_words: settings.ng_words,
     updated_at: now,
@@ -182,6 +183,8 @@ export interface InsertPostParams {
   storeId: string;
   authorHash: string;
   now: Date;
+  /** この店舗の 1 日の枚数（wall_boards.daily_max） */
+  dailyMax: number;
   post: { id: string; body: string; status: WallPostStatus; pending_reason: WallPostRow['pending_reason']; ng_hits: string[] };
 }
 
@@ -193,13 +196,13 @@ export type InsertPostResult =
 
 /** 1 日の上限と前回からの間隔を確認して挿入する（DB 関数で 1 トランザクション） */
 export async function insertWallPostChecked(params: InsertPostParams): Promise<InsertPostResult> {
-  const { storeId, authorHash, now, post } = params;
+  const { storeId, authorHash, now, post, dailyMax } = params;
   if (isLocal()) {
     const boards = readJson<Record<string, unknown>>('wall_boards.json');
     if (!boards.some((b) => b.store_id === storeId)) return { ok: false, reason: 'board_missing' };
     const rows = readJson<WallPostRow>('wall_posts.json');
     const mine = rows.filter((r) => r.store_id === storeId && r.author_hash === authorHash).map((r) => r.created_at);
-    const rate = checkWallRate(mine, now);
+    const rate = checkWallRate(mine, now, dailyMax);
     if (!rate.ok) return rate;
     const ts = now.toISOString();
     const row: WallPostRow = {
@@ -215,7 +218,7 @@ export async function insertWallPostChecked(params: InsertPostParams): Promise<I
     p_store_id: storeId,
     p_author_hash: authorHash,
     p_day_start: jstDayStart(now).toISOString(),
-    p_daily_max: WALL_DAILY_MAX,
+    p_daily_max: dailyMax,
     p_min_interval_sec: WALL_MIN_INTERVAL_SEC,
     p_post: post,
   });

@@ -44,6 +44,8 @@ export interface WallBoardSettings {
   liff_id: string;
   moderation: WallModeration;
   access_mode: WallAccessMode;
+  /** 1 ユーザーが 1 日に貼れる枚数（1〜10。既定 1） */
+  daily_max: number;
   theme: WallTheme;
   ng_words: string[];
 }
@@ -100,6 +102,7 @@ export interface WallPublicBoardResponse {
     liff_id: string;
     moderation: WallModeration;
     access_mode: WallAccessMode;
+    daily_max: number;
     theme: WallTheme;
     terms_version: string;
     consent_text: string;
