@@ -5,12 +5,13 @@
  *
  * 流れ: ボード設定を取得 → LIFF 初期化（LINE 外は案内）→ ID トークンで一覧を取り直し（is_mine / 同意済み）→ 貼る / 見る / 通報する
  * local 環境（NEXT_PUBLIC_APP_ENV=local）は LIFF を使わず、端末ごとの仮ユーザー ID で動く
+ * 追加機能: お題（topic）/ 共感（empathy）/ 色・飾りの選択（customer_pick）/ 自分の付箋 / あとで読む（端末内保存）
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import WallBoardView, { WALL_CSS, wallRootFrameAttr, wallRootStyle } from './WallBoardView';
+import WallBoardView, { WALL_CSS, reactionEmoji as reactionEmojiOf, wallRootFrameAttr, wallRootStyle } from './WallBoardView';
 import { WALL_BODY_MAX, WALL_REPORT_REASONS } from '@/lib/wall-rules';
 import { wallThemeVars } from '@/lib/wall-themes';
-import type { WallPublicBoardResponse, WallPublicPost, WallReportReason } from '@/types/wall';
+import type { WallMyPost, WallPublicBoardResponse, WallPublicPost, WallReportReason } from '@/types/wall';
 
  
 declare global {
@@ -51,6 +52,20 @@ function localUserId(): string {
   }
 }
 
+type SavedNote = { id: string; body: string; created_at: string };
+const MY_POST_STATUS_LABEL: Record<WallMyPost['status'], string> = { published: '表示中', pending: 'お店の確認待ち', review: '確認中', hidden: '非公開' };
+
+function savedKey(storeId: string): string { return `wall_saved_${storeId}`; }
+function readSaved(storeId: string): SavedNote[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(savedKey(storeId)) || '[]');
+    return Array.isArray(v) ? v.filter((x) => x && typeof x.id === 'string') : [];
+  } catch { return []; }
+}
+function writeSaved(storeId: string, rows: SavedNote[]) {
+  try { localStorage.setItem(savedKey(storeId), JSON.stringify(rows.slice(0, 50))); } catch { /* 保存できない端末は無視 */ }
+}
+
 export default function WallApp({ storeId }: { storeId: string }) {
   const [phase, setPhase] = useState<Phase>('loading');
   const [gate, setGate] = useState<Gate | null>(null);
@@ -72,6 +87,16 @@ export default function WallApp({ storeId }: { storeId: string }) {
   const [reportReason, setReportReason] = useState<WallReportReason | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WallPublicPost | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  // 追加機能
+  const [useTopic, setUseTopic] = useState(true);
+  const [pickColor, setPickColor] = useState<string | null>(null);
+  const [pickDeco, setPickDeco] = useState<string | null>(null);
+  const [empathyBusyId, setEmpathyBusyId] = useState<string | null>(null);
+  const [saved, setSaved] = useState<SavedNote[]>([]);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [savedLive, setSavedLive] = useState<Map<string, WallPublicPost> | null>(null);
+  const [mineOpen, setMineOpen] = useState(false);
+  const [minePosts, setMinePosts] = useState<WallMyPost[] | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -152,6 +177,7 @@ export default function WallApp({ storeId }: { storeId: string }) {
         setPosts(full.posts);
         setNextCursor(full.next_cursor);
         setAgree(full.consented);
+        setSaved(readSaved(storeId));
         setPhase('ready');
       } catch (e) {
         if (cancelled) return;
@@ -160,7 +186,7 @@ export default function WallApp({ storeId }: { storeId: string }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [fetchBoard]);
+  }, [fetchBoard, storeId]);
 
   // 下端に来たら続きを読み込む
   const loadMore = useCallback(async () => {
@@ -210,17 +236,27 @@ export default function WallApp({ storeId }: { storeId: string }) {
       const res = await fetch(`/api/walls/${encodeURIComponent(storeId)}/posts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...authFields(identity), body: text, consent: { agreed: data.consented || agree, terms_version: data.board.terms_version } }),
+        body: JSON.stringify({
+          ...authFields(identity),
+          body: text,
+          consent: { agreed: data.consented || agree, terms_version: data.board.terms_version },
+          ...(data.board.topic && useTopic ? { topic_id: data.board.topic.id } : {}),
+          ...(data.board.customer_pick_enabled && pickColor ? { note_color: pickColor } : {}),
+          ...(data.board.customer_pick_enabled && pickDeco ? { note_deco: pickDeco } : {}),
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (handleAuthError(res.status)) return;
         if (json.code === 'consent_required') setData({ ...data, consented: false });
+        if (json.code === 'topic_closed') setData({ ...data, board: { ...data.board, topic: null } });
         setFormError(json.error || '貼れませんでした。時間をおいて再度お試しください');
         return;
       }
       setData({ ...data, consented: true });
       setBody('');
+      setPickColor(null);
+      setPickDeco(null);
       setComposeOpen(false);
       if (json.status === 'published' && json.post) {
         const p = json.post as WallPublicPost;
@@ -292,6 +328,78 @@ export default function WallApp({ storeId }: { storeId: string }) {
     }
   };
 
+  // 共感（押す / 取り消す）。結果でその付箋だけ差し替える
+  const toggleEmpathy = async (p: WallPublicPost) => {
+    if (empathyBusyId) return;
+    setEmpathyBusyId(p.id);
+    try {
+      const res = await fetch(`/api/walls/${encodeURIComponent(storeId)}/posts/${encodeURIComponent(p.id)}/empathy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(authFields(identity)),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (handleAuthError(res.status)) return;
+        showToast(json.error || '送れませんでした');
+        return;
+      }
+      const apply = (x: WallPublicPost) => (x.id === p.id ? { ...x, empathized: !!json.empathized, empathy_count: json.empathy_count ?? x.empathy_count } : x);
+      setPosts((prev) => prev.map(apply));
+      setSavedLive((prev) => { if (!prev) return prev; const n = new Map(prev); const cur = n.get(p.id); if (cur) n.set(p.id, apply(cur)); return n; });
+    } catch {
+      showToast('通信に失敗しました');
+    } finally {
+      setEmpathyBusyId(null);
+    }
+  };
+
+  // あとで読む（端末内に保存。サーバーには送らない）
+  const savedIds = new Set(saved.map((x) => x.id));
+  const toggleSave = (p: WallPublicPost) => {
+    const next = savedIds.has(p.id) ? saved.filter((x) => x.id !== p.id) : [{ id: p.id, body: p.body, created_at: p.created_at }, ...saved];
+    setSaved(next);
+    writeSaved(storeId, next);
+    showToast(savedIds.has(p.id) ? '保存をやめました' : 'この端末に保存しました');
+    setLiftedId(null);
+  };
+  const openSaved = async () => {
+    setSavedOpen(true);
+    setSavedLive(null);
+    const ids = readSaved(storeId).map((x) => x.id);
+    if (ids.length === 0) { setSavedLive(new Map()); return; }
+    try {
+      const q = new URLSearchParams({ ids: ids.slice(0, 50).join(',') });
+      if (identity.idToken) q.set('id_token', identity.idToken);
+      if (identity.lineUserId) q.set('line_user_id', identity.lineUserId);
+      if (identity.friend) q.set('friend', '1');
+      const res = await fetch(`/api/walls/${encodeURIComponent(storeId)}/posts/lookup?${q.toString()}`, { cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      setSavedLive(new Map(((res.ok && json.posts) || []).map((p: WallPublicPost) => [p.id, p])));
+    } catch {
+      setSavedLive(new Map());
+    }
+  };
+
+  // 自分の付箋（状態付き）
+  const openMine = async () => {
+    setMineOpen(true);
+    setMinePosts(null);
+    try {
+      const q = new URLSearchParams();
+      if (identity.idToken) q.set('id_token', identity.idToken);
+      if (identity.lineUserId) q.set('line_user_id', identity.lineUserId);
+      if (identity.friend) q.set('friend', '1');
+      const res = await fetch(`/api/walls/${encodeURIComponent(storeId)}/my-posts?${q.toString()}`, { cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { if (handleAuthError(res.status)) return; showToast(json.error || '取得できませんでした'); setMinePosts([]); return; }
+      setMinePosts(json.posts || []);
+    } catch {
+      showToast('通信に失敗しました');
+      setMinePosts([]);
+    }
+  };
+
   const theme = data?.board.theme;
   const googleFont = theme ? wallThemeVars(theme).googleFont : null;
   const remaining = WALL_BODY_MAX - [...body].length;
@@ -320,6 +428,17 @@ export default function WallApp({ storeId }: { storeId: string }) {
           <header className="wall-header">
             <h1 className="wall-title">{theme.title}</h1>
             <p className="wall-subtitle">{theme.subtitle}</p>
+            {data.board.topic && (
+              <div className="wall-topic" role="note">
+                <span className="wall-topic-label">今のお題</span>
+                <p className="wall-topic-title">{data.board.topic.title}</p>
+                {data.board.topic.description && <p className="wall-topic-desc">{data.board.topic.description}</p>}
+              </div>
+            )}
+            <div className="wall-mybar">
+              <button type="button" onClick={openMine}>自分の付箋</button>
+              <button type="button" onClick={openSaved}>あとで読む{saved.length > 0 ? `（${saved.length}）` : ''}</button>
+            </div>
           </header>
           <WallBoardView
             theme={theme}
@@ -328,6 +447,10 @@ export default function WallApp({ storeId }: { storeId: string }) {
             onToggleLift={(id) => setLiftedId((cur) => (cur === id ? null : id))}
             onReport={(p) => { setReportTarget(p); setReportReason(null); }}
             onDelete={(p) => setDeleteTarget(p)}
+            onSave={toggleSave}
+            savedIds={savedIds}
+            onEmpathy={data.board.empathy_enabled ? toggleEmpathy : undefined}
+            empathyBusyId={empathyBusyId}
             droppingIds={dropping}
           >
             {nextCursor && (
@@ -361,6 +484,31 @@ export default function WallApp({ storeId }: { storeId: string }) {
               disabled={sending}
             />
             <div className={`wall-count${remaining < 0 ? ' is-over' : ''}`}>残り {remaining} 文字</div>
+            {data.board.topic && (
+              <div className="wall-pick" role="radiogroup" aria-label="お題">
+                <button type="button" className={`wall-chip${useTopic ? ' is-on' : ''}`} role="radio" aria-checked={useTopic} onClick={() => setUseTopic(true)}>お題に答える</button>
+                <button type="button" className={`wall-chip${!useTopic ? ' is-on' : ''}`} role="radio" aria-checked={!useTopic} onClick={() => setUseTopic(false)}>自由に書く</button>
+                {useTopic && <p className="wall-note-hint" style={{ width: '100%', margin: '4px 0 0' }}>お題: {data.board.topic.title}</p>}
+              </div>
+            )}
+            {data.board.customer_pick_enabled && (
+              <div className="wall-pick-group">
+                <div className="wall-pick" role="radiogroup" aria-label="付箋の色">
+                  <span className="wall-pick-label">色</span>
+                  <button type="button" className={`wall-swatch is-auto${pickColor === null ? ' is-on' : ''}`} role="radio" aria-checked={pickColor === null} aria-label="おまかせ" onClick={() => setPickColor(null)}>おまかせ</button>
+                  {theme.note_colors.map((c) => (
+                    <button key={c} type="button" className={`wall-swatch${pickColor === c ? ' is-on' : ''}`} role="radio" aria-checked={pickColor === c} aria-label={c} style={{ background: c }} onClick={() => setPickColor(c)} />
+                  ))}
+                </div>
+                <div className="wall-pick" role="radiogroup" aria-label="飾り">
+                  <span className="wall-pick-label">飾り</span>
+                  <button type="button" className={`wall-chip${pickDeco === null ? ' is-on' : ''}`} role="radio" aria-checked={pickDeco === null} onClick={() => setPickDeco(null)}>なし</button>
+                  {data.board.decorations.map((d) => (
+                    <button key={d} type="button" className={`wall-chip is-deco${pickDeco === d ? ' is-on' : ''}`} role="radio" aria-checked={pickDeco === d} onClick={() => setPickDeco(d)}>{d}</button>
+                  ))}
+                </div>
+              </div>
+            )}
             {data.board.moderation === 'approval' && <p className="wall-note-hint">お店が確認してから表示されます。</p>}
             {!data.consented && (
               <label className="wall-consent">
@@ -415,6 +563,72 @@ export default function WallApp({ storeId }: { storeId: string }) {
         </div>
       )}
 
+      {/* 自分の付箋 */}
+      {mineOpen && theme && (
+        <div className="wall-sheet-backdrop" onClick={() => setMineOpen(false)}>
+          <div className="wall-sheet" role="dialog" aria-modal="true" aria-label="自分の付箋" onClick={(e) => e.stopPropagation()}>
+            <h2>自分の付箋</h2>
+            {minePosts === null ? (
+              <p className="wall-note-hint">読み込み中…</p>
+            ) : minePosts.length === 0 ? (
+              <p className="wall-note-hint">まだ付箋を貼っていません。</p>
+            ) : (
+              <ul className="wall-list">
+                {minePosts.map((p) => (
+                  <li key={p.id} className="wall-list-item">
+                    <div className="wall-list-meta">
+                      <span className={`wall-list-status is-${p.status}`}>{MY_POST_STATUS_LABEL[p.status]}</span>
+                      <span>{new Date(p.created_at).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric' })}</span>
+                      {p.reaction && <span title="お店からのスタンプ">お店から {reactionEmojiOf(p.reaction)}</span>}
+                      {p.empathy_count !== null && p.empathy_count > 0 && <span>わかる！ {p.empathy_count}</span>}
+                    </div>
+                    {p.topic_title && <div className="wall-list-topic">お題: {p.topic_title}</div>}
+                    <p className="wall-list-body">{p.body}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="wall-sheet-actions">
+              <button type="button" className="is-secondary" onClick={() => setMineOpen(false)}>閉じる</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* あとで読む */}
+      {savedOpen && theme && (
+        <div className="wall-sheet-backdrop" onClick={() => setSavedOpen(false)}>
+          <div className="wall-sheet" role="dialog" aria-modal="true" aria-label="あとで読む" onClick={(e) => e.stopPropagation()}>
+            <h2>あとで読む</h2>
+            <p className="wall-note-hint">この端末にだけ保存されます。端末を変えたりアプリのデータを消したりすると消えます。</p>
+            {saved.length === 0 ? (
+              <p className="wall-note-hint">保存した付箋はありません。付箋をタップして「あとで読む」を押すと保存できます。</p>
+            ) : (
+              <ul className="wall-list">
+                {saved.map((sv) => {
+                  const live = savedLive?.get(sv.id);
+                  const gone = savedLive !== null && !live;
+                  return (
+                    <li key={sv.id} className={`wall-list-item${gone ? ' is-gone' : ''}`}>
+                      <div className="wall-list-meta">
+                        <span>{new Date(sv.created_at).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric' })}</span>
+                        {gone && <span className="wall-list-status is-hidden">表示できません</span>}
+                        {live?.reaction && <span>お店から {reactionEmojiOf(live.reaction)}</span>}
+                        <button type="button" className="wall-list-remove" onClick={() => { const next = saved.filter((x) => x.id !== sv.id); setSaved(next); writeSaved(storeId, next); }}>保存をやめる</button>
+                      </div>
+                      <p className="wall-list-body">{gone ? '（この付箋は現在表示されていません）' : (live?.body ?? sv.body)}</p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <div className="wall-sheet-actions">
+              <button type="button" className="is-secondary" onClick={() => setSavedOpen(false)}>閉じる</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && <div className="wall-toast" role="status">{toast}</div>}
     </div>
   );
@@ -451,5 +665,26 @@ const APP_CSS = `
 .wall-reasons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .wall-reason { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid #d6d0c4; border-radius: 10px; background: #fff; font-size: 14px; }
 .wall-reason.is-selected { border-color: var(--wall-accent); box-shadow: 0 0 0 2px var(--wall-accent) inset; }
+.wall-mybar { display: flex; justify-content: center; gap: 8px; margin-top: 10px; }
+.wall-mybar button { min-height: 32px; padding: 0 12px; border: 1px solid rgba(255,255,255,.5); border-radius: 16px; background: rgba(255,255,255,.3); color: var(--wall-text); font: inherit; font-size: 12px; font-weight: 700; backdrop-filter: blur(2px); }
+.wall-pick-group { margin-top: 10px; }
+.wall-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.wall-pick-label { font-size: 12px; color: #666; margin-right: 2px; }
+.wall-chip { min-height: 32px; padding: 0 12px; border: 1px solid #d6d0c4; border-radius: 16px; background: #fff; color: #333; font: inherit; font-size: 13px; }
+.wall-chip.is-deco { min-width: 40px; font-size: 16px; padding: 0 8px; }
+.wall-chip.is-on { border-color: var(--wall-accent); box-shadow: 0 0 0 2px var(--wall-accent) inset; font-weight: 700; }
+.wall-swatch { width: 30px; height: 30px; border: 2px solid rgba(0,0,0,.15); border-radius: 50%; padding: 0; }
+.wall-swatch.is-auto { width: auto; border-radius: 15px; padding: 0 10px; background: #fff; font: inherit; font-size: 12px; color: #333; }
+.wall-swatch.is-on { border-color: var(--wall-accent); box-shadow: 0 0 0 2px #fff inset; }
+.wall-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.wall-list-item { padding: 10px 12px; border: 1px solid #e6e0d4; border-radius: 10px; background: #fff; }
+.wall-list-item.is-gone { opacity: .6; }
+.wall-list-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11.5px; color: #777; }
+.wall-list-status { padding: 1px 8px; border-radius: 10px; background: #e8f4e8; color: #2f6b33; font-weight: 700; }
+.wall-list-status.is-pending, .wall-list-status.is-review { background: #fdf1d6; color: #8a5a00; }
+.wall-list-status.is-hidden { background: #eee; color: #666; }
+.wall-list-topic { margin-top: 4px; font-size: 11px; color: #8a5a00; font-weight: 700; }
+.wall-list-body { margin: 6px 0 0; font-size: 14px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.wall-list-remove { margin-left: auto; border: 0; background: none; color: #b3261e; font: inherit; font-size: 11.5px; text-decoration: underline; }
 .wall-toast { position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40; max-width: calc(100% - 32px); padding: 10px 16px; border-radius: 20px; background: rgba(30,30,30,.9); color: #fff; font-size: 13px; }
 `;

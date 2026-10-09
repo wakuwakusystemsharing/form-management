@@ -12,7 +12,7 @@ import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { normalizeWallSettings } from '@/lib/wall-themes';
 import { checkWallRate, jstDayStart, WALL_MIN_INTERVAL_SEC } from '@/lib/wall-rules';
-import type { WallBoardSettings, WallPostRow, WallPostStatus, WallReportReason } from '@/types/wall';
+import type { WallBoardSettings, WallPostRow, WallPostStatus, WallReportReason, WallTopic } from '@/types/wall';
 
 function isLocal(): boolean {
   return getAppEnvironment() === 'local';
@@ -105,6 +105,9 @@ export async function saveWallBoard(settings: WallBoardSettings): Promise<WallBo
     moderation: settings.moderation,
     access_mode: settings.access_mode,
     daily_max: settings.daily_max,
+    empathy_enabled: settings.empathy_enabled,
+    empathy_show_count: settings.empathy_show_count,
+    customer_pick_enabled: settings.customer_pick_enabled,
     theme: settings.theme,
     ng_words: settings.ng_words,
     updated_at: now,
@@ -126,6 +129,19 @@ export async function saveWallBoard(settings: WallBoardSettings): Promise<WallBo
 // 付箋
 // ---------------------------------------------------------------------------
 
+/** 追加列（リアクション・お題・色・飾り・共感数）が無い古い行を補完する */
+function withPostDefaults(r: WallPostRow): WallPostRow {
+  return {
+    ...r,
+    reaction: r.reaction ?? null,
+    reaction_at: r.reaction_at ?? null,
+    topic_id: r.topic_id ?? null,
+    note_color: r.note_color ?? null,
+    note_deco: r.note_deco ?? null,
+    empathy_count: Number(r.empathy_count) || 0,
+  };
+}
+
 function sortNewest(a: WallPostRow, b: WallPostRow): number {
   if (a.created_at !== b.created_at) return a.created_at < b.created_at ? 1 : -1;
   return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
@@ -144,14 +160,26 @@ export interface ListPostsParams {
   cursor: { created_at: string; id: string } | null;
   limit: number;
   reportedOnly?: boolean;
+  /** お題で絞り込み */
+  topicId?: string;
+  /** 本人の付箋だけ（自分の付箋一覧） */
+  authorHash?: string;
+  /** 本文の部分一致 */
+  search?: string;
+  /** ID で絞り込み（あとで読むの照会） */
+  ids?: string[];
 }
 
 /** 新しい順に limit + 1 件まで返す（呼び出し側で次ページの有無を判定） */
 export async function listWallPosts(params: ListPostsParams): Promise<WallPostRow[]> {
-  const { storeId, statuses, cursor, limit, reportedOnly } = params;
+  const { storeId, statuses, cursor, limit, reportedOnly, topicId, authorHash, search, ids } = params;
+  const needle = search ? search.normalize('NFKC').toLowerCase() : '';
   if (isLocal()) {
     return readJson<WallPostRow>('wall_posts.json')
-      .filter((r) => r.store_id === storeId && statuses.includes(r.status) && beforeCursor(r, cursor) && (!reportedOnly || r.report_count > 0))
+      .map(withPostDefaults)
+      .filter((r) => r.store_id === storeId && statuses.includes(r.status) && beforeCursor(r, cursor) && (!reportedOnly || r.report_count > 0)
+        && (!topicId || r.topic_id === topicId) && (!authorHash || r.author_hash === authorHash)
+        && (!needle || r.body.normalize('NFKC').toLowerCase().includes(needle)) && (!ids || ids.includes(r.id)))
       .sort(sortNewest)
       .slice(0, limit + 1);
   }
@@ -164,19 +192,24 @@ export async function listWallPosts(params: ListPostsParams): Promise<WallPostRo
     .order('id', { ascending: false })
     .limit(limit + 1);
   if (reportedOnly) q = q.gt('report_count', 0);
+  if (topicId) q = q.eq('topic_id', topicId);
+  if (authorHash) q = q.eq('author_hash', authorHash);
+  if (ids) q = q.in('id', ids);
+  if (needle) q = q.ilike('body', `%${needle.replace(/[%_\\]/g, (m) => `\\${m}`)}%`);
   if (cursor) q = q.or(`created_at.lt."${cursor.created_at}",and(created_at.eq."${cursor.created_at}",id.lt."${cursor.id}")`);
   const { data, error } = await q;
   if (error) throw new Error(`付箋の取得に失敗しました: ${error.message}`);
-  return (data || []) as WallPostRow[];
+  return ((data || []) as WallPostRow[]).map(withPostDefaults);
 }
 
 export async function getWallPost(storeId: string, postId: string): Promise<WallPostRow | null> {
   if (isLocal()) {
-    return readJson<WallPostRow>('wall_posts.json').find((r) => r.id === postId && r.store_id === storeId) ?? null;
+    const r = readJson<WallPostRow>('wall_posts.json').find((r) => r.id === postId && r.store_id === storeId);
+    return r ? withPostDefaults(r) : null;
   }
   const { data, error } = await client().from('wall_posts').select('*').eq('id', postId).eq('store_id', storeId).maybeSingle();
   if (error) throw new Error(`付箋の取得に失敗しました: ${error.message}`);
-  return (data as WallPostRow) ?? null;
+  return data ? withPostDefaults(data as WallPostRow) : null;
 }
 
 export interface InsertPostParams {
@@ -185,7 +218,7 @@ export interface InsertPostParams {
   now: Date;
   /** この店舗の 1 日の枚数（wall_boards.daily_max） */
   dailyMax: number;
-  post: { id: string; body: string; status: WallPostStatus; pending_reason: WallPostRow['pending_reason']; ng_hits: string[] };
+  post: { id: string; body: string; status: WallPostStatus; pending_reason: WallPostRow['pending_reason']; ng_hits: string[]; topic_id: string | null; note_color: string | null; note_deco: string | null };
 }
 
 export type InsertPostResult =
@@ -208,6 +241,7 @@ export async function insertWallPostChecked(params: InsertPostParams): Promise<I
     const row: WallPostRow = {
       id: post.id, store_id: storeId, body: post.body, status: post.status, pending_reason: post.pending_reason,
       ng_hits: post.ng_hits, author_hash: authorHash, report_count: 0, hidden_reason: null, hidden_at: null, hidden_by: null,
+      reaction: null, reaction_at: null, topic_id: post.topic_id, note_color: post.note_color, note_deco: post.note_deco, empathy_count: 0,
       created_at: ts, updated_at: ts,
     };
     rows.push(row);
@@ -224,13 +258,13 @@ export async function insertWallPostChecked(params: InsertPostParams): Promise<I
   });
   if (error) throw new Error(`付箋の保存に失敗しました: ${error.message}`);
   const r = data as { ok: boolean; reason?: string; retry_after?: number; post?: WallPostRow };
-  if (r.ok && r.post) return { ok: true, post: r.post };
+  if (r.ok && r.post) return { ok: true, post: withPostDefaults(r.post) };
   if (r.reason === 'interval') return { ok: false, reason: 'interval', retry_after: Math.max(1, Number(r.retry_after) || 1) };
   if (r.reason === 'daily') return { ok: false, reason: 'daily' };
   return { ok: false, reason: 'board_missing' };
 }
 
-export type WallPostPatch = Partial<Pick<WallPostRow, 'status' | 'pending_reason' | 'report_count' | 'hidden_reason' | 'hidden_at' | 'hidden_by'>>;
+export type WallPostPatch = Partial<Pick<WallPostRow, 'status' | 'pending_reason' | 'report_count' | 'hidden_reason' | 'hidden_at' | 'hidden_by' | 'reaction' | 'reaction_at'>>;
 
 export async function updateWallPost(storeId: string, postId: string, patch: WallPostPatch): Promise<WallPostRow | null> {
   const updated_at = new Date().toISOString();
@@ -240,11 +274,11 @@ export async function updateWallPost(storeId: string, postId: string, patch: Wal
     if (idx < 0) return null;
     rows[idx] = { ...rows[idx], ...patch, updated_at };
     writeJson('wall_posts.json', rows);
-    return rows[idx];
+    return withPostDefaults(rows[idx]);
   }
   const { data, error } = await client().from('wall_posts').update({ ...patch, updated_at }).eq('id', postId).eq('store_id', storeId).select('*').maybeSingle();
   if (error) throw new Error(`付箋の更新に失敗しました: ${error.message}`);
-  return (data as WallPostRow) ?? null;
+  return data ? withPostDefaults(data as WallPostRow) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -372,4 +406,113 @@ export async function countWallStats(storeId: string, since: Date): Promise<{ we
     c.from('wall_posts').select('id', { count: 'exact', head: true }).eq('store_id', storeId).eq('status', 'review'),
   ]);
   return { week_posts: w.count || 0, pending: p.count || 0, review: r.count || 0 };
+}
+
+// ---------------------------------------------------------------------------
+// 共感（押した人は hash のみ）
+// ---------------------------------------------------------------------------
+
+interface WallEmpathyRow { id: string; store_id: string; post_id: string; empathizer_hash: string; created_at: string }
+
+export type ToggleEmpathyResult = { ok: true; empathized: boolean; count: number } | { ok: false; reason: 'not_found' };
+
+/** 押す / 取り消す（公開中の付箋のみ。DB 関数で 1 トランザクション） */
+export async function toggleWallEmpathy(storeId: string, postId: string, hash: string): Promise<ToggleEmpathyResult> {
+  if (isLocal()) {
+    const posts = readJson<WallPostRow>('wall_posts.json');
+    const idx = posts.findIndex((r) => r.id === postId && r.store_id === storeId);
+    if (idx < 0 || posts[idx].status !== 'published') return { ok: false, reason: 'not_found' };
+    let rows = readJson<WallEmpathyRow>('wall_empathies.json');
+    const existing = rows.findIndex((r) => r.post_id === postId && r.empathizer_hash === hash);
+    let empathized: boolean;
+    if (existing >= 0) {
+      rows = rows.filter((_, i) => i !== existing);
+      empathized = false;
+    } else {
+      rows.push({ id: `emp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, store_id: storeId, post_id: postId, empathizer_hash: hash, created_at: new Date().toISOString() });
+      empathized = true;
+    }
+    writeJson('wall_empathies.json', rows);
+    const count = rows.filter((r) => r.post_id === postId).length;
+    posts[idx] = { ...withPostDefaults(posts[idx]), empathy_count: count, updated_at: new Date().toISOString() };
+    writeJson('wall_posts.json', posts);
+    return { ok: true, empathized, count };
+  }
+  const { data, error } = await client().rpc('wall_toggle_empathy', { p_store_id: storeId, p_post_id: postId, p_hash: hash });
+  if (error) throw new Error(`共感の保存に失敗しました: ${error.message}`);
+  const r = data as { ok: boolean; empathized?: boolean; count?: number };
+  if (!r.ok) return { ok: false, reason: 'not_found' };
+  return { ok: true, empathized: !!r.empathized, count: Number(r.count) || 0 };
+}
+
+/** 閲覧者が共感済みの付箋 ID */
+export async function getEmpathizedPostIds(postIds: string[], hash: string): Promise<Set<string>> {
+  if (postIds.length === 0) return new Set();
+  if (isLocal()) {
+    return new Set(readJson<WallEmpathyRow>('wall_empathies.json').filter((r) => r.empathizer_hash === hash && postIds.includes(r.post_id)).map((r) => r.post_id));
+  }
+  const { data, error } = await client().from('wall_empathies').select('post_id').eq('empathizer_hash', hash).in('post_id', postIds);
+  if (error) throw new Error(`共感の取得に失敗しました: ${error.message}`);
+  return new Set(((data || []) as Array<{ post_id: string }>).map((r) => r.post_id));
+}
+
+// ---------------------------------------------------------------------------
+// お題
+// ---------------------------------------------------------------------------
+
+function sortTopics(a: WallTopic, b: WallTopic): number {
+  return a.starts_on < b.starts_on ? 1 : a.starts_on > b.starts_on ? -1 : a.id < b.id ? 1 : -1;
+}
+
+export async function listWallTopics(storeId: string): Promise<WallTopic[]> {
+  if (isLocal()) {
+    return readJson<WallTopic>('wall_topics.json').filter((t) => t.store_id === storeId).sort(sortTopics);
+  }
+  const { data, error } = await client().from('wall_topics').select('*').eq('store_id', storeId).order('starts_on', { ascending: false });
+  if (error) throw new Error(`お題の取得に失敗しました: ${error.message}`);
+  return (data || []) as WallTopic[];
+}
+
+export async function saveWallTopic(topic: WallTopic): Promise<WallTopic> {
+  if (isLocal()) {
+    const rows = readJson<WallTopic>('wall_topics.json');
+    const idx = rows.findIndex((t) => t.id === topic.id && t.store_id === topic.store_id);
+    if (idx >= 0) rows[idx] = topic;
+    else rows.push(topic);
+    writeJson('wall_topics.json', rows);
+    return topic;
+  }
+  const { data, error } = await client().from('wall_topics').upsert(topic, { onConflict: 'id' }).select('*').single();
+  if (error) throw new Error(`お題の保存に失敗しました: ${error.message}`);
+  return data as WallTopic;
+}
+
+export async function deleteWallTopic(storeId: string, topicId: string): Promise<boolean> {
+  if (isLocal()) {
+    const rows = readJson<WallTopic>('wall_topics.json');
+    const next = rows.filter((t) => !(t.id === topicId && t.store_id === storeId));
+    if (next.length === rows.length) return false;
+    writeJson('wall_topics.json', next);
+    const posts = readJson<WallPostRow>('wall_posts.json').map((p) => (p.topic_id === topicId ? { ...p, topic_id: null } : p));
+    writeJson('wall_posts.json', posts);
+    return true;
+  }
+  const { data, error } = await client().from('wall_topics').delete().eq('id', topicId).eq('store_id', storeId).select('id');
+  if (error) throw new Error(`お題の削除に失敗しました: ${error.message}`);
+  return Array.isArray(data) && data.length > 0;
+}
+
+// ---------------------------------------------------------------------------
+// 見どころ（本文と日時だけ。投稿者情報は読まない）
+// ---------------------------------------------------------------------------
+
+export async function listWallPostsForInsights(storeId: string, since: Date): Promise<Array<{ body: string; created_at: string; status: string }>> {
+  if (isLocal()) {
+    return readJson<WallPostRow>('wall_posts.json')
+      .filter((r) => r.store_id === storeId && new Date(r.created_at) >= since)
+      .map((r) => ({ body: r.body, created_at: r.created_at, status: r.status }));
+  }
+  const { data, error } = await client().from('wall_posts').select('body, created_at, status').eq('store_id', storeId).gte('created_at', since.toISOString()).limit(5000);
+  if (error) throw new Error(`付箋の取得に失敗しました: ${error.message}`);
+  return (data || []) as Array<{ body: string; created_at: string; status: string }>;
 }

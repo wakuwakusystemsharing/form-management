@@ -2,7 +2,7 @@
 
 /**
  * 寄せ書きウォール: 管理画面のタブ本体（店舗管理者ページ / テナント側 店舗ページで共通）
- * 上から 件数 → ボードの設定 → 付箋の確認（ボタンで開く。既定は閉じている）
+ * 上から 件数 → ボードの設定 → お題 → 見どころまとめ → 付箋の確認（ボタンで開く。既定は閉じている）
  */
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,12 +12,15 @@ import StoreAdminGuide, { GuideHint } from '@/components/StoreAdminGuide';
 import { STORE_ADMIN_HINTS } from '@/lib/store-admin-guide';
 import WallPostList from './WallPostList';
 import WallSettingsCard from './WallSettingsCard';
+import WallTopicsCard from './WallTopicsCard';
+import WallInsightsCard from './WallInsightsCard';
 import type { WallStats } from '@/types/wall';
 
 export default function WallAdminPanel({ storeId, showGuide = true }: { storeId: string; showGuide?: boolean }) {
   const [stats, setStats] = useState<WallStats | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [postsOpen, setPostsOpen] = useState(false);
+  const [postSearch, setPostSearch] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -54,6 +57,8 @@ export default function WallAdminPanel({ storeId, showGuide = true }: { storeId:
       </div>
 
       <WallSettingsCard storeId={storeId} onSaved={() => setRefreshKey((k) => k + 1)} />
+      <WallTopicsCard storeId={storeId} onChanged={() => setRefreshKey((k) => k + 1)} />
+      <WallInsightsCard storeId={storeId} refreshKey={refreshKey} onPickWord={(w) => { setPostSearch(w); setPostsOpen(true); }} />
 
       <div className="space-y-3 border-t pt-5">
         <Button
@@ -75,7 +80,7 @@ export default function WallAdminPanel({ storeId, showGuide = true }: { storeId:
         {postsOpen && (
           <div id="wall-post-list" className="space-y-3">
             <GuideHint text={STORE_ADMIN_HINTS.wallPosts} />
-            <WallPostList storeId={storeId} refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} />
+            <WallPostList storeId={storeId} refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} search={postSearch} onSearchChange={setPostSearch} />
           </div>
         )}
       </div>

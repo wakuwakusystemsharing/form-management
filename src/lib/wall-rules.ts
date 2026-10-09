@@ -1,7 +1,7 @@
 /**
  * 寄せ書きウォールの投稿ルール — 純粋ロジック（クライアントでも使う定数を含む）
  */
-import type { WallReportReason } from '@/types/wall';
+import type { WallReaction, WallReportReason } from '@/types/wall';
 
 export const WALL_BODY_MAX = 140;
 /** 1 日の枚数の既定値（店舗設定 wall_boards.daily_max で変更。1〜10） */
@@ -24,6 +24,34 @@ export const WALL_ADMIN_PAGE_SIZE = 50;
 export const WALL_TERMS_VERSION = '2026-10-01';
 export const WALL_CONSENT_TEXT =
   '投稿は他のお客さんにもお店にも匿名で表示されます。ただし、規約違反や誹謗中傷があった場合に対応するため、運営が投稿者を内部で記録しています。';
+
+/** お店からのリアクション（案 1）。固定セット */
+export const WALL_REACTIONS: Array<{ id: WallReaction; emoji: string; label: string }> = [
+  { id: 'thanks', emoji: '🙏', label: 'ありがとう' },
+  { id: 'heart', emoji: '❤️', label: 'うれしい' },
+  { id: 'smile', emoji: '😊', label: 'にっこり' },
+  { id: 'party', emoji: '🎉', label: 'やったね' },
+];
+export function isWallReaction(v: unknown): v is WallReaction {
+  return typeof v === 'string' && WALL_REACTIONS.some((r) => r.id === v);
+}
+
+/** 貼る人が選べる飾り（案 6）。絵文字の自由入力は不可 */
+export const WALL_NOTE_DECORATIONS = ['★', '♪', '🍀', '☀', '♥', '✿', '☕', '✨'] as const;
+export function isWallDecoration(v: unknown): v is (typeof WALL_NOTE_DECORATIONS)[number] {
+  return typeof v === 'string' && (WALL_NOTE_DECORATIONS as readonly string[]).includes(v);
+}
+
+/** お題の件数上限（店舗ごと） */
+export const WALL_TOPICS_MAX = 50;
+/** あとで読む・自分の付箋の照会で一度に渡せる ID 数 */
+export const WALL_LOOKUP_MAX = 50;
+
+/** JST の今日の日付 YYYY-MM-DD */
+export function jstToday(now: Date = new Date()): string {
+  const jst = new Date(now.getTime() + 9 * 3600000);
+  return `${jst.getUTCFullYear()}-${String(jst.getUTCMonth() + 1).padStart(2, '0')}-${String(jst.getUTCDate()).padStart(2, '0')}`;
+}
 
 export const WALL_REPORT_REASONS: Array<{ id: WallReportReason; label: string }> = [
   { id: 'abuse', label: '誹謗中傷' },

@@ -225,6 +225,9 @@ export function normalizeWallSettings(storeId: string, raw: unknown): WallBoardS
     moderation: MODERATIONS.includes(r.moderation as WallModeration) ? (r.moderation as WallModeration) : 'instant',
     access_mode: ACCESS_MODES.includes(r.access_mode as WallAccessMode) ? (r.access_mode as WallAccessMode) : 'login',
     daily_max: normalizeWallDailyMax(r.daily_max),
+    empathy_enabled: r.empathy_enabled === true,
+    empathy_show_count: r.empathy_show_count !== false,
+    customer_pick_enabled: r.customer_pick_enabled === true,
     theme: normalizeWallTheme(r.theme),
     ng_words: normalizeStoreNgWords(r.ng_words),
   };
