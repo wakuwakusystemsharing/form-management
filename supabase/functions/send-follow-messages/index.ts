@@ -82,12 +82,15 @@ function hasRebooking(reservations, baseDate: string, excludeReservationId: stri
   });
 }
 function isReminderSameDay(store, reservations, todayJst: string): boolean {
-  if (store.reminder_enabled === false) return false;
   if (!Array.isArray(reservations)) return false;
+  const active = reservations.filter((r) => r && r.status !== "cancelled");
+  // 当日リマインダー ON: 今日の予約があれば今日リマインダーが送られる
+  if (store.reminder_same_day_enabled === true && active.some((r) => r.reservation_date === todayJst)) return true;
+  if (store.reminder_enabled === false) return false;
   const n = typeof store.reminder_days_before === "number" && isFinite(store.reminder_days_before) ? Math.floor(store.reminder_days_before) : 1;
   const daysBefore = n >= 1 && n <= 30 ? n : 1;
   const target = addDays(todayJst, daysBefore);
-  return reservations.some((r) => r && r.status !== "cancelled" && r.reservation_date === target);
+  return active.some((r) => r.reservation_date === target);
 }
 /** 32 桁 hex の行 ID を LINE の X-Line-Retry-Key（UUID 形式）にする */
 function toLineRetryKey(id: string | null | undefined): string | null {
@@ -328,7 +331,7 @@ async function processBatch(now: Date, totals) {
   const storeIds = [...new Set(due.map((r) => r.store_id))];
   const { data: stores, error: storeError } = await supabase
     .from("stores")
-    .select("id,name,line_channel_access_token,follow_enabled,follow_template,reminder_enabled,reminder_days_before")
+    .select("id,name,line_channel_access_token,follow_enabled,follow_template,reminder_enabled,reminder_days_before,reminder_same_day_enabled")
     .in("id", storeIds);
   if (storeError) throw new Error(`店舗取得エラー: ${storeError.message}`);
   const storeMap = new Map((stores || []).map((s) => [s.id, s]));

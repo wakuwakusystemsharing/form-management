@@ -175,6 +175,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 
 **LINE リマインダー機能:**
 - 予約日の N 日前（`stores.reminder_days_before`、既定 1）に LINE Flex メッセージで自動リマインド
+- **当日リマインダー**（`stores.reminder_same_day_enabled`、既定 false / `reminder_same_day_time`、既定 09:00）: 予約当日の指定時刻に「本日の予約」を送る。前日などのリマインダーとは**独立に ON/OFF**（両方 ON なら前日と当日の 2 回届く）。送信時刻の時点で予約時刻を過ぎている予約には送らない（`isSameDayReminderTarget`。時刻の無い予約は対象）。送信時刻より後に入った当日予約は次の毎時 0 分で送る。文面は `reminder_template` を共通で使い、既定文言だけ `daysBefore = 0` → 「【予約当日メッセージ】/ 本日の予約をお知らせします」（`defaultHeaderTitle(0)` / `defaultBodyLabel(0)`）。送信記録は `reminder_logs.kind`（`before` / `same_day`。一意キーは reservation × target_date × kind）。フォローメッセージの `reminder_same_day` 見送り判定（`isReminderSameDay`）も当日リマインダーを見る。顧客詳細のバッジは「当日リマインダー 9/19（土）09:00 送信予定 / 当日リマインダー送信済み」（`reminder_plan.kind` / `reminder_log.kind`）。マイグレーション: `20261013000000_add_same_day_reminder.sql`
 - Supabase Edge Function `send-reminders` が pg_cron（毎時 0 分）でトリガー
 - 店舗ごとに ON/OFF + 送信時刻指定が可能（`stores.reminder_enabled` / `stores.reminder_time`、デフォルト 19:00）。`PUT /api/stores/{storeId}` で `HH:00` / 1〜30 日 / 文面の型を検証（DB にも CHECK）
 - **送信記録 `reminder_logs`**（1 予約 × 対象日 = 1 行。`sending / sent / failed / skipped`）: 送信前に行を確保（sending）してから push するので二重送信しない。`X-Line-Retry-Key` に行 ID（UUID）。失敗は 3 回まで再試行、10 分以上 sending のままの行は再確保
@@ -579,6 +580,7 @@ export async function GET(req, { params }) {
 - `20260904000000_add_admin_visible_options.sql` - stores.admin_visible_options 追加（店舗管理者に表示する項目の個別設定）
 - `20260908000000_add_follow_message.sql` - stores.follow_* 5 カラム + follow_messages テーブル（フォローメッセージ配信予定）+ RLS
 - `20260911000000_message_delivery_reliability.sql` - reminder_logs テーブル、stores.reminder_* の CHECK、follow_messages に sending / claimed_at、DB 関数 follow_message_schedule / follow_message_restore_for_user
+- `20261013000000_add_same_day_reminder.sql` - stores.reminder_same_day_enabled / reminder_same_day_time（当日リマインダー）、reminder_logs.kind + 一意キーの差し替え
 - `20261009000000_add_wall.sql` - 寄せ書きウォールの 5 テーブル・RLS・DB 関数 `wall_insert_post_checked` / `wall_add_report`
 - `20261010000000_add_wall_daily_max.sql` - wall_boards.daily_max
 - `20261011000000_add_wall_engagement.sql` - 寄せ書きの追加機能（wall_topics / wall_empathies、wall_posts の reaction / topic_id / note_color / note_deco / empathy_count、wall_boards の empathy_* / customer_pick_enabled、DB 関数 `wall_toggle_empathy`）
@@ -684,6 +686,7 @@ export async function GET(req, { params }) {
 **店舗テーブル (`stores`):**
 - `name` / `owner_name` / `owner_email` / `phone` / `postal_code` / `address` - メール本文差し込みに使用
 - `reminder_enabled` / `reminder_time` - LINE リマインダーの有効性と送信時刻（デフォルト 19:00）
+- `reminder_same_day_enabled` / `reminder_same_day_time` - 当日リマインダー（既定 OFF / 09:00。前日などのリマインダーとは独立）
 - `follow_enabled` / `follow_base` / `follow_days_after` / `follow_time` / `follow_template` - LINE フォローメッセージ（既定 OFF。基準日 + N 日後に送信）
 - `google_calendar_id` / `google_calendar_source` / `google_calendar_refresh_token` - Calendar 連携情報
 - `line_channel_access_token` - LINE Messaging API 用

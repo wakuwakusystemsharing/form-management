@@ -2604,7 +2604,7 @@ export default function StoreDetailPage() {
                   <p className="text-xs text-muted-foreground">
                     設定した日数前にLINEリマインドメッセージを送信します（通数を1消費します）
                   </p>
-                  {editingStore.reminder_enabled !== false && !(editingStore.line_channel_access_token || '').trim() && (
+                  {(editingStore.reminder_enabled !== false || editingStore.reminder_same_day_enabled === true) && !(editingStore.line_channel_access_token || '').trim() && (
                     <p className="text-xs text-red-600 font-medium">
                       ⚠ LINE チャネルアクセストークンが未設定のため、この店舗にはリマインダーが送信されません。上の「LINE チャネルアクセストークン」を設定してください。
                     </p>
@@ -2659,10 +2659,59 @@ export default function StoreDetailPage() {
                     <p>※ 送信は毎時 0 分にまとめて行います。設定時刻から数分以内に届きます。同じ予約には 1 回だけ送信されます。</p>
                   </div>
                 )}
-                {editingStore.reminder_enabled !== false && (
+
+                {/* 当日リマインダー（前日などのリマインダーとは独立。reminder_same_day_enabled / reminder_same_day_time） */}
+                <div className="space-y-2 border-t pt-3">
+                  <Label>当日リマインダー</Label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={editingStore.reminder_same_day_enabled === true}
+                      onClick={() => setEditingStore({...editingStore, reminder_same_day_enabled: editingStore.reminder_same_day_enabled !== true})}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editingStore.reminder_same_day_enabled === true ? 'bg-primary' : 'bg-gray-300'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editingStore.reminder_same_day_enabled === true ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                    <span className="text-sm text-muted-foreground">
+                      {editingStore.reminder_same_day_enabled === true ? '有効' : '無効'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    予約当日の指定時刻に「本日の予約」をお知らせします。上の予約リマインダー（前日など）とは別に送信されるため、両方 ON なら前日と当日の 2 回届きます（それぞれ通数を 1 消費します）
+                  </p>
+                  {editingStore.reminder_same_day_enabled === true && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>当日の送信時刻</Label>
+                        <Select
+                          value={editingStore.reminder_same_day_time || '09:00'}
+                          onValueChange={(value) => setEditingStore({...editingStore, reminder_same_day_time: value})}
+                        >
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 16 }, (_, i) => {
+                              const hour = i + 6;
+                              const value = `${String(hour).padStart(2, '0')}:00`;
+                              return <SelectItem key={value} value={value}>{value}</SelectItem>;
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        <p>当日に予約がある顧客へ {editingStore.reminder_same_day_time || '09:00'} に送信します。送信時刻の時点で予約時刻を過ぎている予約には送りません</p>
+                        <p>※ 送信時刻より後に入った当日予約には、次の毎時 0 分の送信で届きます。文面は下の「文面を編集」と共通です（既定の見出しだけ「【予約当日メッセージ】」になります）</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {(editingStore.reminder_enabled !== false || editingStore.reminder_same_day_enabled === true) && (
                   <ReminderTemplateEditor
                     storeName={editingStore.name}
-                    daysBefore={editingStore.reminder_days_before || 1}
+                    daysBefore={editingStore.reminder_enabled !== false ? (editingStore.reminder_days_before || 1) : 0}
                     value={editingStore.reminder_template}
                     onChange={(next) => setEditingStore({ ...editingStore, reminder_template: next })}
                   />
