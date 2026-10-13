@@ -19,6 +19,7 @@ import type { FollowMessage, FollowMessageSummary, ReminderLogSummary, ReminderP
 import type { Store } from '@/types/store';
 import {
   computeReminderScheduledAt,
+  computeSameDayReminderScheduledAt,
   computeScheduledAt,
   normalizeFollowBase,
   normalizeFollowDaysAfter,
@@ -540,7 +541,7 @@ export async function getReminderLogSummariesByReservationIds(
   try {
     const ids = Array.from(new Set((reservationIds || []).filter(Boolean)));
     if (ids.length === 0) return result;
-    type Row = { reservation_id: string; target_date: string; status: ReminderLogSummary['status']; skip_reason: string | null; sent_at: string | null; last_error: string | null };
+    type Row = { reservation_id: string; target_date: string; kind?: ReminderLogSummary['kind'] | null; status: ReminderLogSummary['status']; skip_reason: string | null; sent_at: string | null; last_error: string | null };
     let rows: Row[] = [];
     if (isLocal()) {
       rows = readJsonFile<Row>(REMINDER_LOG_FILE).filter((r) => ids.includes(r.reservation_id));
@@ -550,7 +551,7 @@ export async function getReminderLogSummariesByReservationIds(
       for (let i = 0; i < ids.length; i += 500) {
         const { data, error } = await (client as any)
           .from('reminder_logs')
-          .select('reservation_id,target_date,status,skip_reason,sent_at,last_error')
+          .select('reservation_id,target_date,kind,status,skip_reason,sent_at,last_error')
           .in('reservation_id', ids.slice(i, i + 500));
         if (error) {
           console.error('[reminder-log] summaries error:', error.message);
@@ -559,17 +560,25 @@ export async function getReminderLogSummariesByReservationIds(
         rows.push(...(data || []));
       }
     }
+    // 同じ予約に複数行（対象日違い / 前日と当日）があるときは「最新の対象日」→「当日 > 前日」の順で代表 1 件を選ぶ
+    const kindOf = (r: Row): ReminderLogSummary['kind'] => (r.kind === 'same_day' ? 'same_day' : 'before');
+    const loggedKinds: Record<string, Set<ReminderLogSummary['kind']>> = {};
     rows.forEach((r) => {
+      const kind = kindOf(r);
+      (loggedKinds[r.reservation_id] ||= new Set()).add(kind);
       const prev = result[r.reservation_id];
-      if (prev && prev.target_date > r.target_date) return;
+      if (prev && (prev.target_date > r.target_date || (prev.target_date === r.target_date && prev.kind === 'same_day' && kind === 'before'))) return;
       result[r.reservation_id] = {
         status: r.status,
+        kind,
+        logged_kinds: [],
         target_date: r.target_date,
         skip_reason: r.skip_reason ?? null,
         sent_at: r.sent_at ?? null,
         last_error: r.last_error ?? null,
       };
     });
+    Object.keys(result).forEach((id) => { result[id].logged_kinds = Array.from(loggedKinds[id] || []); });
   } catch (e) {
     console.error('[reminder-log] summaries failed:', e);
   }
@@ -577,8 +586,9 @@ export async function getReminderLogSummariesByReservationIds(
 }
 
 /**
- * 送信記録がまだ無い予約について、店舗のリマインダー設定から「いつ送られる予定か」を計算する（顧客詳細の表示用）。
- * 店舗のリマインダーが OFF / トークン未設定、予約がキャンセル / LINE ユーザーでない、予定が過去（対象日を過ぎた）ものは含めない。
+ * 送信記録がまだ無い予約について、店舗のリマインダー設定から「次にいつ送られる予定か」を計算する（顧客詳細の表示用）。
+ * 前日などのリマインダーと当日リマインダーのうち、記録がまだ無く・送信日を過ぎていないものの早い方を 1 件返す。
+ * 店舗のリマインダーが両方 OFF / トークン未設定、予約がキャンセル / LINE ユーザーでないものは含めない。
  */
 export async function getReminderPlansForReservations(
   storeId: string,
@@ -589,7 +599,7 @@ export async function getReminderPlansForReservations(
   const result: Record<string, ReminderPlanSummary> = {};
   try {
     if (!storeId || reservations.length === 0) return result;
-    let store: Pick<Store, 'reminder_enabled' | 'reminder_days_before' | 'reminder_time' | 'line_channel_access_token'> | null = null;
+    let store: Pick<Store, 'reminder_enabled' | 'reminder_days_before' | 'reminder_time' | 'reminder_same_day_enabled' | 'reminder_same_day_time' | 'line_channel_access_token'> | null = null;
     if (isLocal()) {
       store = readJsonFile<Store>(STORES_FILE).find((s) => s.id === storeId) || null;
     } else {
@@ -597,22 +607,36 @@ export async function getReminderPlansForReservations(
       if (!client) return result;
       const { data, error } = await (client as any)
         .from('stores')
-        .select('reminder_enabled,reminder_days_before,reminder_time,line_channel_access_token')
+        .select('reminder_enabled,reminder_days_before,reminder_time,reminder_same_day_enabled,reminder_same_day_time,line_channel_access_token')
         .eq('id', storeId)
         .maybeSingle();
       if (error) { console.error('[reminder-plan] store lookup error:', error.message); return result; }
       store = data || null;
     }
-    if (!store || store.reminder_enabled === false || !(store.line_channel_access_token || '').trim()) return result;
+    if (!store || !(store.line_channel_access_token || '').trim()) return result;
+    const beforeOn = store.reminder_enabled !== false;
+    const sameDayOn = store.reminder_same_day_enabled === true;
+    if (!beforeOn && !sameDayOn) return result;
     const todayJst = toJstDateString(now);
     for (const r of reservations) {
-      if (existingLogs[r.id] || !r.line_user_id || r.status === 'cancelled') continue;
+      if (!r.line_user_id || r.status === 'cancelled') continue;
       if (typeof r.reservation_date !== 'string') continue;
-      const scheduledAt = computeReminderScheduledAt(r.reservation_date, store.reminder_days_before, store.reminder_time);
-      if (!scheduledAt) continue;
-      // 対象日（送信日）を過ぎたものは予定として出さない（当日中なら遅れて送られる可能性があるので残す）
-      if (toJstDateString(new Date(scheduledAt)) < todayJst) continue;
-      result[r.id] = { scheduled_at: scheduledAt };
+      const existing = existingLogs[r.id];
+      const logged = new Set<ReminderLogSummary['kind']>(existing ? (existing.logged_kinds?.length ? existing.logged_kinds : [existing.kind]) : []);
+      const candidates: ReminderPlanSummary[] = [];
+      if (beforeOn && !logged.has('before')) {
+        const at = computeReminderScheduledAt(r.reservation_date, store.reminder_days_before, store.reminder_time);
+        if (at) candidates.push({ scheduled_at: at, kind: 'before' });
+      }
+      if (sameDayOn && !logged.has('same_day')) {
+        const at = computeSameDayReminderScheduledAt(r.reservation_date, store.reminder_same_day_time);
+        if (at) candidates.push({ scheduled_at: at, kind: 'same_day' });
+      }
+      // 対象日（送信日）を過ぎたものは予定として出さない（当日中なら遅れて送られる可能性があるので残す）。残った中で早いもの
+      const next = candidates
+        .filter((c) => toJstDateString(new Date(c.scheduled_at)) >= todayJst)
+        .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))[0];
+      if (next) result[r.id] = next;
     }
   } catch (e) {
     console.error('[reminder-plan] failed:', e);

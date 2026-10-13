@@ -65,10 +65,15 @@ export const FOLLOW_MESSAGE_SKIP_REASON_LABELS: Record<FollowMessageSkipReason, 
 // ---------------------------------------------------------------------------
 
 export type ReminderLogStatus = 'sending' | 'sent' | 'failed' | 'skipped';
+/** before = 何日前リマインダー、same_day = 当日リマインダー（reminder_logs.kind） */
+export type ReminderLogKind = 'before' | 'same_day';
 
-/** 顧客詳細の予約履歴に同梱する要約（最新の対象日の 1 件） */
+/** 顧客詳細の予約履歴に同梱する要約（同じ予約に前日・当日の両方があれば当日を優先した 1 件） */
 export interface ReminderLogSummary {
   status: ReminderLogStatus;
+  kind: ReminderLogKind;
+  /** この予約について記録がある種別（送信予定の計算で「まだ記録が無い種別」を知るため） */
+  logged_kinds: ReminderLogKind[];
   target_date: string;
   skip_reason: string | null;
   sent_at: string | null;
@@ -84,5 +89,6 @@ export const REMINDER_LOG_STATUS_LABELS: Record<ReminderLogStatus, string> = {
 
 /** まだ送信記録が無い予約に対する、店舗設定から計算したリマインダーの送信予定（顧客詳細の表示用） */
 export interface ReminderPlanSummary {
-  scheduled_at: string;  // ISO（UTC）。予約日 - reminder_days_before 日 の reminder_time（JST）
+  scheduled_at: string;  // ISO（UTC）。before: 予約日 - reminder_days_before 日 の reminder_time（JST）/ same_day: 予約日当日の reminder_same_day_time
+  kind: ReminderLogKind;
 }

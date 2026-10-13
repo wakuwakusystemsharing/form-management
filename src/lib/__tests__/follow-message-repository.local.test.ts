@@ -241,10 +241,31 @@ describe('getReminderPlansForReservations（送信予定の表示用）', () => 
       { id: 'e', reservation_date: '2026-09-09', line_user_id: 'U1', status: 'pending' }, // 送信日 = 今日（9/8）→ 出す
       { id: 'f', reservation_date: '2026-09-20', line_user_id: 'U1', status: 'pending' },
     ];
-    const logs = { f: { status: 'sent' as const, target_date: '2026-09-20', skip_reason: null, sent_at: null, last_error: null } };
+    const logs = { f: { status: 'sent' as const, kind: 'before' as const, logged_kinds: ['before' as const], target_date: '2026-09-20', skip_reason: null, sent_at: null, last_error: null } };
     const plans = await repo.getReminderPlansForReservations('st1', rsvs, logs, NOW);
     expect(Object.keys(plans).sort()).toEqual(['a', 'e']);
-    expect(plans.a.scheduled_at).toBe('2026-09-19T10:00:00.000Z');
+    expect(plans.a).toEqual({ scheduled_at: '2026-09-19T10:00:00.000Z', kind: 'before' });
+  });
+
+  it('当日リマインダー ON: 前日の記録があれば当日の予定を出す。前日 OFF なら当日の予定だけ', async () => {
+    writeStores({ reminder_enabled: true, reminder_days_before: 1, reminder_time: '19:00', reminder_same_day_enabled: true, reminder_same_day_time: '09:00', line_channel_access_token: 'tok' });
+    const rsvs = [
+      { id: 'a', reservation_date: '2026-09-20', line_user_id: 'U1', status: 'pending' },
+      { id: 'f', reservation_date: '2026-09-20', line_user_id: 'U1', status: 'pending' },
+      { id: 'g', reservation_date: '2026-09-20', line_user_id: 'U1', status: 'pending' },
+    ];
+    const logs = {
+      f: { status: 'sent' as const, kind: 'before' as const, logged_kinds: ['before' as const], target_date: '2026-09-20', skip_reason: null, sent_at: null, last_error: null },
+      g: { status: 'sent' as const, kind: 'same_day' as const, logged_kinds: ['before' as const, 'same_day' as const], target_date: '2026-09-20', skip_reason: null, sent_at: null, last_error: null },
+    };
+    const plans = await repo.getReminderPlansForReservations('st1', rsvs, logs, NOW);
+    expect(Object.keys(plans).sort()).toEqual(['a', 'f']);
+    expect(plans.a).toEqual({ scheduled_at: '2026-09-19T10:00:00.000Z', kind: 'before' });   // 先に来る前日を出す
+    expect(plans.f).toEqual({ scheduled_at: '2026-09-20T00:00:00.000Z', kind: 'same_day' });
+
+    writeStores({ reminder_enabled: false, reminder_same_day_enabled: true, reminder_same_day_time: '08:00', line_channel_access_token: 'tok' });
+    const only = await repo.getReminderPlansForReservations('st1', [{ id: 'a', reservation_date: '2026-09-20', line_user_id: 'U1', status: 'pending' }], {}, NOW);
+    expect(only.a).toEqual({ scheduled_at: '2026-09-19T23:00:00.000Z', kind: 'same_day' });
   });
 
   it('リマインダー OFF / トークン無しの店舗は空', async () => {

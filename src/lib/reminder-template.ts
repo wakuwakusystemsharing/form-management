@@ -34,11 +34,14 @@ export interface ReminderContext {
   staffName: string;         // 無ければ ''
 }
 
+/** daysBefore: 1 = 前日、2〜 = N 日前、0 = 当日（当日リマインダー） */
 export function defaultHeaderTitle(daysBefore: number): string {
+  if (daysBefore === 0) return '【予約当日メッセージ】';
   return daysBefore === 1 ? '【予約前日メッセージ】' : `【予約${daysBefore}日前メッセージ】`;
 }
 
 export function defaultBodyLabel(daysBefore: number): string {
+  if (daysBefore === 0) return '本日の予約をお知らせします';
   return daysBefore === 1 ? '明日の予約をお知らせします' : `${daysBefore}日後の予約をお知らせします`;
 }
 
