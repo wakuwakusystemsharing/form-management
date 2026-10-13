@@ -4,7 +4,7 @@ import path from 'path';
 import { Store } from '@/types/store';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
-import { FOLLOW_DAYS_AFTER_OPTIONS } from '@/lib/follow-message-scheduler';
+import { FOLLOW_DAYS_AFTER_OPTIONS, REMINDER_BEFORE_TIME_OPTIONS } from '@/lib/follow-message-scheduler';
 import { applyFollowSettingsToScheduledRows, backfillFollowMessagesForStore } from '@/lib/follow-message-repository';
 
 const TIME_HH00_RE = /^([01]\d|2[0-3]):00$/;
@@ -51,6 +51,13 @@ function validateReminderSettings(body: Record<string, unknown>): string | null 
   }
   if ('reminder_same_day_time' in body && (typeof body.reminder_same_day_time !== 'string' || !TIME_HH00_RE.test(body.reminder_same_day_time))) {
     return '当日リマインダーの送信時刻は HH:00 形式で指定してください';
+  }
+  // 直前リマインダー（予約時間の N 分前。前日・当日とは独立）
+  if ('reminder_before_time_enabled' in body && typeof body.reminder_before_time_enabled !== 'boolean') {
+    return '直前リマインダーの有効/無効の値が不正です';
+  }
+  if ('reminder_before_time_minutes' in body && (typeof body.reminder_before_time_minutes !== 'number' || !REMINDER_BEFORE_TIME_OPTIONS.includes(body.reminder_before_time_minutes))) {
+    return '直前リマインダーの「何分前」は選択肢の中から指定してください';
   }
   return null;
 }

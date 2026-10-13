@@ -15,6 +15,7 @@ import StoreAdminManager from '@/components/StoreAdminManager';
 import StoreAdminMenuSettings from '@/components/StoreAdminMenuSettings';
 import FormHistoryDialog from '@/components/FormHistoryDialog';
 import ReminderTemplateEditor from '@/components/ReminderTemplateEditor';
+import { REMINDER_BEFORE_TIME_OPTIONS, formatMinutesJa } from '@/lib/follow-message-scheduler';
 import FollowTemplateEditor from '@/components/FollowTemplateEditor';
 import { FOLLOW_DAYS_AFTER_OPTIONS } from '@/lib/follow-message-scheduler';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -2604,7 +2605,7 @@ export default function StoreDetailPage() {
                   <p className="text-xs text-muted-foreground">
                     設定した日数前にLINEリマインドメッセージを送信します（通数を1消費します）
                   </p>
-                  {(editingStore.reminder_enabled !== false || editingStore.reminder_same_day_enabled === true) && !(editingStore.line_channel_access_token || '').trim() && (
+                  {(editingStore.reminder_enabled !== false || editingStore.reminder_same_day_enabled === true || editingStore.reminder_before_time_enabled === true) && !(editingStore.line_channel_access_token || '').trim() && (
                     <p className="text-xs text-red-600 font-medium">
                       ⚠ LINE チャネルアクセストークンが未設定のため、この店舗にはリマインダーが送信されません。上の「LINE チャネルアクセストークン」を設定してください。
                     </p>
@@ -2702,16 +2703,63 @@ export default function StoreDetailPage() {
                       </div>
                       <div className="text-xs text-muted-foreground space-y-1">
                         <p>当日に予約がある顧客へ {editingStore.reminder_same_day_time || '09:00'} に送信します。送信時刻の時点で予約時刻を過ぎている予約には送りません</p>
-                        <p>※ 送信時刻より後に入った当日予約には、次の毎時 0 分の送信で届きます。文面は下の「文面を編集」と共通です（既定の見出しだけ「【予約当日メッセージ】」になります）</p>
+                        <p>※ 送信時刻より後に入った当日予約には、次の送信（10 分おき）で届きます。文面は下の「文面を編集」と共通です（既定の見出しだけ「【予約当日メッセージ】」になります）</p>
                       </div>
                     </>
                   )}
                 </div>
 
-                {(editingStore.reminder_enabled !== false || editingStore.reminder_same_day_enabled === true) && (
+                {/* 直前リマインダー（予約時間の N 分前。前日・当日とは独立。reminder_before_time_enabled / reminder_before_time_minutes） */}
+                <div className="space-y-2 border-t pt-3">
+                  <Label>直前リマインダー（予約時間の〇分前）</Label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={editingStore.reminder_before_time_enabled === true}
+                      onClick={() => setEditingStore({...editingStore, reminder_before_time_enabled: editingStore.reminder_before_time_enabled !== true})}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editingStore.reminder_before_time_enabled === true ? 'bg-primary' : 'bg-gray-300'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editingStore.reminder_before_time_enabled === true ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                    <span className="text-sm text-muted-foreground">
+                      {editingStore.reminder_before_time_enabled === true ? '有効' : '無効'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    予約時間の指定した時間前に「まもなくご予約のお時間です」とお知らせします。前日・当日のリマインダーとは別に送信されます（通数を 1 消費します）
+                  </p>
+                  {editingStore.reminder_before_time_enabled === true && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>何分前に送るか</Label>
+                        <Select
+                          value={String(editingStore.reminder_before_time_minutes || 60)}
+                          onValueChange={(value) => setEditingStore({...editingStore, reminder_before_time_minutes: parseInt(value)})}
+                        >
+                          <SelectTrigger className="w-[160px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {REMINDER_BEFORE_TIME_OPTIONS.map((m) => (
+                              <SelectItem key={m} value={String(m)}>{formatMinutesJa(m)}前</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        <p>予約時間の {formatMinutesJa(editingStore.reminder_before_time_minutes || 60)}前に送信します（送信は 10 分おきなので、最大 10 分ほど遅れることがあります）</p>
+                        <p>※ 送信予定時刻を過ぎてから入った予約、時刻の無い予約には送りません。文面は下の「文面を編集」と共通です（既定の見出しだけ「【ご予約{formatMinutesJa(editingStore.reminder_before_time_minutes || 60)}前のお知らせ】」になります）</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {(editingStore.reminder_enabled !== false || editingStore.reminder_same_day_enabled === true || editingStore.reminder_before_time_enabled === true) && (
                   <ReminderTemplateEditor
                     storeName={editingStore.name}
                     daysBefore={editingStore.reminder_enabled !== false ? (editingStore.reminder_days_before || 1) : 0}
+                    beforeMinutes={editingStore.reminder_enabled === false && editingStore.reminder_same_day_enabled !== true && editingStore.reminder_before_time_enabled === true ? (editingStore.reminder_before_time_minutes || 60) : undefined}
                     value={editingStore.reminder_template}
                     onChange={(next) => setEditingStore({ ...editingStore, reminder_template: next })}
                   />

@@ -13,7 +13,9 @@
  *      予約時刻を過ぎた予約には送らない。前日などのリマインダーとは独立に ON/OFF（同じ予約に両方送られることもある）
  *   3. 対象日の予約（キャンセル以外・line_user_id あり）を取得
  *   4. reminder_logs に (reservation_id, target_date, kind) で行を確保（sending）してから送信 → sent / failed
- *      kind = 'before'（何日前）/ 'same_day'（当日）
+ *      直前リマインダー（reminder_before_time_enabled）: 予約日時 − N 分 <= 今 < 予約日時 の予約（今日・明日の予約を見る）。
+ *      予定時刻を過ぎてから入った予約（created_at > 予定）・時刻の無い予約には送らない。cron は 10 分おき想定
+ *      kind = 'before'（何日前）/ 'same_day'（当日）/ 'before_time'（直前）
  *      - 既に sent / skipped の予約は送らない（二重送信防止）
  *      - failed は 3 回まで再試行。sending のまま 10 分以上経った行（前回の異常終了）は再確保できる
  *      - X-Line-Retry-Key に reminder_logs.id（UUID）を付け、LINE 側でも重複を防ぐ
@@ -78,8 +80,41 @@ function isSameDayReminderTarget(reservationTime: unknown, currentHHMM: string):
   if (!/^\d{2}:\d{2}$/.test(t)) return true;
   return t > currentHHMM;
 }
-type ReminderKind = "before" | "same_day";
-type ReminderJob = { kind: ReminderKind; targetDate: string; daysBefore: number };
+type ReminderKind = "before" | "same_day" | "before_time";
+// targetDates: 予約日としてマッチさせる日付（before / same_day は 1 つ、before_time は今日と明日）
+type ReminderJob = { kind: ReminderKind; targetDates: string[]; daysBefore: number; beforeMinutes?: number };
+
+// ===== 直前リマインダー（src/lib/follow-message-scheduler.ts と同じ判定） =====
+const BEFORE_TIME_OPTIONS = [30, 60, 90, 120, 180, 240, 360, 720];
+function normalizeBeforeTimeMinutes(v: unknown): number {
+  return typeof v === "number" && BEFORE_TIME_OPTIONS.includes(v) ? v : 60;
+}
+function formatMinutesJa(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}分`;
+  return m === 0 ? `${h}時間` : `${h}時間${m}分`;
+}
+/** 予約日時（JST）の UTC ms。時刻が無ければ null */
+function reservationAtUtcMs(reservationDate: string, reservationTime: unknown): number | null {
+  const t = String(reservationTime || "").slice(0, 5);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reservationDate) || !/^\d{2}:\d{2}$/.test(t)) return null;
+  const [y, m, d] = reservationDate.split("-").map((s) => parseInt(s, 10));
+  const [hh, mm] = t.split(":").map((s) => parseInt(s, 10));
+  return Date.UTC(y, m - 1, d, hh, mm, 0) - 9 * 60 * 60 * 1000;
+}
+/** 直前リマインダーを今送るべきか: 予定 <= 今 < 予約時刻 かつ 予約作成が予定より前 */
+function isBeforeTimeReminderDue(reservationDate: string, reservationTime: unknown, minutes: number, createdAt: unknown, nowMs: number): boolean {
+  const at = reservationAtUtcMs(reservationDate, reservationTime);
+  if (at === null) return false;
+  const scheduled = at - minutes * 60 * 1000;
+  if (!(nowMs >= scheduled && nowMs < at)) return false;
+  if (typeof createdAt === "string" && createdAt) {
+    const created = new Date(createdAt).getTime();
+    if (!isNaN(created) && created > scheduled) return false;
+  }
+  return true;
+}
 
 // ===== リマインダー文面テンプレート =====
 // ※ src/lib/reminder-template.ts（管理画面プレビュー）と同じロジック。変更時は両方を合わせること
@@ -87,12 +122,14 @@ const REMINDER_DEFAULT_HEADER_COLOR = "#877059";
 const REMINDER_DEFAULT_TEXT_COLOR = "#333333";
 const REMINDER_DEFAULT_FOOTER = "心よりお待ちしております";
 
-// daysBefore: 1 = 前日、2〜 = N 日前、0 = 当日（当日リマインダー）
-function defaultHeaderTitle(daysBefore: number): string {
+// daysBefore: 1 = 前日、2〜 = N 日前、0 = 当日（当日リマインダー）。beforeMinutes > 0 なら直前リマインダー
+function defaultHeaderTitle(daysBefore: number, beforeMinutes?: number): string {
+  if (beforeMinutes && beforeMinutes > 0) return `【ご予約${formatMinutesJa(beforeMinutes)}前のお知らせ】`;
   if (daysBefore === 0) return "【予約当日メッセージ】";
   return daysBefore === 1 ? "【予約前日メッセージ】" : `【予約${daysBefore}日前メッセージ】`;
 }
-function defaultBodyLabel(daysBefore: number): string {
+function defaultBodyLabel(daysBefore: number, beforeMinutes?: number): string {
+  if (beforeMinutes && beforeMinutes > 0) return `${formatMinutesJa(beforeMinutes)}後にご予約のお時間です`;
   if (daysBefore === 0) return "本日の予約をお知らせします";
   return daysBefore === 1 ? "明日の予約をお知らせします" : `${daysBefore}日後の予約をお知らせします`;
 }
@@ -112,11 +149,11 @@ function applyReminderPlaceholders(text: string, ctx) {
 }
 function resolveReminderContent(template, ctx) {
   const t = template && typeof template === "object" ? template : {};
-  const headerTitle = (t.header_title || "").trim() ? applyReminderPlaceholders(t.header_title, ctx) : defaultHeaderTitle(ctx.daysBefore);
+  const headerTitle = (t.header_title || "").trim() ? applyReminderPlaceholders(t.header_title, ctx) : defaultHeaderTitle(ctx.daysBefore, ctx.beforeMinutes);
   const headerColor = isValidHex(t.header_color) ? t.header_color : REMINDER_DEFAULT_HEADER_COLOR;
   const textColor = isValidHex(t.text_color) ? t.text_color : REMINDER_DEFAULT_TEXT_COLOR;
   const customBody = (t.body_text || "").trim() ? applyReminderPlaceholders(t.body_text, ctx).trim() : "";
-  const bodyText = customBody || defaultBodyLabel(ctx.daysBefore);
+  const bodyText = customBody || defaultBodyLabel(ctx.daysBefore, ctx.beforeMinutes);
   const showDetails = t.show_details !== false;
   const showFooter = t.show_footer !== false;
   const footerText = (t.footer_text || "").trim() ? applyReminderPlaceholders(t.footer_text, ctx).trim() : REMINDER_DEFAULT_FOOTER;
@@ -160,7 +197,7 @@ function buildFlexMessage(template, ctx) {
   }
   return {
     type: "flex",
-    altText: `${c.headerTitle}${c.isCustomBody ? "" : defaultBodyLabel(ctx.daysBefore)}`.slice(0, 400),
+    altText: `${c.headerTitle}${c.isCustomBody ? "" : defaultBodyLabel(ctx.daysBefore, ctx.beforeMinutes)}`.slice(0, 400),
     contents: {
       type: "bubble",
       size: "mega",
@@ -291,8 +328,8 @@ Deno.serve(async () => {
     stores = await fetchAll((from, to) =>
       supabase
         .from("stores")
-        .select("id,name,line_channel_access_token,reminder_enabled,reminder_time,reminder_days_before,reminder_template,reminder_same_day_enabled,reminder_same_day_time")
-        .or("reminder_enabled.eq.true,reminder_same_day_enabled.eq.true")
+        .select("id,name,line_channel_access_token,reminder_enabled,reminder_time,reminder_days_before,reminder_template,reminder_same_day_enabled,reminder_same_day_time,reminder_before_time_enabled,reminder_before_time_minutes")
+        .or("reminder_enabled.eq.true,reminder_same_day_enabled.eq.true,reminder_before_time_enabled.eq.true")
         .not("line_channel_access_token", "is", null)
         .neq("line_channel_access_token", "")
         .order("id")
@@ -303,16 +340,21 @@ Deno.serve(async () => {
     return json({ error: "店舗取得に失敗しました" }, 500);
   }
 
-  // 2. 送信時刻に達している店舗だけ対象。店舗ごとに「何日前」「当日」のジョブ（対象日）を決める
+  // 2. 送信時刻に達している店舗だけ対象。店舗ごとに「何日前」「当日」「直前」のジョブ（対象日）を決める
+  const nowMs = Date.now();
   const storeMap = new Map<string, { token: string; name: string; template: unknown; jobs: ReminderJob[] }>();
   for (const s of stores) {
     const jobs: ReminderJob[] = [];
     if (s.reminder_enabled !== false && isReminderTimeReached(s.reminder_time, currentHHMM)) {
       const daysBefore = normalizeDaysBefore(s.reminder_days_before);
-      jobs.push({ kind: "before", targetDate: addDays(todayJst, daysBefore), daysBefore });
+      jobs.push({ kind: "before", targetDates: [addDays(todayJst, daysBefore)], daysBefore });
     }
     if (s.reminder_same_day_enabled === true && currentHHMM >= normalizeSameDayTime(s.reminder_same_day_time)) {
-      jobs.push({ kind: "same_day", targetDate: todayJst, daysBefore: 0 });
+      jobs.push({ kind: "same_day", targetDates: [todayJst], daysBefore: 0 });
+    }
+    if (s.reminder_before_time_enabled === true) {
+      // 日付をまたぐ直前（例: 00:15 の予約の 1 時間前）も拾えるよう今日と明日の予約を見る
+      jobs.push({ kind: "before_time", targetDates: [todayJst, addDays(todayJst, 1)], daysBefore: 0, beforeMinutes: normalizeBeforeTimeMinutes(s.reminder_before_time_minutes) });
     }
     if (jobs.length === 0) continue;
     storeMap.set(s.id, { token: s.line_channel_access_token, name: s.name || "店舗", template: s.reminder_template || null, jobs });
@@ -322,7 +364,7 @@ Deno.serve(async () => {
     return json({ sent: 0, already: 0, skipped: 0, failed: 0 });
   }
   const storeIds = [...storeMap.keys()];
-  const targetDates = [...new Set([...storeMap.values()].flatMap((s) => s.jobs.map((j) => j.targetDate)))];
+  const targetDates = [...new Set([...storeMap.values()].flatMap((s) => s.jobs.flatMap((j) => j.targetDates)))];
   console.log(`対象店舗数: ${storeIds.length}件 / 対象日: ${targetDates.join(", ")}`);
 
   // 3. 対象日の予約
@@ -331,7 +373,7 @@ Deno.serve(async () => {
     reservations = await fetchAll((from, to) =>
       supabase
         .from("reservations")
-        .select("id,store_id,reservation_date,reservation_time,menu_name,submenu_name,line_user_id,status,customer_name,staff_name")
+        .select("id,store_id,reservation_date,reservation_time,menu_name,submenu_name,line_user_id,status,customer_name,staff_name,created_at")
         .in("reservation_date", targetDates)
         .in("store_id", storeIds)
         .neq("status", "cancelled")
@@ -343,16 +385,17 @@ Deno.serve(async () => {
     console.error("予約取得エラー:", e);
     return json({ error: "予約取得に失敗しました" }, 500);
   }
-  // 店舗ごとのジョブ（何日前 / 当日）の対象日と一致するものだけに展開する（店舗ごとに「何日前」が違うため）。
-  // 当日リマインダーは予約時刻を過ぎた予約を除く
+  // 店舗ごとのジョブ（何日前 / 当日 / 直前）の対象日と一致するものだけに展開する（店舗ごとに「何日前」が違うため）。
+  // 当日リマインダーは予約時刻を過ぎた予約を除く。直前は「予定 <= 今 < 予約時刻」のものだけ
   const tasks: Array<{ reservation: any; job: ReminderJob }> = [];
   for (const r of reservations) {
     if (!r.line_user_id) continue;
     const storeInfo = storeMap.get(r.store_id);
     if (!storeInfo) continue;
     for (const job of storeInfo.jobs) {
-      if (r.reservation_date !== job.targetDate) continue;
+      if (!job.targetDates.includes(r.reservation_date)) continue;
       if (job.kind === "same_day" && !isSameDayReminderTarget(r.reservation_time, currentHHMM)) continue;
+      if (job.kind === "before_time" && !isBeforeTimeReminderDue(r.reservation_date, r.reservation_time, job.beforeMinutes || 60, r.created_at, nowMs)) continue;
       tasks.push({ reservation: r, job });
     }
   }
@@ -361,7 +404,7 @@ Deno.serve(async () => {
     return json({ sent: 0, already: 0, skipped: 0, failed: 0 });
   }
   reservations = reservations.filter((r) => tasks.some((t) => t.reservation.id === r.id));
-  console.log(`対象予約数: ${tasks.length}件（うち当日: ${tasks.filter((t) => t.job.kind === "same_day").length}件）`);
+  console.log(`対象予約数: ${tasks.length}件（うち当日: ${tasks.filter((t) => t.job.kind === "same_day").length}件 / 直前: ${tasks.filter((t) => t.job.kind === "before_time").length}件）`);
 
   // 4. {LINE名} 差し込み用の表示名
   const lineNameMap = new Map<string, string>();
@@ -422,6 +465,7 @@ Deno.serve(async () => {
       const flexMessage = buildFlexMessage(storeInfo.template, {
         storeName: storeInfo.name,
         daysBefore: job.daysBefore,
+        beforeMinutes: job.beforeMinutes,
         lineDisplayName: lineNameMap.get(`${reservation.store_id}:${reservation.line_user_id}`) || customerName,
         customerName,
         dateText: `${dateOnly} ${timeOnly}`,
