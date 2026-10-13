@@ -41,6 +41,8 @@ export interface Store {
   reminder_template?: ReminderTemplate | null; // リマインダー文面のカスタマイズ（null = デフォルト）
   reminder_same_day_enabled?: boolean;  // 当日リマインダー（予約当日の指定時刻に送信。前日などのリマインダーとは独立。既定 false）
   reminder_same_day_time?: string;      // 当日リマインダーの送信時刻（HH:00 形式、既定 09:00）。文面は reminder_template と共通
+  reminder_before_time_enabled?: boolean; // 直前リマインダー（予約時間の N 分前に送信。前日・当日とは独立。既定 false）
+  reminder_before_time_minutes?: number;  // 直前リマインダーの「何分前」（REMINDER_BEFORE_TIME_OPTIONS。既定 60）。文面は reminder_template と共通
   follow_enabled?: boolean;           // LINE フォローメッセージの有効/無効（既定 false）
   follow_base?: FollowBase;           // 基準日（既定 'reservation_date'）
   follow_days_after?: number;         // 基準日から何日後に送るか（1〜60。既定 7）

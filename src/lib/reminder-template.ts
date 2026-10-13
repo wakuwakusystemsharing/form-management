@@ -6,6 +6,7 @@
  *   ここを変更したら Edge Function 側も合わせて変更すること（Deno 側から src/ を import できないため）。
  */
 import type { ReminderTemplate } from '@/types/store';
+import { formatMinutesJa } from '@/lib/follow-message-scheduler';
 
 export const REMINDER_DEFAULT_HEADER_COLOR = '#877059';
 export const REMINDER_DEFAULT_TEXT_COLOR = '#333333';
@@ -25,6 +26,7 @@ export const REMINDER_PLACEHOLDERS: Array<{ key: string; label: string }> = [
 export interface ReminderContext {
   storeName: string;
   daysBefore: number;
+  beforeMinutes?: number;    // 直前リマインダーのとき「何分前」（> 0）。指定があれば daysBefore より優先して既定文言を決める
   lineDisplayName: string;   // 取得できなければお名前を入れる
   customerName: string;
   dateText: string;          // 2026年04月03日（木） 10:00
@@ -34,13 +36,15 @@ export interface ReminderContext {
   staffName: string;         // 無ければ ''
 }
 
-/** daysBefore: 1 = 前日、2〜 = N 日前、0 = 当日（当日リマインダー） */
-export function defaultHeaderTitle(daysBefore: number): string {
+/** daysBefore: 1 = 前日、2〜 = N 日前、0 = 当日（当日リマインダー）。beforeMinutes > 0 なら直前リマインダー（予約時間の N 分前） */
+export function defaultHeaderTitle(daysBefore: number, beforeMinutes?: number): string {
+  if (beforeMinutes && beforeMinutes > 0) return `【ご予約${formatMinutesJa(beforeMinutes)}前のお知らせ】`;
   if (daysBefore === 0) return '【予約当日メッセージ】';
   return daysBefore === 1 ? '【予約前日メッセージ】' : `【予約${daysBefore}日前メッセージ】`;
 }
 
-export function defaultBodyLabel(daysBefore: number): string {
+export function defaultBodyLabel(daysBefore: number, beforeMinutes?: number): string {
+  if (beforeMinutes && beforeMinutes > 0) return `${formatMinutesJa(beforeMinutes)}後にご予約のお時間です`;
   if (daysBefore === 0) return '本日の予約をお知らせします';
   return daysBefore === 1 ? '明日の予約をお知らせします' : `${daysBefore}日後の予約をお知らせします`;
 }
@@ -105,8 +109,8 @@ export function resolveMessageContent(
  */
 export function resolveReminderContent(template: ReminderTemplate | null | undefined, ctx: ReminderContext): ResolvedMessageContent {
   return resolveMessageContent(template, ctx, {
-    headerTitle: defaultHeaderTitle(ctx.daysBefore),
-    bodyText: defaultBodyLabel(ctx.daysBefore),
+    headerTitle: defaultHeaderTitle(ctx.daysBefore, ctx.beforeMinutes),
+    bodyText: defaultBodyLabel(ctx.daysBefore, ctx.beforeMinutes),
     footerText: REMINDER_DEFAULT_FOOTER,
   });
 }

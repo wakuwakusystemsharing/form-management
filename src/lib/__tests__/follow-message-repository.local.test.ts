@@ -268,6 +268,17 @@ describe('getReminderPlansForReservations（送信予定の表示用）', () => 
     expect(only.a).toEqual({ scheduled_at: '2026-09-19T23:00:00.000Z', kind: 'same_day' });
   });
 
+  it('直前リマインダー ON: 予約日時 − N 分の予定。時刻の無い予約・予定を過ぎた予約は出さない', async () => {
+    writeStores({ reminder_enabled: false, reminder_before_time_enabled: true, reminder_before_time_minutes: 90, line_channel_access_token: 'tok' });
+    const plans = await repo.getReminderPlansForReservations('st1', [
+      { id: 'a', reservation_date: '2026-09-20', reservation_time: '10:15:00', line_user_id: 'U1', status: 'pending' },
+      { id: 'b', reservation_date: '2026-09-20', reservation_time: null, line_user_id: 'U1', status: 'pending' },
+      { id: 'c', reservation_date: '2026-09-08', reservation_time: '09:00', line_user_id: 'U1', status: 'pending' }, // NOW より前
+    ], {}, NOW);
+    expect(Object.keys(plans)).toEqual(['a']);
+    expect(plans.a).toEqual({ scheduled_at: '2026-09-19T23:45:00.000Z', kind: 'before_time' }); // 10:15 JST − 90 分 = 08:45 JST
+  });
+
   it('リマインダー OFF / トークン無しの店舗は空', async () => {
     writeStores({ reminder_enabled: true, line_channel_access_token: '' });
     expect(await repo.getReminderPlansForReservations('st1', [{ id: 'a', reservation_date: '2026-09-20', line_user_id: 'U1', status: 'pending' }], {}, NOW)).toEqual({});

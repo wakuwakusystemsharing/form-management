@@ -444,6 +444,8 @@ interface Store {
   reminder_time?: string;         // リマインダー送信時刻（HH:00 形式、デフォルト '19:00'）
   reminder_same_day_enabled?: boolean; // 当日リマインダーの ON/OFF（デフォルト false。前日などとは独立）
   reminder_same_day_time?: string;     // 当日リマインダーの送信時刻（HH:00 形式、デフォルト '09:00'）
+  reminder_before_time_enabled?: boolean; // 直前リマインダー（予約時間の N 分前）の ON/OFF（デフォルト false）
+  reminder_before_time_minutes?: number;  // 何分前に送るか（30 分刻み 30〜720、デフォルト 60）
   follow_enabled?: boolean;       // LINE フォローメッセージの ON/OFF（デフォルト false）
   follow_base?: 'reservation_date' | 'created_at'; // フォローの基準日（予約日 / 予約受付日）
   follow_days_after?: number;     // 基準日から何日後に送るか（1〜60、デフォルト 7）

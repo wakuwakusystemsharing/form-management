@@ -133,14 +133,14 @@ function followBadge(summary: FollowMessageSummary | null | undefined): { label:
 function reminderBadge(summary: ReminderLogSummary | null | undefined, plan: ReminderPlanSummary | null | undefined): { label: string; className: string; title: string } | null {
   if (!summary) {
     if (!plan) return null;
-    const planName = plan.kind === 'same_day' ? '当日リマインダー' : 'リマインダー';
+    const planName = plan.kind === 'same_day' ? '当日リマインダー' : plan.kind === 'before_time' ? '直前リマインダー' : 'リマインダー';
     return {
       label: `${planName} ${formatJstShort(plan.scheduled_at)} 送信予定`,
       className: 'bg-sky-50 text-sky-700 border-sky-200',
       title: `予定: ${new Date(plan.scheduled_at).toLocaleString('ja-JP')}（店舗のリマインダー設定から計算）`,
     };
   }
-  const kindPrefix = summary.kind === 'same_day' ? '当日' : '';
+  const kindPrefix = summary.kind === 'same_day' ? '当日' : summary.kind === 'before_time' ? '直前' : '';
   const label = summary.status === 'sent' && summary.sent_at
     ? `${kindPrefix}リマインダー送信済み ${formatJstShort(summary.sent_at)}`
     : `${kindPrefix}${REMINDER_LOG_STATUS_LABELS[summary.status] || `リマインダー: ${summary.status}`}`;

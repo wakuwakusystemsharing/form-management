@@ -238,3 +238,59 @@ describe('当日リマインダー', () => {
     expect(defaultHeaderTitle(1)).toBe('【予約前日メッセージ】');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 直前リマインダー（予約時間の N 分前）
+// ---------------------------------------------------------------------------
+import {
+  REMINDER_BEFORE_TIME_OPTIONS,
+  normalizeReminderBeforeTimeMinutes,
+  formatMinutesJa,
+  computeBeforeTimeReminderScheduledAt,
+  isBeforeTimeReminderDue,
+} from '@/lib/follow-message-scheduler';
+
+describe('直前リマインダー', () => {
+  it('何分前の選択肢は 30 分刻み。範囲外・不正は 60', () => {
+    expect(REMINDER_BEFORE_TIME_OPTIONS).toEqual([30, 60, 90, 120, 180, 240, 360, 720]);
+    expect(normalizeReminderBeforeTimeMinutes(90)).toBe(90);
+    expect(normalizeReminderBeforeTimeMinutes(45)).toBe(60);
+    expect(normalizeReminderBeforeTimeMinutes('30')).toBe(60);
+    expect(normalizeReminderBeforeTimeMinutes(undefined)).toBe(60);
+  });
+  it('分の日本語表記', () => {
+    expect(formatMinutesJa(30)).toBe('30分');
+    expect(formatMinutesJa(60)).toBe('1時間');
+    expect(formatMinutesJa(90)).toBe('1時間30分');
+    expect(formatMinutesJa(720)).toBe('12時間');
+  });
+  it('送信予定 = 予約日時（JST）− N 分。時刻が無い予約は null', () => {
+    // 2026-09-20 10:15 JST − 30 分 = 09:45 JST = 00:45Z
+    expect(computeBeforeTimeReminderScheduledAt('2026-09-20', '10:15:00', 30)).toBe('2026-09-20T00:45:00.000Z');
+    // 日付をまたぐ: 00:15 JST − 60 分 = 前日 23:15 JST = 14:15Z
+    expect(computeBeforeTimeReminderScheduledAt('2026-09-20', '00:15', 60)).toBe('2026-09-19T14:15:00.000Z');
+    expect(computeBeforeTimeReminderScheduledAt('2026-09-20', null, 60)).toBeNull();
+    expect(computeBeforeTimeReminderScheduledAt('2026-09-20', '', 60)).toBeNull();
+    expect(computeBeforeTimeReminderScheduledAt('bad', '10:00', 60)).toBeNull();
+  });
+  it('送るのは「予定時刻 <= 今 < 予約時刻」のとき。予約時刻を過ぎたら送らない', () => {
+    const base = { reservationDate: '2026-09-20', reservationTime: '10:00', minutes: 60, createdAt: '2026-09-19T00:00:00Z' };
+    // 09:00 JST = 00:00Z
+    expect(isBeforeTimeReminderDue({ ...base, now: new Date('2026-09-19T23:59:00Z') })).toBe(false);
+    expect(isBeforeTimeReminderDue({ ...base, now: new Date('2026-09-20T00:00:00Z') })).toBe(true);
+    expect(isBeforeTimeReminderDue({ ...base, now: new Date('2026-09-20T00:50:00Z') })).toBe(true);
+    expect(isBeforeTimeReminderDue({ ...base, now: new Date('2026-09-20T01:00:00Z') })).toBe(false); // 10:00 JST = 予約時刻
+  });
+  it('予定時刻を過ぎてから入った予約（駆け込み）には送らない。時刻の無い予約は対象外', () => {
+    const now = new Date('2026-09-20T00:30:00Z'); // 09:30 JST
+    expect(isBeforeTimeReminderDue({ reservationDate: '2026-09-20', reservationTime: '10:00', minutes: 60, createdAt: '2026-09-20T00:10:00Z', now })).toBe(false);
+    expect(isBeforeTimeReminderDue({ reservationDate: '2026-09-20', reservationTime: '10:00', minutes: 60, createdAt: '2026-09-19T23:59:00Z', now })).toBe(true);
+    expect(isBeforeTimeReminderDue({ reservationDate: '2026-09-20', reservationTime: '10:00', minutes: 60, createdAt: null, now })).toBe(true);
+    expect(isBeforeTimeReminderDue({ reservationDate: '2026-09-20', reservationTime: null, minutes: 60, createdAt: null, now })).toBe(false);
+  });
+  it('文面の既定値: 直前は「【ご予約 N 前のお知らせ】」', () => {
+    expect(defaultHeaderTitle(0, 90)).toBe('【ご予約1時間30分前のお知らせ】');
+    expect(defaultBodyLabel(0, 30)).toBe('30分後にご予約のお時間です');
+    expect(defaultHeaderTitle(1)).toBe('【予約前日メッセージ】');
+  });
+});
