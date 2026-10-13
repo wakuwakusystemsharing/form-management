@@ -160,8 +160,8 @@ export function reminderTargetDate(todayJst: string, daysBefore: unknown): strin
 
 export const REMINDER_SAME_DAY_DEFAULT_TIME = '09:00';
 
-/** リマインダーの種別（reminder_logs.kind）。before = 何日前リマインダー、same_day = 当日リマインダー */
-export type ReminderKind = 'before' | 'same_day';
+/** リマインダーの種別（reminder_logs.kind）。before = 何日前、same_day = 当日、before_time = 予約時間の N 分前（直前） */
+export type ReminderKind = 'before' | 'same_day' | 'before_time';
 
 export function normalizeReminderSameDayTime(value: unknown): string {
   return typeof value === 'string' && /^([01]\d|2[0-3]):00$/.test(value) ? value : REMINDER_SAME_DAY_DEFAULT_TIME;
@@ -175,6 +175,68 @@ export function isSameDayReminderTarget(reservationTime: string | null | undefin
   const t = String(reservationTime || '').slice(0, 5);
   if (!/^\d{2}:\d{2}$/.test(t)) return true;
   return t > currentHHMM;
+}
+
+// ---------------------------------------------------------------------------
+// 直前リマインダー（予約時間の N 分前。stores.reminder_before_time_enabled / reminder_before_time_minutes）
+// 送信予定 = 予約日時（JST）− N 分。予約時刻を過ぎたら送らない。予定時刻より後に入った予約（駆け込み）にも送らない。
+// 時刻の無い予約は対象外。cron は 10 分おき想定（遅れは最大 10 分）。Edge Function send-reminders と同じ判定
+// ---------------------------------------------------------------------------
+
+export const REMINDER_BEFORE_TIME_OPTIONS: number[] = [30, 60, 90, 120, 180, 240, 360, 720];
+export const REMINDER_BEFORE_TIME_DEFAULT_MINUTES = 60;
+
+export function normalizeReminderBeforeTimeMinutes(value: unknown): number {
+  return typeof value === 'number' && REMINDER_BEFORE_TIME_OPTIONS.includes(value) ? value : REMINDER_BEFORE_TIME_DEFAULT_MINUTES;
+}
+
+/** 30 → 「30分」、60 → 「1時間」、90 → 「1時間30分」 */
+export function formatMinutesJa(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}分`;
+  return m === 0 ? `${h}時間` : `${h}時間${m}分`;
+}
+
+/** 予約日時（JST）の UTC ms。時刻が HH:MM[:SS] でなければ null */
+function reservationAtUtcMs(reservationDate: string, reservationTime: string | null | undefined): number | null {
+  if (!isDateString(reservationDate)) return null;
+  const t = String(reservationTime || '').slice(0, 5);
+  if (!/^\d{2}:\d{2}$/.test(t)) return null;
+  const [y, m, d] = reservationDate.split('-').map((s) => parseInt(s, 10));
+  const [hh, mm] = t.split(':').map((s) => parseInt(s, 10));
+  const ms = Date.UTC(y, m - 1, d, hh, mm, 0) - JST_OFFSET_MINUTES * 60 * 1000;
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/** 直前リマインダーの送信予定時刻（UTC ISO）。時刻の無い予約は null */
+export function computeBeforeTimeReminderScheduledAt(reservationDate: string, reservationTime: string | null | undefined, minutes: unknown): string | null {
+  const at = reservationAtUtcMs(reservationDate, reservationTime);
+  if (at === null) return null;
+  return new Date(at - normalizeReminderBeforeTimeMinutes(minutes) * 60 * 1000).toISOString();
+}
+
+/**
+ * 今、直前リマインダーを送るべきか:
+ * 予定時刻 <= 今 < 予約時刻 かつ 予約の作成が予定時刻より前（予定時刻を過ぎてから入った予約には送らない）
+ */
+export function isBeforeTimeReminderDue(args: {
+  reservationDate: string;
+  reservationTime: string | null | undefined;
+  minutes: unknown;
+  createdAt?: string | null;
+  now: Date;
+}): boolean {
+  const at = reservationAtUtcMs(args.reservationDate, args.reservationTime);
+  if (at === null) return false;
+  const scheduled = at - normalizeReminderBeforeTimeMinutes(args.minutes) * 60 * 1000;
+  const nowMs = args.now.getTime();
+  if (!(nowMs >= scheduled && nowMs < at)) return false;
+  if (args.createdAt) {
+    const created = new Date(args.createdAt).getTime();
+    if (!Number.isNaN(created) && created > scheduled) return false;
+  }
+  return true;
 }
 
 /** 当日リマインダーの送信予定時刻: 予約日当日の sameDayTime（JST）を UTC ISO で返す */

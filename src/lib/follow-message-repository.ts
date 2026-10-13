@@ -18,6 +18,7 @@ import { createAdminClient } from '@/lib/supabase';
 import type { FollowMessage, FollowMessageSummary, ReminderLogSummary, ReminderPlanSummary } from '@/types/follow-message';
 import type { Store } from '@/types/store';
 import {
+  computeBeforeTimeReminderScheduledAt,
   computeReminderScheduledAt,
   computeSameDayReminderScheduledAt,
   computeScheduledAt,
@@ -561,13 +562,15 @@ export async function getReminderLogSummariesByReservationIds(
       }
     }
     // 同じ予約に複数行（対象日違い / 前日と当日）があるときは「最新の対象日」→「当日 > 前日」の順で代表 1 件を選ぶ
-    const kindOf = (r: Row): ReminderLogSummary['kind'] => (r.kind === 'same_day' ? 'same_day' : 'before');
+    const KIND_RANK: Record<ReminderLogSummary['kind'], number> = { before: 0, same_day: 1, before_time: 2 };
+    const kindOf = (r: Row): ReminderLogSummary['kind'] => (r.kind === 'same_day' || r.kind === 'before_time' ? r.kind : 'before');
     const loggedKinds: Record<string, Set<ReminderLogSummary['kind']>> = {};
     rows.forEach((r) => {
       const kind = kindOf(r);
       (loggedKinds[r.reservation_id] ||= new Set()).add(kind);
       const prev = result[r.reservation_id];
-      if (prev && (prev.target_date > r.target_date || (prev.target_date === r.target_date && prev.kind === 'same_day' && kind === 'before'))) return;
+      // 「最新の対象日」→「直前 > 当日 > 前日」（後に送られる方）を代表にする
+      if (prev && (prev.target_date > r.target_date || (prev.target_date === r.target_date && KIND_RANK[prev.kind] > KIND_RANK[kind]))) return;
       result[r.reservation_id] = {
         status: r.status,
         kind,
@@ -592,14 +595,14 @@ export async function getReminderLogSummariesByReservationIds(
  */
 export async function getReminderPlansForReservations(
   storeId: string,
-  reservations: Array<{ id: string; reservation_date?: string | null; line_user_id?: string | null; status?: string | null }>,
+  reservations: Array<{ id: string; reservation_date?: string | null; reservation_time?: string | null; line_user_id?: string | null; status?: string | null }>,
   existingLogs: Record<string, ReminderLogSummary>,
   now: Date = new Date()
 ): Promise<Record<string, ReminderPlanSummary>> {
   const result: Record<string, ReminderPlanSummary> = {};
   try {
     if (!storeId || reservations.length === 0) return result;
-    let store: Pick<Store, 'reminder_enabled' | 'reminder_days_before' | 'reminder_time' | 'reminder_same_day_enabled' | 'reminder_same_day_time' | 'line_channel_access_token'> | null = null;
+    let store: Pick<Store, 'reminder_enabled' | 'reminder_days_before' | 'reminder_time' | 'reminder_same_day_enabled' | 'reminder_same_day_time' | 'reminder_before_time_enabled' | 'reminder_before_time_minutes' | 'line_channel_access_token'> | null = null;
     if (isLocal()) {
       store = readJsonFile<Store>(STORES_FILE).find((s) => s.id === storeId) || null;
     } else {
@@ -607,7 +610,7 @@ export async function getReminderPlansForReservations(
       if (!client) return result;
       const { data, error } = await (client as any)
         .from('stores')
-        .select('reminder_enabled,reminder_days_before,reminder_time,reminder_same_day_enabled,reminder_same_day_time,line_channel_access_token')
+        .select('reminder_enabled,reminder_days_before,reminder_time,reminder_same_day_enabled,reminder_same_day_time,reminder_before_time_enabled,reminder_before_time_minutes,line_channel_access_token')
         .eq('id', storeId)
         .maybeSingle();
       if (error) { console.error('[reminder-plan] store lookup error:', error.message); return result; }
@@ -616,7 +619,8 @@ export async function getReminderPlansForReservations(
     if (!store || !(store.line_channel_access_token || '').trim()) return result;
     const beforeOn = store.reminder_enabled !== false;
     const sameDayOn = store.reminder_same_day_enabled === true;
-    if (!beforeOn && !sameDayOn) return result;
+    const beforeTimeOn = store.reminder_before_time_enabled === true;
+    if (!beforeOn && !sameDayOn && !beforeTimeOn) return result;
     const todayJst = toJstDateString(now);
     for (const r of reservations) {
       if (!r.line_user_id || r.status === 'cancelled') continue;
@@ -631,6 +635,11 @@ export async function getReminderPlansForReservations(
       if (sameDayOn && !logged.has('same_day')) {
         const at = computeSameDayReminderScheduledAt(r.reservation_date, store.reminder_same_day_time);
         if (at) candidates.push({ scheduled_at: at, kind: 'same_day' });
+      }
+      if (beforeTimeOn && !logged.has('before_time')) {
+        const at = computeBeforeTimeReminderScheduledAt(r.reservation_date, r.reservation_time, store.reminder_before_time_minutes);
+        // 予定時刻を過ぎたものは出さない（直前は分単位なので日付ではなく時刻で判定）
+        if (at && new Date(at).getTime() >= now.getTime()) candidates.push({ scheduled_at: at, kind: 'before_time' });
       }
       // 対象日（送信日）を過ぎたものは予定として出さない（当日中なら遅れて送られる可能性があるので残す）。残った中で早いもの
       const next = candidates
