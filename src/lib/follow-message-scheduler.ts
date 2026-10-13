@@ -106,17 +106,20 @@ function addDays(dateStr: string, days: number): string {
  * 判定式は Edge Function `send-reminders` と同じ（今日 + N 日）。reminder_enabled 未設定は既定 ON。
  */
 export function isReminderSameDay(
-  store: { reminder_enabled?: boolean | null; reminder_days_before?: number | null },
+  store: { reminder_enabled?: boolean | null; reminder_days_before?: number | null; reminder_same_day_enabled?: boolean | null },
   reservations: RebookingCandidate[] | null | undefined,
   todayJst: string
 ): boolean {
-  if (store.reminder_enabled === false) return false;
   if (!Array.isArray(reservations) || !isDateString(todayJst)) return false;
+  const active = reservations.filter((r) => r && r.status !== 'cancelled');
+  // 当日リマインダー（ON のときだけ）: 今日の予約があれば今日リマインダーが送られる
+  if (store.reminder_same_day_enabled === true && active.some((r) => r.reservation_date === todayJst)) return true;
+  if (store.reminder_enabled === false) return false;
   const n = typeof store.reminder_days_before === 'number' && Number.isFinite(store.reminder_days_before)
     ? Math.floor(store.reminder_days_before) : 1;
   const daysBefore = n >= 1 && n <= 30 ? n : 1;
   const reminderTargetDate = addDays(todayJst, daysBefore);
-  return reservations.some((r) => r && r.status !== 'cancelled' && r.reservation_date === reminderTargetDate);
+  return active.some((r) => r.reservation_date === reminderTargetDate);
 }
 
 // ---------------------------------------------------------------------------
@@ -148,6 +151,40 @@ export function isReminderTimeReached(reminderTime: unknown, currentHHMM: string
 /** 今日（JST）+ days_before = リマインド対象の予約日 */
 export function reminderTargetDate(todayJst: string, daysBefore: unknown): string {
   return addDays(todayJst, normalizeReminderDaysBefore(daysBefore));
+}
+
+// ---------------------------------------------------------------------------
+// 当日リマインダー（前日などのリマインダーとは独立。stores.reminder_same_day_enabled / reminder_same_day_time）
+// 対象日 = 今日。予約時刻を過ぎた予約には送らない。Edge Function send-reminders と同じ判定
+// ---------------------------------------------------------------------------
+
+export const REMINDER_SAME_DAY_DEFAULT_TIME = '09:00';
+
+/** リマインダーの種別（reminder_logs.kind）。before = 何日前リマインダー、same_day = 当日リマインダー */
+export type ReminderKind = 'before' | 'same_day';
+
+export function normalizeReminderSameDayTime(value: unknown): string {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):00$/.test(value) ? value : REMINDER_SAME_DAY_DEFAULT_TIME;
+}
+
+/**
+ * 当日リマインダーの対象か: 予約時刻（HH:MM[:SS]）が現在時刻（HH:MM）より後なら true。
+ * 時刻が無い予約は対象にする（終日扱い）。
+ */
+export function isSameDayReminderTarget(reservationTime: string | null | undefined, currentHHMM: string): boolean {
+  const t = String(reservationTime || '').slice(0, 5);
+  if (!/^\d{2}:\d{2}$/.test(t)) return true;
+  return t > currentHHMM;
+}
+
+/** 当日リマインダーの送信予定時刻: 予約日当日の sameDayTime（JST）を UTC ISO で返す */
+export function computeSameDayReminderScheduledAt(reservationDate: string, sameDayTime: unknown): string | null {
+  if (!isDateString(reservationDate)) return null;
+  const [y, m, d] = reservationDate.split('-').map((s) => parseInt(s, 10));
+  const hour = parseInt(normalizeReminderSameDayTime(sameDayTime).slice(0, 2), 10);
+  const utcMs = Date.UTC(y, m - 1, d, hour, 0, 0) - JST_OFFSET_MINUTES * 60 * 1000;
+  const dt = new Date(utcMs);
+  return Number.isNaN(dt.getTime()) ? null : dt.toISOString();
 }
 
 /**

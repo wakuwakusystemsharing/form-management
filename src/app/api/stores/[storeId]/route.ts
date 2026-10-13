@@ -45,6 +45,13 @@ function validateReminderSettings(body: Record<string, unknown>): string | null 
     const err = validateMessageTemplate(body.reminder_template, '予約リマインダー');
     if (err) return err;
   }
+  // 当日リマインダー（前日などのリマインダーとは独立。送信 Function は reminder_same_day_time を「HH:00」で照合）
+  if ('reminder_same_day_enabled' in body && typeof body.reminder_same_day_enabled !== 'boolean') {
+    return '当日リマインダーの有効/無効の値が不正です';
+  }
+  if ('reminder_same_day_time' in body && (typeof body.reminder_same_day_time !== 'string' || !TIME_HH00_RE.test(body.reminder_same_day_time))) {
+    return '当日リマインダーの送信時刻は HH:00 形式で指定してください';
+  }
   return null;
 }
 

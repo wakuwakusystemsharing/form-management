@@ -187,3 +187,54 @@ describe('computeReminderScheduledAt / formatJstShort', () => {
     expect(formatJstShort('x')).toBe('');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 当日リマインダー用
+// ---------------------------------------------------------------------------
+import {
+  normalizeReminderSameDayTime,
+  isSameDayReminderTarget,
+  computeSameDayReminderScheduledAt,
+  REMINDER_SAME_DAY_DEFAULT_TIME,
+} from '@/lib/follow-message-scheduler';
+import { defaultHeaderTitle, defaultBodyLabel } from '@/lib/reminder-template';
+
+describe('当日リマインダー', () => {
+  it('送信時刻の正規化（既定 09:00）', () => {
+    expect(REMINDER_SAME_DAY_DEFAULT_TIME).toBe('09:00');
+    expect(normalizeReminderSameDayTime('07:00')).toBe('07:00');
+    expect(normalizeReminderSameDayTime('19:00')).toBe('19:00');
+    expect(normalizeReminderSameDayTime('09:30')).toBe('09:00');
+    expect(normalizeReminderSameDayTime(undefined)).toBe('09:00');
+    expect(normalizeReminderSameDayTime(null)).toBe('09:00');
+  });
+  it('予約時刻が現在時刻より後の予約だけ対象（過ぎた予約には送らない）', () => {
+    expect(isSameDayReminderTarget('10:00', '09:05')).toBe(true);
+    expect(isSameDayReminderTarget('10:00:00', '09:05')).toBe(true);
+    expect(isSameDayReminderTarget('09:00', '09:05')).toBe(false);
+    expect(isSameDayReminderTarget('09:05', '09:05')).toBe(false);
+    // 時刻が無い予約（終日など）は対象にする
+    expect(isSameDayReminderTarget(null, '09:05')).toBe(true);
+    expect(isSameDayReminderTarget('', '09:05')).toBe(true);
+  });
+  it('予約日当日の HH:00 JST を送信予定にする', () => {
+    // 2026-09-20 09:00 JST = 2026-09-20T00:00Z
+    expect(computeSameDayReminderScheduledAt('2026-09-20', '09:00')).toBe('2026-09-20T00:00:00.000Z');
+    expect(computeSameDayReminderScheduledAt('2026-09-20', undefined)).toBe('2026-09-20T00:00:00.000Z');
+    expect(computeSameDayReminderScheduledAt('bad', '09:00')).toBeNull();
+  });
+  it('isReminderSameDay: 当日リマインダー ON なら今日の予約でも true（フォローの見送り判定）', () => {
+    const today = '2026-09-27';
+    const rsv = [{ reservation_date: '2026-09-27', status: 'pending' }];
+    expect(isReminderSameDay({ reminder_enabled: false, reminder_same_day_enabled: true }, rsv, today)).toBe(true);
+    expect(isReminderSameDay({ reminder_enabled: true, reminder_days_before: 1, reminder_same_day_enabled: true }, rsv, today)).toBe(true);
+    expect(isReminderSameDay({ reminder_enabled: true, reminder_days_before: 1 }, rsv, today)).toBe(false);
+    expect(isReminderSameDay({ reminder_enabled: false, reminder_same_day_enabled: true }, [{ reservation_date: '2026-09-27', status: 'cancelled' }], today)).toBe(false);
+    expect(isReminderSameDay({ reminder_enabled: false, reminder_same_day_enabled: false }, rsv, today)).toBe(false);
+  });
+  it('文面の既定値: daysBefore 0 は「当日」', () => {
+    expect(defaultHeaderTitle(0)).toBe('【予約当日メッセージ】');
+    expect(defaultBodyLabel(0)).toBe('本日の予約をお知らせします');
+    expect(defaultHeaderTitle(1)).toBe('【予約前日メッセージ】');
+  });
+});

@@ -133,15 +133,17 @@ function followBadge(summary: FollowMessageSummary | null | undefined): { label:
 function reminderBadge(summary: ReminderLogSummary | null | undefined, plan: ReminderPlanSummary | null | undefined): { label: string; className: string; title: string } | null {
   if (!summary) {
     if (!plan) return null;
+    const planName = plan.kind === 'same_day' ? '当日リマインダー' : 'リマインダー';
     return {
-      label: `リマインダー ${formatJstShort(plan.scheduled_at)} 送信予定`,
+      label: `${planName} ${formatJstShort(plan.scheduled_at)} 送信予定`,
       className: 'bg-sky-50 text-sky-700 border-sky-200',
       title: `予定: ${new Date(plan.scheduled_at).toLocaleString('ja-JP')}（店舗のリマインダー設定から計算）`,
     };
   }
+  const kindPrefix = summary.kind === 'same_day' ? '当日' : '';
   const label = summary.status === 'sent' && summary.sent_at
-    ? `リマインダー送信済み ${formatJstShort(summary.sent_at)}`
-    : (REMINDER_LOG_STATUS_LABELS[summary.status] || `リマインダー: ${summary.status}`);
+    ? `${kindPrefix}リマインダー送信済み ${formatJstShort(summary.sent_at)}`
+    : `${kindPrefix}${REMINDER_LOG_STATUS_LABELS[summary.status] || `リマインダー: ${summary.status}`}`;
   const when = summary.status === 'sent' && summary.sent_at ? `送信: ${new Date(summary.sent_at).toLocaleString('ja-JP')}` : '';
   const title = [summary.skip_reason || '', when, summary.status === 'failed' && summary.last_error ? summary.last_error.slice(0, 120) : ''].filter(Boolean).join(' / ');
   const className = summary.status === 'sent'
