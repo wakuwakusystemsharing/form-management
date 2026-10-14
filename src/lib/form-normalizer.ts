@@ -174,7 +174,12 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       max_concurrent_reservations_per_user: 0,
       time_interval: 30,
       show_customer_name: true,
+      customer_name_label: '',
+      require_customer_name: true,
       show_customer_phone: true,
+      require_customer_phone: true,
+      show_message_field: true,
+      message_label: '',
       show_customer_email: false,
       hide_datetime_until_menu_selected: true,
       notification_email: '',
@@ -482,6 +487,20 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         })(),
         show_customer_name: existingConfig?.calendar_settings?.show_customer_name ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_name ?? true,
         show_customer_phone: existingConfig?.calendar_settings?.show_customer_phone ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_phone ?? true,
+        // お名前 / 電話番号の見出し・必須、メッセージ欄の表示・見出し（未設定 = 従来どおり）
+        ...(() => {
+          const legacy = typedConfig?.calendar_settings as Form['config']['calendar_settings'] | undefined;
+          const pick = <K extends keyof Form['config']['calendar_settings']>(key: K) =>
+            existingConfig?.calendar_settings?.[key] ?? legacy?.[key];
+          const str = (v: unknown) => (typeof v === 'string' ? v : '');
+          return {
+            customer_name_label: str(pick('customer_name_label')),
+            require_customer_name: pick('require_customer_name') !== false,
+            require_customer_phone: pick('require_customer_phone') !== false,
+            show_message_field: pick('show_message_field') !== false,
+            message_label: str(pick('message_label')),
+          };
+        })(),
         show_customer_email: existingConfig?.calendar_settings?.show_customer_email ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.show_customer_email ?? false,
         hide_datetime_until_menu_selected: existingConfig?.calendar_settings?.hide_datetime_until_menu_selected
           ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.hide_datetime_until_menu_selected

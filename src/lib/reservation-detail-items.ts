@@ -211,7 +211,8 @@ export function buildReservationDetailItems(config: FormConfigLike, reservation:
       out.push({ label: 'ご来店日時', value: first });
     }
   }
-  if (show('message')) {
+  // メッセージ欄を非表示にしたフォームでは載せない（入力できないため「なし」固定になる）
+  if (show('message') && cs?.show_message_field !== false) {
     out.push({ label: 'メッセージ', value: (reservation.message || '').trim() || 'なし' });
   }
   return out;
