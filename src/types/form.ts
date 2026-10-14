@@ -311,8 +311,19 @@ export interface FormConfig {
     max_concurrent_reservations_per_user?: number;
     // 「お名前」フィールドの表示（未設定 = true）。false の場合: LIFF 表示名 or「未記入」を自動セット
     show_customer_name?: boolean;
+    // 「お名前」フィールドの見出し（空 / 未設定 = 「お名前」）。フォームの入力欄・ご予約内容・未入力アラートに使う。
+    // LINE メッセージの《お名前》・メール・管理画面の項目名は Webhook の解析に使うため固定
+    customer_name_label?: string;
+    // 「お名前」を必須にする（未設定 = true）。false = 任意（空なら LIFF 表示名 or「未記入」で補う）
+    require_customer_name?: boolean;
     // 「電話番号」フィールドの表示（未設定 = true）。false の場合: 「未記入」を自動セット
     show_customer_phone?: boolean;
+    // 「電話番号」を必須にする（未設定 = true）。false = 任意（空なら「未記入」で補う）
+    require_customer_phone?: boolean;
+    // 「メッセージ（任意）」フィールドの表示（未設定 = true）。false の場合: 入力欄を出さず LINE / メールにも《メッセージ》を載せない
+    show_message_field?: boolean;
+    // 「メッセージ」フィールドの見出し（空 / 未設定 = 「メッセージ」。フォームでは「〜（任意）」と表示）
+    message_label?: string;
     // 「メールアドレス」フィールドの表示（Web 予約フォーム向け、デフォルト false）。true で確認用 2 欄 + 一致検証 + localStorage 保存
     show_customer_email?: boolean;
     // 希望日時エリアをメニュー選択まで非表示にする（未設定 = true）。false の場合: メニュー選択に関わらず常に表示

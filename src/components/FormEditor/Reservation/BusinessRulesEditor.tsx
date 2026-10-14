@@ -10,6 +10,23 @@ import { CANCEL_DEADLINE_OPTIONS, resolveCancelRules, type CancelRules } from '@
 import MultipleDatesSettingsEditor, { ExtraMinutesPicker, InfoTooltip } from './MultipleDatesSettingsEditor';
 import type { MultipleDatesSettings } from '@/types/form';
 
+// ON / OFF トグル（お名前 / 電話番号 / メッセージ欄の設定で使用）
+const ToggleSwitch: React.FC<{ checked: boolean; onChange: (v: boolean) => void; theme: ThemeType; disabled?: boolean }> = ({ checked, onChange, theme, disabled }) => {
+  const themeClasses = getThemeClasses(theme);
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => { if (!disabled) onChange(!checked); }}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
+        checked ? themeClasses.toggle.enabled : themeClasses.toggle.disabled
+      } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+    >
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
+    </button>
+  );
+};
+
 interface BusinessRulesEditorProps {
   form: Form;
   onUpdate: (form: Form) => void;
@@ -21,6 +38,21 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
   const accentClasses = theme === 'light'
     ? 'accent-[rgb(244,144,49)] focus:ring-[rgb(244,144,49)]'
     : 'accent-cyan-500 focus:ring-cyan-500';
+
+  // calendar_settings の 1 キーだけを更新（お名前 / 電話番号 / メッセージ欄の設定で使う）
+  const updateCalendarSetting = <K extends keyof NonNullable<Form['config']['calendar_settings']>>(
+    key: K,
+    value: NonNullable<Form['config']['calendar_settings']>[K],
+  ) => {
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: { ...form.config?.calendar_settings, [key]: value },
+      },
+    });
+  };
+
 
   const [businessHours, setBusinessHours] = useState<BusinessHours>(
     form.config?.calendar_settings?.business_hours || {
@@ -1419,6 +1451,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </button>
             </div>
 
+            {/* お名前 / 電話番号 / メッセージ欄の表示・見出し・必須（営業時間・ルール） */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
@@ -1429,35 +1462,41 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   text="OFF にすると入力欄を非表示。LINE 表示名を自動で記録（Web フォームの場合は「未記入」）"
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const current = form.config?.calendar_settings?.show_customer_name !== false;
-                  const newValue = !current;
-                  onUpdate({
-                    ...form,
-                    config: {
-                      ...form.config,
-                      calendar_settings: {
-                        ...form.config?.calendar_settings,
-                        show_customer_name: newValue
-                      }
-                    }
-                  });
-                }}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
-                  form.config?.calendar_settings?.show_customer_name !== false
-                    ? themeClasses.toggle.enabled
-                    : themeClasses.toggle.disabled
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    form.config?.calendar_settings?.show_customer_name !== false ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
+              <ToggleSwitch
+                theme={theme}
+                checked={form.config?.calendar_settings?.show_customer_name !== false}
+                onChange={(v) => updateCalendarSetting('show_customer_name', v)}
+              />
             </div>
+            {form.config?.calendar_settings?.show_customer_name !== false && (
+              <div className="ml-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <label className={`block text-sm ${themeClasses.text.secondary}`}>項目の見出し</label>
+                    <InfoTooltip theme={theme} text={'予約フォームの入力欄・ご予約内容・未入力時の案内に使う見出しです（例: 氏名 / お名前（フルネーム））。\n空のときは「お名前」。LINE メッセージ・メール・管理画面の項目名は「お名前」のまま変わりません'} />
+                  </div>
+                  <input
+                    type="text"
+                    value={form.config?.calendar_settings?.customer_name_label || ''}
+                    onChange={(e) => updateCalendarSetting('customer_name_label', e.target.value)}
+                    placeholder="お名前"
+                    maxLength={30}
+                    className={`${themeClasses.input} w-48 max-w-full text-sm`}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <label className={`block text-sm ${themeClasses.text.secondary}`}>「お名前」を必須にする</label>
+                    <InfoTooltip theme={theme} text="OFF にすると「（任意）」と表示し、空のまま予約できます（LINE 表示名、無ければ「未記入」で登録します）" />
+                  </div>
+                  <ToggleSwitch
+                theme={theme}
+                    checked={form.config?.calendar_settings?.require_customer_name !== false}
+                    onChange={(v) => updateCalendarSetting('require_customer_name', v)}
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
@@ -1469,35 +1508,59 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                   text="OFF にすると入力欄を非表示。電話番号は「未記入」として保存されます"
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const current = form.config?.calendar_settings?.show_customer_phone !== false;
-                  const newValue = !current;
-                  onUpdate({
-                    ...form,
-                    config: {
-                      ...form.config,
-                      calendar_settings: {
-                        ...form.config?.calendar_settings,
-                        show_customer_phone: newValue
-                      }
-                    }
-                  });
-                }}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${
-                  form.config?.calendar_settings?.show_customer_phone !== false
-                    ? themeClasses.toggle.enabled
-                    : themeClasses.toggle.disabled
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    form.config?.calendar_settings?.show_customer_phone !== false ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
+              <ToggleSwitch
+                theme={theme}
+                checked={form.config?.calendar_settings?.show_customer_phone !== false}
+                onChange={(v) => updateCalendarSetting('show_customer_phone', v)}
+              />
             </div>
+            {form.config?.calendar_settings?.show_customer_phone !== false && (
+              <div className="ml-4 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <label className={`block text-sm ${themeClasses.text.secondary}`}>「電話番号」を必須にする</label>
+                  <InfoTooltip theme={theme} text="OFF にすると「（任意）」と表示し、空のまま予約できます（「未記入」で登録します）" />
+                </div>
+                <ToggleSwitch
+                theme={theme}
+                  checked={form.config?.calendar_settings?.require_customer_phone !== false}
+                  onChange={(v) => updateCalendarSetting('require_customer_phone', v)}
+                />
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
+                  「メッセージ（任意）」フィールドを表示
+                </label>
+                <InfoTooltip
+                  theme={theme}
+                  text="OFF にすると自由記入のメッセージ欄を非表示にします。LINE メッセージ・メール・管理画面にも《メッセージ》を載せません"
+                />
+              </div>
+              <ToggleSwitch
+                theme={theme}
+                checked={form.config?.calendar_settings?.show_message_field !== false}
+                onChange={(v) => updateCalendarSetting('show_message_field', v)}
+              />
+            </div>
+            {form.config?.calendar_settings?.show_message_field !== false && (
+              <div className="ml-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <label className={`block text-sm ${themeClasses.text.secondary}`}>項目の見出し</label>
+                  <InfoTooltip theme={theme} text={'予約フォームでは「見出し（任意）」と表示します（例: ご要望 → ご要望（任意））。\n空のときは「メッセージ」。LINE メッセージ・メール・管理画面の項目名は「メッセージ」のまま変わりません'} />
+                </div>
+                <input
+                  type="text"
+                  value={form.config?.calendar_settings?.message_label || ''}
+                  onChange={(e) => updateCalendarSetting('message_label', e.target.value)}
+                  placeholder="メッセージ"
+                  maxLength={30}
+                  className={`${themeClasses.input} w-48 max-w-full text-sm`}
+                />
+              </div>
+            )}
+
 
 
             <div className="flex items-center justify-between">
@@ -1638,10 +1701,19 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 • 希望日時エリア: {form.config?.calendar_settings?.hide_datetime_until_menu_selected !== false ? 'メニュー選択後に表示' : '常に表示'}
               </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
-                • お名前フィールド: {form.config?.calendar_settings?.show_customer_name !== false ? '表示' : '非表示'}
+                • お名前フィールド: {form.config?.calendar_settings?.show_customer_name !== false
+                  ? `表示（見出し「${(form.config?.calendar_settings?.customer_name_label || '').trim() || 'お名前'}」・${form.config?.calendar_settings?.require_customer_name !== false ? '必須' : '任意'}）`
+                  : '非表示'}
               </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
-                • 電話番号フィールド: {form.config?.calendar_settings?.show_customer_phone !== false ? '表示' : '非表示'}
+                • 電話番号フィールド: {form.config?.calendar_settings?.show_customer_phone !== false
+                  ? `表示（${form.config?.calendar_settings?.require_customer_phone !== false ? '必須' : '任意'}）`
+                  : '非表示'}
+              </p>
+              <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
+                • メッセージフィールド: {form.config?.calendar_settings?.show_message_field !== false
+                  ? `表示（見出し「${(form.config?.calendar_settings?.message_label || '').trim() || 'メッセージ'}（任意）」）`
+                  : '非表示'}
               </p>
               <p className={`text-sm ${theme === 'light' ? 'text-[rgb(220,125,35)]' : 'text-cyan-200'}`}>
                 • メールアドレスフィールド: {(form.config?.calendar_settings?.show_customer_email === true || form.config?.form_type === 'web') ? `表示（送信時に確認メール自動送信）${form.config?.form_type === 'web' ? '・Web予約は必須' : ''}` : '非表示'}
