@@ -660,6 +660,9 @@ export async function GET(req, { params }) {
 - `allow_exceed_business_hours` - 営業時間超過の予約を許可
 - `special_business_days?: Array<{ date: 'YYYY-MM-DD', open, close }>` - 臨時営業日。登録した日付は曜日設定が定休でも、祝日設定・「祝日を予約不可にする」の対象でも、この時間で営業（〇）にする（優先順位: 臨時営業日 > 祝日 > 曜日）。カレンダー表示モードは `calendar_settings.special_business_days`、第三希望日時モードは `multiple_dates_settings.special_business_days`（別々に設定）。編集 UI は営業時間・ルール → 各モードの祝日行の下「臨時営業日」（`renderSpecialBusinessDays`）。正規化は `sanitizeSpecialBusinessDays()`（不正行除去・日付で重複排除・昇順）。生成 HTML は `findSpecialBusinessDay()` / `getDayBusinessHours()` / `isCalendarDateBlockedAsHoliday()` / `isMdDateSelectable()`。✕にする時間帯（`blocked_times`）はそのまま適用される
 - `show_customer_name` / `show_customer_phone` - 入力欄の表示制御（false 時は LIFF 表示名/「未記入」を自動補完）
+- `customer_name_label` - 「お名前」欄の見出し（空 = お名前。例: 氏名 / お名前（フルネーム））。フォームの入力欄・ご予約内容・未入力アラートに使う。**LINE メッセージの《お名前》・メール・管理画面の項目名は Webhook の解析（`《お名前》` で新形式判定）に使うため固定**
+- `require_customer_name` / `require_customer_phone` - お名前 / 電話番号を必須にする（既定 true）。false で「（任意）」表示 + 必須チェックをスキップし、空なら LIFF 表示名 →「未記入」/「未記入」で補う。生成時に内部フラグ `customer_name_optional` / `customer_phone_optional` に変換（手動予約フォームは `manual_form_settings` が優先）
+- `show_message_field` / `message_label` - 「メッセージ（任意）」欄の表示（既定 true）と見出し（空 = メッセージ。フォームでは「見出し（任意）」）。非表示のときは LINE メッセージ・メール・管理画面（`reservation-detail-items.ts`）にも《メッセージ》を載せない。編集 UI は営業時間・ルール → 「電話番号」フィールドを表示の下
 - `show_menu_field` - メニュー欄の表示制御（false 時は希望日時/カレンダーをデフォルト表示）
 - `show_customer_email` - メールアドレス入力 2 欄（メイン+確認）の表示。Web 予約での自動メール送信に必須
 - `notification_email` - Web 予約の店舗側通知メール宛先（空時は `store.owner_email`）

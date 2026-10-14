@@ -25,6 +25,8 @@ export class StaticReservationGenerator {
     const lineOnly = !manualMode && !previewMode && config.form_type !== 'web' && config.basic_info?.line_only !== false;
     // 「予約する」ボタンの文言（基本情報で変更可。手動予約フォームは固定）
     const submitLabel = manualMode ? '予約を行う' : ((config.basic_info?.submit_button_label || '').trim() || '予約する');
+    // 「お名前」欄の見出し（営業時間・ルールで変更可。空 = お名前）
+    const nameLabel = (config.calendar_settings?.customer_name_label || '').trim() || 'お名前';
     // config は immutable に扱うため、深くコピーして修正
     const safeConfig: FormConfig = JSON.parse(JSON.stringify(config));
 
@@ -119,6 +121,12 @@ export class StaticReservationGenerator {
       };
     }
 
+    // 通常フォームの「お名前」「電話番号」を任意にする設定（営業時間・ルール）。手動予約フォームは下で manual_form_settings に置き換える
+    if (safeConfig.calendar_settings) {
+      safeConfig.calendar_settings.customer_name_optional = safeConfig.calendar_settings.require_customer_name === false;
+      safeConfig.calendar_settings.customer_phone_optional = safeConfig.calendar_settings.require_customer_phone === false;
+    }
+
     if (manualMode) {
       // 手動モード: 電話等で確定済みの1日時を登録できるよう、希望日時は第一希望のみ必須にする
       // （safeConfig はコピーなので元の設定は変更されない。FORM_CONFIG にも同じ値が埋め込まれる）
@@ -190,7 +198,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
             ${safeConfig.calendar_settings?.show_customer_name === false ? '' : `
             <!-- お客様名 -->
             <div class="field" id="name-field">
-                <label class="field-label">お名前 ${safeConfig.calendar_settings?.customer_name_optional === true ? '<span class="optional-mark">（任意）</span>' : '<span class="required">*</span>'}</label>
+                <label class="field-label">${this.escapeHtml(nameLabel)} ${safeConfig.calendar_settings?.customer_name_optional === true ? '<span class="optional-mark">（任意）</span>' : '<span class="required">*</span>'}</label>
                 <input type="text" id="customer-name" class="input" placeholder="山田太郎">
             </div>
             `}
@@ -235,7 +243,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
             ${this.renderDateTimeFields(safeConfig)}
             ${this.renderContentBlocksAt(safeConfig, 'datetime', 'below')}
             ${this.renderContentBlocksAt(safeConfig, 'message', 'above')}
-            ${this.renderMessageField()}
+            ${this.renderMessageField(safeConfig)}
             ${this.renderContentBlocksAt(safeConfig, 'message', 'below')}
             ${this.renderContentBlocksAt(safeConfig, 'summary', 'above')}
             ${this.renderSummary()}
@@ -2339,6 +2347,16 @@ class BookingForm {
         }
     }
     
+    // 「お名前」「メッセージ」欄の見出し（営業時間・ルールの設定。空なら既定）
+    getCustomerNameLabel() {
+        const v = this.config.calendar_settings?.customer_name_label;
+        return (typeof v === 'string' && v.trim()) ? v.trim() : 'お名前';
+    }
+    getMessageLabel() {
+        const v = this.config.calendar_settings?.message_label;
+        return (typeof v === 'string' && v.trim()) ? v.trim() : 'メッセージ';
+    }
+
     updateSummary() {
         // メニュー/オプションの選択状態に応じて追加質問の表示を同期
         // （updateSummary は選択変更のたびに呼ばれるためここでまとめて処理する）
@@ -2350,7 +2368,7 @@ class BookingForm {
         const summaryShowName = this.config.calendar_settings?.show_customer_name !== false;
         const summaryShowPhone = this.config.calendar_settings?.show_customer_phone !== false;
         if (summaryShowName && this.state.name) {
-            items.push(\`<div class="summary-item"><span><strong>お名前:</strong> \${this.state.name}</span><button class="summary-edit-button" data-field="name-field">修正</button></div>\`);
+            items.push(\`<div class="summary-item"><span><strong>\${this.getCustomerNameLabel()}:</strong> \${this.state.name}</span><button class="summary-edit-button" data-field="name-field">修正</button></div>\`);
         }
         if (summaryShowPhone && this.state.phone) {
             items.push(\`<div class="summary-item"><span><strong>電話番号:</strong> \${this.state.phone}</span><button class="summary-edit-button" data-field="phone-field">修正</button></div>\`);
@@ -2405,7 +2423,7 @@ class BookingForm {
             }
         }
         if (this.state.message) {
-            items.push(\`<div class="summary-item" style="align-items:flex-start;"><div><strong>メッセージ:</strong><div style="margin-top:0.25rem;font-size:0.875rem;color:#6b7280;">\${this.state.message}</div></div><button class="summary-edit-button" data-field="message-field">修正</button></div>\`);
+            items.push(\`<div class="summary-item" style="align-items:flex-start;"><div><strong>\${this.getMessageLabel()}:</strong><div style="margin-top:0.25rem;font-size:0.875rem;color:#6b7280;">\${this.state.message}</div></div><button class="summary-edit-button" data-field="message-field">修正</button></div>\`);
         }
         
         const container = document.getElementById('summary-content');
@@ -2460,7 +2478,7 @@ class BookingForm {
         const showNameField = this.config.calendar_settings?.show_customer_name !== false;
         const showPhoneField = this.config.calendar_settings?.show_customer_phone !== false;
         if (showNameField && !this.state.name && this.config.calendar_settings?.customer_name_optional !== true) {
-            alert('お名前を入力してください');
+            alert(this.getCustomerNameLabel() + 'を入力してください');
             resetSubmitState();
             return;
         }
@@ -2927,7 +2945,7 @@ class BookingForm {
             }
 
             // メッセージ
-            if (showLineItem('message')) {
+            if (showLineItem('message') && this.config.calendar_settings?.show_message_field !== false) {
                 addMsgSegment('message', '《メッセージ》\\n' + (this.state.message || 'なし'), true);
             }
 
@@ -3823,16 +3841,18 @@ if (document.readyState === 'loading') {
     // 表示位置を変更したフィールドは renderContentBlocksAt 側で描画するため、標準位置のフィールドのみ
     const fields = (config.custom_fields || []).filter(f => !this.customFieldHasPlacement(f));
     if (fields.length === 0) return '';
-    const renderField = (field: NonNullable<FormConfig['custom_fields']>[number]): string => this.renderCustomFieldWithFollowUps(field);
-
-    // 各カスタムフィールドの上下に「画像orテキスト設置」ブロックを挿入できるようにする
     return fields
-      .map(field =>
-        this.renderContentBlocksAt(config, `custom_${field.id}`, 'above')
-        + renderField(field)
-        + this.renderContentBlocksAt(config, `custom_${field.id}`, 'below'))
+      .map(field => this.renderCustomFieldWithBlocks(config, field))
       .filter(Boolean)
       .join('\n            ');
+  }
+
+  // カスタムフィールド + その上下に置かれた「画像orテキスト設置」ブロック（anchor = custom_{id}）
+  // 標準位置のフィールドも、表示位置を変更したフィールドも、必ずこの経路で描画する
+  private renderCustomFieldWithBlocks(config: FormConfig, field: NonNullable<FormConfig['custom_fields']>[number]): string {
+    return this.renderContentBlocksAt(config, `custom_${field.id}`, 'above')
+      + this.renderCustomFieldWithFollowUps(field)
+      + this.renderContentBlocksAt(config, `custom_${field.id}`, 'below');
   }
 
   private renderMenuField(config: FormConfig): string {
@@ -4064,7 +4084,7 @@ if (document.readyState === 'loading') {
       this.customFieldHasPlacement(f)
       && f.placement!.anchor === anchor
       && (f.placement!.position || 'above') === position);
-    const placedFieldsHtml = placedFields.map(f => this.renderCustomFieldWithFollowUps(f)).join('\n            ');
+    const placedFieldsHtml = placedFields.map(f => this.renderCustomFieldWithBlocks(config, f)).join('\n            ');
     if (blocks.length === 0) return placedFieldsHtml;
     const items = blocks.map(b => {
       if (b.type === 'image') {
@@ -4134,11 +4154,13 @@ if (document.readyState === 'loading') {
             </div>`;
   }
 
-  private renderMessageField(): string {
+  private renderMessageField(config: FormConfig): string {
+    if (config.calendar_settings?.show_message_field === false) return '';
+    const label = (config.calendar_settings?.message_label || '').trim() || 'メッセージ';
     return `
             <!-- メッセージ -->
             <div class="field" id="message-field">
-                <label class="field-label">メッセージ（任意）</label>
+                <label class="field-label">${this.escapeHtml(label)}（任意）</label>
                 <textarea id="customer-message" class="input" rows="4" placeholder="ご要望などがあればご記入ください"></textarea>
             </div>`;
   }
