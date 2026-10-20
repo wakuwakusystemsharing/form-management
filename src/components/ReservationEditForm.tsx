@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -111,6 +111,19 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
   const [selectedOptionIds, setSelectedOptionIds] = useState<Set<string>>(initialOptionIds);
   const [staffId, setStaffId] = useState<string>(reservation.staff_id || '');
   const [saving, setSaving] = useState(false);
+  // 終了時間を手で直したら true（以降はメニューを変えても自動で動かさない）
+  const [endManual, setEndManual] = useState(false);
+  // 変更前の値（「変更前 → 変更後」の表示用）
+  const initial = useRef({
+    date: String(reservation.reservation_date || '').slice(0, 10),
+    start: startInit,
+    end: toHHMM(toMin(startInit) + initialDuration),
+    duration: initialDuration,
+    menuLabel: [
+      ...currentMenus.map((m) => (m.submenu_name ? `${m.menu_name || m.name} > ${m.submenu_name}` : (m.menu_name || m.name))),
+      ...currentOptions.map((o) => `+${o.option_name || o.name}`),
+    ].filter(Boolean).join('、'),
+  }).current;
 
   const staffList = formConfig?.staff_selection?.enabled === true ? (formConfig.staff_selection.staff || []) : [];
   const allowMultiple = formConfig?.menu_structure?.allow_cross_category_selection === true;
@@ -156,7 +169,19 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
   const recalcEnd = () => {
     const { duration } = buildSelection();
     if (duration > 0) setEnd(toHHMM(toMin(start) + duration));
+    setEndManual(false);
   };
+
+  // メニュー / オプションを変えたら終了時間を所要時間に合わせて自動で更新する（手で直した後は動かさない）
+  const selectionDuration = buildSelection().duration;
+  const prevSelectionDuration = useRef(selectionDuration);
+  useEffect(() => {
+    if (prevSelectionDuration.current === selectionDuration) return;
+    prevSelectionDuration.current = selectionDuration;
+    if (endManual || selectionDuration <= 0) return;
+    setEnd(toHHMM(toMin(start) + selectionDuration));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectionDuration]);
 
   const handleSave = async () => {
     if (!date || !start || !end) { toast({ title: '予約日・開始時間・終了時間を入力してください', variant: 'destructive' }); return; }
@@ -164,7 +189,12 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
     const { menus, options } = buildSelection();
     const hasMenusInForm = menuChoices.length > 0;
     if (hasMenusInForm && menus.length === 0) { toast({ title: 'メニューを1つ以上選択してください', variant: 'destructive' }); return; }
-    if (!confirm('予約内容を変更します。Googleカレンダーの予定も更新されます。よろしいですか？')) return;
+    const dur = toMin(end) - toMin(start);
+    const changedTime = date !== initial.date || start !== initial.start || end !== initial.end;
+    const confirmLines = ['予約内容を変更します。'];
+    if (changedTime) confirmLines.push(`日時: ${initial.date} ${initial.start}〜${initial.end} → ${date} ${start}〜${end}（${dur}分）`);
+    confirmLines.push('Googleカレンダーの予定も同じ内容に更新されます。よろしいですか？');
+    if (!confirm(confirmLines.join('\n'))) return;
 
     setSaving(true);
     try {
@@ -228,17 +258,43 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
             </div>
             <div>
               <Label htmlFor="edit-end">終了時間</Label>
-              <Input id="edit-end" type="time" step={300} value={end} onChange={(e) => setEnd(e.target.value)} />
+              <Input id="edit-end" type="time" step={300} value={end} onChange={(e) => { setEnd(e.target.value); setEndManual(true); }} />
             </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            所要時間: {Math.max(0, toMin(end) - toMin(start))}分（Googleカレンダーの予定の長さに反映されます）
-            {selection.duration > 0 && selection.duration !== Math.max(0, toMin(end) - toMin(start)) && (
-              <Button variant="link" size="sm" className="h-auto p-0 ml-2 text-xs" onClick={recalcEnd}>
-                メニューの所要時間（{selection.duration}分）に合わせる
-              </Button>
-            )}
-          </p>
+          {(() => {
+            const dur = Math.max(0, toMin(end) - toMin(start));
+            const dateTimeChanged = date !== initial.date || start !== initial.start || end !== initial.end;
+            const mismatch = selection.duration > 0 && selection.duration !== dur;
+            return (
+              <div className="mt-3 space-y-2 text-xs">
+                <p className="text-muted-foreground">
+                  所要時間: <span className="font-semibold text-foreground">{dur}分</span>
+                  {!endManual && selection.duration > 0 && !mismatch && (
+                    <span className="ml-1">（メニューの所要時間に合わせて自動で計算しています）</span>
+                  )}
+                </p>
+                {mismatch && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 text-amber-900 px-3 py-2 space-y-1">
+                    <p>
+                      終了時間（{dur}分）がメニューの所要時間（{selection.duration}分）と違います。
+                      {endManual ? '終了時間を手で変更したため、メニューを変えても自動では直しません。' : ''}
+                    </p>
+                    <Button variant="link" size="sm" className="h-auto p-0 text-xs text-amber-900 underline" onClick={recalcEnd}>
+                      終了時間を {toHHMM(toMin(start) + selection.duration)} にする（メニューの所要時間 {selection.duration}分 に合わせる）
+                    </Button>
+                  </div>
+                )}
+                {dateTimeChanged && (
+                  <div className="rounded-md border border-blue-200 bg-blue-50 text-blue-900 px-3 py-2">
+                    <p className="font-semibold">日時の変更</p>
+                    <p>変更前: {initial.date} {initial.start}〜{initial.end}（{initial.duration}分）</p>
+                    <p>変更後: <span className="font-semibold">{date} {start}〜{end}（{dur}分）</span></p>
+                    <p className="mt-1">保存すると Google カレンダーの予定もこの日時・長さに変わります。</p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
@@ -314,6 +370,37 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
           </CardContent>
         </Card>
       )}
+
+      {(() => {
+        const dur = Math.max(0, toMin(end) - toMin(start));
+        const newMenuLabel = [
+          ...selection.menus.map((m: any) => (m.submenu_name ? `${m.menu_name} > ${m.submenu_name}` : m.menu_name)),
+          ...selection.options.map((o: any) => `+${o.option_name}`),
+        ].join('、');
+        const rows: Array<{ label: string; before: string; after: string }> = [];
+        if (date !== initial.date || start !== initial.start) rows.push({ label: '予約日時', before: `${initial.date} ${initial.start}`, after: `${date} ${start}` });
+        if (dur !== initial.duration || end !== initial.end) rows.push({ label: '終了時間（所要時間）', before: `${initial.end}（${initial.duration}分）`, after: `${end}（${dur}分）` });
+        if (menuChoices.length > 0 && newMenuLabel !== initial.menuLabel) rows.push({ label: 'メニュー', before: initial.menuLabel || '（なし）', after: newMenuLabel || '（なし）' });
+        if (staffList.length > 0 && (staffId || '') !== (reservation.staff_id || '')) {
+          const nameOf = (id: string) => staffList.find((st) => st.id === id)?.name || '担当なし';
+          rows.push({ label: '担当スタッフ', before: nameOf(reservation.staff_id || ''), after: nameOf(staffId) });
+        }
+        if (rows.length === 0) {
+          return <p className="text-xs text-muted-foreground">まだ変更はありません。</p>;
+        }
+        return (
+          <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs space-y-1.5">
+            <p className="font-semibold text-sm">変更内容の確認</p>
+            {rows.map((r) => (
+              <div key={r.label} className="grid grid-cols-[auto_1fr] gap-x-2">
+                <span className="text-muted-foreground">{r.label}:</span>
+                <span><span className="line-through text-muted-foreground">{r.before}</span> → <span className="font-semibold">{r.after}</span></span>
+              </div>
+            ))}
+            <p className="text-muted-foreground pt-1">「変更を保存」を押すと、予約と Google カレンダーの予定がこの内容に更新されます。お客様の LINE「予約確認」にも変更後の内容が表示されます。</p>
+          </div>
+        );
+      })()}
 
       <div className="flex gap-2 justify-end pt-2 border-t">
         <Button variant="outline" size="sm" onClick={onCancel} disabled={saving}>キャンセル</Button>
