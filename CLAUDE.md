@@ -78,6 +78,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 
 **フォーム正規化（`normalizeForm()`）:**
 - レガシーのフラット構造 vs 新しい `config.*` 構造を処理
+- **フォーム名の正本は `config.basic_info.form_name`**。旧フラット形式の最上位 `form_name` は config に名前が無いときだけ使う。画面・API での表示は `getReservationFormName()`（`src/lib/form-display-name.ts`）に統一し、`(form as any).form_name || config...` の直書きはしない（複製したフォームの名前を変えても古い名前が残る原因になった）
 - API 層で全フォームを正規化し、UI の一貫性を確保
 - Supabase からの JSONB 文字列を必要に応じてパース
 - 常に欠落フィールドをデフォルト値で補完

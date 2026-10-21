@@ -19,6 +19,7 @@ import FormSyncDialog from './FormSyncDialog';
 import FormSnapshotDialog from './FormSnapshotDialog';
 import { Copy, Eye, History, Save, Upload } from 'lucide-react';
 
+import { getReservationFormName } from '@/lib/form-display-name';
 export type EditableForm = Form | SurveyForm | LotteryForm;
 
 interface FormEditModalProps {
@@ -225,7 +226,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
                   ? `${editingForm.config?.basic_info?.title || '抽選フォーム'} 編集`
                   : isSurvey(editingForm)
                   ? `${editingForm.config?.basic_info?.title || 'アンケートフォーム'} 編集`
-                  : `${(editingForm as Form).config?.basic_info?.form_name || (editingForm as any).form_name || '予約フォーム'} 編集`}
+                  : `${getReservationFormName(editingForm as Form, '予約フォーム')} 編集`}
               </DialogTitle>
             </div>
             <div className="flex items-center gap-4 mr-8">
