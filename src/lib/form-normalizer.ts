@@ -6,6 +6,7 @@
 import { Form, SpecialBusinessDay } from '@/types/form';
 import { resolveCancelRules } from './cancel-rules';
 import { normalizeStaffSchedule } from './staff-schedule';
+import { sanitizeConditionalAdvanceRules } from './advance-rules';
 
 /**
  * ✕にする時間帯の曜日指定を検証する。
@@ -370,6 +371,10 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 0;
           return n >= 0 && n <= 168 ? n : 0;
         })(),
+        conditional_advance_rules: sanitizeConditionalAdvanceRules(
+          existingConfig?.calendar_settings?.conditional_advance_rules
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.conditional_advance_rules
+        ),
         advance_booking_days: (existingConfig?.calendar_settings?.advance_booking_days || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.advance_booking_days || (typedBusinessRules?.advance_booking_days as number) || 30) as number,
         google_calendar_url: (existingConfig?.calendar_settings?.google_calendar_url || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.google_calendar_url) as string | undefined,
         // 日時選択モードのデフォルト値設定

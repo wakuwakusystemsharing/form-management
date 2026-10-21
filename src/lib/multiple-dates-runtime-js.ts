@@ -165,7 +165,8 @@ function mdPopulateDateOptions(select, settings, opts) {
         select.appendChild(option);
     }
 }
-// 時間の選択肢を作る。opts: { minAdvanceHours, placeholder }
+// 時間の選択肢を作る。opts: { minAdvanceHours, earliestStart: { date: 'YYYY-MM-DD', time: 'HH:MM' }, placeholder }
+// earliestStart = 条件付き予約受付開始時間で決まる「最初に予約できる日とその開始時刻」。その日はこの時刻より前を出さない
 function mdPopulateTimeOptions(select, settings, selectedDateStr, opts) {
     if (!select) return;
     opts = opts || {};
@@ -217,8 +218,10 @@ function mdPopulateTimeOptions(select, settings, selectedDateStr, opts) {
     const minAdvThreshold = (typeof opts.minAdvanceHours === 'number' && opts.minAdvanceHours > 0)
         ? Date.now() + opts.minAdvanceHours * 3600000
         : 0;
+    const earliest = opts.earliestStart && opts.earliestStart.time && selectedDateStr === opts.earliestStart.date ? opts.earliestStart.time : null;
     const visibleSlots = timeSlots.filter(time => {
         if (isBlockedForSelectedDay(time)) return false;
+        if (earliest && time < earliest) return false;
         if (minAdvThreshold && selectedDateStr) {
             const slotMs = new Date(selectedDateStr + 'T' + time + ':00').getTime();
             if (Number.isFinite(slotMs) && slotMs < minAdvThreshold) return false;

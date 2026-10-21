@@ -7,6 +7,7 @@ import { computeAccentColor, hexToRgb } from './color-utils';
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { FormConfig } from '@/types/form';
 import { STAFF_SCHEDULE_RUNTIME_JS } from './staff-schedule';
+import { ADVANCE_RULES_RUNTIME_JS } from './advance-rules';
 
 export class StaticReservationGenerator {
   /**
@@ -272,6 +273,7 @@ ${HOLIDAY_RUNTIME_JS}
 ${MULTIPLE_DATES_RUNTIME_JS}
 ${BIRTHDAY_RUNTIME_JS}
 ${STAFF_SCHEDULE_RUNTIME_JS}
+${ADVANCE_RULES_RUNTIME_JS}
 function formatDateTimeForDisplay(value) {
     // "2026-04-30T15:08[:00]" → "2026年04月30日 15:08"
     // "2026-04-30"            → "2026年04月30日"
@@ -1743,7 +1745,8 @@ class BookingForm {
     // 予約可能期間・営業時間・ルールの判定に使う設定の組
     // （スタッフごとの希望日時設定があるときは、指名あり = そのスタッフの設定、指名なし = 対応できる各スタッフの設定。
     //   無ければフォームの営業時間・ルール設定のみ = 従来どおり）
-    const today = new Date();
+    const nowAtRender = new Date();
+    const today = new Date(nowAtRender);
     today.setHours(0,0,0,0);
     const ruleContexts = this.getRuleContexts().map(c => {
         // 事前予約可能日数の上限日を算出
@@ -1751,10 +1754,11 @@ class BookingForm {
         const max = new Date(today);
         max.setDate(today.getDate() + days);
         max.setHours(23,59,59,999);
-        // 予約受付開始日（0 = 当日から）より前の日付は予約不可
+        // 予約受付開始日（0 = 当日から）+ 条件付き予約受付開始時間 より前の日時は予約不可
+        const earliest = resolveEarliestBookable(c.cs, nowAtRender);
         const minDate = new Date(today);
-        minDate.setDate(today.getDate() + this.getMinAdvanceDaysFor(c.cs));
-        return { staffId: c.staffId, cs: c.cs, max, minDate };
+        minDate.setDate(today.getDate() + earliest.days);
+        return { staffId: c.staffId, cs: c.cs, max, minDate, startTime: earliest.start_time };
     });
     // 時間間隔・追加で表示する分はスタッフ指名中はそのスタッフの設定、それ以外はフォームの設定
     const primaryCs = this.getPrimaryCalendarSettings();
@@ -3040,13 +3044,21 @@ class BookingForm {
         }
     }
     
-    // 予約受付開始日: 何日後から予約可能か（0 = 当日から）
+    // 予約受付開始日: 何日後から予約可能か（0 = 当日から）。条件付き予約受付開始時間設定も加味する
     getMinAdvanceDays() {
         return this.getMinAdvanceDaysFor(this.config?.calendar_settings);
     }
     getMinAdvanceDaysFor(cs) {
-        const v = cs?.min_advance_days;
-        return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.floor(v) : 0;
+        return resolveEarliestBookable(cs, new Date()).days;
+    }
+    // 条件付き予約受付開始時間設定で決まる「最初に予約できる日とその開始時刻」（第三希望日時モードの時間選択用）
+    getEarliestBookableStart() {
+        const earliest = resolveEarliestBookable(this.config?.calendar_settings, new Date());
+        if (!earliest.start_time) return null;
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + earliest.days);
+        return { date: formatLocalYmd(d), time: earliest.start_time };
     }
 
     // カレンダー内スクロールが上端/下端に達したら、続きのドラッグでページ側をスクロールさせる。
@@ -3425,7 +3437,7 @@ class BookingForm {
     }
 
     // 1 スロットが「受付期間・営業時間・✕にする時間帯・祝日・営業時間超過」のルールを満たすか（設定の組ごと）
-    // ctx: { cs, max, minDate }（renderCalendar で作る）。戻り値 { ok, isPast }
+    // ctx: { cs, max, minDate, startTime }（renderCalendar で作る）。戻り値 { ok, isPast }
     evaluateSlotRules(ctx, date, time, dayOfWeek, slotStart, slotEnd, now) {
         const cs = ctx.cs;
         const dayHours = this.getDayBusinessHoursFor(cs, date);
@@ -3442,7 +3454,13 @@ class BookingForm {
         }
 
         // 予約可能期間の判定（予約受付開始日〜事前予約可能日数の範囲内）
-        const withinWindow = date.getTime() <= ctx.max.getTime() && date.getTime() >= ctx.minDate.getTime();
+        let withinWindow = date.getTime() <= ctx.max.getTime() && date.getTime() >= ctx.minDate.getTime();
+        // 条件付き予約受付開始時間: 最初に予約できる日は、その開始時刻より前のスロットを✕
+        if (withinWindow && ctx.startTime && formatLocalYmd(date) === formatLocalYmd(ctx.minDate)) {
+            const startMin = arHHMMToMin(ctx.startTime);
+            const slotMin = parseInt(time.split(':')[0]) * 60 + parseInt(time.split(':')[1]);
+            if (startMin !== null && slotMin < startMin) withinWindow = false;
+        }
 
         // 予約受付開始時間: 現在時刻から N 時間後より前のスロットは✕（0 = 制限なし）
         const minAdvanceHoursRaw = cs?.min_advance_hours;
@@ -3535,7 +3553,8 @@ class BookingForm {
 
     populateTimeOptions(index, settings, selectedDateStr) {
         mdPopulateTimeOptions(document.getElementById('date' + index + '_time'), settings, selectedDateStr, {
-            minAdvanceHours: this.config.calendar_settings?.min_advance_hours
+            minAdvanceHours: this.config.calendar_settings?.min_advance_hours,
+            earliestStart: this.getEarliestBookableStart()
         });
     }
 

@@ -51,6 +51,7 @@ describe('normalizeStaffSchedule', () => {
       extra_minutes: [10, 70],
       min_advance_days: 1,
       min_advance_hours: 2.9,
+      conditional_advance_rules: [{ from_time: '15:00', min_days: 2 }],
       advance_booking_days: 14,
       holidays_as_closed: true,
       allow_exceed_business_hours: true,
@@ -66,6 +67,7 @@ describe('normalizeStaffSchedule', () => {
     expect(sc.extra_minutes).toEqual([10]);
     expect(sc.min_advance_days).toBe(1);
     expect(sc.min_advance_hours).toBe(2);
+    expect(sc.conditional_advance_rules).toEqual([expect.objectContaining({ from_time: '15:00', min_days: 2 })]);
     expect(sc.advance_booking_days).toBe(14);
     expect(sc.holidays_as_closed).toBe(true);
     expect(sc.excluded_holiday_types).toEqual([]);

@@ -6,6 +6,8 @@ import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 import { ExtraMinutesPicker, InfoTooltip } from './MultipleDatesSettingsEditor';
 import { HOLIDAY_TYPES } from '@/lib/holiday-types';
 import { STAFF_SCHEDULE_ITEMS, pickFormValueForStaffItem } from '@/lib/staff-schedule';
+import { describeAdvanceRule } from '@/lib/advance-rules';
+import ConditionalAdvanceRulesEditor from './ConditionalAdvanceRulesEditor';
 
 /**
  * スタッフごとの「希望日時設定」エディタ（メニュー構成 → 詳細設定 → スタッフ選択 → 各スタッフの「希望日時設定」）
@@ -336,6 +338,12 @@ const StaffScheduleEditor: React.FC<StaffScheduleEditorProps> = ({ schedule, cal
         return (
           <Row key={key} itemKey={key} summary={(cs.min_advance_hours ?? 0) === 0 ? '制限なし' : `現在時刻の${cs.min_advance_hours}時間後から予約可能`} help="現在時刻から何時間後以降の枠を予約可能にするか（0 = 制限なし）。">
             {numberInput('min_advance_hours', 0, 168, 0)}
+          </Row>
+        );
+      case 'conditional_advance_rules':
+        return (
+          <Row key={key} itemKey={key} summary={(cs.conditional_advance_rules || []).length > 0 ? (cs.conditional_advance_rules || []).map(describeAdvanceRule).join(' / ') : '未設定'} help={'「現在時刻が◯時以降なら N 日後の◯時から」のルール。このスタッフの予約受付開始日と合わせて、いちばん先になる条件が使われます。'}>
+            <ConditionalAdvanceRulesEditor rules={sc.conditional_advance_rules || []} theme={theme} showHeading={false} onChange={(next) => set({ conditional_advance_rules: next })} />
           </Row>
         );
       case 'advance_booking_days':

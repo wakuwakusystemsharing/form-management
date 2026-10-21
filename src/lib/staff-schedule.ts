@@ -9,6 +9,7 @@
  */
 import type { BusinessHours, FormConfig, SpecialBusinessDay, StaffScheduleSettings } from '@/types/form';
 import { sanitizeBlockedTimeWeekdays, sanitizeExtraMinutes, sanitizeSpecialBusinessDays } from './form-normalizer';
+import { sanitizeConditionalAdvanceRules } from './advance-rules';
 
 export type CalendarSettings = FormConfig['calendar_settings'];
 
@@ -27,6 +28,7 @@ export const STAFF_SCHEDULE_ITEMS: Array<{
   { key: 'extra_minutes', label: '追加で表示する分', group: 'calendar' },
   { key: 'min_advance_days', label: '予約受付開始日', group: 'rules' },
   { key: 'min_advance_hours', label: '予約受付開始時間', group: 'rules' },
+  { key: 'conditional_advance_rules', label: '条件付き予約受付開始時間設定', group: 'rules' },
   { key: 'advance_booking_days', label: '事前予約可能日数', group: 'rules' },
   { key: 'holidays_as_closed', label: '祝日を予約不可にする', companion: 'excluded_holiday_types', group: 'rules' },
   { key: 'allow_exceed_business_hours', label: '営業時間を超える予約を許可', group: 'rules' },
@@ -103,6 +105,8 @@ export function normalizeStaffSchedule(raw: unknown): StaffScheduleSettings | un
   if (mad !== undefined) out.min_advance_days = mad;
   const mah = normNonNegativeInt(r.min_advance_hours, 168);
   if (mah !== undefined) out.min_advance_hours = mah;
+  if (Array.isArray(r.conditional_advance_rules)) out.conditional_advance_rules = sanitizeConditionalAdvanceRules(r.conditional_advance_rules);
+
   const abd = normNonNegativeInt(r.advance_booking_days, 365);
   if (abd !== undefined && abd >= 1) out.advance_booking_days = abd;
 
@@ -164,6 +168,7 @@ export function pickFormValueForStaffItem(cs: CalendarSettings, key: keyof Staff
     case 'extra_minutes': return [...(cs.extra_minutes || [])];
     case 'min_advance_days': return cs.min_advance_days ?? 0;
     case 'min_advance_hours': return cs.min_advance_hours ?? 0;
+    case 'conditional_advance_rules': return (cs.conditional_advance_rules || []).map((r) => ({ ...r }));
     case 'advance_booking_days': return cs.advance_booking_days || 30;
     case 'holidays_as_closed': return cs.holidays_as_closed === true;
     case 'excluded_holiday_types': return [...(cs.excluded_holiday_types || [])];
@@ -181,7 +186,7 @@ export const STAFF_SCHEDULE_RUNTIME_JS = `
 var STAFF_SCHEDULE_KEYS = [
     ['business_hours', null], ['holiday_hours', null], ['special_business_days', null],
     ['blocked_times', 'blocked_time_weekdays'], ['time_interval', null], ['extra_minutes', null],
-    ['min_advance_days', null], ['min_advance_hours', null], ['advance_booking_days', null],
+    ['min_advance_days', null], ['min_advance_hours', null], ['conditional_advance_rules', null], ['advance_booking_days', null],
     ['holidays_as_closed', 'excluded_holiday_types'], ['allow_exceed_business_hours', null]
 ];
 // フォームのカレンダー設定にスタッフの上書きを重ねる（上書きがある項目だけスタッフの値。付随キーも一緒に置き換える）

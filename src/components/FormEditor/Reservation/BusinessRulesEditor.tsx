@@ -10,6 +10,7 @@ import { CANCEL_DEADLINE_OPTIONS, resolveCancelRules, type CancelRules } from '@
 import MultipleDatesSettingsEditor, { ExtraMinutesPicker, InfoTooltip } from './MultipleDatesSettingsEditor';
 import type { MultipleDatesSettings } from '@/types/form';
 import { HOLIDAY_TYPES } from '@/lib/holiday-types';
+import ConditionalAdvanceRulesEditor from './ConditionalAdvanceRulesEditor';
 
 // ON / OFF トグル（お名前 / 電話番号 / メッセージ欄の設定で使用）
 const ToggleSwitch: React.FC<{ checked: boolean; onChange: (v: boolean) => void; theme: ThemeType; disabled?: boolean }> = ({ checked, onChange, theme, disabled }) => {
@@ -1224,6 +1225,13 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 {minAdvanceHours === 0 ? '制限なし（直前でも予約可能）' : `現在時刻の${minAdvanceHours}時間後から予約可能`}
               </p>
             </div>
+
+            {/* 条件付き予約受付開始時間設定（現在時刻の条件 → N 日後の◯時から） */}
+            <ConditionalAdvanceRulesEditor
+              rules={form.config?.calendar_settings?.conditional_advance_rules || []}
+              theme={theme}
+              onChange={(next) => updateCalendarSetting('conditional_advance_rules', next)}
+            />
 
             <div className="max-w-xs">
               <div className="flex items-center gap-1.5 mb-2">
