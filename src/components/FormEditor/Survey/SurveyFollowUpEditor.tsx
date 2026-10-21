@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { SurveyFollowUpQuestion, SurveyFollowUpType, SurveyQuestionOption } from '@/types/survey';
+import type { SurveyContentBlock, SurveyFollowUpQuestion, SurveyFollowUpType, SurveyQuestionOption } from '@/types/survey';
+import { AddContentBlockButton, SurveyContentBlockCard, createSurveyContentBlock } from './SurveyContentBlockEditor';
 import {
   SURVEY_FOLLOW_UP_MAX_DEPTH,
   countFollowUpsDeep,
@@ -82,6 +83,27 @@ export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle
   };
 
   const canNest = depth < SURVEY_FOLLOW_UP_MAX_DEPTH;
+  // 追加質問の上下のテキスト / 画像ブロック（画像アップロードに店舗 ID が要るため storeId があるときだけ）
+  const blocksEnabled = !!storeId;
+  const blocksAt = (fu: SurveyFollowUpQuestion, position: 'above' | 'below') =>
+    (fu.content_blocks || []).filter((b) => (b.position || 'above') === position);
+  const addBlock = (fuIndex: number, position: 'above' | 'below') => {
+    const fu = list[fuIndex];
+    updateFollowUp(fuIndex, { content_blocks: [...(fu.content_blocks || []), createSurveyContentBlock(fu.id || '', position)] });
+  };
+  const updateBlock = (fuIndex: number, blockId: string, patch: Partial<SurveyContentBlock>) => {
+    const fu = list[fuIndex];
+    updateFollowUp(fuIndex, { content_blocks: (fu.content_blocks || []).map((b) => (b.id === blockId ? { ...b, ...patch } : b)) });
+  };
+  const deleteBlock = (fuIndex: number, blockId: string) => {
+    const fu = list[fuIndex];
+    const next = (fu.content_blocks || []).filter((b) => b.id !== blockId);
+    updateFollowUp(fuIndex, { content_blocks: next.length > 0 ? next : undefined });
+  };
+  const renderBlocks = (fuIndex: number, position: 'above' | 'below') =>
+    blocksAt(list[fuIndex], position).map((b) => (
+      <SurveyContentBlockCard key={b.id} block={b} storeId={storeId || ''} onChange={(patch) => updateBlock(fuIndex, b.id, patch)} onDelete={() => deleteBlock(fuIndex, b.id)} />
+    ));
 
   return (
     <div className="ml-8 mt-2 mb-3 space-y-3">
@@ -93,7 +115,15 @@ export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle
         const fuTitleForChildren = (fu.title || '').trim() || `${parentTitle}（${optionLabel}）`;
         const prefix = `${idPrefix}-fu${fuIndex}`;
         return (
-          <div key={fuKey} className={`p-3 rounded-md border bg-background space-y-3 ${fu.enabled === false ? 'opacity-70' : ''}`}>
+          <React.Fragment key={fuKey}>
+          {blocksEnabled && (
+            <AddContentBlockButton
+              onClick={() => addBlock(fuIndex, 'above')}
+              label={fuIndex === 0 ? '追加質問 1 の上にテキスト/画像表示を追加' : `追加質問 ${fuIndex} と ${fuIndex + 1} の間にテキスト/画像表示を追加`}
+            />
+          )}
+          {renderBlocks(fuIndex, 'above')}
+          <div className={`p-3 rounded-md border bg-background space-y-3 ${fu.enabled === false ? 'opacity-70' : ''}`}>
             <div className="flex items-center justify-between gap-2">
               <div className="text-xs font-semibold">
                 追加質問 {fuIndex + 1}
@@ -160,6 +190,18 @@ export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle
                 必須にする（「{optionLabel}」が選ばれているときのみ）
               </Label>
             </div>
+            {isChoiceFollowUpType(fu.type) && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id={`${prefix}-allow-other`}
+                  checked={fu.allow_other === true}
+                  onCheckedChange={(checked) => updateFollowUp(fuIndex, { allow_other: checked === true })}
+                />
+                <Label htmlFor={`${prefix}-allow-other`} className="cursor-pointer text-sm">
+                  {fu.type === 'select' ? '「その他」の選択肢を追加（選択時に理由入力欄を表示）' : '「その他」ボタンを追加（選択時に理由入力欄を表示）'}
+                </Label>
+              </div>
+            )}
 
             {isChoiceFollowUpType(fu.type) && (
               <div className="space-y-2">
@@ -285,6 +327,11 @@ export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle
               </div>
             )}
           </div>
+          {renderBlocks(fuIndex, 'below')}
+          {blocksEnabled && fuIndex === list.length - 1 && (
+            <AddContentBlockButton onClick={() => addBlock(fuIndex, 'below')} label={`追加質問 ${fuIndex + 1} の下にテキスト/画像表示を追加`} />
+          )}
+          </React.Fragment>
         );
       })}
       <Button type="button" variant="outline" size="sm" onClick={addFollowUp} className="w-full">
