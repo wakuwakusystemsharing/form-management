@@ -9,6 +9,7 @@
  */
 import type { LotteryConfig, LotteryForm } from '@/types/lottery';
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
+import { FOLLOW_UP_NESTED_CSS, FOLLOW_UP_RUNTIME_JS, renderFollowUpBlocksHtml } from './survey-follow-up-runtime-js';
 import type { SurveyQuestion } from '@/types/survey';
 import { computeAccentColor } from './color-utils';
 import { renderColoredTextHtml } from './colored-text';
@@ -163,6 +164,7 @@ export class StaticLotteryGenerator {
         };
 
         ${BIRTHDAY_RUNTIME_JS}
+        ${FOLLOW_UP_RUNTIME_JS}
         ${this.generateHelpersJS()}
         ${this.generateQuestionsJS()}
         ${this.generateLiffJS()}
@@ -325,11 +327,12 @@ export class StaticLotteryGenerator {
     const otherInput = q.allow_other && (q.type === 'radio' || q.type === 'checkbox' || q.type === 'select')
       ? `<input type="text" id="other-${id}" class="input other-input hidden" placeholder="その他の内容を入力してください">`
       : '';
-    const followUps = (q.options || []).map((o, i) => {
-      const fu = o.follow_up;
-      if (!fu || !fu.enabled) return '';
-      return `<div class="follow-up hidden" id="fu-${id}-${i}"><label class="follow-up-title">${this.escapeHtml(fu.title || `${q.title}（${o.label}）`)}${fu.required ? '<span class="required">必須</span>' : ''}</label>${this.renderFollowUpField(q.id, i, fu)}</div>`;
-    }).join('');
+    // 選択肢ごとの追加質問（複数・入れ子。アンケートと共通の描画）
+    const followUps = renderFollowUpBlocksHtml(q.id, q.title, q.options, {
+      labelClass: 'follow-up-title',
+      buttonGroupClass: 'choice-group',
+      textAs: 'input',
+    });
     return `
                     <div class="question" id="question-${id}">
                         <label class="field-label">Q${index + 1}. ${this.escapeHtml(q.title)}${requiredMark}</label>
@@ -338,24 +341,6 @@ export class StaticLotteryGenerator {
                         ${otherInput}
                         ${followUps}
                     </div>`;
-  }
-
-  private renderFollowUpField(questionId: string, optionIndex: number, fu: NonNullable<SurveyQuestion['options']>[number]['follow_up'] & object): string {
-    const fid = `fu-${this.escapeAttr(questionId)}-${optionIndex}-input`;
-    switch (fu.type) {
-      case 'textarea':
-        return `<textarea id="${fid}" class="input" rows="2" placeholder="入力してください"></textarea>`;
-      case 'birthday':
-        return renderBirthdayFieldHtml(fid);
-      case 'select':
-        return `<select id="${fid}" class="input"><option value="">選択してください</option>${(fu.options || []).map((o) => `<option value="${this.escapeAttr(o.value)}">${this.escapeHtml(o.label)}</option>`).join('')}</select>`;
-      case 'radio':
-      case 'checkbox':
-        return `<div class="choice-group" id="${fid}" data-type="${fu.type}">${(fu.options || []).map((o) => `<button type="button" class="choice-button" data-value="${this.escapeAttr(o.value)}" onclick="selectFollowUpChoice(this, '${fid}', '${fu.type}')">${this.escapeHtml(o.label)}</button>`).join('')}</div>`;
-      case 'text':
-      default:
-        return `<input type="text" id="${fid}" class="input" placeholder="入力してください">`;
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -447,16 +432,8 @@ export class StaticLotteryGenerator {
             }
             onQuestionChange(qid);
         }
-        function selectFollowUpChoice(el, groupId, type) {
-            var group = $(groupId);
-            if (type === 'radio') {
-                var all = group.querySelectorAll('.choice-button');
-                for (var i = 0; i < all.length; i++) all[i].classList.remove('selected');
-                el.classList.add('selected');
-            } else {
-                el.classList.toggle('selected');
-            }
-        }
+        // 追加質問内の選択が変わったとき（共通ランタイムから呼ばれる）: 入れ子の追加質問の表示を更新
+        function fuOnChange(qid) { onQuestionChange(qid); }
         function selectedIndexes(q) {
             var out = [];
             if (q.type === 'select') {
@@ -484,23 +461,7 @@ export class StaticLotteryGenerator {
             if (!q) return;
             var other = $('other-' + qid);
             if (other) other.classList.toggle('hidden', !isOtherSelected(q));
-            var idx = selectedIndexes(q);
-            for (var i = 0; i < (q.options || []).length; i++) {
-                var fu = $('fu-' + qid + '-' + i);
-                if (fu) fu.classList.toggle('hidden', idx.indexOf(i) === -1);
-            }
-        }
-        function followUpValue(fid, type) {
-            if (type === 'radio' || type === 'checkbox') {
-                var group = $(fid);
-                if (!group) return '';
-                var btns = group.querySelectorAll('.choice-button.selected');
-                var vals = [];
-                for (var i = 0; i < btns.length; i++) vals.push(btns[i].dataset.value);
-                return vals.join(', ');
-            }
-            var el = $(fid);
-            return el ? String(el.value || '').trim() : '';
+            fuUpdateVisibility(qid, q.options, selectedIndexes(q), [], true);
         }
         // 回答を { 質問タイトル: 値 } で集める。必須未入力があればエラー文言を返す
         function collectAnswers() {
@@ -527,20 +488,9 @@ export class StaticLotteryGenerator {
                 if (q.required && !value) return { error: '「' + q.title + '」を入力してください' };
                 answers[q.title] = value;
                 if (q.options) {
-                    var sidx = selectedIndexes(q);
-                    for (var m = 0; m < sidx.length; m++) {
-                        var opt = q.options[sidx[m]];
-                        var fu = opt && opt.follow_up;
-                        if (!fu || fu.enabled !== true) continue;
-                        var fid = 'fu-' + q.id + '-' + sidx[m] + '-input';
-                        var fuVal = followUpValue(fid, fu.type);
-                        var fuTitle = (fu.title || '').trim() || (q.title + '（' + opt.label + '）');
-                        if (fu.required && !fuVal) return { error: '「' + fuTitle + '」を入力してください' };
-                        if (!fuVal) continue;
-                        var key = fuTitle;
-                        if (Object.prototype.hasOwnProperty.call(answers, key)) key = key + '（' + opt.label + '）';
-                        answers[key] = fuVal;
-                    }
+                    // 選択中の選択肢の追加質問（複数・入れ子）を親の直後に追加
+                    var fuResult = fuCollect(q.id, q.title, q.options, selectedIndexes(q), [], answers, null);
+                    if (fuResult && fuResult.error) return { error: '「' + fuResult.title + '」を入力してください' };
                 }
             }
             return { answers: answers };
@@ -1438,6 +1388,7 @@ export class StaticLotteryGenerator {
         .other-input, .follow-up { margin-top: 10px; }
         .follow-up { padding: 10px; background: #f7f8fa; border-radius: 6px; }
         .follow-up-title { display: flex; gap: 6px; align-items: center; font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+        ${FOLLOW_UP_NESTED_CSS}
         .choice-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .choice-button { padding: 12px 8px; border: 1px solid #ccc; border-radius: 2px; background: var(--white); font-weight: 500; font-size: 15px; color: var(--text-color); }
         .choice-button.selected { background: var(--primary-color); border-color: var(--primary-color); color: var(--white); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }

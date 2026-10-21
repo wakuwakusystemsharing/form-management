@@ -105,8 +105,8 @@ describe('アンケート: 回答タイプ「誕生日選択」', () => {
     expect(p.d.value).toBe('24');
     expect(w.formatDateTimeForDisplay(p.hidden.value)).toBe('1990年12月24日');
     // 追加質問側の部品も生成されている
-    expect(doc.getElementById('fu-q2-0')).not.toBeNull();
-    expect(doc.querySelector('.birthday-field[data-birthday-for="fu-q2-0"]')).not.toBeNull();
+    expect(doc.getElementById('fu-q2-0-0')).not.toBeNull();
+    expect(doc.querySelector('.birthday-field[data-birthday-for="fu-q2-0-0"]')).not.toBeNull();
   });
 });
 

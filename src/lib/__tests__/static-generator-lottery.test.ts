@@ -80,8 +80,8 @@ describe('StaticLotteryGenerator', () => {
     expect(html).toContain('id="choices-q2"');
     expect(html).toContain('data-other="1"');
     expect(html).toContain('id="other-q2"');
-    expect(html).toContain('id="fu-q2-1"');
-    expect(html).toContain('id="fu-q2-1-input"');
+    expect(html).toContain('id="followup-q2-1-0"');
+    expect(html).toContain('id="fu-q2-1-0"');
     expect(html).toContain('<select id="q-q3"');
     expect(html).toContain('id="choices-q4"');
     expect(html).toContain('type="date" id="q-q5"');
