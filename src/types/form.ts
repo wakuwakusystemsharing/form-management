@@ -103,6 +103,35 @@ export interface SpecialBusinessDay {
   close: string;  // "18:00"
 }
 
+// 条件付き予約受付開始時間: 「現在時刻が from_time 以降（until_time より前）なら min_days 日後の start_time から」。
+// 予約受付開始日（min_advance_days）と合わせていちばん先になるものを採用。純粋ロジックは src/lib/advance-rules.ts
+export interface ConditionalAdvanceRule {
+  id: string;
+  from_time?: string;    // "HH:MM" 現在時刻がこれ以降のとき適用（未設定 = 条件なし）
+  until_time?: string;   // "HH:MM" 現在時刻がこれより前のとき適用（未設定 = 条件なし）
+  min_days: number;      // 何日後から（0 = 当日）
+  start_time?: string;   // その日の "HH:MM" から（未設定 = 営業開始から）
+}
+
+// スタッフごとの「希望日時設定」: カレンダー表示モードの受付時間・予約ルールをスタッフ単位で上書きする。
+// 各項目は undefined = フォーム（営業時間・ルールタブ）の設定を使う。純粋ロジックは src/lib/staff-schedule.ts
+export interface StaffScheduleSettings {
+  business_hours?: BusinessHours;                 // 営業時間設定（曜日別）
+  holiday_hours?: { enabled: boolean; open: string; close: string };  // 祝日の営業時間
+  special_business_days?: SpecialBusinessDay[];   // 臨時営業日
+  blocked_times?: string[];                       // デフォルトで✕にする時間帯（blocked_time_weekdays とセット）
+  blocked_time_weekdays?: { [time: string]: number[] };
+  time_interval?: 10 | 15 | 20 | 30 | 45 | 60 | 120;
+  extra_minutes?: number[];
+  min_advance_days?: number;                      // 予約受付開始日
+  min_advance_hours?: number;                     // 予約受付開始時間
+  conditional_advance_rules?: ConditionalAdvanceRule[];  // 条件付き予約受付開始時間設定
+  advance_booking_days?: number;                  // 事前予約可能日数
+  holidays_as_closed?: boolean;                   // 祝日を予約不可にする（excluded_holiday_types とセット）
+  excluded_holiday_types?: string[];
+  allow_exceed_business_hours?: boolean;          // 営業時間を超える予約を許可
+}
+
 export interface FormConfig {
   basic_info: {
     form_name: string;
@@ -232,6 +261,8 @@ export interface FormConfig {
     min_advance_days?: number;
     // 予約受付開始時間: 現在時刻から何時間後以降のみ予約可能か（0 = 制限なし）。両モードに適用
     min_advance_hours?: number;
+    // 条件付き予約受付開始時間設定（現在時刻の条件 → N 日後の◯時から）。両モードに適用
+    conditional_advance_rules?: ConditionalAdvanceRule[];
     advance_booking_days: number;
     google_calendar_url?: string;
     // 日時選択モード
@@ -350,6 +381,8 @@ export interface FormConfig {
       event_color_id?: string;      // 予約イベントの色（colorId '1'〜'11'。空 = カレンダーの既定色）
       hidden_menu_ids?: string[];   // このスタッフ選択時に非表示にするメニューID（空 = 全メニュー表示）
       hidden_option_ids?: string[]; // このスタッフ選択時に非表示にするオプションID（メニュー内・カテゴリー共通）
+      // 希望日時設定（カレンダー表示モードのみ。未設定 / 各項目 undefined = フォームの営業時間・ルール設定）
+      schedule?: StaffScheduleSettings;
     }>;
   };
 

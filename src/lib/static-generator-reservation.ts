@@ -6,6 +6,8 @@
 import { computeAccentColor, hexToRgb } from './color-utils';
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { FormConfig } from '@/types/form';
+import { STAFF_SCHEDULE_RUNTIME_JS } from './staff-schedule';
+import { ADVANCE_RULES_RUNTIME_JS } from './advance-rules';
 
 export class StaticReservationGenerator {
   /**
@@ -270,6 +272,8 @@ const LINE_ONLY = ${lineOnly ? 'true' : 'false'};
 ${HOLIDAY_RUNTIME_JS}
 ${MULTIPLE_DATES_RUNTIME_JS}
 ${BIRTHDAY_RUNTIME_JS}
+${STAFF_SCHEDULE_RUNTIME_JS}
+${ADVANCE_RULES_RUNTIME_JS}
 function formatDateTimeForDisplay(value) {
     // "2026-04-30T15:08[:00]" → "2026年04月30日 15:08"
     // "2026-04-30"            → "2026年04月30日"
@@ -284,12 +288,16 @@ function formatDateTimeForDisplay(value) {
 function oneLine(s) {
     return String(s == null ? '' : s).replace(/\\s*\\r?\\n\\s*/g, ' ').trim();
 }
-function shouldBlockAsHoliday(date) {
-    if (!FORM_CONFIG.calendar_settings || !FORM_CONFIG.calendar_settings.holidays_as_closed) return false;
+// 指定したカレンダー設定（フォーム全体 or スタッフの希望日時設定を重ねたもの）で「祝日を予約不可」に該当するか
+function shouldBlockAsHolidayWith(cs, date) {
+    if (!cs || !cs.holidays_as_closed) return false;
     const type = getEffectiveHolidayType(date);
     if (!type) return false;
-    const excluded = FORM_CONFIG.calendar_settings.excluded_holiday_types || [];
+    const excluded = cs.excluded_holiday_types || [];
     return !excluded.includes(type);
+}
+function shouldBlockAsHoliday(date) {
+    return shouldBlockAsHolidayWith(FORM_CONFIG.calendar_settings, date);
 }
 // ========== 祝日判定ロジックここまで ==========
 
@@ -1734,81 +1742,74 @@ class BookingForm {
         const table = document.getElementById('calendar-table');
         if (!table) return;
         
-    // 事前予約可能日数の上限日を算出
-    const days = (this.config?.calendar_settings?.advance_booking_days ?? 30);
-    const today = new Date();
+    // 予約可能期間・営業時間・ルールの判定に使う設定の組
+    // （スタッフごとの希望日時設定があるときは、指名あり = そのスタッフの設定、指名なし = 対応できる各スタッフの設定。
+    //   無ければフォームの営業時間・ルール設定のみ = 従来どおり）
+    const nowAtRender = new Date();
+    const today = new Date(nowAtRender);
     today.setHours(0,0,0,0);
-    const max = new Date(today);
-    max.setDate(today.getDate() + days);
-    max.setHours(23,59,59,999);
-    // 予約受付開始日（0 = 当日から）より前の日付は予約不可
-    const minDate = new Date(today);
-    minDate.setDate(today.getDate() + this.getMinAdvanceDays());
+    const ruleContexts = this.getRuleContexts().map(c => {
+        // 事前予約可能日数の上限日を算出
+        const days = (c.cs?.advance_booking_days ?? 30);
+        const max = new Date(today);
+        max.setDate(today.getDate() + days);
+        max.setHours(23,59,59,999);
+        // 予約受付開始日（0 = 当日から）+ 条件付き予約受付開始時間 より前の日時は予約不可
+        const earliest = resolveEarliestBookable(c.cs, nowAtRender);
+        const minDate = new Date(today);
+        minDate.setDate(today.getDate() + earliest.days);
+        return { staffId: c.staffId, cs: c.cs, max, minDate, startTime: earliest.start_time };
+    });
+    // 時間間隔・追加で表示する分はスタッフ指名中はそのスタッフの設定、それ以外はフォームの設定
+    const primaryCs = this.getPrimaryCalendarSettings();
 
         const weekDates = this.getWeekDates(this.state.currentWeekStart);
 
-        // 全曜日の営業時間から最早open・最遅closeを算出してタイムスロットを動的生成
-        const businessHours = this.config?.calendar_settings?.business_hours;
+        // 全設定の営業時間から最早open・最遅closeを算出してタイムスロットを動的生成
         let earliestOpen = 9 * 60;
         let latestClose = 18 * 60;
-        if (businessHours) {
-            let foundOpen = false;
-            const dayKeys = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+        let foundOpen = false;
+        const toMin = (t, fallback) => {
+            const parts = String(t || fallback).split(':');
+            const v = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+            return isFinite(v) ? v : null;
+        };
+        const widen = (openM, closeM) => {
+            if (openM === null || closeM === null) return;
+            if (openM < earliestOpen) earliestOpen = openM;
+            if (closeM > latestClose) latestClose = closeM;
+        };
+        const dayKeys = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+        ruleContexts.forEach(c => {
+            const businessHours = c.cs?.business_hours;
+            if (!businessHours) return;
             dayKeys.forEach(day => {
                 const h = businessHours[day];
                 if (h && !h.closed) {
-                    const openM = parseInt(h.open.split(':')[0]) * 60 + parseInt(h.open.split(':')[1]);
-                    const closeM = parseInt(h.close.split(':')[0]) * 60 + parseInt(h.close.split(':')[1]);
-                    if (!foundOpen || openM < earliestOpen) earliestOpen = openM;
-                    if (!foundOpen || closeM > latestClose) latestClose = closeM;
-                    foundOpen = true;
+                    const openM = toMin(h.open, '09:00');
+                    const closeM = toMin(h.close, '18:00');
+                    if (openM === null || closeM === null) return;
+                    if (!foundOpen) { earliestOpen = openM; latestClose = closeM; foundOpen = true; }
+                    else widen(openM, closeM);
                 }
             });
-        }
-        // 祝日の営業時間が設定されている場合はスロット範囲にも含める
-        const holidayHoursCfg = this.config?.calendar_settings?.holiday_hours;
-        if (holidayHoursCfg && holidayHoursCfg.enabled === true) {
-            const ho = holidayHoursCfg.open || '09:00';
-            const hc = holidayHoursCfg.close || '18:00';
-            const hOpenM = parseInt(ho.split(':')[0]) * 60 + parseInt(ho.split(':')[1]);
-            const hCloseM = parseInt(hc.split(':')[0]) * 60 + parseInt(hc.split(':')[1]);
-            if (isFinite(hOpenM) && hOpenM < earliestOpen) earliestOpen = hOpenM;
-            if (isFinite(hCloseM) && hCloseM > latestClose) latestClose = hCloseM;
-        }
-        // 臨時営業日の時間もスロット範囲に含める（表示中の週に含まれる日のみ）
-        weekDates.forEach(d => {
-            const sp = this.getSpecialBusinessHours(d);
-            if (!sp) return;
-            const sOpenM = parseInt(sp.open.split(':')[0]) * 60 + parseInt(sp.open.split(':')[1]);
-            const sCloseM = parseInt(sp.close.split(':')[0]) * 60 + parseInt(sp.close.split(':')[1]);
-            if (isFinite(sOpenM) && sOpenM < earliestOpen) earliestOpen = sOpenM;
-            if (isFinite(sCloseM) && sCloseM > latestClose) latestClose = sCloseM;
+        });
+        ruleContexts.forEach(c => {
+            // 祝日の営業時間が設定されている場合はスロット範囲にも含める
+            const holidayHoursCfg = c.cs?.holiday_hours;
+            if (holidayHoursCfg && holidayHoursCfg.enabled === true) {
+                widen(toMin(holidayHoursCfg.open, '09:00'), toMin(holidayHoursCfg.close, '18:00'));
+            }
+            // 臨時営業日の時間もスロット範囲に含める（表示中の週に含まれる日のみ）
+            weekDates.forEach(d => {
+                const sp = this.getSpecialBusinessHoursFor(c.cs, d);
+                if (sp) widen(toMin(sp.open, '09:00'), toMin(sp.close, '18:00'));
+            });
         });
         // 選択中メニュー/オプションの対応時間設定（セルごとの判定用に1回だけ計算）
         const menuTimeWindows = this.getActiveTimeWindows();
 
-        // 予約受付開始時間: 現在時刻から N 時間後より前のスロットは✕（0 = 制限なし）
-        const minAdvanceHoursRaw = this.config.calendar_settings?.min_advance_hours;
-        const minAdvanceMs = (typeof minAdvanceHoursRaw === 'number' && minAdvanceHoursRaw > 0 ? minAdvanceHoursRaw : 0) * 3600000;
-
-        // デフォルトで✕にする時間帯（設定された時刻のスロットは✕。"9:00" → "09:00" に正規化）
-        // 曜日指定がある時刻は指定曜日のみ✕（指定なし = 全曜日✕の既存挙動）
-        const normalizeBlockedTime = (t) => { const m = /^([0-9]{1,2}):([0-9]{2})/.exec(t || ''); return m ? String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2] : ''; };
-        const blockedTimesSet = new Set((this.config.calendar_settings?.blocked_times || [])
-            .map(normalizeBlockedTime)
-            .filter(Boolean));
-        const blockedTimeWeekdays = {};
-        Object.entries(this.config.calendar_settings?.blocked_time_weekdays || {}).forEach(([t, days]) => {
-            const key = normalizeBlockedTime(t);
-            if (key && Array.isArray(days) && days.length > 0) blockedTimeWeekdays[key] = days;
-        });
-        const isBlockedTimeSlot = (time, dayOfWeek) => {
-            if (!blockedTimesSet.has(time)) return false;
-            const days = blockedTimeWeekdays[time];
-            return !days || days.indexOf(dayOfWeek) !== -1;
-        };
-
-        const rawInterval = this.config?.calendar_settings?.time_interval;
+        const rawInterval = primaryCs?.time_interval;
         const timeInterval = (rawInterval === 10 || rawInterval === 15 || rawInterval === 20 || rawInterval === 30 || rawInterval === 45 || rawInterval === 60 || rawInterval === 120) ? rawInterval : 30;
         const timeSlots = this.addExtraMinuteSlots(
             (() => {
@@ -1816,9 +1817,9 @@ class BookingForm {
                 for (let m = earliestOpen; m < latestClose; m += timeInterval) base.push(m);
                 return base;
             })(),
-            earliestOpen, latestClose, this.config?.calendar_settings?.extra_minutes
+            earliestOpen, latestClose, primaryCs?.extra_minutes
         ).map(m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'));
-        
+
         // 月表示を更新
         const monthDisplay = document.getElementById('current-month');
         if (monthDisplay) {
@@ -1849,51 +1850,6 @@ class BookingForm {
         const dateStr = formatLocalYmd(date);
         const dayOfWeek = date.getDay();
         
-        // 営業時間設定を取得（臨時営業日 > 祝日の営業時間 > 曜日設定）
-        const dayHours = this.getDayBusinessHours(date);
-        
-        // 定休日チェック
-        const isClosed = dayHours?.closed === true;
-        
-        // 営業時間チェック
-        let isWithinBusinessHours = true;
-        if (!isClosed && dayHours) {
-            const timeHour = parseInt(time.split(':')[0]);
-            const timeMinute = parseInt(time.split(':')[1]);
-            const timeMinutes = timeHour * 60 + timeMinute;
-            
-            const openTime = dayHours.open || '09:00';
-            const closeTime = dayHours.close || '18:00';
-            const openHour = parseInt(openTime.split(':')[0]);
-            const openMinute = parseInt(openTime.split(':')[1]);
-            const openMinutes = openHour * 60 + openMinute;
-            
-            const closeHour = parseInt(closeTime.split(':')[0]);
-            const closeMinute = parseInt(closeTime.split(':')[1]);
-            const closeMinutes = closeHour * 60 + closeMinute;
-            
-            isWithinBusinessHours = timeMinutes >= openMinutes && timeMinutes < closeMinutes;
-        }
-        
-        // 予約可能期間の判定（予約受付開始日〜事前予約可能日数の範囲内）
-        const withinWindow = date.getTime() <= max.getTime() && date.getTime() >= minDate.getTime();
-
-        // メニュー/オプションの対応時間設定（すべての時間帯に収まらないスロットは✕）
-        let isWithinMenuWindows = true;
-        if (menuTimeWindows.length > 0) {
-            const slotMin = parseInt(time.split(':')[0], 10) * 60 + parseInt(time.split(':')[1], 10);
-            isWithinMenuWindows = menuTimeWindows.every(w => slotMin >= w.start && slotMin < w.end);
-        }
-        
-        // 現在の日時を取得
-        const now = new Date();
-        // 日付をローカル時間で取得し、時間を設定
-        const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 
-            parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
-        
-        // ミリ秒で比較してタイムゾーンの問題を回避
-        const isPast = slotStart.getTime() < now.getTime() + minAdvanceMs;
-        
         // メニュー＋オプション時間は共通ヘルパーで取得
         const { menuDuration, optionsDuration } = this.getDurations();
         let visitDuration = 0;
@@ -1902,6 +1858,12 @@ class BookingForm {
             if (visitOption?.duration) visitDuration = visitOption.duration;
         }
         const totalDuration = menuDuration + optionsDuration + visitDuration;
+
+        // 現在の日時を取得
+        const now = new Date();
+        // 日付をローカル時間で取得し、時間を設定
+        const slotStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(),
+            parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
         const slotEnd = new Date(slotStart);
         slotEnd.setMinutes(slotStart.getMinutes() + totalDuration);
         // 重なり判定用: メニュー未選択(=幅0)のときはスロット間隔ぶんの幅を持たせる
@@ -1910,33 +1872,32 @@ class BookingForm {
             ? slotEnd
             : new Date(slotStart.getTime() + timeInterval * 60000);
 
-        // 終了時間が翌日になる場合は不可
-        let isNextDay = slotEnd.getDate() !== slotStart.getDate();
-        
-        // 営業時間超過チェック（閉店時間を動的参照）
-        let endsAfterClose = false;
-        const allowExceed = this.config?.calendar_settings?.allow_exceed_business_hours || false;
-        if (!allowExceed && !isClosed && dayHours) {
-            const closeTime2 = dayHours.close || '18:00';
-            const closeH = parseInt(closeTime2.split(':')[0]);
-            const closeM = parseInt(closeTime2.split(':')[1]);
-            const endH = slotEnd.getHours();
-            const endM = slotEnd.getMinutes();
-            if (endH > closeH || (endH === closeH && endM > closeM)) {
-                endsAfterClose = true;
-            }
+        // メニュー/オプションの対応時間設定（すべての時間帯に収まらないスロットは✕）
+        let isWithinMenuWindows = true;
+        if (menuTimeWindows.length > 0) {
+            const slotMin = parseInt(time.split(':')[0], 10) * 60 + parseInt(time.split(':')[1], 10);
+            isWithinMenuWindows = menuTimeWindows.every(w => slotMin >= w.start && slotMin < w.end);
         }
+
+        // 終了時間が翌日になる場合は不可
+        const isNextDay = slotEnd.getDate() !== slotStart.getDate();
+
+        // 設定の組ごとに 受付期間・営業時間・✕にする時間帯・祝日・営業時間超過 を判定
+        // （スタッフごとの希望日時設定があるときは、通る組が 1 つでもあれば候補にする）
+        const ruleResults = ruleContexts.map(c => this.evaluateSlotRules(c, date, time, dayOfWeek, slotStart, slotEnd, now));
+        const isPast = ruleResults.length > 0 && ruleResults.every(r => r.isPast);
+        const rulesOk = isWithinMenuWindows && !isNextDay && ruleResults.some(r => r.ok);
 
         // 空き状況の判定
         let isAvailable = false;
 
-        if (isPast || isNextDay || endsAfterClose || !withinWindow || isClosed || !isWithinBusinessHours || !isWithinMenuWindows || isBlockedTimeSlot(time, dayOfWeek)) {
+        if (!rulesOk) {
             isAvailable = false;
         } else if (this.availabilityData && this.availabilityData.length > 0) {
             // カレンダーAPIから取得したデータがある場合
             const day = new Date(date);
             day.setHours(0, 0, 0, 0);
-            
+
             // 営業日のイベント時間帯を取得
             let businessEventTimes = [];
             this.availabilityData.forEach(slot => {
@@ -1946,19 +1907,19 @@ class BookingForm {
                     businessEventTimes.push({ start: eventStart, end: eventEnd });
                 }
             });
-            
+
             // 営業日チェック
             const isBusinessDay = this.businessDays.some(businessDay => {
                 const businessDayStart = new Date(businessDay.start);
                 const businessDayEnd = new Date(businessDay.end);
                 return slotStart >= businessDayStart && slotEnd <= businessDayEnd;
             });
-            
+
             // 営業日のイベント時間内かチェック
             const isBusinessEventTime = businessEventTimes.some(event => {
                 return slotStart < event.end && event.start < overlapEnd;
             });
-            
+
             // 予約済みイベントの数をカウント（営業日イベントは除外）
             const count = this.availabilityData.reduce((acc, slot) => {
                 const eventStart = new Date(slot.startTime);
@@ -1993,8 +1954,11 @@ class BookingForm {
                     // スタッフ指名あり: そのスタッフが空いていれば〇（上限到達時は✕）
                     isAvailable = !capReached && !busyByStaff[this.state.selectedStaffId];
                 } else {
-                    // 指名なし/未選択: 誰か1人でも空いていれば〇（上限到達時は✕）
-                    isAvailable = !capReached && this.getCapableCalendarStaff().some(m => !busyByStaff[m.id]);
+                    // 指名なし/未選択: ルールを満たす設定の組のうち、空いているスタッフが 1 人でもいれば〇（上限到達時は✕）
+                    // （設定の組がスタッフ単位でないときは、対応できるスタッフの誰かが空いていれば〇 = 従来どおり）
+                    isAvailable = !capReached && ruleContexts.some((c, i) => ruleResults[i].ok && (c.staffId
+                        ? !busyByStaff[c.staffId]
+                        : this.getCapableCalendarStaff().some(m => !busyByStaff[m.id])));
                 }
             } else if (isBusinessEventTime && count >= maxConcurrent) {
                 // 営業日のイベント時間内で同時刻に閾値以上のイベントがある場合
@@ -2017,11 +1981,6 @@ class BookingForm {
         } else {
             // カレンダーAPIから取得したデータがない場合、営業時間のみで判定
             isAvailable = true;
-        }
-
-        // 祝日チェック（マスタートグル ON かつ除外リストに含まれていない祝日は ✕。臨時営業日は除く）
-        if (isAvailable && this.isCalendarDateBlockedAsHoliday(slotStart)) {
-            isAvailable = false;
         }
 
         const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
@@ -3085,10 +3044,21 @@ class BookingForm {
         }
     }
     
-    // 予約受付開始日: 何日後から予約可能か（0 = 当日から）
+    // 予約受付開始日: 何日後から予約可能か（0 = 当日から）。条件付き予約受付開始時間設定も加味する
     getMinAdvanceDays() {
-        const v = this.config?.calendar_settings?.min_advance_days;
-        return (typeof v === 'number' && isFinite(v) && v > 0) ? Math.floor(v) : 0;
+        return this.getMinAdvanceDaysFor(this.config?.calendar_settings);
+    }
+    getMinAdvanceDaysFor(cs) {
+        return resolveEarliestBookable(cs, new Date()).days;
+    }
+    // 条件付き予約受付開始時間設定で決まる「最初に予約できる日とその開始時刻」（第三希望日時モードの時間選択用）
+    getEarliestBookableStart() {
+        const earliest = resolveEarliestBookable(this.config?.calendar_settings, new Date());
+        if (!earliest.start_time) return null;
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + earliest.days);
+        return { date: formatLocalYmd(d), time: earliest.start_time };
     }
 
     // カレンダー内スクロールが上端/下端に達したら、続きのドラッグでページ側をスクロールさせる。
@@ -3394,7 +3364,10 @@ class BookingForm {
     // OFF または祝日でない日は null（= 曜日の設定に従う）。
     // 「祝日を予約不可にする」とは独立で、そちらが ON の場合は後段の shouldBlockAsHoliday が✕にする
     getHolidayBusinessHours(date) {
-        const hh = this.config?.calendar_settings?.holiday_hours;
+        return this.getHolidayBusinessHoursFor(this.config?.calendar_settings, date);
+    }
+    getHolidayBusinessHoursFor(cs, date) {
+        const hh = cs?.holiday_hours;
         if (!hh || hh.enabled !== true) return null;
         if (!getEffectiveHolidayType(date)) return null;
         return { open: hh.open || '09:00', close: hh.close || '18:00', closed: false };
@@ -3402,22 +3375,116 @@ class BookingForm {
 
     // 臨時営業日（カレンダーモード）: 当日が登録されていればその時間で営業扱い（曜日・祝日設定より優先）。無ければ null
     getSpecialBusinessHours(date) {
-        const sp = findSpecialBusinessDay(this.config?.calendar_settings?.special_business_days, date);
+        return this.getSpecialBusinessHoursFor(this.config?.calendar_settings, date);
+    }
+    getSpecialBusinessHoursFor(cs, date) {
+        const sp = findSpecialBusinessDay(cs?.special_business_days, date);
         if (!sp) return null;
         return { open: sp.open, close: sp.close, closed: false };
     }
 
     // カレンダーモードの当日の営業時間: 臨時営業日 > 祝日の営業時間 > 曜日設定
     getDayBusinessHours(date) {
+        return this.getDayBusinessHoursFor(this.config?.calendar_settings, date);
+    }
+    getDayBusinessHoursFor(cs, date) {
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-        const businessHours = this.config?.calendar_settings?.business_hours;
-        return this.getSpecialBusinessHours(date) || this.getHolidayBusinessHours(date) || businessHours?.[dayNames[date.getDay()]];
+        const businessHours = cs?.business_hours;
+        return this.getSpecialBusinessHoursFor(cs, date) || this.getHolidayBusinessHoursFor(cs, date) || businessHours?.[dayNames[date.getDay()]];
     }
 
     // 「祝日を予約不可にする」による ✕ 判定。臨時営業日として登録した日は対象外
     isCalendarDateBlockedAsHoliday(date) {
-        if (this.getSpecialBusinessHours(date)) return false;
-        return shouldBlockAsHoliday(date);
+        return this.isCalendarDateBlockedAsHolidayFor(this.config?.calendar_settings, date);
+    }
+    isCalendarDateBlockedAsHolidayFor(cs, date) {
+        if (this.getSpecialBusinessHoursFor(cs, date)) return false;
+        return shouldBlockAsHolidayWith(cs, date);
+    }
+
+    // デフォルトで✕にする時間帯（"9:00" → "09:00" に正規化。曜日指定がある時刻は指定曜日のみ✕）
+    isBlockedTimeSlotFor(cs, time, dayOfWeek) {
+        const normalize = (t) => { const m = /^([0-9]{1,2}):([0-9]{2})/.exec(t || ''); return m ? String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2] : ''; };
+        const list = (cs?.blocked_times || []).map(normalize).filter(Boolean);
+        if (list.indexOf(time) === -1) return false;
+        const map = cs?.blocked_time_weekdays || {};
+        let days = null;
+        Object.keys(map).forEach(t => { if (normalize(t) === time && Array.isArray(map[t]) && map[t].length > 0) days = map[t]; });
+        return !days || days.indexOf(dayOfWeek) !== -1;
+    }
+
+    // スタッフごとの希望日時設定: 空き判定に使う「設定の組」の一覧
+    // - 希望日時設定を持つスタッフがいない（または第三希望日時モード）: フォームの設定 1 つ（従来どおり）
+    // - スタッフ指名あり: そのスタッフの設定（フォーム設定にスタッフの上書きを重ねたもの）
+    // - 指名なし / 未選択: 選択中メニュー・オプションに対応できる各スタッフの設定（1 人でも通れば〇）
+    getRuleContexts() {
+        const base = this.config?.calendar_settings || {};
+        if (!this.isStaffCalendarMode()) return [{ staffId: null, cs: base }];
+        const staff = this.getCalendarStaff();
+        if (!staff.some(staffHasSchedule)) return [{ staffId: null, cs: base }];
+        const sel = this.state.selectedStaffId;
+        if (sel && sel !== 'none') {
+            const member = staff.find(m => m.id === sel);
+            return [{ staffId: sel, cs: member ? mergeStaffSchedule(base, member.schedule) : base }];
+        }
+        return this.getCapableCalendarStaff().map(m => ({ staffId: m.id, cs: mergeStaffSchedule(base, m.schedule) }));
+    }
+
+    // 時間間隔・追加で表示する分などカレンダー全体に 1 つしか使えない設定: 指名中のスタッフの設定、それ以外はフォームの設定
+    getPrimaryCalendarSettings() {
+        const contexts = this.getRuleContexts();
+        return (contexts.length === 1 && contexts[0].staffId) ? contexts[0].cs : (this.config?.calendar_settings || {});
+    }
+
+    // 1 スロットが「受付期間・営業時間・✕にする時間帯・祝日・営業時間超過」のルールを満たすか（設定の組ごと）
+    // ctx: { cs, max, minDate, startTime }（renderCalendar で作る）。戻り値 { ok, isPast }
+    evaluateSlotRules(ctx, date, time, dayOfWeek, slotStart, slotEnd, now) {
+        const cs = ctx.cs;
+        const dayHours = this.getDayBusinessHoursFor(cs, date);
+        const isClosed = dayHours?.closed === true;
+
+        let isWithinBusinessHours = true;
+        if (!isClosed && dayHours) {
+            const timeMinutes = parseInt(time.split(':')[0]) * 60 + parseInt(time.split(':')[1]);
+            const openTime = dayHours.open || '09:00';
+            const closeTime = dayHours.close || '18:00';
+            const openMinutes = parseInt(openTime.split(':')[0]) * 60 + parseInt(openTime.split(':')[1]);
+            const closeMinutes = parseInt(closeTime.split(':')[0]) * 60 + parseInt(closeTime.split(':')[1]);
+            isWithinBusinessHours = timeMinutes >= openMinutes && timeMinutes < closeMinutes;
+        }
+
+        // 予約可能期間の判定（予約受付開始日〜事前予約可能日数の範囲内）
+        let withinWindow = date.getTime() <= ctx.max.getTime() && date.getTime() >= ctx.minDate.getTime();
+        // 条件付き予約受付開始時間: 最初に予約できる日は、その開始時刻より前のスロットを✕
+        if (withinWindow && ctx.startTime && formatLocalYmd(date) === formatLocalYmd(ctx.minDate)) {
+            const startMin = arHHMMToMin(ctx.startTime);
+            const slotMin = parseInt(time.split(':')[0]) * 60 + parseInt(time.split(':')[1]);
+            if (startMin !== null && slotMin < startMin) withinWindow = false;
+        }
+
+        // 予約受付開始時間: 現在時刻から N 時間後より前のスロットは✕（0 = 制限なし）
+        const minAdvanceHoursRaw = cs?.min_advance_hours;
+        const minAdvanceMs = (typeof minAdvanceHoursRaw === 'number' && minAdvanceHoursRaw > 0 ? minAdvanceHoursRaw : 0) * 3600000;
+        const isPast = slotStart.getTime() < now.getTime() + minAdvanceMs;
+
+        // 営業時間超過チェック（閉店時間を動的参照）
+        let endsAfterClose = false;
+        const allowExceed = cs?.allow_exceed_business_hours || false;
+        if (!allowExceed && !isClosed && dayHours) {
+            const closeTime2 = dayHours.close || '18:00';
+            const closeH = parseInt(closeTime2.split(':')[0]);
+            const closeM = parseInt(closeTime2.split(':')[1]);
+            const endH = slotEnd.getHours();
+            const endM = slotEnd.getMinutes();
+            if (endH > closeH || (endH === closeH && endM > closeM)) endsAfterClose = true;
+        }
+
+        const blocked = this.isBlockedTimeSlotFor(cs, time, dayOfWeek);
+        // 祝日チェック（マスタートグル ON かつ除外リストに含まれていない祝日は ✕。臨時営業日は除く）
+        const holidayBlocked = this.isCalendarDateBlockedAsHolidayFor(cs, slotStart);
+
+        const ok = !isPast && !endsAfterClose && withinWindow && !isClosed && isWithinBusinessHours && !blocked && !holidayBlocked;
+        return { ok, isPast };
     }
 
     // スタッフ同時刻に埋まるイベント数の上限（機能OFFなら null）。
@@ -3486,7 +3553,8 @@ class BookingForm {
 
     populateTimeOptions(index, settings, selectedDateStr) {
         mdPopulateTimeOptions(document.getElementById('date' + index + '_time'), settings, selectedDateStr, {
-            minAdvanceHours: this.config.calendar_settings?.min_advance_hours
+            minAdvanceHours: this.config.calendar_settings?.min_advance_hours,
+            earliestStart: this.getEarliestBookableStart()
         });
     }
 

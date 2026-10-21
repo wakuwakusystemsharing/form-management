@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { AdditionalQuestion, Form, MenuCategory, MenuItem, MenuOption, SubMenuItem } from '@/types/form';
+import { AdditionalQuestion, Form, MenuCategory, MenuItem, MenuOption, StaffScheduleSettings, SubMenuItem } from '@/types/form';
+import StaffScheduleEditor from './StaffScheduleEditor';
+import { countStaffScheduleOverrides } from '@/lib/staff-schedule';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
 
 // テキストブロックの文字色プリセット
@@ -1841,6 +1843,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
 
   // スタッフごとのメニュー/オプション表示設定モーダル（開いているスタッフの index）
   const [staffMenuModalIndex, setStaffMenuModalIndex] = useState<number | null>(null);
+  // スタッフごとの希望日時設定モーダル
+  const [staffScheduleModalIndex, setStaffScheduleModalIndex] = useState<number | null>(null);
 
   // 画像orテキスト設置ブロック
   const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
@@ -2067,9 +2071,11 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     });
   };
 
-  const updateStaffMember = (index: number, patch: Partial<{ name: string; calendar_id: string; calendar_name: string; event_color_id: string; hidden_menu_ids: string[]; hidden_option_ids: string[] }>) => {
+  const updateStaffMember = (index: number, patch: Partial<{ name: string; calendar_id: string; calendar_name: string; event_color_id: string; hidden_menu_ids: string[]; hidden_option_ids: string[]; schedule: StaffScheduleSettings | undefined }>) => {
     const staff = [...currentStaffSelection().staff];
     staff[index] = { ...staff[index], ...patch };
+    // 希望日時設定が空になったらキー自体を消す（= フォームの設定どおり）
+    if ('schedule' in patch && !patch.schedule) delete staff[index].schedule;
     updateStaffSelection({ staff });
   };
 
@@ -2468,7 +2474,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     })}
                   </div>
                   {/* スタッフごとのメニュー/オプション表示設定 */}
-                  <div className="mt-2">
+                  <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => setStaffMenuModalIndex(index)}
@@ -2478,6 +2484,15 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                       {((member.hidden_menu_ids?.length || 0) + (member.hidden_option_ids?.length || 0)) > 0
                         ? `（${(member.hidden_menu_ids?.length || 0) + (member.hidden_option_ids?.length || 0)}件 非表示中）`
                         : ''}
+                    </button>
+                    {/* スタッフごとの希望日時設定（営業時間・ルールの上書き。カレンダー表示モードのみ有効） */}
+                    <button
+                      type="button"
+                      onClick={() => setStaffScheduleModalIndex(index)}
+                      className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
+                    >
+                      希望日時設定
+                      {countStaffScheduleOverrides(member.schedule) > 0 ? `（${countStaffScheduleOverrides(member.schedule)}項目 個別設定）` : ''}
                     </button>
                   </div>
                   </div>
@@ -2574,6 +2589,40 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
           )}
           <DialogFooter>
             <Button onClick={() => setStaffMenuModalIndex(null)}>閉じる</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* スタッフごとの希望日時設定モーダル */}
+      <Dialog open={staffScheduleModalIndex !== null} onOpenChange={(open) => { if (!open) setStaffScheduleModalIndex(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              希望日時設定
+              {staffScheduleModalIndex !== null && currentStaffSelection().staff[staffScheduleModalIndex]
+                ? `（${currentStaffSelection().staff[staffScheduleModalIndex].name || 'スタッフ'}）`
+                : ''}
+            </DialogTitle>
+            <DialogDescription>
+              このスタッフが選ばれているときの受付時間・予約ルールです。「フォームの設定を使う」の項目は営業時間・ルールタブの設定がそのまま使われます。
+              指名なしのときは、出勤していて空いているスタッフが 1 人でもいれば〇になります（メニューオプション設定で非表示にしたメニュー・オプションを含む予約では、そのスタッフは数えません）。
+            </DialogDescription>
+          </DialogHeader>
+          {(form.config?.calendar_settings?.booking_mode || 'calendar') !== 'calendar' && (
+            <p className="text-xs p-3 rounded bg-amber-50 text-amber-700 border border-amber-200">
+              この設定は日時選択モードが「カレンダー表示」のときだけ使われます（現在は第三希望日時選択）。
+            </p>
+          )}
+          {staffScheduleModalIndex !== null && currentStaffSelection().staff[staffScheduleModalIndex] && (
+            <StaffScheduleEditor
+              schedule={currentStaffSelection().staff[staffScheduleModalIndex].schedule}
+              calendarSettings={form.config?.calendar_settings}
+              theme={theme}
+              onChange={(next) => updateStaffMember(staffScheduleModalIndex, { schedule: next })}
+            />
+          )}
+          <DialogFooter>
+            <Button onClick={() => setStaffScheduleModalIndex(null)}>閉じる</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

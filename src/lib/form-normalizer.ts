@@ -5,13 +5,15 @@
 
 import { Form, SpecialBusinessDay } from '@/types/form';
 import { resolveCancelRules } from './cancel-rules';
+import { normalizeStaffSchedule } from './staff-schedule';
+import { sanitizeConditionalAdvanceRules } from './advance-rules';
 
 /**
  * ✕にする時間帯の曜日指定を検証する。
  * 値: 時刻("HH:MM") → 曜日(0〜6)配列。不正キー・不正値・空配列のエントリは除去
  * （エントリ無し = 全曜日✕ という既存挙動に戻る）
  */
-function sanitizeBlockedTimeWeekdays(raw: unknown): { [time: string]: number[] } {
+export function sanitizeBlockedTimeWeekdays(raw: unknown): { [time: string]: number[] } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const out: { [time: string]: number[] } = {};
   for (const [time, days] of Object.entries(raw as Record<string, unknown>)) {
@@ -369,6 +371,10 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 0;
           return n >= 0 && n <= 168 ? n : 0;
         })(),
+        conditional_advance_rules: sanitizeConditionalAdvanceRules(
+          existingConfig?.calendar_settings?.conditional_advance_rules
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.conditional_advance_rules
+        ),
         advance_booking_days: (existingConfig?.calendar_settings?.advance_booking_days || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.advance_booking_days || (typedBusinessRules?.advance_booking_days as number) || 30) as number,
         google_calendar_url: (existingConfig?.calendar_settings?.google_calendar_url || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.google_calendar_url) as string | undefined,
         // 日時選択モードのデフォルト値設定
@@ -561,7 +567,9 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
                 : [],
               hidden_option_ids: Array.isArray(m.hidden_option_ids)
                 ? m.hidden_option_ids.filter((x): x is string => typeof x === 'string')
-                : []
+                : [],
+              // 希望日時設定（上書きが無ければキー自体を持たない）
+              ...(() => { const sc = normalizeStaffSchedule(m.schedule); return sc ? { schedule: sc } : {}; })()
             }))
         };
       })(),

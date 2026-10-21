@@ -681,6 +681,19 @@ export async function GET(req, { params }) {
 - `multiple_dates_settings` - 希望日時モードの時間間隔・選択日数・曜日別時間設定
   - `weekday_hours[day].extra_slots?: Array<{ label, after }>` - 通常の時間リストに差し込む追加の選択肢（例: 午前中 / 午後 / 16:00以降）。`after` は `'start'`（先頭）/ `'end'`（末尾）/ `'HH:MM'`（その時刻の直後。✕で消えている時刻なら次の時刻の前）。編集 UI は曜日行と祝日行の「＋ 時間帯を追加」（`holiday_hours.extra_slots` も同形式）。生成 HTML は `insertExtraSlots()`。`custom`（カスタム受付時間）が ON のときは custom_slots が優先され extra_slots は使わない
 
+**条件付き予約受付開始時間設定（`config.calendar_settings.conditional_advance_rules`。営業時間・ルール → 予約ルール設定 → 予約受付開始時間の下）:**
+- 型 `ConditionalAdvanceRule { id, from_time?, until_time?, min_days, start_time? }`（`src/types/form.ts`）: 「現在時刻が from_time 以降（until_time より前）なら min_days 日後の start_time から予約可能」。例: 常に 2 日後の 09:30 から = `{ min_days: 2, start_time: '09:30' }` / 15:00 を過ぎたら翌日は不可 = `{ from_time: '15:00', min_days: 2 }`（15:00 までは予約受付開始日どおり）
+- 純粋ロジック `src/lib/advance-rules.ts`: `sanitizeConditionalAdvanceRules`（normalizeForm が適用）/ `resolveEarliestBookable(cs, now)` → `{ days, start_time }`（予約受付開始日 `min_advance_days` と合わせて**いちばん先になるもの**を採用。同じ日数なら遅い開始時刻）/ `describeAdvanceRule`。静的 HTML には `ADVANCE_RULES_RUNTIME_JS`（同名の `resolveEarliestBookable` / `arHHMMToMin`）を埋め込む
+- 生成 HTML: カレンダー表示モードは `renderCalendar()` の設定の組ごとに `resolveEarliestBookable` で `minDate` / `startTime` を決め、`evaluateSlotRules` が最初に予約できる日の開始時刻より前のスロットを✕にする。第三希望日時モードは `getMinAdvanceDays()` が日数を、`populateTimeOptions` が `earliestStart`（`mdPopulateTimeOptions` の opts）で最初の日の開始時刻より前の時間を隠す
+- 編集 UI は `ConditionalAdvanceRulesEditor.tsx`（条件: 常に / ◯時以降 / ◯時より前 / ◯時〜◯時 → N 日後の◯時から）。スタッフごとの希望日時設定（`StaffScheduleSettings.conditional_advance_rules`）でも項目として上書きできる
+
+**スタッフごとの「希望日時設定」（`config.staff_selection.staff[].schedule`。メニュー構成 → 詳細設定 → スタッフ選択 → 各スタッフの「メニューオプション設定」の隣）:**
+- 型 `StaffScheduleSettings`（`src/types/form.ts`）。営業時間・ルールタブのうち Googleカレンダー連携モード設定（`business_hours` / `holiday_hours` / `special_business_days` / `blocked_times`+`blocked_time_weekdays` / `time_interval` / `extra_minutes`）と予約ルール（`min_advance_days` / `min_advance_hours` / `conditional_advance_rules` / `advance_booking_days` / `holidays_as_closed`+`excluded_holiday_types` / `allow_exceed_business_hours`）を**項目ごとに**上書き。`undefined` = フォームの設定を使う。**カレンダー表示モードのみ**（第三希望日時モードでは使わない）
+- 純粋ロジック `src/lib/staff-schedule.ts`: `STAFF_SCHEDULE_ITEMS`（項目一覧・付随キー）/ `normalizeStaffSchedule`（normalizeForm が各スタッフに適用。上書きが無ければキーを持たない）/ `mergeStaffSchedule(cs, schedule)`（フォーム設定に上書きを重ねる）/ `countStaffScheduleOverrides` / `hasStaffSchedules`。静的 HTML には `STAFF_SCHEDULE_RUNTIME_JS`（同名の `mergeStaffSchedule` / `staffHasSchedule`）を埋め込む
+- 生成 HTML の判定: `renderCalendar()` は `getRuleContexts()` が返す「設定の組」ごとに `evaluateSlotRules(ctx, …)`（受付期間 / 営業時間 / ✕にする時間帯 / 祝日 / 営業時間超過）を判定し、**1 つでも通れば候補**。指名あり = そのスタッフの設定 1 つ、指名なし / 未選択 = `getCapableCalendarStaff()`（メニューオプション設定で非表示にしたメニュー・オプションを含む予約では候補にしない）の各スタッフの設定。指名なしの空き判定は「ルールを満たし、かつカレンダーが空いているスタッフが 1 人でもいれば〇」。希望日時設定を持つスタッフがいない（または第三希望日時モード）ときは設定の組がフォーム設定 1 つになり**従来どおり**。時間間隔・追加で表示する分は指名中のスタッフの設定、それ以外はフォームの設定（`getPrimaryCalendarSettings`）。`getDayBusinessHoursFor(cs, date)` / `isBlockedTimeSlotFor` / `shouldBlockAsHolidayWith(cs, date)` が設定指定版、従来名は薄いラッパー
+- 編集 UI: `src/components/FormEditor/Reservation/StaffScheduleEditor.tsx`（各項目に「フォームの設定を使う / このスタッフ用に設定」。個別にした時点でフォームの現在値をコピー。`HOLIDAY_TYPES` は `src/lib/holiday-types.ts` に共通化）。`MenuStructureEditor` の「希望日時設定」ボタンは上書き項目数を `（N項目 個別設定）` で表示。「更新して他のフォームにも反映」の「詳細設定（スタッフ選択）」はスタッフの希望日時設定ごとコピーする
+- サーバー側（予約 API の空き再チェック・availability API）はカレンダーの予定だけを見るので変更なし
+
 **キャンセルルール設定 (`config.cancel_rules`。営業時間・ルール → 予約ルール設定とご予約内容の間):**
 - `deadline_hours`（0 = いつでも）: 予約日時（JST）の N 時間前までお客様自身が LINE の「予約をキャンセル」でキャンセルできる。期限後は一覧にボタンを出さず「店舗へご連絡ください（TEL）」の案内、「キャンセル: N」で来ても案内だけ返して取り消さない。**店舗管理画面（`PATCH /api/reservations/{id}`）からのキャンセルには適用しない**
 - `policy_text` + `show_policy_on_form`: キャンセル規定の文言を予約フォームの送信ボタンの上に「キャンセルについて」として表示（`renderCancelPolicy`。期限があれば「LINE からのキャンセルは N 時間前まで」を自動で添える）
