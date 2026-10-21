@@ -1,24 +1,46 @@
 import { NextResponse } from 'next/server';
-import { getAppEnvironment } from '@/lib/env';
-import { createAdminClient } from '@/lib/supabase';
 import fs from 'fs';
 import path from 'path';
+import { getAppEnvironment } from '@/lib/env';
+import { createAdminClient } from '@/lib/supabase';
+import { authorizeStoreAccess } from '@/lib/store-access';
+import { fetchAllRows } from '@/lib/supabase-fetch-all';
+import {
+  computeReservationAnalytics,
+  type AnalyticsFormInfo,
+  type AnalyticsReservation,
+} from '@/lib/reservation-analytics';
 
-// ローカル環境用: 予約データの読み込み
+// ローカル環境用: 予約 / フォームデータの読み込み
 const DATA_DIR = path.join(process.cwd(), 'data');
 const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
 
-function readReservations(): any[] {
-  if (!fs.existsSync(RESERVATIONS_FILE)) {
+function readJsonArray(file: string): any[] {
+  if (!fs.existsSync(file)) return [];
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
     return [];
   }
-  const data = fs.readFileSync(RESERVATIONS_FILE, 'utf-8');
-  return JSON.parse(data);
+}
+
+const DATE_PARAM_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function formNameOf(form: any): string {
+  const name = form?.form_name || form?.config?.basic_info?.form_name;
+  return typeof name === 'string' && name.trim() ? name.trim() : 'フォーム';
 }
 
 /**
  * GET /api/stores/[storeId]/reservations/analytics
- * 予約データの分析結果を返す
+ * 予約データの分析結果を返す（店舗管理者 / テナント管理者 / マスター管理者）
+ *
+ * クエリ:
+ * - date_from / date_to: 予約日（YYYY-MM-DD）の範囲。省略時は全期間
+ * - form_id: 指定するとフォーム別一覧以外をそのフォームの予約だけで集計
+ *
+ * 集計ルールは `src/lib/reservation-analytics.ts`（キャンセル除外・メニュー+オプションの売上・フォーム別）
  */
 export async function GET(
   request: Request,
@@ -26,239 +48,74 @@ export async function GET(
 ) {
   try {
     const { storeId } = await params;
+
+    const { response: authError } = await authorizeStoreAccess(request, storeId);
+    if (authError) return authError;
+
     const { searchParams } = new URL(request.url);
-    const dateFrom = searchParams.get('date_from');
-    const dateTo = searchParams.get('date_to');
+    const dateFromRaw = searchParams.get('date_from');
+    const dateToRaw = searchParams.get('date_to');
+    const dateFrom = dateFromRaw && DATE_PARAM_RE.test(dateFromRaw) ? dateFromRaw : null;
+    const dateTo = dateToRaw && DATE_PARAM_RE.test(dateToRaw) ? dateToRaw : null;
+    if ((dateFromRaw && !dateFrom) || (dateToRaw && !dateTo)) {
+      return NextResponse.json({ error: '日付は YYYY-MM-DD 形式で指定してください' }, { status: 400 });
+    }
+    const formId = searchParams.get('form_id')?.trim() || null;
 
     const env = getAppEnvironment();
-    let reservations: any[] = [];
+    let reservations: AnalyticsReservation[] = [];
+    let forms: AnalyticsFormInfo[] = [];
 
-    // ローカル環境: JSON から読み込み
     if (env === 'local') {
-      let allReservations = readReservations();
-
-      // 店舗IDでフィルタ（必須）
-      reservations = allReservations.filter((r: any) => r.store_id === storeId);
-
-      // 日付フィルタ
-      if (dateFrom) {
-        reservations = reservations.filter((r: any) => r.reservation_date >= dateFrom);
-      }
-      if (dateTo) {
-        reservations = reservations.filter((r: any) => r.reservation_date <= dateTo);
-      }
-
-      // 予約日時でソート（新しい順）
-      reservations.sort((a: any, b: any) => {
-        const dateA = new Date(`${a.reservation_date}T${a.reservation_time}`);
-        const dateB = new Date(`${b.reservation_date}T${b.reservation_time}`);
-        return dateB.getTime() - dateA.getTime();
-      });
+      reservations = readJsonArray(RESERVATIONS_FILE).filter((r: any) => r && r.store_id === storeId);
+      if (dateFrom) reservations = reservations.filter((r) => typeof r.reservation_date === 'string' && r.reservation_date >= dateFrom);
+      if (dateTo) reservations = reservations.filter((r) => typeof r.reservation_date === 'string' && r.reservation_date <= dateTo);
+      forms = readJsonArray(path.join(DATA_DIR, `forms_${storeId}.json`))
+        .filter((f: any) => f && typeof f.id === 'string')
+        .map((f: any) => ({ id: f.id, name: formNameOf(f) }));
     } else {
-      // staging/production: Supabase から取得
       const adminClient = createAdminClient();
-
       if (!adminClient) {
-        return NextResponse.json(
-          { error: 'Supabase 接続エラー' },
-          { status: 500 }
+        return NextResponse.json({ error: 'Supabase 接続エラー' }, { status: 500 });
+      }
+
+      try {
+        // 予約は 1000 件ずつページングして全件取得（PostgREST の既定上限で切れないように）
+        reservations = await fetchAllRows<AnalyticsReservation>((from, to) => {
+          let query = (adminClient as any)
+            .from('reservations')
+            .select('id, form_id, status, reservation_date, reservation_time, selected_menus, selected_options, customer_info, gender, visit_count, coupon')
+            .eq('store_id', storeId);
+          if (dateFrom) query = query.gte('reservation_date', dateFrom);
+          if (dateTo) query = query.lte('reservation_date', dateTo);
+          return query.order('reservation_date', { ascending: true }).order('id', { ascending: true }).range(from, to);
+        });
+
+        const formRows = await fetchAllRows<{ id: string; config: any; created_at: string }>((from, to) =>
+          (adminClient as any)
+            .from('reservation_forms')
+            .select('id, config, created_at')
+            .eq('store_id', storeId)
+            .order('created_at', { ascending: false })
+            .range(from, to)
         );
+        forms = formRows.map((f) => ({ id: f.id, name: formNameOf(f) }));
+      } catch (fetchError) {
+        console.error('[API] Analytics fetch error:', fetchError);
+        return NextResponse.json({ error: '予約データの取得に失敗しました' }, { status: 500 });
       }
-
-      // 予約データを取得
-       
-      let query = (adminClient as any)
-        .from('reservations')
-        .select('*')
-        .eq('store_id', storeId);
-
-      if (dateFrom) {
-        query = query.gte('reservation_date', dateFrom);
-      }
-      if (dateTo) {
-        query = query.lte('reservation_date', dateTo);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('[API] Analytics fetch error:', error);
-        return NextResponse.json(
-          { error: '予約データの取得に失敗しました' },
-          { status: 500 }
-        );
-      }
-
-      reservations = data || [];
     }
 
-    if (!reservations || reservations.length === 0) {
-      return NextResponse.json({
-        daily_stats: [],
-        monthly_stats: [],
-        menu_popularity: [],
-        time_slot_distribution: [],
-        customer_demographics: {
-          gender: {},
-          visit_count: {},
-          coupon_usage: {}
-        },
-        status_distribution: {},
-        revenue_analysis: {
-          total_revenue: 0,
-          by_menu: [],
-          by_month: []
-        }
-      });
-    }
-
-    // 日別集計
-    const dailyStats: Record<string, { date: string; count: number }> = {};
-    reservations.forEach((r: any) => {
-      const date = r.reservation_date;
-      if (!dailyStats[date]) {
-        dailyStats[date] = { date, count: 0 };
-      }
-      dailyStats[date].count++;
-    });
-    const dailyStatsArray = Object.values(dailyStats).sort((a, b) => 
-      a.date.localeCompare(b.date)
-    );
-
-    // 月別集計
-    const monthlyStats: Record<string, { month: string; count: number }> = {};
-    reservations.forEach((r: any) => {
-      const date = new Date(r.reservation_date);
-      const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      if (!monthlyStats[month]) {
-        monthlyStats[month] = { month, count: 0 };
-      }
-      monthlyStats[month].count++;
-    });
-    const monthlyStatsArray = Object.values(monthlyStats).sort((a, b) => 
-      a.month.localeCompare(b.month)
-    );
-
-    // メニュー別人気度
-    const menuCounts: Record<string, { 
-      menu_id: string; 
-      menu_name: string; 
-      category_name: string;
-      count: number;
-      revenue: number;
-    }> = {};
-    
-    reservations.forEach((r: any) => {
-      const selectedMenus = r.selected_menus || [];
-      selectedMenus.forEach((menu: any) => {
-        const key = menu.menu_id || menu.menu_name;
-        if (!menuCounts[key]) {
-          menuCounts[key] = {
-            menu_id: menu.menu_id || '',
-            menu_name: menu.menu_name || menu.menu_name || '不明',
-            category_name: menu.category_name || '',
-            count: 0,
-            revenue: 0
-          };
-        }
-        menuCounts[key].count++;
-        menuCounts[key].revenue += menu.price || 0;
-      });
-    });
-    const menuPopularity = Object.values(menuCounts)
-      .sort((a, b) => b.count - a.count);
-
-    // 時間帯別分布
-    const timeSlotCounts: Record<string, number> = {};
-    reservations.forEach((r: any) => {
-      if (r.reservation_time) {
-        const hour = r.reservation_time.split(':')[0];
-        const timeSlot = `${hour}:00`;
-        timeSlotCounts[timeSlot] = (timeSlotCounts[timeSlot] || 0) + 1;
-      }
-    });
-    const timeSlotDistribution = Object.entries(timeSlotCounts)
-      .map(([time, count]) => ({ time, count }))
-      .sort((a, b) => a.time.localeCompare(b.time));
-
-    // 顧客属性分析
-    const genderCounts: Record<string, number> = {};
-    const visitCountCounts: Record<string, number> = {};
-    const couponCounts: Record<string, number> = {};
-    
-    reservations.forEach((r: any) => {
-      const customerInfo = r.customer_info || {};
-      
-      if (customerInfo.gender) {
-        genderCounts[customerInfo.gender] = (genderCounts[customerInfo.gender] || 0) + 1;
-      }
-      
-      if (customerInfo.visit_count) {
-        visitCountCounts[customerInfo.visit_count] = (visitCountCounts[customerInfo.visit_count] || 0) + 1;
-      }
-      
-      if (customerInfo.coupon) {
-        couponCounts[customerInfo.coupon] = (couponCounts[customerInfo.coupon] || 0) + 1;
-      }
-    });
-
-    // ステータス別集計
-    const statusCounts: Record<string, number> = {};
-    reservations.forEach((r: any) => {
-      const status = r.status || 'pending';
-      statusCounts[status] = (statusCounts[status] || 0) + 1;
-    });
-
-    // 売上分析
-    let totalRevenue = 0;
-    const revenueByMenu: Record<string, { menu_name: string; revenue: number }> = {};
-    const revenueByMonth: Record<string, { month: string; revenue: number }> = {};
-    
-    reservations.forEach((r: any) => {
-      const selectedMenus = r.selected_menus || [];
-      const date = new Date(r.reservation_date);
-      const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      
-      selectedMenus.forEach((menu: any) => {
-        const price = menu.price || 0;
-        totalRevenue += price;
-        
-        const menuKey = menu.menu_name || '不明';
-        if (!revenueByMenu[menuKey]) {
-          revenueByMenu[menuKey] = { menu_name: menuKey, revenue: 0 };
-        }
-        revenueByMenu[menuKey].revenue += price;
-        
-        if (!revenueByMonth[month]) {
-          revenueByMonth[month] = { month, revenue: 0 };
-        }
-        revenueByMonth[month].revenue += price;
-      });
-    });
+    const analytics = computeReservationAnalytics(reservations, forms, formId);
 
     return NextResponse.json({
-      daily_stats: dailyStatsArray,
-      monthly_stats: monthlyStatsArray,
-      menu_popularity: menuPopularity,
-      time_slot_distribution: timeSlotDistribution,
-      customer_demographics: {
-        gender: genderCounts,
-        visit_count: visitCountCounts,
-        coupon_usage: couponCounts
-      },
-      status_distribution: statusCounts,
-      revenue_analysis: {
-        total_revenue: totalRevenue,
-        by_menu: Object.values(revenueByMenu).sort((a, b) => b.revenue - a.revenue),
-        by_month: Object.values(revenueByMonth).sort((a, b) => a.month.localeCompare(b.month))
-      }
+      ...analytics,
+      forms,
+      period: { date_from: dateFrom, date_to: dateTo },
+      form_id: formId,
     });
   } catch (error) {
     console.error('Analytics error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: '分析データの取得に失敗しました' }, { status: 500 });
   }
 }
-
