@@ -4,6 +4,7 @@ import { StaticSurveyGenerator } from '@/lib/static-generator-survey';
 import { StaticLotteryGenerator } from '@/lib/static-generator-lottery';
 import { normalizeLotteryForm } from '@/lib/lottery-normalizer';
 import {
+  FOLLOW_UP_OTHER_VALUE,
   SURVEY_FOLLOW_UP_MAX_DEPTH,
   countFollowUpsDeep,
   followUpDepth,
@@ -277,5 +278,85 @@ describe('survey-tags: 追加質問の選択肢のタグ', () => {
 
   it('countTaggedOptions は入れ子の選択肢も数える', () => {
     expect(countTaggedOptions(config)).toBe(3);
+  });
+});
+
+describe('追加質問の「その他」とテキスト/画像表示', () => {
+  const question: SurveyQuestion = {
+    id: 'q3', type: 'radio', title: '興味', required: false, options: [
+      {
+        label: 'あり', value: 'あり',
+        follow_ups: [
+          {
+            enabled: true, title: '気になるメニュー', type: 'checkbox', allow_other: true,
+            options: [{ label: 'カラー', value: 'カラー' }, { label: 'パーマ', value: 'パーマ' }],
+            content_blocks: [
+              { id: 'b1', type: 'text', text: '[color=#ff0000]複数選べます[/color]', anchor: '', position: 'above' },
+              { id: 'b2', type: 'image', image_url: 'https://example.com/a.png', anchor: '', position: 'below' },
+              { id: 'b3', type: 'text', text: '   ', anchor: '', position: 'below' },
+            ],
+          },
+          { enabled: true, title: '年代', type: 'select', allow_other: true, options: [{ label: '20代', value: '20代' }] },
+        ],
+      },
+    ],
+  };
+  const config: SurveyConfig = {
+    basic_info: { title: 'テスト', liff_id: '', theme_color: '#3B82F6' },
+    questions: [question],
+    ui_settings: { submit_button_text: '送信', theme_color: '#3B82F6' },
+  } as SurveyConfig;
+
+  it('内部値は各ジェネレータの OTHER_OPTION_VALUE と同じ', () => {
+    expect(FOLLOW_UP_OTHER_VALUE).toBe(StaticSurveyGenerator.OTHER_OPTION_VALUE);
+    expect(FOLLOW_UP_OTHER_VALUE).toBe(StaticLotteryGenerator.OTHER_OPTION_VALUE);
+  });
+
+  it('「その他」ボタン / option と理由欄、上下のテキスト・画像ブロックを描画する（空のテキストは出さない）', () => {
+    const html = renderFollowUpBlocksHtml('q3', '興味', question.options, { labelClass: 'l', buttonGroupClass: 'g', textAs: 'textarea' });
+    expect(html).toContain('data-other="1"');
+    expect(html).toContain('id="fu-other-block-q3-0-0"');
+    expect(html).toContain('id="fu-other-q3-0-0"');
+    expect(html).toContain('<option value="__other__">その他</option>');
+    expect(html).toContain('id="fu-other-block-q3-0-1"');
+    expect(html).toContain('複数選べます');
+    expect(html).toContain('color:#ff0000');
+    expect(html).toContain('<img src="https://example.com/a.png"');
+    expect((html.match(/content-block-text/g) || []).length).toBe(1);
+    // 上のブロックは見出しより前、下のブロックは入力欄より後
+    expect(html.indexOf('複数選べます')).toBeLessThan(html.indexOf('気になるメニュー'));
+    expect(html.indexOf('a.png')).toBeGreaterThan(html.indexOf('fu-container-q3-0-0'));
+  });
+
+  it('その他を選ぶと理由欄が出て、送信値は「その他（理由）」になる（ボタン / ドロップダウン）', async () => {
+    const html = new StaticSurveyGenerator().generateHTML(config, 'sv1', 'st1');
+    const { w, doc } = await loadDom(html);
+    const q = (w.eval('SURVEY_QUESTIONS') as SurveyQuestion[])[0];
+    click(doc, doc.querySelector('#container-q3 .choice-button[data-opt-index="0"]'));
+    const otherBlock = doc.getElementById('fu-other-block-q3-0-0') as HTMLElement;
+    expect(otherBlock.style.display).toBe('none');
+
+    click(doc, doc.querySelector('#fu-container-q3-0-0 .choice-button[data-opt-index="0"]'));
+    click(doc, doc.querySelector('#fu-container-q3-0-0 .choice-button[data-other]'));
+    expect(otherBlock.style.display).toBe('block');
+    (doc.getElementById('fu-other-q3-0-0') as HTMLTextAreaElement).value = 'トリートメント';
+
+    const sel = doc.getElementById('fu-q3-0-1') as HTMLSelectElement;
+    sel.value = '__other__';
+    sel.dispatchEvent(new doc.defaultView!.Event('change', { bubbles: true }));
+    expect((doc.getElementById('fu-other-block-q3-0-1') as HTMLElement).style.display).toBe('block');
+
+    const answers: Record<string, string> = { '興味': 'あり' };
+    expect(w.fuCollect('q3', q.title, q.options, [0], [], answers, null)).toBeNull();
+    expect(answers['気になるメニュー']).toBe('カラー, その他（トリートメント）');
+    expect(answers['年代']).toBe('その他');
+
+    // 復元状態に理由が含まれる
+    const state = w.fuCollectState('q3', q.options, [], {});
+    expect(state['q3-0-0']).toEqual({ sel: ['カラー', '__other__'], r: 'トリートメント' });
+
+    // その他を外すと理由欄が消える
+    click(doc, doc.querySelector('#fu-container-q3-0-0 .choice-button[data-other]'));
+    expect(otherBlock.style.display).toBe('none');
   });
 });

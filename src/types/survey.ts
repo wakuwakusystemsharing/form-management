@@ -21,6 +21,9 @@ export interface SurveyFollowUpQuestion {
   type: SurveyFollowUpType;
   required?: boolean; // 親の選択肢が選ばれているときのみ必須チェック
   options?: SurveyQuestionOption[]; // radio/checkbox/select 用（各選択肢に follow_ups / tags を付けられる）
+  allow_other?: boolean; // radio/checkbox/select: 選択肢の最後に「その他」+ 理由入力欄を表示（通常の質問と同じ）
+  // この追加質問の上下に表示するテキスト / 画像ブロック（`anchor` は未使用。`position` で上下を決める）
+  content_blocks?: SurveyContentBlock[];
 }
 
 export interface SurveyQuestionOption {

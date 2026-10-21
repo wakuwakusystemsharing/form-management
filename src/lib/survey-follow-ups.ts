@@ -6,6 +6,9 @@
  */
 import type { SurveyFollowUpQuestion, SurveyFollowUpType, SurveyQuestion, SurveyQuestionOption } from '@/types/survey';
 
+/** 追加質問の「その他」の内部値（ドロップダウンの option / ボタンの data-value。各ジェネレータの OTHER_OPTION_VALUE と同じ） */
+export const FOLLOW_UP_OTHER_VALUE = '__other__';
+
 /** 追加質問の入れ子の最大深さ（質問 → 追加質問 = 1、その追加質問 = 2、さらにその追加質問 = 3。質問を含めて 4 段階） */
 export const SURVEY_FOLLOW_UP_MAX_DEPTH = 3;
 
