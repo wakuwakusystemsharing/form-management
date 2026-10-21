@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { SurveyQuestion, SurveyQuestionType, SurveyQuestionOption, SurveyFollowUpQuestion, SurveyFollowUpType, SurveyContentBlock } from '@/types/survey';
+import { SurveyQuestion, SurveyQuestionType, SurveyQuestionOption, SurveyContentBlock } from '@/types/survey';
+import OptionFollowUpsEditor, { followUpButtonLabel } from './SurveyFollowUpEditor';
+import { countFollowUpsDeep, createFollowUp, getOptionFollowUps, setOptionFollowUps } from '@/lib/survey-follow-ups';
 import {
   AddContentBlockButton,
   ColoredTextPreview,
@@ -121,11 +123,22 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
     setDragOverOpt(null);
   };
 
-  const updateFollowUp = (qIndex: number, optIndex: number, updates: Partial<SurveyFollowUpQuestion>) => {
-    const options = [...(questions[qIndex].options || [])];
-    const current: SurveyFollowUpQuestion = options[optIndex].follow_up || { enabled: false, title: '', type: 'text' };
-    options[optIndex] = { ...options[optIndex], follow_up: { ...current, ...updates } };
-    updateOptions(qIndex, options);
+  // 追加質問パネルの開閉（`${questionId}:${optIndex}`）。初めて開くときに追加質問が無ければ 1 つ作る
+  const [openFuPanels, setOpenFuPanels] = useState<Set<string>>(new Set());
+  const toggleFollowUpPanel = (qIndex: number, optIndex: number) => {
+    const q = questions[qIndex];
+    const key = `${q.id}:${optIndex}`;
+    const opt = (q.options || [])[optIndex];
+    if (!openFuPanels.has(key) && opt && getOptionFollowUps(opt).length === 0) {
+      const options = [...(q.options || [])];
+      options[optIndex] = setOptionFollowUps(opt, [createFollowUp()]);
+      updateOptions(qIndex, options);
+    }
+    setOpenFuPanels((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
   };
 
   // タグ設定パネルの開閉（`${questionId}:${optIndex}`）
@@ -136,16 +149,6 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
-    });
-  };
-
-  const toggleFollowUp = (qIndex: number, optIndex: number) => {
-    const opt = (questions[qIndex].options || [])[optIndex];
-    const enabled = !(opt.follow_up?.enabled);
-    updateFollowUp(qIndex, optIndex, {
-      enabled,
-      title: opt.follow_up?.title || '',
-      type: opt.follow_up?.type || 'text',
     });
   };
 
@@ -326,8 +329,8 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                       {q.options?.map((opt, optIndex) => {
                         const isDragOver = dragOverOpt?.qId === q.id && dragOverOpt.index === optIndex && dragOpt?.qId === q.id && dragOpt.index !== optIndex;
                         const isDragging = dragOpt?.qId === q.id && dragOpt.index === optIndex;
-                        const fu = opt.follow_up;
-                        const fuEnabled = fu?.enabled === true;
+                        const fuCount = countFollowUpsDeep([opt]);
+                        const fuOpen = openFuPanels.has(`${q.id}:${optIndex}`);
                         return (
                           <div
                             key={optIndex}
@@ -371,14 +374,14 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                               </Button>
                               <Button
                                 type="button"
-                                variant={fuEnabled ? 'default' : 'outline'}
+                                variant={fuCount > 0 ? 'default' : 'outline'}
                                 size="sm"
-                                onClick={() => toggleFollowUp(index, optIndex)}
-                                title={fuEnabled ? '追加質問を無効にする' : 'この選択肢が選ばれたときに表示する追加質問を設定'}
+                                onClick={() => toggleFollowUpPanel(index, optIndex)}
+                                title={fuOpen ? '追加質問の設定を閉じる' : 'この選択肢が選ばれたときに表示する追加質問を設定（複数・入れ子可）'}
                                 className="shrink-0"
                               >
                                 <MessageSquarePlus className="mr-1 h-4 w-4" />
-                                追加質問
+                                {followUpButtonLabel(opt)}
                               </Button>
                               <Button
                                 variant="ghost"
@@ -415,94 +418,21 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                                 </div>
                               </div>
                             )}
-                            {/* 追加質問の設定パネル */}
-                            {fuEnabled && fu && (
-                              <div className="ml-8 mt-2 mb-3 p-3 rounded-md border bg-background space-y-3">
-                                <div className="text-xs font-medium text-muted-foreground">
-                                  「{opt.label || `選択肢 ${optIndex + 1}`}」が選択されたときに表示する追加質問
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                  <div className="space-y-1">
-                                    <Label className="text-xs">追加質問の文言</Label>
-                                    <Input
-                                      type="text"
-                                      value={fu.title}
-                                      onChange={(e) => updateFollowUp(index, optIndex, { title: e.target.value })}
-                                      placeholder="例: ご紹介者を入力してください"
-                                    />
-                                  </div>
-                                  <div className="space-y-1">
-                                    <Label className="text-xs">回答タイプ</Label>
-                                    <Select
-                                      value={fu.type}
-                                      onValueChange={(value) => updateFollowUp(index, optIndex, { type: value as SurveyFollowUpType })}
-                                    >
-                                      <SelectTrigger>
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="text">テキスト入力 (1行)</SelectItem>
-                                        <SelectItem value="textarea">テキスト入力 (複数行)</SelectItem>
-                                        <SelectItem value="birthday">誕生日選択</SelectItem>
-                                        <SelectItem value="select">ドロップダウン選択</SelectItem>
-                                        <SelectItem value="radio">単一選択 (ボタン)</SelectItem>
-                                        <SelectItem value="checkbox">複数選択 (ボタン)</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`fu-required-${q.id}-${optIndex}`}
-                                    checked={fu.required === true}
-                                    onCheckedChange={(checked) => updateFollowUp(index, optIndex, { required: checked as boolean })}
-                                  />
-                                  <Label htmlFor={`fu-required-${q.id}-${optIndex}`} className="cursor-pointer text-sm">
-                                    必須にする（この選択肢が選ばれているときのみ）
-                                  </Label>
-                                </div>
-                                {(fu.type === 'radio' || fu.type === 'checkbox' || fu.type === 'select') && (
-                                  <div className="space-y-2">
-                                    <Label className="text-xs">追加質問の選択肢</Label>
-                                    {(fu.options || []).map((fuOpt, fuIndex) => (
-                                      <div key={fuIndex} className="flex items-center gap-2">
-                                        <Input
-                                          type="text"
-                                          value={fuOpt.label}
-                                          onChange={(e) => {
-                                            const fuOptions = [...(fu.options || [])];
-                                            fuOptions[fuIndex] = { label: e.target.value, value: e.target.value };
-                                            updateFollowUp(index, optIndex, { options: fuOptions });
-                                          }}
-                                          placeholder={`選択肢 ${fuIndex + 1}`}
-                                          className="flex-1"
-                                        />
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => {
-                                            const fuOptions = [...(fu.options || [])];
-                                            fuOptions.splice(fuIndex, 1);
-                                            updateFollowUp(index, optIndex, { options: fuOptions });
-                                          }}
-                                          className="text-destructive hover:text-destructive"
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    ))}
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => updateFollowUp(index, optIndex, { options: [...(fu.options || []), { label: '', value: '' }] })}
-                                      className="w-full"
-                                    >
-                                      <Plus className="mr-2 h-4 w-4" />
-                                      選択肢を追加
-                                    </Button>
-                                  </div>
-                                )}
-                              </div>
+                            {/* 追加質問の設定パネル（複数・入れ子） */}
+                            {fuOpen && (
+                              <OptionFollowUpsEditor
+                                option={opt}
+                                optionLabel={opt.label || `選択肢 ${optIndex + 1}`}
+                                parentTitle={q.title || `Q${index + 1}`}
+                                depth={1}
+                                idPrefix={`fu-${q.id}-${optIndex}`}
+                                storeId={storeId}
+                                onChange={(nextOpt) => {
+                                  const newOptions = [...(q.options || [])];
+                                  newOptions[optIndex] = nextOpt;
+                                  updateOptions(index, newOptions);
+                                }}
+                              />
                             )}
                           </div>
                         );

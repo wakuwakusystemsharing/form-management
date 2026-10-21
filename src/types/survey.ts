@@ -10,19 +10,28 @@ export type SurveyFollowUpType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'b
 /**
  * 選択肢ごとの追加質問。
  * 例: 「紹介者」を選択したら「ご紹介者を入力してください」というテキスト入力欄を表示する
+ * - 1 つの選択肢に複数の追加質問を付けられる（`SurveyQuestionOption.follow_ups`）
+ * - 追加質問の選択肢（radio / checkbox / select）にもさらに追加質問を付けられる（入れ子。
+ *   深さの上限は `SURVEY_FOLLOW_UP_MAX_DEPTH`（`src/lib/survey-follow-ups.ts`））
  */
 export interface SurveyFollowUpQuestion {
+  id?: string; // 編集画面での安定キー（旧データには無い）
   enabled: boolean;
   title: string; // 追加質問の文言（例: ご紹介者を入力してください）
   type: SurveyFollowUpType;
   required?: boolean; // 親の選択肢が選ばれているときのみ必須チェック
-  options?: SurveyQuestionOption[]; // radio/checkbox/select 用（ネストした follow_up は不可）
+  options?: SurveyQuestionOption[]; // radio/checkbox/select 用（各選択肢に follow_ups / tags を付けられる）
 }
 
 export interface SurveyQuestionOption {
   label: string;
   value: string;
-  follow_up?: SurveyFollowUpQuestion; // この選択肢が選ばれたときに表示する追加質問
+  /**
+   * @deprecated 旧形式（1 選択肢 1 追加質問）。読み取りは `getOptionFollowUps()` を通すこと。
+   * 編集画面で保存すると `follow_ups` に移行される
+   */
+  follow_up?: SurveyFollowUpQuestion;
+  follow_ups?: SurveyFollowUpQuestion[]; // この選択肢が選ばれたときに表示する追加質問（複数・上から順に表示）
   // この選択肢を選んで送信した回答者（LINE ユーザー ID で紐付く顧客）に付与するタグ（顧客管理のタグと同じ）
   tags?: string[];
 }
