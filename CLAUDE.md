@@ -641,7 +641,10 @@ export async function GET(req, { params }) {
 **アンケート質問の選択肢 (`SurveyQuestionOption`, `src/types/survey.ts`):**
 - 編集画面（`SurveyQuestionEditor.tsx`）で選択肢をドラッグ&ドロップ並び替え可能（配列順がそのまま静的 HTML の表示順）
 - `allow_other` は `radio` / `checkbox` / `select` すべてで有効。`select` は内部値 `__other__`（`StaticSurveyGenerator.OTHER_OPTION_VALUE`）で「その他」を表し、送信時に `その他（理由）` に変換
-- `follow_up?: { enabled, title, type: 'text'|'textarea'|'radio'|'checkbox'|'select', required?, options? }` - その選択肢が選ばれたときだけ表示する追加質問。回答は `responses` に `follow_up.title` をキーとして親質問の直後に追加（同名キーがある場合は `（選択肢名）` を付加）。復元機能 ON 時は追加質問の入力も localStorage に保存
+- `follow_ups?: Array<{ id?, enabled, title, type: 'text'|'textarea'|'radio'|'checkbox'|'select'|'birthday', required?, options? }>` - その選択肢が選ばれたときだけ表示する追加質問（**1 選択肢に複数 OK**。上から順に表示）。追加質問の `options[]` にも `follow_ups` / `tags` を付けられる（**入れ子。深さは `SURVEY_FOLLOW_UP_MAX_DEPTH` = 3 階層まで** = 質問を含めて 4 段階）。旧形式 `follow_up`（1 件）は読み取り互換（`getOptionFollowUps()` で両方を読む。編集画面で触ると `follow_ups` に移行）
+  - 純粋ロジック: `src/lib/survey-follow-ups.ts`（`getOptionFollowUps` / `setOptionFollowUps` / `followUpTitle` / `resolveFollowUpResponseKey` / `countFollowUpsDeep` / `normalizeQuestionFollowUps`）。静的 HTML の描画と埋め込み JS はアンケート・抽選の事前質問で共通: `src/lib/survey-follow-up-runtime-js.ts`（`renderFollowUpBlocksHtml` / `FOLLOW_UP_RUNTIME_JS` = `fuUpdateVisibility` / `fuSelectChoice` / `fuCollect` / `fuCollectState` / `fuRestoreState` / `fuBindSave`。各ジェネレータは `fuOnChange(questionId)` を定義）。DOM id は `followup-{qid}-{path}` / `fu-{qid}-{path}` / `fu-container-{qid}-{path}`（path = 選択肢 index と追加質問 index を交互に `-` 連結。例 `fu-q2-1-0-2-0`）。入れ子ブロックは親の追加質問ブロックの中に描画
+  - 回答は `responses` に追加質問の文言をキーとして親の直後に追加（文言が空なら `親の文言（選択肢名）`。同名キーがあれば `（選択肢名）`、それも重複すれば ` 2`, ` 3` …）。入れ子の回答もその直後に続く。追加質問の選択肢のタグも `collectSurveyOptionTags` が回答キーをたどって集める
+  - 編集 UI: `src/components/FormEditor/Survey/SurveyFollowUpEditor.tsx`（`OptionFollowUpsEditor`。再帰。各追加質問に「表示する」/ 削除、選択肢ごとに「タグ」「追加質問」）。「追加質問」ボタンは配下の件数を `追加質問(N)` で表示し、初めて開くときに 1 件を自動作成。復元機能 ON 時は追加質問の入力（入れ子含む）も localStorage に保存
 
 **カスタムフィールド (`config.custom_fields[]`):**
 - `type`: `CustomFieldType` = `'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'birthday' | 'select'`（追加質問 `AdditionalQuestion` も同じ）
