@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
+import { getReservationFormName } from '@/lib/form-display-name';
 interface BasicInfoEditorProps {
   form: Form;
   onUpdate: (form: Form) => void;
@@ -35,27 +36,24 @@ const BasicInfoEditor: React.FC<BasicInfoEditorProps> = ({
         <Input
           id="form_name"
           type="text"
-          value={(form as any).form_name || form.config?.basic_info?.form_name || ''}
+          value={getReservationFormName(form, '')}
           onChange={(e) => {
-            if ((form as any).form_name !== undefined) {
-              // 新形式
-              onUpdate({
-                ...form,
-                form_name: e.target.value
-              } as any);
-            } else {
-              // 旧形式
-              onUpdate({
-                ...form,
-                config: {
-                  ...form.config,
-                  basic_info: {
-                    ...form.config?.basic_info,
-                    form_name: e.target.value
-                  }
+            // 正本は config.basic_info.form_name。旧フラット形式の最上位 form_name が残っている場合は
+            // 表示がずれないように同じ値にそろえる
+            const next = {
+              ...form,
+              config: {
+                ...form.config,
+                basic_info: {
+                  ...form.config?.basic_info,
+                  form_name: e.target.value
                 }
-              });
+              }
+            };
+            if ((form as any).form_name !== undefined) {
+              (next as any).form_name = e.target.value;
             }
+            onUpdate(next);
           }}
           placeholder="例：ヘアサロン予約フォーム"
           required

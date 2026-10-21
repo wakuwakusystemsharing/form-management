@@ -235,7 +235,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
     last_published_at: (typedRawForm.last_published_at ?? undefined) as string | undefined,
     config: {
       basic_info: {
-        form_name: (typedRawForm.form_name as string) || (existingConfig?.basic_info?.form_name as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.form_name || 'フォーム',
+        // 正本は config.basic_info.form_name。旧フラット形式の最上位 form_name は config に名前が無いときだけ使う
+        form_name: (existingConfig?.basic_info?.form_name as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.form_name || (typedRawForm.form_name as string) || 'フォーム',
         store_name: (existingConfig?.basic_info?.store_name as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.store_name || (typedBasicInfo?.store_name as string) || '',
         liff_id: (existingConfig?.basic_info?.liff_id as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.liff_id || (typedBasicInfo?.liff_id as string) || (typedLineSettings?.liff_id as string) || '',
         theme_color: (existingConfig?.basic_info?.theme_color as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.theme_color || (typedBasicInfo?.theme_color as string) || '#3B82F6',

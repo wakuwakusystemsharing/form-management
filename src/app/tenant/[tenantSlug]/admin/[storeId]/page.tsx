@@ -54,6 +54,7 @@ import ReservationInfoRows from '@/components/ReservationInfoRows';
 import type { AdminReservationInput } from '@/lib/reservation-detail-items';
 import Link from 'next/link';
 
+import { getReservationFormName } from '@/lib/form-display-name';
 function InfoTooltip({ text }: { text: string }) {
   return (
     <span className="relative group inline-flex items-center">
@@ -1587,7 +1588,7 @@ export default function StoreDetailPage() {
                               <div key={form.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 group">
                                 <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                                 <span className="text-sm font-medium truncate flex-1 min-w-0">
-                                  {(form as any).form_name || form.config?.basic_info?.form_name}
+                                  {getReservationFormName(form)}
                                 </span>
                                 <Badge variant={form.status === 'active' ? 'default' : 'secondary'} className="text-xs shrink-0">
                                   {form.status === 'active' ? '公開中' : '非公開'}
@@ -1939,7 +1940,7 @@ export default function StoreDetailPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1 flex-wrap">
                                 <h3 className="font-medium truncate">
-{(form as any).form_name || form.config?.basic_info?.form_name}
+{getReservationFormName(form)}
                                 </h3>
                                 <Badge variant="outline" className={`shrink-0 ${(form.config?.form_type ?? 'line') === 'web' ? 'text-blue-600 border-blue-600 dark:text-blue-400 dark:border-blue-400' : 'text-green-600 border-green-600 dark:text-green-400 dark:border-green-400'}`}>
                                   {(form.config?.form_type ?? 'line') === 'web' ? 'Web' : 'LINE'}
@@ -1989,7 +1990,7 @@ export default function StoreDetailPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => setHistoryTarget({ formId: form.id, formType: 'reservation', formName: (form as any).form_name || form.config?.basic_info?.form_name || '' })}
+                                onClick={() => setHistoryTarget({ formId: form.id, formType: 'reservation', formName: getReservationFormName(form, '') })}
                                 title="操作履歴（誰がいつ何を変更したか）"
                               >
                                 <History className="mr-2 h-4 w-4" />
@@ -2982,7 +2983,7 @@ export default function StoreDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <p>
-Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === deletingFormId) as any).form_name || forms.find(f => f.id === deletingFormId)?.config?.basic_info?.form_name) : ''}」を削除しますか？
+Form「{getReservationFormName(forms.find(f => f.id === deletingFormId), '')}」を削除しますか？
                 </p>
             <p className="text-sm text-muted-foreground">
                   削除すると、このフォームに関連する予約データも全て削除されます。
@@ -3058,7 +3059,7 @@ Form「{forms.find(f => f.id === deletingFormId) ? ((forms.find(f => f.id === de
                       <Label className="text-sm text-muted-foreground">フォーム</Label>
                       <p className="font-medium">
                         {forms.find(f => f.id === selectedReservation.form_id)
-                          ? ((forms.find(f => f.id === selectedReservation.form_id) as any)?.form_name || forms.find(f => f.id === selectedReservation.form_id)?.config?.basic_info?.form_name || 'フォーム')
+                          ? getReservationFormName(forms.find(f => f.id === selectedReservation.form_id))
                           : 'フォーム不明'}
                       </p>
                       <p className="text-xs text-muted-foreground font-mono">{selectedReservation.form_id}</p>
