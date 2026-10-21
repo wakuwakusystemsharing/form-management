@@ -5,13 +5,14 @@
 
 import { Form, SpecialBusinessDay } from '@/types/form';
 import { resolveCancelRules } from './cancel-rules';
+import { normalizeStaffSchedule } from './staff-schedule';
 
 /**
  * ✕にする時間帯の曜日指定を検証する。
  * 値: 時刻("HH:MM") → 曜日(0〜6)配列。不正キー・不正値・空配列のエントリは除去
  * （エントリ無し = 全曜日✕ という既存挙動に戻る）
  */
-function sanitizeBlockedTimeWeekdays(raw: unknown): { [time: string]: number[] } {
+export function sanitizeBlockedTimeWeekdays(raw: unknown): { [time: string]: number[] } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const out: { [time: string]: number[] } = {};
   for (const [time, days] of Object.entries(raw as Record<string, unknown>)) {
@@ -561,7 +562,9 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
                 : [],
               hidden_option_ids: Array.isArray(m.hidden_option_ids)
                 ? m.hidden_option_ids.filter((x): x is string => typeof x === 'string')
-                : []
+                : [],
+              // 希望日時設定（上書きが無ければキー自体を持たない）
+              ...(() => { const sc = normalizeStaffSchedule(m.schedule); return sc ? { schedule: sc } : {}; })()
             }))
         };
       })(),

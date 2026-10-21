@@ -1,0 +1,21 @@
+/** 「祝日を予約不可にする」の対象祝日（ID は静的 HTML の祝日判定 getEffectiveHolidayType と同じ） */
+export const HOLIDAY_TYPES: { id: string; label: string; rule: string }[] = [
+  { id: 'new_year', label: '元日', rule: '1/1' },
+  { id: 'coming_of_age', label: '成人の日', rule: '1月第2月曜' },
+  { id: 'national_foundation', label: '建国記念の日', rule: '2/11' },
+  { id: 'emperor_birthday', label: '天皇誕生日', rule: '2/23' },
+  { id: 'vernal_equinox', label: '春分の日', rule: '3/20 or 3/21' },
+  { id: 'showa', label: '昭和の日', rule: '4/29' },
+  { id: 'constitution', label: '憲法記念日', rule: '5/3' },
+  { id: 'greenery', label: 'みどりの日', rule: '5/4' },
+  { id: 'childrens', label: 'こどもの日', rule: '5/5' },
+  { id: 'marine', label: '海の日', rule: '7月第3月曜' },
+  { id: 'mountain', label: '山の日', rule: '8/11' },
+  { id: 'respect_for_aged', label: '敬老の日', rule: '9月第3月曜' },
+  { id: 'autumnal_equinox', label: '秋分の日', rule: '9/22 or 9/23' },
+  { id: 'sports', label: 'スポーツの日', rule: '10月第2月曜' },
+  { id: 'culture', label: '文化の日', rule: '11/3' },
+  { id: 'labor_thanksgiving', label: '勤労感謝の日', rule: '11/23' },
+  { id: 'substitute', label: '振替休日', rule: '祝日が日曜の場合の翌平日' },
+  { id: 'national_day', label: '国民の休日', rule: '祝日に挟まれた平日' },
+];

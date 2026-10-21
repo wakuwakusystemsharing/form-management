@@ -103,6 +103,24 @@ export interface SpecialBusinessDay {
   close: string;  // "18:00"
 }
 
+// スタッフごとの「希望日時設定」: カレンダー表示モードの受付時間・予約ルールをスタッフ単位で上書きする。
+// 各項目は undefined = フォーム（営業時間・ルールタブ）の設定を使う。純粋ロジックは src/lib/staff-schedule.ts
+export interface StaffScheduleSettings {
+  business_hours?: BusinessHours;                 // 営業時間設定（曜日別）
+  holiday_hours?: { enabled: boolean; open: string; close: string };  // 祝日の営業時間
+  special_business_days?: SpecialBusinessDay[];   // 臨時営業日
+  blocked_times?: string[];                       // デフォルトで✕にする時間帯（blocked_time_weekdays とセット）
+  blocked_time_weekdays?: { [time: string]: number[] };
+  time_interval?: 10 | 15 | 20 | 30 | 45 | 60 | 120;
+  extra_minutes?: number[];
+  min_advance_days?: number;                      // 予約受付開始日
+  min_advance_hours?: number;                     // 予約受付開始時間
+  advance_booking_days?: number;                  // 事前予約可能日数
+  holidays_as_closed?: boolean;                   // 祝日を予約不可にする（excluded_holiday_types とセット）
+  excluded_holiday_types?: string[];
+  allow_exceed_business_hours?: boolean;          // 営業時間を超える予約を許可
+}
+
 export interface FormConfig {
   basic_info: {
     form_name: string;
@@ -350,6 +368,8 @@ export interface FormConfig {
       event_color_id?: string;      // 予約イベントの色（colorId '1'〜'11'。空 = カレンダーの既定色）
       hidden_menu_ids?: string[];   // このスタッフ選択時に非表示にするメニューID（空 = 全メニュー表示）
       hidden_option_ids?: string[]; // このスタッフ選択時に非表示にするオプションID（メニュー内・カテゴリー共通）
+      // 希望日時設定（カレンダー表示モードのみ。未設定 / 各項目 undefined = フォームの営業時間・ルール設定）
+      schedule?: StaffScheduleSettings;
     }>;
   };
 
