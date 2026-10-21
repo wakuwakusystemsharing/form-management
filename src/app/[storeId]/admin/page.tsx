@@ -41,6 +41,7 @@ import { ToastAction } from '@/components/ui/toast';
 import { AUTH_REQUIRED_EVENT, syncAuthCookie } from '@/lib/client-auth';
 import { SearchBar } from '@/components/ui/search-bar';
 import { useDebounce } from '@/hooks/use-debounce';
+import { getReservationFormName } from '@/lib/form-display-name';
 import {
   Search,
   Edit,
@@ -591,7 +592,7 @@ export default function StoreAdminPage() {
   const getFormName = useCallback((formId: string) => {
     const form = forms.find(f => f.id === formId);
     if (form) {
-      return (form as any).form_name || form.config?.basic_info?.form_name || 'フォーム';
+      return getReservationFormName(form);
     }
     return 'フォーム不明';
   }, [forms]);
@@ -600,7 +601,7 @@ export default function StoreAdminPage() {
   const filteredForms = forms.filter(form => {
     if (!formSearchQuery) return true;
     const query = formSearchQuery.toLowerCase();
-    const formName = (form as any).form_name || form.config?.basic_info?.form_name || '';
+    const formName = getReservationFormName(form, '');
     return formName.toLowerCase().includes(query);
   });
 
@@ -782,7 +783,7 @@ export default function StoreAdminPage() {
                             <div className="flex-1 space-y-3">
                               <div className="flex flex-wrap items-center gap-2">
                                 <h3 className="text-lg font-semibold">
-                          {(form as any).form_name || form.config?.basic_info?.form_name || 'フォーム'}
+                          {getReservationFormName(form)}
                         </h3>
                                 <Badge className={getFormStatusColor(form.status)}>
                           {getFormStatusText(form.status)}
@@ -920,7 +921,7 @@ export default function StoreAdminPage() {
                               <div className="space-y-1">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <h4 className="text-sm font-semibold">
-                          {(form as any).form_name || form.config?.basic_info?.form_name || 'フォーム'}
+                          {getReservationFormName(form)}
                                   </h4>
                                   <Badge className={getFormStatusColor(form.status)}>
                           {getFormStatusText(form.status)}

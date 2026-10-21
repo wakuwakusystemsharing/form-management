@@ -5,6 +5,7 @@ import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { authorizeStoreAccess } from '@/lib/store-access';
 import { fetchAllRows } from '@/lib/supabase-fetch-all';
+import { getReservationFormName } from '@/lib/form-display-name';
 import {
   computeReservationAnalytics,
   type AnalyticsFormInfo,
@@ -28,8 +29,7 @@ function readJsonArray(file: string): any[] {
 const DATE_PARAM_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function formNameOf(form: any): string {
-  const name = form?.form_name || form?.config?.basic_info?.form_name;
-  return typeof name === 'string' && name.trim() ? name.trim() : 'フォーム';
+  return getReservationFormName(form);
 }
 
 /**

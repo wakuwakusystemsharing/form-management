@@ -91,6 +91,8 @@ export async function POST(
       const newForm: Form = {
         ...sourceForm,
         id: newId,
+        // 旧フラット形式の最上位 form_name が残っていれば新しい名前にそろえる（表示が元の名前に戻らないように）
+        ...((sourceForm as any).form_name !== undefined ? { form_name: newConfig.basic_info?.form_name } : {}),
         config: newConfig,
         status: 'inactive',
         draft_status: 'none',

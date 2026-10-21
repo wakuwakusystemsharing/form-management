@@ -7,9 +7,10 @@ import { Form } from '@/types/form';
 import BusinessRulesEditor from '@/components/FormEditor/Reservation/BusinessRulesEditor';
 import MenuStructureEditor from '@/components/FormEditor/Reservation/MenuStructureEditor';
 
+import { getReservationFormName } from '@/lib/form-display-name';
 // フォーム構造の互換性を保つためのヘルパー関数
 function getFormName(form: Form): string {
-  return (form as any).form_name || form.config?.basic_info?.form_name || 'フォーム';
+  return getReservationFormName(form);
 }
 
 function getFormConfig(form: Form) {
@@ -228,7 +229,7 @@ export default function FormEditPage() {
               </button>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">
-                  {(form as any).form_name || form.config?.basic_info?.form_name || 'フォーム'} - 編集
+                  {getReservationFormName(form)} - 編集
                 </h1>
                 <div className="flex items-center space-x-2 mt-1">
                   <span className="text-sm text-gray-500">ID: {form.id}</span>

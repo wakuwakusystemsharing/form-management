@@ -10,6 +10,7 @@ import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
 import { getCurrentUserId } from '@/lib/auth-helper';
 
+import { getReservationFormName } from '@/lib/form-display-name';
 // 一時的なJSONファイルでのデータ保存（開発用）
 const DATA_DIR = path.join(process.cwd(), 'data');
 const FORMS_FILE = path.join(DATA_DIR, 'forms.json');
@@ -325,7 +326,7 @@ export async function DELETE(
           message: 'フォームを削除しました',
           deletedForm: {
             id: deletedForm.id,
-            name: (deletedForm as any).form_name || deletedForm.config?.basic_info?.form_name || 'フォーム'
+            name: getReservationFormName(deletedForm)
           }
         });
       }
@@ -357,7 +358,7 @@ export async function DELETE(
             formId,
             formType: 'reservation',
             action: 'delete',
-            formName: (deletedForm as any).form_name || deletedForm.config?.basic_info?.form_name || null,
+            formName: getReservationFormName(deletedForm, '') || null,
           });
 
           return NextResponse.json({
@@ -365,7 +366,7 @@ export async function DELETE(
             message: 'フォームを削除しました',
             deletedForm: {
               id: deletedForm.id,
-              name: (deletedForm as any).form_name || deletedForm.config?.basic_info?.form_name || 'フォーム'
+              name: getReservationFormName(deletedForm)
             }
           });
         }
@@ -420,7 +421,7 @@ export async function DELETE(
       formId,
       formType: 'reservation',
       action: 'delete',
-      formName: (form as any).form_name || form.config?.basic_info?.form_name || null,
+      formName: getReservationFormName(form, '') || null,
     });
 
     return NextResponse.json({
@@ -428,7 +429,7 @@ export async function DELETE(
       message: 'フォームを削除しました',
       deletedForm: {
         id: form.id,
-        name: (form as any).form_name || form.config?.basic_info?.form_name || 'フォーム'
+        name: getReservationFormName(form)
       }
     });
   } catch (error) {

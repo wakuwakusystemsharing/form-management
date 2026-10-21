@@ -9,6 +9,8 @@ import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 import { CANCEL_DEADLINE_OPTIONS, resolveCancelRules, type CancelRules } from '@/lib/cancel-rules';
 import MultipleDatesSettingsEditor, { ExtraMinutesPicker, InfoTooltip } from './MultipleDatesSettingsEditor';
 import type { MultipleDatesSettings } from '@/types/form';
+import { HOLIDAY_TYPES } from '@/lib/holiday-types';
+import ConditionalAdvanceRulesEditor from './ConditionalAdvanceRulesEditor';
 
 // ON / OFF トグル（お名前 / 電話番号 / メッセージ欄の設定で使用）
 const ToggleSwitch: React.FC<{ checked: boolean; onChange: (v: boolean) => void; theme: ThemeType; disabled?: boolean }> = ({ checked, onChange, theme, disabled }) => {
@@ -396,26 +398,6 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
     updateExcludedHolidayTypes(next);
   };
 
-  const HOLIDAY_TYPES: { id: string; label: string; rule: string }[] = [
-    { id: 'new_year', label: '元日', rule: '1/1' },
-    { id: 'coming_of_age', label: '成人の日', rule: '1月第2月曜' },
-    { id: 'national_foundation', label: '建国記念の日', rule: '2/11' },
-    { id: 'emperor_birthday', label: '天皇誕生日', rule: '2/23' },
-    { id: 'vernal_equinox', label: '春分の日', rule: '3/20 or 3/21' },
-    { id: 'showa', label: '昭和の日', rule: '4/29' },
-    { id: 'constitution', label: '憲法記念日', rule: '5/3' },
-    { id: 'greenery', label: 'みどりの日', rule: '5/4' },
-    { id: 'childrens', label: 'こどもの日', rule: '5/5' },
-    { id: 'marine', label: '海の日', rule: '7月第3月曜' },
-    { id: 'mountain', label: '山の日', rule: '8/11' },
-    { id: 'respect_for_aged', label: '敬老の日', rule: '9月第3月曜' },
-    { id: 'autumnal_equinox', label: '秋分の日', rule: '9/22 or 9/23' },
-    { id: 'sports', label: 'スポーツの日', rule: '10月第2月曜' },
-    { id: 'culture', label: '文化の日', rule: '11/3' },
-    { id: 'labor_thanksgiving', label: '勤労感謝の日', rule: '11/23' },
-    { id: 'substitute', label: '振替休日', rule: '祝日が日曜の場合の翌平日' },
-    { id: 'national_day', label: '国民の休日', rule: '祝日に挟まれた平日' },
-  ];
 
   const handleBookingModeChange = (mode: 'calendar' | 'multiple_dates') => {
     setBookingMode(mode);
@@ -1243,6 +1225,13 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 {minAdvanceHours === 0 ? '制限なし（直前でも予約可能）' : `現在時刻の${minAdvanceHours}時間後から予約可能`}
               </p>
             </div>
+
+            {/* 条件付き予約受付開始時間設定（現在時刻の条件 → N 日後の◯時から） */}
+            <ConditionalAdvanceRulesEditor
+              rules={form.config?.calendar_settings?.conditional_advance_rules || []}
+              theme={theme}
+              onChange={(next) => updateCalendarSetting('conditional_advance_rules', next)}
+            />
 
             <div className="max-w-xs">
               <div className="flex items-center gap-1.5 mb-2">

@@ -5,13 +5,15 @@
 
 import { Form, SpecialBusinessDay } from '@/types/form';
 import { resolveCancelRules } from './cancel-rules';
+import { normalizeStaffSchedule } from './staff-schedule';
+import { sanitizeConditionalAdvanceRules } from './advance-rules';
 
 /**
  * ✕にする時間帯の曜日指定を検証する。
  * 値: 時刻("HH:MM") → 曜日(0〜6)配列。不正キー・不正値・空配列のエントリは除去
  * （エントリ無し = 全曜日✕ という既存挙動に戻る）
  */
-function sanitizeBlockedTimeWeekdays(raw: unknown): { [time: string]: number[] } {
+export function sanitizeBlockedTimeWeekdays(raw: unknown): { [time: string]: number[] } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const out: { [time: string]: number[] } = {};
   for (const [time, days] of Object.entries(raw as Record<string, unknown>)) {
@@ -233,7 +235,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
     last_published_at: (typedRawForm.last_published_at ?? undefined) as string | undefined,
     config: {
       basic_info: {
-        form_name: (typedRawForm.form_name as string) || (existingConfig?.basic_info?.form_name as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.form_name || 'フォーム',
+        // 正本は config.basic_info.form_name。旧フラット形式の最上位 form_name は config に名前が無いときだけ使う
+        form_name: (existingConfig?.basic_info?.form_name as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.form_name || (typedRawForm.form_name as string) || 'フォーム',
         store_name: (existingConfig?.basic_info?.store_name as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.store_name || (typedBasicInfo?.store_name as string) || '',
         liff_id: (existingConfig?.basic_info?.liff_id as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.liff_id || (typedBasicInfo?.liff_id as string) || (typedLineSettings?.liff_id as string) || '',
         theme_color: (existingConfig?.basic_info?.theme_color as string) || (typedConfig?.basic_info as Form['config']['basic_info'])?.theme_color || (typedBasicInfo?.theme_color as string) || '#3B82F6',
@@ -369,6 +372,10 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 0;
           return n >= 0 && n <= 168 ? n : 0;
         })(),
+        conditional_advance_rules: sanitizeConditionalAdvanceRules(
+          existingConfig?.calendar_settings?.conditional_advance_rules
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.conditional_advance_rules
+        ),
         advance_booking_days: (existingConfig?.calendar_settings?.advance_booking_days || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.advance_booking_days || (typedBusinessRules?.advance_booking_days as number) || 30) as number,
         google_calendar_url: (existingConfig?.calendar_settings?.google_calendar_url || (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.google_calendar_url) as string | undefined,
         // 日時選択モードのデフォルト値設定
@@ -561,7 +568,9 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
                 : [],
               hidden_option_ids: Array.isArray(m.hidden_option_ids)
                 ? m.hidden_option_ids.filter((x): x is string => typeof x === 'string')
-                : []
+                : [],
+              // 希望日時設定（上書きが無ければキー自体を持たない）
+              ...(() => { const sc = normalizeStaffSchedule(m.schedule); return sc ? { schedule: sc } : {}; })()
             }))
         };
       })(),
