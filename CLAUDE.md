@@ -214,9 +214,17 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - キャンセル時は Google Calendar イベントも自動削除
 - キャンセル済み予約はデフォルトでクエリ結果から除外
 
-**予約分析機能:**
-- `/api/stores/{storeId}/reservations/analytics` - 予約分析 API
-- `ReservationAnalytics.tsx` - 日別・週別・月別の予約統計表示
+**予約分析機能（予約管理 → 分析）:**
+- `GET /api/stores/{storeId}/reservations/analytics?date_from&date_to&form_id` - 予約分析 API（`authorizeStoreAccess` で保護。予約・フォームは `fetchAllRows` で 1000 件ずつ全件取得）
+- 集計は純粋ロジック `src/lib/reservation-analytics.ts` の `computeReservationAnalytics(reservations, forms, formId)`（Vitest 対象）
+  - **キャンセル済み（`status = 'cancelled'`）は予約数・日別 / 月別・メニュー・時間帯・顧客属性・売上から除外**し、ステータス別集計と `summary.cancelled` にだけ数える
+  - 売上 = メニュー料金 + オプション料金（`reservationAmount`。顧客管理の `calculateTotalAmount` と同じ考え方）。メニュー別売上はメニュー料金のみ、オプションは `option_popularity` で別集計
+  - メニューは **名前（カテゴリー > メニュー > サブメニュー）でまとめる**（`menu_id` はテンプレート由来でフォームをまたいで重複するため使わない）
+  - 顧客属性（性別 / ご来店回数 / クーポン）は送信時のラベル `customer_info.*_label` → 既定値の日本語 → 生の値（`demographicLabel`）
+  - `by_form`: フォーム別の予約数・キャンセル数・売上（`form_id` で絞り込んでも全フォーム分を返す。削除済みフォームは「削除されたフォーム」）。フォーム名はローカル `data/forms_{storeId}.json` / Supabase `reservation_forms.config.basic_info.form_name`
+  - 期間プリセット `ANALYTICS_PERIOD_OPTIONS` / `resolveAnalyticsPeriod(preset)`（今月 / 先月 / 過去3か月 / 過去12か月 / 全期間 / 期間指定。JST 基準）
+- `ReservationAnalytics.tsx` - 上部に期間チップ + フォームのプルダウン（既定は過去12か月 / すべてのフォーム）、予約数・キャンセル・売上・1件あたりのタイル、概要（フォーム別 / ステータス別 / 日別 / 月別）・メニュー分析（メニュー・オプションの人気と売上）・時間帯分析・顧客属性・売上分析（月別 / フォーム別 / メニュー別）。`fetchWithAuth` を使う。店舗管理者ページとテナント側 店舗ページで共用
+- 顧客分析 API（`/customers/analytics`）も `fetchAllRows` で全件取得。月別新規顧客数は JST の月で数える
 
 **公開ページ:**
 - `/home` - 公開ホームページ（Web 予約フォーム機能紹介）
@@ -458,7 +466,7 @@ export async function GET(req, { params }) {
 - `GET /api/stores/{storeId}/customers/analytics` - 顧客分析データ（セグメント分布、月別新規、性別/年齢、`line_friend_rate` + `line_friend_connected` + `line_linked_customers`、平均来店間隔、リピート率、売上ランキング）
 
 ### 予約分析 API:
-- `GET /api/stores/{storeId}/reservations/analytics` - 予約統計
+- `GET /api/stores/{storeId}/reservations/analytics` - 予約統計（`date_from` / `date_to` = 予約日 YYYY-MM-DD、`form_id` = フォーム絞り込み。認証必須）
 
 ### Google Calendar 連携 API:
 - `GET /api/integrations/google-calendar/connect?store_id=xxx` - OAuth 認証開始（リダイレクト）
