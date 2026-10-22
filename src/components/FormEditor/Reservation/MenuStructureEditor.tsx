@@ -1,5 +1,7 @@
 'use client';
 
+import { SELECT_SEARCH_DEFAULT_UNKNOWN_LABEL, SELECT_SEARCH_UNKNOWN_LABEL_MAX } from '@/lib/searchable-select';
+import { DEFAULT_MENU_HEADING, DEFAULT_OPTIONS_HEADING, MENU_HEADING_MAX, resolveMenuHeadings } from '@/lib/menu-headings';
 import React, { useState } from 'react';
 import { AdditionalQuestion, Form, MenuCategory, MenuItem, MenuOption, StaffScheduleSettings, SubMenuItem } from '@/types/form';
 import StaffScheduleEditor from './StaffScheduleEditor';
@@ -1808,6 +1810,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
   );
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // フォームの見出し文言（メニュー欄 / オプション欄）の編集パネル
+  const [headingsOpen, setHeadingsOpen] = useState(false);
 
   // スタッフ選択: 店舗に連携している Google カレンダー一覧
   const [staffCalendars, setStaffCalendars] = useState<Array<{ id: string; summary: string; primary: boolean }>>([]);
@@ -4024,6 +4028,56 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                 </div>
               )}
 
+              {/* ドロップダウン選択: 検索・絞り込み機能（選択肢が多いとき用） */}
+              {field.type === 'select' && (
+                <div className={`mb-3 p-3 rounded border ${theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-gray-900/50 border-gray-700'}`}>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={field.select_search?.enabled === true}
+                      onChange={(e) => updateCustomFieldAt(index, {
+                        select_search: e.target.checked
+                          ? { enabled: true, unknown_enabled: field.select_search?.unknown_enabled !== false, unknown_label: field.select_search?.unknown_label || '' }
+                          : undefined,
+                      })}
+                      className={`h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${theme === 'light' ? 'bg-gray-100 border-gray-300' : 'bg-gray-700 border-gray-600'}`}
+                    />
+                    <span className={`text-sm ${themeClasses.text.secondary}`}>検索・絞り込み機能を使う（選択肢が多いときにおすすめ）</span>
+                  </label>
+                  <p className={`text-[10px] ${themeClasses.text.tertiary} mt-1 ml-6`}>
+                    フォームでは「名前で検索」の入力欄と「あ・か・さ…」の五十音ボタンで選択肢を絞り込めます。
+                    漢字で始まる選択肢は、下の各選択肢の「ふりがな」を入れると五十音ボタンでも探せます（名前検索はふりがな無しでも使えます）。
+                  </p>
+                  {field.select_search?.enabled === true && (
+                    <div className="mt-2 ml-6 space-y-2">
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={field.select_search.unknown_enabled !== false}
+                          onChange={(e) => updateCustomFieldAt(index, { select_search: { ...field.select_search, enabled: true, unknown_enabled: e.target.checked } })}
+                          className={`h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${theme === 'light' ? 'bg-gray-100 border-gray-300' : 'bg-gray-700 border-gray-600'}`}
+                        />
+                        <span className={`text-sm ${themeClasses.text.secondary}`}>「不明」を独立したボタンとして表示する（絞り込みに関係なく常に押せる位置に出ます）</span>
+                      </label>
+                      {field.select_search.unknown_enabled !== false && (
+                        <div className="flex items-center gap-2 ml-6 flex-wrap">
+                          <span className={`text-xs ${themeClasses.text.secondary} shrink-0`}>ボタンの表示名</span>
+                          <input
+                            type="text"
+                            value={field.select_search.unknown_label || ''}
+                            maxLength={SELECT_SEARCH_UNKNOWN_LABEL_MAX}
+                            onChange={(e) => updateCustomFieldAt(index, { select_search: { ...field.select_search, enabled: true, unknown_label: e.target.value } })}
+                            placeholder={SELECT_SEARCH_DEFAULT_UNKNOWN_LABEL}
+                            className={`w-48 ${themeClasses.input} text-sm`}
+                          />
+                          <span className={`text-[10px] ${themeClasses.text.tertiary}`}>空のときは「{SELECT_SEARCH_DEFAULT_UNKNOWN_LABEL}」。この文言がそのまま回答として送られます</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {(field.type === 'radio' || field.type === 'checkbox' || field.type === 'select') && (
                 <div className={`${theme === 'light' ? 'bg-gray-50' : 'bg-gray-900/50'} p-3 rounded border ${theme === 'light' ? 'border-gray-200' : 'border-gray-700'}`}>
                   <label className={`block text-xs ${themeClasses.text.secondary} mb-2`}>選択肢</label>
@@ -4050,6 +4104,23 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                           className={`flex-1 ${themeClasses.input} text-sm`}
                           placeholder={`選択肢 ${optIndex + 1}`}
                         />
+                        {field.type === 'select' && field.select_search?.enabled === true && (
+                          <input
+                            type="text"
+                            value={opt.kana || ''}
+                            onChange={(e) => {
+                              const currentFields = [...(form.config?.custom_fields || [])];
+                              const newOptions = [...(currentFields[index].options || [])];
+                              const kana = e.target.value;
+                              newOptions[optIndex] = { ...newOptions[optIndex], kana: kana.trim() ? kana : undefined };
+                              currentFields[index] = { ...currentFields[index], options: newOptions };
+                              onUpdate({ ...form, config: { ...form.config, custom_fields: currentFields } });
+                            }}
+                            title="ふりがな（任意）。五十音ボタンでの絞り込みと名前検索に使います。漢字で始まる選択肢は、ふりがなが無いと五十音ボタンで探せません"
+                            className={`w-32 shrink-0 ${themeClasses.input} text-sm`}
+                            placeholder="ふりがな（任意）"
+                          />
+                        )}
                         <button
                           type="button"
                           onClick={() => setFollowUpTarget({ fieldIndex: index, optIndex })}
@@ -4124,16 +4195,74 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             <span className={`text-sm font-semibold ${themeClasses.text.primary}`}>カテゴリー・メニュー</span>
             <span className={`text-xs ${themeClasses.text.tertiary}`}>{categories.length}カテゴリー</span>
           </div>
-          <button
-            onClick={handleOpenAddCategory}
-            className={`px-3 py-1.5 text-sm rounded-md flex items-center space-x-1 ${themeClasses.button.primary}`}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <span>カテゴリー追加</span>
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => setHeadingsOpen(v => !v)}
+              title="予約フォームに表示される「メニューをお選びください」「オプション」の文言を変更"
+              className={`px-3 py-1.5 text-sm rounded-md flex items-center space-x-1 ${headingsOpen ? themeClasses.button.primary : themeClasses.button.secondary}`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <span>見出しの文言を変更</span>
+            </button>
+            <button
+              onClick={handleOpenAddCategory}
+              className={`px-3 py-1.5 text-sm rounded-md flex items-center space-x-1 ${themeClasses.button.primary}`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>カテゴリー追加</span>
+            </button>
+          </div>
         </div>
+
+        {/* 見出しの文言（予約フォームの「メニューをお選びください」「オプション」） */}
+        {headingsOpen && (
+          <div className={`p-4 ${themeClasses.card} rounded-lg space-y-3`}>
+            <div>
+              <h3 className={`text-sm font-medium ${themeClasses.text.primary}`}>✏️ 見出しの文言</h3>
+              <p className={`text-xs ${themeClasses.text.secondary} mt-1`}>
+                予約フォームに表示される見出しを変更できます。空のときは既定の文言になります（{MENU_HEADING_MAX} 文字まで）。
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>メニュー欄の見出し（既定: {DEFAULT_MENU_HEADING}）</label>
+                <input
+                  type="text"
+                  value={displayOptions?.menu_heading || ''}
+                  maxLength={MENU_HEADING_MAX}
+                  onChange={(e) => updateDisplayOptions({ menu_heading: e.target.value })}
+                  placeholder={DEFAULT_MENU_HEADING}
+                  className={`w-full ${themeClasses.input} text-sm`}
+                />
+              </div>
+              <div>
+                <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>オプション欄の見出し（既定: {DEFAULT_OPTIONS_HEADING}）</label>
+                <input
+                  type="text"
+                  value={displayOptions?.options_heading || ''}
+                  maxLength={MENU_HEADING_MAX}
+                  onChange={(e) => updateDisplayOptions({ options_heading: e.target.value })}
+                  placeholder={DEFAULT_OPTIONS_HEADING}
+                  className={`w-full ${themeClasses.input} text-sm`}
+                />
+                <p className={`text-[10px] ${themeClasses.text.tertiary} mt-1`}>メニュー直下のオプションとカテゴリー共通オプションの両方に使われます</p>
+              </div>
+            </div>
+            <div className={`text-xs ${themeClasses.text.secondary} rounded border p-3 ${theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-gray-900/50 border-gray-700'}`}>
+              <p className={`text-[10px] ${themeClasses.text.tertiary} mb-1`}>フォーム上の表示:</p>
+              <p className={`font-medium ${themeClasses.text.primary}`}>{resolveMenuHeadings(form.config).menu_heading}</p>
+              <p className={`mt-1 ml-4`}>└ {resolveMenuHeadings(form.config).options_heading}</p>
+            </div>
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setHeadingsOpen(false)} className={`px-3 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}>閉じる</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* カテゴリーアコーディオン */}

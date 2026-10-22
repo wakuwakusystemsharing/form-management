@@ -5,6 +5,8 @@
 
 import { computeAccentColor, hexToRgb } from './color-utils';
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
+import { SEARCHABLE_SELECT_CSS, SEARCHABLE_SELECT_RUNTIME_JS, renderSearchableSelectHtml } from './searchable-select-runtime-js';
+import { resolveMenuHeadings } from './menu-headings';
 import { FormConfig } from '@/types/form';
 import { STAFF_SCHEDULE_RUNTIME_JS } from './staff-schedule';
 import { ADVANCE_RULES_RUNTIME_JS } from './advance-rules';
@@ -272,6 +274,7 @@ const LINE_ONLY = ${lineOnly ? 'true' : 'false'};
 ${HOLIDAY_RUNTIME_JS}
 ${MULTIPLE_DATES_RUNTIME_JS}
 ${BIRTHDAY_RUNTIME_JS}
+${SEARCHABLE_SELECT_RUNTIME_JS}
 ${STAFF_SCHEDULE_RUNTIME_JS}
 ${ADVANCE_RULES_RUNTIME_JS}
 function formatDateTimeForDisplay(value) {
@@ -784,6 +787,8 @@ class BookingForm {
                     el.value = val;
                     // 誕生日選択は hidden の値をプルダウンに反映する（選択肢に無い値は空に戻る）
                     if (field.type === 'birthday') bdSyncFromHidden(el);
+                    // 検索・絞り込み機能つきのドロップダウンは <select> の値を「選択中」の表示に反映する
+                    if (field.type === 'select') ssSyncFromSelect(el);
                     // select や date は値が選択肢/形式に合わないと反映されないため、反映確認後に state 更新
                     if (el.value === val) this.state.customFields[field.id] = val;
                 }
@@ -892,6 +897,7 @@ class BookingForm {
         if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime' || field.type === 'select' || field.type === 'birthday')) {
             el.value = '';
             if (field.type === 'birthday') bdSyncFromHidden(el);
+            if (field.type === 'select') ssSyncFromSelect(el);
         }
         if (field.type === 'radio') {
             document.querySelectorAll('input[name="custom-field-' + field.id + '"]').forEach(radio => {
@@ -1015,6 +1021,7 @@ class BookingForm {
         // カスタムフィールド（メニュー/オプションの追加質問も同じ仕組みで値を保持する）
         const listenerFields = (this.config.custom_fields || []).concat(this.getAdditionalQuestionEntries().map(function(e) { return e.field; }));
         bdInitAll();
+        ssInitAll();
         if (listenerFields.length > 0) {
             const self = this;
             listenerFields.forEach(function(field) {
@@ -3813,13 +3820,21 @@ if (document.readyState === 'loading') {
             </div>`;
       }
       if (field.type === 'select' && field.options?.length) {
-        const optionsHtml = field.options.map(opt =>
-          `<option value="${this.escapeHtml(opt.value)}">${this.escapeHtml(opt.label)}</option>`
-        ).join('');
+        // 検索・絞り込み機能（select_search.enabled）が ON なら名前検索 + 五十音ボタン + 独立した「不明」ボタンを描画（OFF は従来の <select>）
+        const selectHtml = renderSearchableSelectHtml({
+          selectId: id,
+          options: field.options.map((opt) => ({
+            value: opt.value,
+            label: opt.label,
+            kana: (opt as { kana?: string }).kana,
+          })),
+          settings: (field as { select_search?: import('./searchable-select').SelectSearchSettings }).select_search,
+          selectAttrs: `data-field-id="${field.id}"`,
+        });
         return `
             <div class="field" id="custom-field-wrap-${field.id}">
                 <label class="field-label" for="${id}">${label}</label>
-                <select id="${id}" class="input" data-field-id="${field.id}"><option value="">選択してください</option>${optionsHtml}</select>
+                ${selectHtml}
             </div>`;
       }
       return '';
@@ -3945,6 +3960,9 @@ if (document.readyState === 'loading') {
                                             </div>`;
     };
     const menuItemClass = imageDisplay === 'thumbnail' ? 'menu-item menu-item--thumb' : 'menu-item';
+    // 見出し文言（メニュー構成 → 「見出しの文言を変更」。未設定は既定）
+    const headings = resolveMenuHeadings(config);
+    const optionsHeadingHtml = this.escapeHtml(headings.options_heading);
     const renderMenuButton = (menu: import('@/types/form').MenuItem, categoryId: string) => `
                                 <div>
                                     <button type="button" class="${menuItemClass}" data-menu-id="${menu.id}" data-category-id="${categoryId}">
@@ -3962,7 +3980,7 @@ if (document.readyState === 'loading') {
                                     </button>
                                     ${!menu.has_submenu && menu.options && menu.options.length > 0 ? `
                                         <div id="options-${menu.id}" class="menu-options-container" style="display:none;margin-left:1.5rem;padding-left:1rem;border-left:2px solid #bbf7d0;margin-top:0.75rem;margin-bottom:0.75rem;">
-                                            <div style="font-size:0.875rem;font-weight:500;color:#374151;margin-bottom:0.75rem;">オプション</div>
+                                            <div style="font-size:0.875rem;font-weight:500;color:#374151;margin-bottom:0.75rem;">${optionsHeadingHtml}</div>
                                             ${menu.options.map((option, optionIndex) => `
                                                 <button type="button" class="menu-option-item" data-menu-id="${menu.id}" data-option-id="${option.id || `option-${optionIndex}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
                                                     <div style="display:flex;align-items:center;">
@@ -3988,7 +4006,7 @@ if (document.readyState === 'loading') {
       if (!category.options || category.options.length === 0) return '';
       return `
                             <div class="category-options-section" style="margin-top:1rem;padding-top:1rem;border-top:1px solid #e5e7eb;">
-                                <div style="font-size:0.875rem;font-weight:600;color:#374151;margin-bottom:0.75rem;">オプション</div>
+                                <div style="font-size:0.875rem;font-weight:600;color:#374151;margin-bottom:0.75rem;">${optionsHeadingHtml}</div>
                                 <div class="category-options-list">
                                     ${category.options.map((opt, idx) => `
                                         <button type="button" class="category-option-item" data-category-id="${category.id}" data-option-id="${opt.id || `catopt-${idx}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
@@ -4010,7 +4028,7 @@ if (document.readyState === 'loading') {
     return `
             <!-- メニュー選択（ご来店回数「選択するまで非表示」が ON なら選択まで隠す） -->
             <div class="field" id="menu-field"${hiddenUntilVisit ? ' style="display:none;"' : ''}>
-                <label class="field-label">メニューをお選びください</label>
+                <label class="field-label">${this.escapeHtml(headings.menu_heading)}</label>
                 ${config.menu_structure.categories.map((category, idx) => `
                     ${multiCat ? `
                     <button type="button" class="category-header${idx === 0 ? ' open' : ''}" data-category-id="${category.id}" onclick="window.bookingForm.toggleCategory('${category.id}')">
@@ -4621,6 +4639,7 @@ if (document.readyState === 'loading') {
             box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
         }
         ${BIRTHDAY_CSS}
+        ${SEARCHABLE_SELECT_CSS}
         /* キャンセル規定（送信ボタンの上） */
         .cancel-policy { margin: 0 0 1rem; padding: 0.75rem 0.9rem; border: 1px solid #f1c9a5; background: #fff7ef; border-radius: 0.375rem; font-size: 0.8rem; color: #444; line-height: 1.6; }
         .cancel-policy-title { font-weight: 700; color: var(--primary-color); margin-bottom: 0.25rem; }
