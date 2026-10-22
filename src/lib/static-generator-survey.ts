@@ -2,6 +2,7 @@ import { SurveyConfig, SurveyQuestion } from '@/types/survey';
 import { computeAccentColor } from './color-utils';
 import { renderColoredTextHtml } from './colored-text';
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
+import { SEARCHABLE_SELECT_CSS, SEARCHABLE_SELECT_RUNTIME_JS, renderSearchableSelectHtml, type SearchableSelectOption } from './searchable-select-runtime-js';
 import { FOLLOW_UP_NESTED_CSS, FOLLOW_UP_RUNTIME_JS, renderFollowUpBlocksHtml } from './survey-follow-up-runtime-js';
 import { getRequiredChoices, getVisibleChoices, normalizeMultipleDatesSettings } from './multiple-dates-settings';
 
@@ -100,8 +101,9 @@ export class StaticSurveyGenerator {
         ${HOLIDAY_RUNTIME_JS}
         ${MULTIPLE_DATES_RUNTIME_JS}
         ${BIRTHDAY_RUNTIME_JS}
+        ${SEARCHABLE_SELECT_RUNTIME_JS}
         ${FOLLOW_UP_RUNTIME_JS}
-        document.addEventListener('DOMContentLoaded', function () { bdInitAll(); });
+        document.addEventListener('DOMContentLoaded', function () { bdInitAll(); ssInitAll(); });
 
         // ---- 質問型「第三希望日時選択」（予約フォームの日時選択モードと同じ設定・同じ選択 UI） ----
         var MD_CHOICE_LABELS = { 1: '第一希望', 2: '第二希望', 3: '第三希望' };
@@ -263,7 +265,7 @@ export class StaticSurveyGenerator {
                     // 復元: ドロップダウンの選択値
                     if (q.type === 'select' && data && typeof data.v === 'string' && data.v !== '') {
                         const el = document.getElementById(q.id);
-                        if (el) el.value = data.v;
+                        if (el) { el.value = data.v; ssSyncFromSelect(el); }
                     }
                     if (data) {
                         const reasonInput = document.getElementById('other-input-' + q.id);
@@ -628,13 +630,24 @@ export class StaticSurveyGenerator {
         fieldHtml = renderBirthdayFieldHtml(q.id);
         break;
       case 'select': {
-        let opts = (q.options || []).map((opt, i) =>
-          `<option value="${this.escapeHtml(opt.value || opt.label)}" data-opt-index="${i}">${this.escapeHtml(opt.label)}</option>`
-        ).join('\n');
+        // 検索・絞り込み機能（select_search.enabled）が ON なら名前検索 + 五十音ボタン + 独立した「不明」ボタンを描画（OFF は従来の <select>）。
+        // 「その他」は絞り込みに関係なく常にリストの末尾に出す（fixed）
+        const options: SearchableSelectOption[] = (q.options || []).map((opt, i) => ({
+          value: opt.value || opt.label,
+          label: opt.label,
+          kana: opt.kana,
+          attrs: `data-opt-index="${i}"`,
+        }));
         if (q.allow_other) {
-          opts += `\n<option value="${StaticSurveyGenerator.OTHER_OPTION_VALUE}">その他</option>`;
+          options.push({ value: StaticSurveyGenerator.OTHER_OPTION_VALUE, label: 'その他', fixed: true });
         }
-        fieldHtml = `<select id="${q.id}" class="input" onchange="onSelectChange('${q.id}')"><option value="">選択してください</option>${opts}</select>${this.renderFollowUps(q)}${this.renderOtherReason(q)}`;
+        const selectHtml = renderSearchableSelectHtml({
+          selectId: q.id,
+          options,
+          settings: q.select_search,
+          selectAttrs: `onchange="onSelectChange('${q.id}')"`,
+        });
+        fieldHtml = `${selectHtml}${this.renderFollowUps(q)}${this.renderOtherReason(q)}`;
         break;
       }
       case 'radio':
@@ -839,6 +852,7 @@ export class StaticSurveyGenerator {
             color: var(--white);
         }
         ${BIRTHDAY_CSS}
+        ${SEARCHABLE_SELECT_CSS}
         /* 日付・日時入力: スマホで横幅をページに収める + 未選択時ヒント */
         input[type="date"].input,
         input[type="datetime-local"].input {

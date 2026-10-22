@@ -622,6 +622,10 @@ export async function GET(req, { params }) {
 - **画像 URL はアップロードごとに変える**（`/api/upload/menu-image` が `{menuId}_{stamp}.{ext}`）。Storage の画像は 1 年キャッシュ（`cacheControl: 31536000`）のため、同じファイル名で上書きすると古い形の画像が表示され続ける。古い画像は `oldImageUrl` で削除
 - **画像の拡大表示**: ボタン左のサムネイルと詳細モーダルの画像をタップするとライトボックス（`#image-lightbox`。`openImageLightbox` / `closeImageLightbox`、閉じるボタン・背景タップ・Esc で閉じる）で画面サイズに合わせて表示。サムネイルのタップはメニュー選択を起こさない（`stopPropagation`）
 
+**メニュー / オプションの見出し文言 (`config.menu_structure.display_options.menu_heading` / `options_heading`):**
+- 予約フォームの「メニューをお選びください」（メニュー欄の見出し）と「オプション」（メニュー直下のオプション欄・カテゴリー共通オプション欄の両方）を店舗が変更できる。空 / 未設定 = 既定文言。40 文字まで。純粋ロジックは `src/lib/menu-headings.ts`（`resolveMenuHeadings(config)` / `DEFAULT_MENU_HEADING` / `DEFAULT_OPTIONS_HEADING`）
+- 編集 UI はメニュー構成 → 「カテゴリー・メニュー」見出しの右の「見出しの文言を変更」ボタン（`MenuStructureEditor` の `headingsOpen` パネル。2 つの入力 + フォーム上の表示プレビュー）。「更新して他のフォームにも反映」ではメニュー構成セクションに含まれる。Vitest: `menu-headings.test.ts`
+
 **カテゴリーまたいでの複数選択 (`config.menu_structure`):**
 - `allow_cross_category_selection` ON のとき `max_cross_category_selections`（既定 3、1〜20）で同時に選べるメニュー数を制限。生成 HTML の `getMaxCrossSelections()` が上限で選択を止め「メニューは N つまで選択できます」と案内。編集 UI はトグルの下の「選択できるメニューの数（上限）」
 
@@ -659,6 +663,7 @@ export async function GET(req, { params }) {
 **カスタムフィールド (`config.custom_fields[]`):**
 - `type`: `CustomFieldType` = `'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'birthday' | 'select'`（追加質問 `AdditionalQuestion` も同じ）
 - **誕生日選択（`birthday`）**: 年 / 月 / 日を別々のプルダウンで選ぶ（年は今年 → 100 年前、日は年月に合わせて 28〜31 日）。予約フォームのカスタムフィールド・追加質問、アンケートの質問・選択肢の追加質問、抽選の事前質問すべてで使える。値は hidden input（既存の id）に `"YYYY-MM-DD"` で入り、`input` / `change` を発火するので既存の値取得・復元・必須チェックがそのまま使える。表示は `formatDateTimeForDisplay` で `YYYY年MM月DD日`。共通実装は `src/lib/multiple-dates-runtime-js.ts` の `BIRTHDAY_RUNTIME_JS`（`bdInitAll` / `bdSyncFromHidden`）/ `renderBirthdayFieldHtml()` / `BIRTHDAY_CSS`。復元などで hidden を直接書き換えたら `bdSyncFromHidden(hidden)` を呼ぶ
+- **ドロップダウン選択の検索・絞り込み機能（`select_search`。予約フォームのカスタムフィールド / アンケートの質問で `type = 'select'` のときだけ）**: `{ enabled, unknown_enabled?（既定 true）, unknown_label?（空 = 「不明」。最大 20 文字） }`。ON のとき静的 HTML は元の `<select>` を非表示にして値の入れ物にし、その上に「名前で検索」入力欄 + 五十音ボタン（あ〜わ + すべて）+ 絞り込みリスト + **独立した「不明」ボタン**（絞り込みに関係なく常に押せる。送信値 = 表示名）を描画。選択するとリストが `<select>` の値を書き換えて `change` を発火するので既存の保存 / 復元 / 追加質問 / Webhook はそのまま動く（復元で `<select>` を直接書き換えたら `ssSyncFromSelect(select)`）。五十音は選択肢の `options[].kana`（ふりがな。任意。編集画面で ON のときだけ各選択肢に入力欄）→ 無ければ表示名の先頭文字で判定（濁音 / 小書き / カタカナは清音のひらがなへ寄せる。漢字始まりは ふりがな 無しだと五十音では出ず名前検索のみ）。アンケートの「その他」は絞り込みに関係なく常にリストの末尾（`fixed`）。純粋ロジックは `src/lib/searchable-select.ts`（`resolveSelectSearchSettings` / `kanaRowOf` / `matchesSelectSearch`）、描画 / CSS / 埋め込み JS は `src/lib/searchable-select-runtime-js.ts`（`renderSearchableSelectHtml` / `SEARCHABLE_SELECT_CSS` / `SEARCHABLE_SELECT_RUNTIME_JS` = `ssInitAll` / `ssSyncFromSelect`。判定は TS 側と同じ実装を持つので直すときは両方）。編集 UI はカスタムフィールドの「選択肢」ブロックの上（`MenuStructureEditor`）/ アンケートの「その他」チェックの下（`SurveyQuestionEditor`）のチェックボックス「検索・絞り込み機能を使う」。追加質問・抽選の事前質問・アンケートの追加質問の select には未対応。Vitest: `searchable-select.test.ts`
 - 選択肢（`radio` / `checkbox` / `select`）ごとに `options[].additional_questions?: AdditionalQuestion[]`（その選択肢が選ばれたときだけ表示する追加質問。メニュー / オプションの追加質問と同じ型・同じ仕組み）。編集 UI は選択肢行の「追加質問」ボタン → モーダル（`AdditionalQuestionsEditor`）。生成 HTML では親項目の直下に `aq-wrap-{id}`（`data-owner-field`）として描画し、`getAdditionalQuestionEntries()` の `ownerType: 'custom_option'`（`ownerId` = 親フィールド ID、`ownerValue` = 選択肢の value）で表示・必須チェック・LINE メッセージ（親項目の直後に《質問名》）を制御。入れ子は不可
 
 **カレンダー設定 (`config.calendar_settings`):**

@@ -3,6 +3,9 @@
 // 回答タイプ（カスタムフィールド / 追加質問 共通）。birthday = 誕生日選択（年 / 月 / 日を別々のプルダウンで選択。値は "YYYY-MM-DD"）
 export type CustomFieldType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'birthday' | 'select';
 
+// ドロップダウン選択（select）の検索・絞り込み機能（純粋ロジック: src/lib/searchable-select.ts）
+import type { SelectSearchSettings } from '@/lib/searchable-select';
+
 export interface AdditionalQuestion {
   id: string;
   type: CustomFieldType;
@@ -211,12 +214,16 @@ export interface FormConfig {
     options?: Array<{
       label: string;
       value: string;
+      // ふりがな（任意）。ドロップダウン選択の検索・絞り込み機能で五十音の判定と名前検索に使う
+      kana?: string;
       // この選択肢が選ばれたときに表示される追加質問（アンケートの追加質問と同じ考え方。入れ子は不可）
       additional_questions?: AdditionalQuestion[];
     }>;
     placeholder?: string;
     // 入力/選択内容を端末の localStorage に保存し、再訪時に復元する（他ユーザーには共有されない）
     restore_enabled?: boolean;
+    // type = 'select' のとき: 名前検索 + 五十音ボタンで絞り込み、「不明」を独立したボタンで表示する（選択肢が多いとき用）
+    select_search?: SelectSearchSettings;
     // 表示位置の変更（未設定 = 標準の位置。anchor は画像orテキスト設置と同じセクション指定）
     placement?: { anchor: string; position: 'above' | 'below' };
     // フォームを開いたときは非表示にし、show_triggers のいずれかが成立したら表示する
@@ -252,6 +259,9 @@ export interface FormConfig {
       hide_detail_popup?: boolean;
       // メニューボタン上の画像: hidden=ボタンには出さない（従来。詳細モーダルのみ）/ thumbnail=ボタンの左側に小さく表示
       menu_image_display?: 'thumbnail' | 'hidden';
+      // フォームの見出し文言（空 / 未設定 = 既定。src/lib/menu-headings.ts）
+      menu_heading?: string;     // メニュー欄の見出し（既定「メニューをお選びください」）
+      options_heading?: string;  // メニュー直下のオプション / カテゴリー共通オプションの見出し（既定「オプション」）
     };
   };
   
