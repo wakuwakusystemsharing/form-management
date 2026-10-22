@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import TagInput from '@/components/customers/TagInput';
 import MultipleDatesSettingsEditor from '../Reservation/MultipleDatesSettingsEditor';
 import { createDefaultMultipleDatesSettings, normalizeMultipleDatesSettings } from '@/lib/multiple-dates-settings';
+import { SELECT_SEARCH_DEFAULT_UNKNOWN_LABEL, SELECT_SEARCH_UNKNOWN_LABEL_MAX } from '@/lib/searchable-select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -361,6 +362,21 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                                 placeholder={`選択肢 ${optIndex + 1}`}
                                 className="flex-1"
                               />
+                              {q.type === 'select' && q.select_search?.enabled === true && (
+                                <Input
+                                  type="text"
+                                  value={opt.kana || ''}
+                                  onChange={(e) => {
+                                    const newOptions = [...(q.options || [])];
+                                    const kana = e.target.value;
+                                    newOptions[optIndex] = { ...newOptions[optIndex], kana: kana.trim() ? kana : undefined };
+                                    updateOptions(index, newOptions);
+                                  }}
+                                  title="ふりがな（任意）。五十音ボタンでの絞り込みと名前検索に使います。漢字で始まる選択肢は、ふりがなが無いと五十音ボタンで探せません"
+                                  placeholder="ふりがな（任意）"
+                                  className="w-32 shrink-0"
+                                />
+                              )}
                               <Button
                                 type="button"
                                 variant={(opt.tags || []).length > 0 ? 'default' : 'outline'}
@@ -460,6 +476,57 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                           {q.type === 'select' ? '「その他」の選択肢を追加（選択時に理由入力欄を表示）' : '「その他」ボタンを追加（選択時に理由入力欄を表示）'}
                         </Label>
                       </div>
+                      {/* ドロップダウン選択: 検索・絞り込み機能（選択肢が多いとき用） */}
+                      {q.type === 'select' && (
+                        <div className="rounded-md border bg-background p-3 space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`select-search-${index}`}
+                              checked={q.select_search?.enabled === true}
+                              onCheckedChange={(checked) => updateQuestion(index, {
+                                select_search: checked === true
+                                  ? { enabled: true, unknown_enabled: q.select_search?.unknown_enabled !== false, unknown_label: q.select_search?.unknown_label || '' }
+                                  : undefined,
+                              })}
+                            />
+                            <Label htmlFor={`select-search-${index}`} className="cursor-pointer">
+                              検索・絞り込み機能を使う（選択肢が多いときにおすすめ）
+                            </Label>
+                          </div>
+                          <p className="text-xs text-muted-foreground ml-6">
+                            フォームでは「名前で検索」の入力欄と「あ・か・さ…」の五十音ボタンで選択肢を絞り込めます。
+                            漢字で始まる選択肢は、上の各選択肢の「ふりがな」を入れると五十音ボタンでも探せます（名前検索はふりがな無しでも使えます）。「その他」は絞り込みに関係なく常にリストの末尾に出ます。
+                          </p>
+                          {q.select_search?.enabled === true && (
+                            <div className="ml-6 space-y-2">
+                              <div className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`select-search-unknown-${index}`}
+                                  checked={q.select_search.unknown_enabled !== false}
+                                  onCheckedChange={(checked) => updateQuestion(index, { select_search: { ...q.select_search, enabled: true, unknown_enabled: checked === true } })}
+                                />
+                                <Label htmlFor={`select-search-unknown-${index}`} className="cursor-pointer">
+                                  「不明」を独立したボタンとして表示する（絞り込みに関係なく常に押せる位置に出ます）
+                                </Label>
+                              </div>
+                              {q.select_search.unknown_enabled !== false && (
+                                <div className="flex items-center gap-2 ml-6 flex-wrap">
+                                  <span className="text-xs text-muted-foreground shrink-0">ボタンの表示名</span>
+                                  <Input
+                                    type="text"
+                                    value={q.select_search.unknown_label || ''}
+                                    maxLength={SELECT_SEARCH_UNKNOWN_LABEL_MAX}
+                                    onChange={(e) => updateQuestion(index, { select_search: { ...q.select_search, enabled: true, unknown_label: e.target.value } })}
+                                    placeholder={SELECT_SEARCH_DEFAULT_UNKNOWN_LABEL}
+                                    className="w-48"
+                                  />
+                                  <span className="text-xs text-muted-foreground">空のときは「{SELECT_SEARCH_DEFAULT_UNKNOWN_LABEL}」。この文言がそのまま回答として保存されます</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}

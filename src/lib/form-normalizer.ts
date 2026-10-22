@@ -354,7 +354,9 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           show_description: existingConfig?.menu_structure?.display_options?.show_description ?? true,
           show_treatment_info: existingConfig?.menu_structure?.display_options?.show_treatment_info ?? false,
           hide_detail_popup: existingConfig?.menu_structure?.display_options?.hide_detail_popup === true,
-          menu_image_display: sanitizeMenuImageDisplay(existingConfig?.menu_structure?.display_options?.menu_image_display)
+          menu_image_display: sanitizeMenuImageDisplay(existingConfig?.menu_structure?.display_options?.menu_image_display),
+          menu_heading: typeof existingConfig?.menu_structure?.display_options?.menu_heading === 'string' ? existingConfig.menu_structure.display_options.menu_heading : undefined,
+          options_heading: typeof existingConfig?.menu_structure?.display_options?.options_heading === 'string' ? existingConfig.menu_structure.display_options.options_heading : undefined
         }
       },
       custom_fields: (existingConfig?.custom_fields ?? (typedConfig as Form['config'])?.custom_fields ?? []) as Form['config']['custom_fields'],
