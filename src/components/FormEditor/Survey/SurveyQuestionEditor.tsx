@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { SurveyQuestion, SurveyQuestionType, SurveyQuestionOption, SurveyContentBlock } from '@/types/survey';
 import OptionFollowUpsEditor, { followUpButtonLabel } from './SurveyFollowUpEditor';
+import SurveyQuestionDisplaySettings from './SurveyQuestionDisplaySettings';
 import { countFollowUpsDeep, createFollowUp, getOptionFollowUps, setOptionFollowUps } from '@/lib/survey-follow-ups';
 import {
   AddContentBlockButton,
@@ -281,6 +282,17 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                     </div>
                   </div>
                 </div>
+
+                {/* 画像（上 / 間 / 下）+ フォームを開いたときは非表示 + 表示トリガー（アンケートのみ。抽選の事前質問では出さない） */}
+                {storeId && (
+                  <SurveyQuestionDisplaySettings
+                    question={q}
+                    index={index}
+                    questions={questions}
+                    storeId={storeId}
+                    onChange={(patch) => updateQuestion(index, patch)}
+                  />
+                )}
 
                 {/* 説明文（同意項目などで使用） */}
                 <div className="space-y-2">

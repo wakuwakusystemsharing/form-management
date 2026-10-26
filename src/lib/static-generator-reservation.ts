@@ -3144,7 +3144,7 @@ class BookingForm {
     }
 
     // カスタムフィールドの表示トリガー（ご来店回数の選択肢 / メニュー / オプション / スタッフ / 性別 / クーポン）が成立しているか
-    isCustomFieldTriggerActive(trigger, selectedIds) {
+    isCustomFieldTriggerActive(trigger, selectedIds, hiddenIds) {
         if (!trigger || typeof trigger.value !== 'string' || !trigger.value) return false;
         switch (trigger.type) {
             case 'visit_count': return this.state.visitCount === trigger.value;
@@ -3153,27 +3153,44 @@ class BookingForm {
             case 'staff': return this.state.selectedStaffId === trigger.value;
             case 'gender': return this.state.gender === trigger.value;
             case 'coupon': return this.state.coupon === trigger.value;
+            case 'custom_field': {
+                // 別のカスタム項目の選択肢が選ばれているか。その項目自体が非表示なら不成立（連鎖）
+                if (typeof trigger.field_id !== 'string' || !trigger.field_id) return false;
+                if (hiddenIds && hiddenIds.indexOf(trigger.field_id) !== -1) return false;
+                const v = this.state.customFields[trigger.field_id];
+                return Array.isArray(v) ? v.indexOf(trigger.value) !== -1 : v === trigger.value;
+            }
             default: return false;
         }
     }
 
     // 現在の選択状態で非表示にするカスタムフィールドID一覧。
     // ① ご来店回数の選択肢で非表示指定 → 非表示（優先）
-    // ② 「フォームを開いたときは非表示」の項目は、表示トリガーのいずれかが成立したときだけ表示
+    // ② 「フォームを開いたときは非表示」の項目は、表示トリガーが成立（show_triggers_mode: any = いずれか 1 つ / all = すべて）したときだけ表示。
+    //    カスタム項目をトリガーにした連鎖（A が非表示 → A を条件にする B も非表示）があるので、結果が変わらなくなるまで繰り返す
     getHiddenCustomFieldIds() {
         const fields = this.config.custom_fields || [];
         if (fields.length === 0) return [];
         const visitHidden = this.getVisitHiddenCustomFieldIds();
         const selectedIds = this.getSelectedOwnerIds();
-        const hidden = [];
-        fields.forEach(field => {
-            if (visitHidden.indexOf(field.id) !== -1) { hidden.push(field.id); return; }
-            if (field.hidden_by_default === true) {
-                const triggers = Array.isArray(field.show_triggers) ? field.show_triggers : [];
-                const shown = triggers.some(t => this.isCustomFieldTriggerActive(t, selectedIds));
-                if (!shown) hidden.push(field.id);
-            }
-        });
+        let hidden = [];
+        for (let iter = 0; iter <= fields.length; iter++) {
+            const next = [];
+            fields.forEach(field => {
+                if (visitHidden.indexOf(field.id) !== -1) { next.push(field.id); return; }
+                if (field.hidden_by_default === true) {
+                    const triggers = Array.isArray(field.show_triggers) ? field.show_triggers : [];
+                    const requireAll = field.show_triggers_mode === 'all';
+                    const shown = triggers.length > 0 && (requireAll
+                        ? triggers.every(t => this.isCustomFieldTriggerActive(t, selectedIds, hidden))
+                        : triggers.some(t => this.isCustomFieldTriggerActive(t, selectedIds, hidden)));
+                    if (!shown) next.push(field.id);
+                }
+            });
+            const same = next.length === hidden.length && next.every((id, i) => id === hidden[i]);
+            hidden = next;
+            if (same) break;
+        }
         return hidden;
     }
 
@@ -3183,6 +3200,7 @@ class BookingForm {
         const fields = this.config.custom_fields || [];
         if (fields.length === 0) return;
         const hidden = this.getHiddenCustomFieldIds();
+        let cleared = false;
         fields.forEach(field => {
             const isHidden = hidden.indexOf(field.id) !== -1;
             const wrap = document.getElementById('custom-field-wrap-' + field.id);
@@ -3190,8 +3208,11 @@ class BookingForm {
             if (isHidden && this.state.customFields[field.id] !== undefined) {
                 delete this.state.customFields[field.id];
                 this.clearAdditionalQuestionInputs(field);
+                cleared = true;
             }
         });
+        // 回答を消した項目の選択肢に紐づく追加質問（custom_option）も非表示にする
+        if (cleared) this.updateAdditionalQuestionsVisibility();
     }
 
     // 互換用（ご来店回数の選択時に呼ばれる）
@@ -3787,6 +3808,25 @@ if (document.readyState === 'loading') {
       if (field.description && field.description.trim()) {
         html = html.replace('</label>', `</label>\n                <div class="custom-field-desc">${this.renderColoredTextHtml(field.description)}</div>`);
       }
+      // 画像（https の URL のみ）。above = 質問名の上 / middle = 説明文の下・入力欄の上 / below = 入力欄の下（リンクボタンより上）
+      const imageHtml = this.renderCustomFieldImageHtml(field);
+      if (imageHtml) {
+        const pos = field.image_position === 'middle' || field.image_position === 'below' ? field.image_position : 'above';
+        if (pos === 'above') {
+          html = html.replace(/(<div class="field" id="custom-field-wrap-[^"]*"[^>]*>)/, `$1\n                ${imageHtml}`);
+        } else if (pos === 'middle') {
+          const descIdx = html.indexOf('<div class="custom-field-desc">');
+          if (descIdx >= 0) {
+            const close = html.indexOf('</div>', descIdx) + 6;
+            html = html.slice(0, close) + `\n                ${imageHtml}` + html.slice(close);
+          } else {
+            html = html.replace('</label>', `</label>\n                ${imageHtml}`);
+          }
+        } else {
+          const lastDiv = html.lastIndexOf('</div>');
+          html = lastDiv >= 0 ? html.slice(0, lastDiv) + imageHtml + '</div>' : html + imageHtml;
+        }
+      }
       // リンクボタンを回答欄の下に追加（注意書きのリンクボタンと同じ見た目）
       const buttonItems = this.renderLinkButtonsHtml(field.link_buttons);
       if (buttonItems) {
@@ -3795,6 +3835,13 @@ if (document.readyState === 'loading') {
         html = lastDiv >= 0 ? html.slice(0, lastDiv) + buttonsHtml + '</div>' : html + buttonsHtml;
       }
       return html;
+  }
+
+  // カスタム項目に添える画像（image_url が http(s) のときだけ描画）
+  private renderCustomFieldImageHtml(field: NonNullable<FormConfig['custom_fields']>[number]): string {
+    const url = typeof field.image_url === 'string' ? field.image_url.trim() : '';
+    if (!url || !/^https?:\/\//i.test(url)) return '';
+    return `<div class="custom-field-image"><img src="${this.escapeHtml(url)}" alt="" loading="lazy"></div>`;
   }
 
   private renderCustomFieldControl(field: NonNullable<FormConfig['custom_fields']>[number]): string {
@@ -4775,6 +4822,13 @@ if (document.readyState === 'loading') {
             flex-shrink: 0;
             margin-left: 10px;
             text-align: right;
+        }
+        /* カスタム項目に添える画像 */
+        .custom-field-image img {
+            display: block;
+            max-width: 100%;
+            margin: 0 auto 10px;
+            border-radius: 4px;
         }
         /* カスタムフィールドの単一/複数選択: ご来店回数と同じボタンデザイン */
         .custom-field-radios,

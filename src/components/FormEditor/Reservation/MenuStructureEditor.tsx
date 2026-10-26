@@ -1945,7 +1945,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     onUpdate({ ...form, config: { ...form.config, custom_fields: currentFields } });
   };
   // カスタムフィールドの表示トリガー: 種別ごとの選択肢（フォーム設定から動的に生成）
-  type TriggerType = 'visit_count' | 'menu' | 'option' | 'staff' | 'gender' | 'coupon';
+  type TriggerType = 'visit_count' | 'menu' | 'option' | 'staff' | 'gender' | 'coupon' | 'custom_field';
   const TRIGGER_TYPE_LABELS: Array<{ value: TriggerType; label: string }> = [
     { value: 'visit_count', label: 'ご来店回数の選択肢' },
     { value: 'menu', label: 'メニュー' },
@@ -1953,10 +1953,26 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     { value: 'staff', label: '担当スタッフ' },
     { value: 'gender', label: '性別' },
     { value: 'coupon', label: 'クーポン' },
+    { value: 'custom_field', label: 'カスタム項目の選択肢' },
   ];
-  const getTriggerValueOptions = (type: TriggerType): Array<{ value: string; label: string }> => {
+  // custom_field トリガーはプルダウン 1 つで「項目 > 選択肢」を選ぶため、値を `${field_id}::${value}` にまとめる
+  const CUSTOM_FIELD_TRIGGER_SEP = '::';
+  const customFieldTriggerKey = (t: { field_id?: string; value: string }) => `${t.field_id || ''}${CUSTOM_FIELD_TRIGGER_SEP}${t.value}`;
+  const getTriggerValueOptions = (type: TriggerType, selfFieldId?: string): Array<{ value: string; label: string }> => {
     const cfg = form.config;
     switch (type) {
+      case 'custom_field': {
+        const out: Array<{ value: string; label: string }> = [];
+        (cfg?.custom_fields || []).forEach(f => {
+          if (f.id === selfFieldId) return;
+          if (f.type !== 'radio' && f.type !== 'checkbox' && f.type !== 'select') return;
+          (f.options || []).forEach(o => {
+            if (!o.value) return;
+            out.push({ value: customFieldTriggerKey({ field_id: f.id, value: o.value }), label: `${f.title || '（無題）'} > ${o.label || o.value}` });
+          });
+        });
+        return out;
+      }
       case 'visit_count':
         return (cfg?.visit_count_selection?.options || []).map(o => ({ value: o.value, label: o.label || o.value }));
       case 'menu': {
@@ -1981,6 +1997,34 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
         return (cfg?.coupon_selection?.options || []).map(o => ({ value: o.value, label: o.label }));
       default:
         return [];
+    }
+  };
+
+  // カスタム項目に添える画像のアップロード（menuId = custom_field_{id}。差し替え時は古い画像を削除）
+  const [uploadingCustomFieldId, setUploadingCustomFieldId] = useState<string | null>(null);
+  const handleCustomFieldImageUpload = async (index: number, file: File) => {
+    const field = (form.config?.custom_fields || [])[index];
+    if (!field) return;
+    setUploadingCustomFieldId(field.id);
+    try {
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      formData.append('storeId', form.store_id);
+      formData.append('menuId', `custom_field_${field.id}`);
+      if (field.image_url) formData.append('oldImageUrl', field.image_url);
+      const response = await fetch('/api/upload/menu-image', { method: 'POST', body: formData });
+      if (response.ok) {
+        const { url } = await response.json();
+        updateCustomFieldAt(index, { image_url: url });
+      } else {
+        const error = await response.json().catch(() => ({}));
+        alert(`アップロードに失敗しました: ${error.error || ''}`);
+      }
+    } catch (e) {
+      console.error('Custom field image upload error:', e);
+      alert('アップロードに失敗しました');
+    } finally {
+      setUploadingCustomFieldId(null);
     }
   };
 
@@ -3941,6 +3985,51 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                 </div>
               </div>
 
+              {/* 項目に添える画像（質問名の上 / 質問名と入力欄の間 / 入力欄の下） */}
+              <div className={`mb-3 p-3 rounded border ${theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-gray-900/50 border-gray-700'}`}>
+                <label className={`block text-xs ${themeClasses.text.secondary} mb-2`}>画像（任意）</label>
+                {field.image_url ? (
+                  <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={field.image_url} alt="" className="h-16 w-auto rounded border border-gray-300" />
+                    <button
+                      type="button"
+                      onClick={() => updateCustomFieldAt(index, { image_url: undefined })}
+                      className="text-sm text-red-400 hover:text-red-300"
+                    >
+                      画像を削除
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={uploadingCustomFieldId === field.id}
+                    className={`text-sm ${themeClasses.text.secondary}`}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleCustomFieldImageUpload(index, file);
+                      e.target.value = '';
+                    }}
+                  />
+                )}
+                {uploadingCustomFieldId === field.id && (
+                  <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>アップロード中...</p>
+                )}
+                <div className="mt-2 flex items-center gap-2">
+                  <span className={`text-xs ${themeClasses.text.secondary}`}>表示位置</span>
+                  <select
+                    value={field.image_position || 'above'}
+                    onChange={(e) => updateCustomFieldAt(index, { image_position: e.target.value as 'above' | 'middle' | 'below' })}
+                    className={`${themeClasses.input} text-sm`}
+                  >
+                    <option value="above">質問名の上</option>
+                    <option value="middle">質問名と入力欄の間</option>
+                    <option value="below">入力欄の下</option>
+                  </select>
+                </div>
+              </div>
+
               {/* フォームを開いたときは非表示 + 表示トリガー */}
               <div className={`mb-3 p-3 rounded border ${theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-gray-900/50 border-gray-700'}`}>
                 <label className="flex items-center space-x-2 cursor-pointer">
@@ -3950,6 +4039,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     onChange={(e) => updateCustomFieldAt(index, {
                       hidden_by_default: e.target.checked,
                       show_triggers: e.target.checked ? (field.show_triggers || []) : undefined,
+                      show_triggers_mode: e.target.checked ? field.show_triggers_mode : undefined,
                     })}
                     className={`h-4 w-4 text-blue-600 focus:ring-blue-500 rounded ${theme === 'light' ? 'bg-gray-100 border-gray-300' : 'bg-gray-700 border-gray-600'}`}
                   />
@@ -3959,10 +4049,12 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                   <div className="mt-3 space-y-2">
                     <p className={`text-xs font-medium ${themeClasses.text.primary}`}>何をトリガーにして表示されるようにしますか？</p>
                     <p className={`text-[10px] ${themeClasses.text.tertiary}`}>
-                      いずれか1つでも選択されていれば表示されます（複数指定は OR）。ご来店回数の「カスタムフィールド表示設定」で非表示にした選択肢では表示されません。
+                      非表示の間は必須チェック・送信内容の対象になりません。ご来店回数の「カスタムフィールド表示設定」で非表示にした選択肢では表示されません。
+                      「カスタム項目の選択肢」をトリガーにした場合、その項目自体が非表示のときは成立しません。
                     </p>
                     {(field.show_triggers || []).map((trigger, tIndex) => {
-                      const valueOptions = getTriggerValueOptions(trigger.type);
+                      const valueOptions = getTriggerValueOptions(trigger.type, field.id);
+                      const isCustomFieldTrigger = trigger.type === 'custom_field';
                       return (
                         <div key={tIndex} className="flex items-center gap-2 flex-wrap">
                           <select
@@ -3978,10 +4070,17 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                           </select>
                           <span className={`text-xs ${themeClasses.text.secondary}`}>で</span>
                           <select
-                            value={trigger.value}
+                            value={isCustomFieldTrigger ? (trigger.field_id ? customFieldTriggerKey(trigger) : '') : trigger.value}
                             onChange={(e) => {
                               const next = [...(field.show_triggers || [])];
-                              next[tIndex] = { ...next[tIndex], value: e.target.value };
+                              if (isCustomFieldTrigger) {
+                                const sep = e.target.value.indexOf(CUSTOM_FIELD_TRIGGER_SEP);
+                                next[tIndex] = sep > 0
+                                  ? { type: 'custom_field', field_id: e.target.value.slice(0, sep), value: e.target.value.slice(sep + CUSTOM_FIELD_TRIGGER_SEP.length) }
+                                  : { type: 'custom_field', value: '' };
+                              } else {
+                                next[tIndex] = { ...next[tIndex], value: e.target.value };
+                              }
                               updateCustomFieldAt(index, { show_triggers: next });
                             }}
                             className={`${themeClasses.input} text-sm flex-1 min-w-0`}
@@ -4012,6 +4111,28 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     </button>
                     {(field.show_triggers || []).length === 0 && (
                       <p className="text-[10px] text-amber-500">トリガーが未設定のため、この項目はフォーム上で常に非表示になります</p>
+                    )}
+                    {(field.show_triggers || []).length >= 2 && (
+                      <div className={`flex flex-wrap items-center gap-4 text-xs ${themeClasses.text.secondary}`}>
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`trigger-mode-${field.id}`}
+                            checked={field.show_triggers_mode !== 'all'}
+                            onChange={() => updateCustomFieldAt(index, { show_triggers_mode: 'any' })}
+                          />
+                          いずれか 1 つでも選択されていれば表示
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`trigger-mode-${field.id}`}
+                            checked={field.show_triggers_mode === 'all'}
+                            onChange={() => updateCustomFieldAt(index, { show_triggers_mode: 'all' })}
+                          />
+                          すべて選択されているときだけ表示
+                        </label>
+                      </div>
                     )}
                   </div>
                 )}
