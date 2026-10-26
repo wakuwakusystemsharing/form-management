@@ -883,12 +883,49 @@ class BookingForm {
         entries.forEach(entry => {
             const visible = this.isAdditionalQuestionVisible(entry, sel);
             const wrap = document.getElementById('aq-wrap-' + entry.field.id);
-            if (wrap) wrap.style.display = visible ? '' : 'none';
+            if (wrap) {
+                if (visible) this.placeAdditionalQuestionBelowChoice(entry, wrap);
+                wrap.style.display = visible ? '' : 'none';
+            }
             if (!visible && this.state.customFields[entry.field.id] !== undefined) {
                 delete this.state.customFields[entry.field.id];
                 this.clearAdditionalQuestionInputs(entry.field);
             }
         });
+    }
+
+    // 「選択したボタンのすぐ下に表示する」が ON の追加質問を、選択されたボタンの直後へ移動する。
+    // 要素を移動するだけなので id・入力値・イベントリスナーはそのまま（ON でなければ何もしない）。
+    // ・メニュー: メニューボタン + オプション欄（サブメニュー一覧もここに入る）をまとめた div の直後
+    // ・オプション / カテゴリー共通オプション: そのボタンの直後
+    // ・カスタム項目: 単一 / 複数選択は選んだ選択肢のラベルの直後、ドロップダウンはプルダウン（検索機能 ON なら検索欄一式）の直後
+    placeAdditionalQuestionBelowChoice(entry, wrap) {
+        if (!entry.field || entry.field.show_below_choice !== true) return;
+        let anchor = null;
+        if (entry.ownerType === 'menu') {
+            const buttons = Array.prototype.slice.call(document.querySelectorAll('.menu-item[data-menu-id="' + entry.ownerId + '"]'));
+            const btn = buttons.filter(b => b.classList.contains('selected'))[0] || buttons[0];
+            anchor = btn ? (btn.parentElement && btn.parentElement.id !== 'menu-field' ? btn.parentElement : btn) : null;
+        } else if (entry.ownerType === 'option') {
+            anchor = document.querySelector('.menu-option-item[data-option-id="' + entry.ownerId + '"], .category-option-item[data-option-id="' + entry.ownerId + '"]');
+        } else if (entry.ownerType === 'custom_option') {
+            const fieldWrap = document.getElementById('custom-field-wrap-' + entry.ownerId);
+            if (fieldWrap) {
+                const inputs = Array.prototype.slice.call(fieldWrap.querySelectorAll('.choice-label input'));
+                const hit = inputs.filter(i => i.value === entry.ownerValue)[0];
+                if (hit) {
+                    anchor = hit.closest('.choice-label');
+                } else {
+                    const select = document.getElementById('custom-field-' + entry.ownerId);
+                    const ss = select ? select.closest('.ss-field') : null;
+                    anchor = ss || select;
+                }
+            }
+        }
+        if (!anchor || anchor === wrap || anchor.nextElementSibling === wrap) return;
+        if (anchor.contains(wrap)) return;
+        wrap.classList.add('aq-field--inline');
+        anchor.after(wrap);
     }
 
     // 非表示になった追加質問の入力欄をリセットする
@@ -3896,8 +3933,13 @@ if (document.readyState === 'loading') {
     const entries = this.collectAdditionalQuestions(config);
     if (entries.length === 0) return '';
     return entries.map(e =>
-      `<div class="aq-field" id="aq-wrap-${e.field.id}" style="display:none;">${this.renderCustomFieldItem(e.field)}</div>`
+      `<div class="aq-field" id="aq-wrap-${e.field.id}"${this.aqInlineAttr(e.field)} style="display:none;">${this.renderCustomFieldItem(e.field)}</div>`
     ).join('\n            ');
+  }
+
+  // 追加質問「選択したボタンのすぐ下に表示する」（show_below_choice）の目印。クライアント側が選択時にボタンの直後へ移動する
+  private aqInlineAttr(q: import('@/types/form').AdditionalQuestion): string {
+    return q.show_below_choice === true ? ' data-aq-inline="1"' : '';
   }
 
   // カスタムフィールド + その選択肢に紐づく追加質問（初期状態は非表示。選択時にクライアント側で表示）
@@ -3907,7 +3949,7 @@ if (document.readyState === 'loading') {
     const followUps = (field.options || []).flatMap(opt =>
       (opt.additional_questions || [])
         .filter(q => q && q.id && q.title)
-        .map(q => `<div class="aq-field aq-followup" id="aq-wrap-${q.id}" data-owner-field="${field.id}" style="display:none;">${this.renderCustomFieldItem(q)}</div>`)
+        .map(q => `<div class="aq-field aq-followup" id="aq-wrap-${q.id}" data-owner-field="${field.id}"${this.aqInlineAttr(q)} style="display:none;">${this.renderCustomFieldItem(q)}</div>`)
     );
     return followUps.length > 0 ? core + '\n            ' + followUps.join('\n            ') : core;
   }
@@ -4741,6 +4783,15 @@ if (document.readyState === 'loading') {
             flex-wrap: wrap;
             gap: 10px;
             margin-bottom: 25px;
+        }
+        /* 「選択したボタンのすぐ下に表示する」追加質問: 選択肢の列の中では 1 行まるごと使う */
+        .custom-field-radios > .aq-field--inline,
+        .custom-field-checkboxes > .aq-field--inline {
+            flex: 0 0 100%;
+        }
+        .aq-field--inline > .field {
+            margin-top: 0.5rem;
+            margin-bottom: 0.75rem;
         }
         .choice-label {
             position: relative;
