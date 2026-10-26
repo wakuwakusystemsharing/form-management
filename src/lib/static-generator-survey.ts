@@ -294,6 +294,8 @@ export class StaticSurveyGenerator {
                     });
                 }
             });
+            // 復元された選択に応じて表示トリガー付きの質問を同期
+            svApplyQuestionVisibility();
         });
 
         // 日付/日時入力: 値の有無でヒント表示を切り替え
@@ -361,6 +363,7 @@ export class StaticSurveyGenerator {
             updateOtherReasonVisibility(questionId);
             updateFollowUpVisibility(questionId);
             saveChoiceAnswer(questionId);
+            svApplyQuestionVisibility();
         }
 
         // ドロップダウンの変更時: その他理由欄 / 追加質問の表示を更新して保存
@@ -368,6 +371,7 @@ export class StaticSurveyGenerator {
             updateOtherReasonVisibility(questionId);
             updateFollowUpVisibility(questionId);
             saveChoiceAnswer(questionId);
+            svApplyQuestionVisibility();
         }
 
         // 追加質問内の選択が変わったとき（共通ランタイム fuSelectChoice / select の onchange から呼ばれる）:
@@ -375,7 +379,78 @@ export class StaticSurveyGenerator {
         function fuOnChange(questionId) {
             updateFollowUpVisibility(questionId);
             saveChoiceAnswer(questionId);
+            svApplyQuestionVisibility();
         }
+
+        // ===== 質問の表示トリガー（hidden_by_default + show_triggers。純粋ロジックは src/lib/survey-visibility.ts と同じ規則） =====
+        // 質問（path が空）または追加質問（path = 選択肢 index と追加質問 index を交互に並べた配列）で選ばれている送信値。「その他」は OTHER_OPTION_VALUE
+        function svSelectedValues(qid, path) {
+            var q = SURVEY_QUESTIONS.find(function (x) { return x.id === qid; });
+            if (!q) return [];
+            var out = [];
+            if (!path || path.length === 0) {
+                if (q.type === 'select') {
+                    var sel = document.getElementById(qid);
+                    if (sel && sel.value !== '') out.push(sel.value);
+                    return out;
+                }
+                var btns = document.querySelectorAll('#container-' + qid + ' .choice-button.selected');
+                for (var i = 0; i < btns.length; i++) {
+                    if (btns[i].dataset.other) { out.push(OTHER_OPTION_VALUE); continue; }
+                    var opt = (q.options || [])[Number(btns[i].dataset.optIndex)];
+                    if (opt) out.push(opt.value || opt.label);
+                }
+                return out;
+            }
+            // 追加質問: 表示されているときだけ数える（親の選択肢が外れて隠れた追加質問の選択は無効）
+            var fid = fuId(qid, path);
+            var block = document.getElementById('followup-' + fid);
+            if (!block || block.style.display === 'none') return [];
+            var fsel = document.getElementById('fu-' + fid);
+            if (fsel && fsel.tagName === 'SELECT') {
+                if (fsel.value !== '') out.push(fsel.value);
+                return out;
+            }
+            var c = document.getElementById('fu-container-' + fid);
+            if (!c) return [];
+            var fb = c.querySelectorAll('.choice-button.selected');
+            for (var k = 0; k < fb.length; k++) out.push(fb[k].dataset.other ? fuOtherValue() : fuButtonValue(fb[k]));
+            return out;
+        }
+
+        // 非表示にする質問 ID（トリガー元の質問が非表示なら不成立 = 連鎖。結果が変わらなくなるまで繰り返す）
+        function svGetHiddenQuestionIds() {
+            var hidden = [];
+            var active = function (t) {
+                if (!t || typeof t.question_id !== 'string' || typeof t.value !== 'string' || !t.value) return false;
+                if (hidden.indexOf(t.question_id) !== -1) return false;
+                return svSelectedValues(t.question_id, Array.isArray(t.path) ? t.path : []).indexOf(t.value) !== -1;
+            };
+            for (var iter = 0; iter <= SURVEY_QUESTIONS.length; iter++) {
+                var next = [];
+                SURVEY_QUESTIONS.forEach(function (q) {
+                    if (q.hidden_by_default !== true) return;
+                    var triggers = Array.isArray(q.show_triggers) ? q.show_triggers : [];
+                    var shown = triggers.length > 0 && (q.show_triggers_mode === 'all' ? triggers.every(active) : triggers.some(active));
+                    if (!shown) next.push(q.id);
+                });
+                var same = next.length === hidden.length && next.every(function (id, i) { return id === hidden[i]; });
+                hidden = next;
+                if (same) break;
+            }
+            return hidden;
+        }
+
+        // 表示 / 非表示を DOM に反映（回答は消さない。非表示の質問は送信時に飛ばす）
+        function svApplyQuestionVisibility() {
+            var hidden = svGetHiddenQuestionIds();
+            SURVEY_QUESTIONS.forEach(function (q) {
+                if (q.hidden_by_default !== true) return;
+                var wrap = document.getElementById('qwrap-' + q.id);
+                if (wrap) wrap.style.display = hidden.indexOf(q.id) !== -1 ? 'none' : '';
+            });
+        }
+        document.addEventListener('DOMContentLoaded', svApplyQuestionVisibility);
 
         // 「その他」の選択状態に応じて理由入力欄を表示/非表示（ボタン / ドロップダウン両対応）
         function updateOtherReasonVisibility(questionId) {
@@ -436,8 +511,11 @@ export class StaticSurveyGenerator {
             const formDataDisplay = {};
             const questions = SURVEY_QUESTIONS;
             let hasError = false;
+            // 表示トリガーで非表示になっている質問は必須チェック・回答・追加質問すべて対象外
+            const svHidden = svGetHiddenQuestionIds();
 
             for (const q of questions) {
+                if (svHidden.indexOf(q.id) !== -1) continue;
                 let value = '';
 
                 if (q.type === 'text' || q.type === 'textarea' || q.type === 'date' || q.type === 'datetime' || q.type === 'birthday') {
@@ -669,13 +747,29 @@ export class StaticSurveyGenerator {
         descriptionHtml = `<div class="field-description">${renderColoredTextHtml(q.description)}</div>`;
     }
 
+    // 画像（https の URL のみ）。above = 質問名の上 / middle = 説明文の下・入力欄の上 / below = 入力欄の下
+    const imageHtml = this.renderQuestionImageHtml(q);
+    const imagePos = q.image_position === 'middle' || q.image_position === 'below' ? q.image_position : 'above';
+    // 「フォームを開いたときは非表示」: JS 適用前のちらつき防止で初期描画から隠す（svApplyQuestionVisibility が切り替える）
+    const hiddenAttr = q.hidden_by_default === true ? ' style="display:none;"' : '';
+
     return `
-        <div class="field">
+        <div class="field" id="qwrap-${q.id}"${hiddenAttr}>
+            ${imagePos === 'above' ? imageHtml : ''}
             <label class="field-label">Q${index + 1}. ${this.escapeHtml(q.title)} ${requiredMark}</label>
             ${descriptionHtml}
+            ${imagePos === 'middle' ? imageHtml : ''}
             ${fieldHtml}
+            ${imagePos === 'below' ? imageHtml : ''}
         </div>
     `;
+  }
+
+  /** 質問に添える画像（image_url が http(s) のときだけ描画） */
+  private renderQuestionImageHtml(q: SurveyQuestion): string {
+    const url = typeof q.image_url === 'string' ? q.image_url.trim() : '';
+    if (!url || !/^https?:\/\//i.test(url)) return '';
+    return `<div class="question-image"><img src="${this.escapeHtml(url)}" alt="" loading="lazy"></div>`;
   }
 
   /**
@@ -780,6 +874,8 @@ export class StaticSurveyGenerator {
             padding: 14px 16px;
         }
         .content-block-image img { display: block; max-width: 100%; margin: 0 auto; border-radius: 4px; }
+        .question-image { margin: 8px 0 12px; }
+        .question-image img { display: block; max-width: 100%; margin: 0 auto; border-radius: 4px; }
         .field-description { white-space: normal; }
         .field-label {
             display: flex;

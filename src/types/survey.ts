@@ -57,6 +57,17 @@ export interface SurveyQuestion {
   // type = 'multiple_dates' の設定（予約フォームの multiple_dates_settings と同じ形。未設定は既定値で補完）。
   // required が true のときは required_choices（第一希望は常に必須）を検証する。false なら全て任意
   multiple_dates?: MultipleDatesSettings;
+  // 質問に添える画像（https の URL）と位置（未設定 = 'above' = 質問名の上。'middle' = 質問名と入力欄の間、'below' = 入力欄の下）
+  image_url?: string;
+  image_position?: 'above' | 'middle' | 'below';
+  // フォームを開いたときは非表示にし、show_triggers が成立したら表示する。
+  // 非表示の間は必須チェック・送信内容（responses / タグ付与）の対象外。純粋ロジックは src/lib/survey-visibility.ts
+  hidden_by_default?: boolean;
+  // 表示トリガー: 別の質問（path があればその選択肢の追加質問）で value の選択肢が選ばれていたら表示。
+  // value は選択肢の送信値（value || label）。「その他」は '__other__'。トリガー元の質問が非表示なら不成立
+  show_triggers?: Array<{ question_id: string; path?: number[]; value: string }>;
+  // 複数トリガーの判定（未設定 = 'any' = いずれか 1 つでも成立で表示。'all' = すべて成立で表示）
+  show_triggers_mode?: 'any' | 'all';
 }
 
 /**
