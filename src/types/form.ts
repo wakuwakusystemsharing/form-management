@@ -228,13 +228,20 @@ export interface FormConfig {
     select_search?: SelectSearchSettings;
     // 表示位置の変更（未設定 = 標準の位置。anchor は画像orテキスト設置と同じセクション指定）
     placement?: { anchor: string; position: 'above' | 'below' };
-    // フォームを開いたときは非表示にし、show_triggers のいずれかが成立したら表示する
+    // フォームを開いたときは非表示にし、show_triggers が成立したら表示する（非表示の間は必須チェック・送信内容の対象外）
     hidden_by_default?: boolean;
-    // 表示トリガー（複数指定は OR）。value は対象の ID / 選択肢の value
+    // 表示トリガー。value は対象の ID / 選択肢の value。
+    // type = 'custom_field' は「別のカスタム項目（field_id）で value の選択肢が選ばれていたら」（その項目が非表示なら不成立）
     show_triggers?: Array<{
-      type: 'visit_count' | 'menu' | 'option' | 'staff' | 'gender' | 'coupon';
+      type: 'visit_count' | 'menu' | 'option' | 'staff' | 'gender' | 'coupon' | 'custom_field';
       value: string;
+      field_id?: string;
     }>;
+    // 複数トリガーの判定（未設定 = 'any' = いずれか 1 つでも成立で表示。'all' = すべて成立で表示）
+    show_triggers_mode?: 'any' | 'all';
+    // 項目に添える画像（https の URL）と位置（未設定 = 'above' = 質問名の上。'middle' = 質問名と入力欄の間、'below' = 入力欄の下）
+    image_url?: string;
+    image_position?: 'above' | 'middle' | 'below';
     // 質問名の下に表示する説明テキスト（[color=#xxxxxx]〜[/color] タグで部分文字色に対応）
     description?: string;
     // 回答欄の下に表示するリンクボタン（注意書きのリンクボタンと同じ見た目）
