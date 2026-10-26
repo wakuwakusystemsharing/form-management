@@ -16,6 +16,8 @@ export interface AdditionalQuestion {
     value: string;
   }>;
   placeholder?: string;
+  // 選択したボタン（メニュー / オプション / カスタム項目の選択肢）のすぐ下に表示する（既定 false = 項目の後ろにまとめて表示）
+  show_below_choice?: boolean;
 }
 
 // メニューオプションの型定義

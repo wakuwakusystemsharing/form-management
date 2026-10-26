@@ -220,6 +220,19 @@ const AdditionalQuestionsEditor: React.FC<{
                 </div>
               </div>
 
+              <label className="flex items-start space-x-2 cursor-pointer mb-3">
+                <input
+                  type="checkbox"
+                  checked={q.show_below_choice === true}
+                  onChange={(e) => updateQuestion(index, { show_below_choice: e.target.checked })}
+                  className="h-4 w-4 rounded mt-0.5"
+                />
+                <span className={`text-sm ${themeClasses.text.secondary}`}>
+                  選択したボタンのすぐ下に表示する
+                  <span className={`block text-xs ${themeClasses.text.tertiary}`}>OFF のときは項目の後ろにまとめて表示されます</span>
+                </span>
+              </label>
+
               {(q.type === 'text' || q.type === 'textarea') && (
                 <div className="mb-1">
                   <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>プレースホルダー（任意）</label>
