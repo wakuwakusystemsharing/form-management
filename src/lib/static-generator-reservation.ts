@@ -6,7 +6,8 @@
 import { computeAccentColor, hexToRgb } from './color-utils';
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { SEARCHABLE_SELECT_CSS, SEARCHABLE_SELECT_RUNTIME_JS, renderSearchableSelectHtml } from './searchable-select-runtime-js';
-import { resolveMenuHeadings } from './menu-headings';
+import { resolveMenuHeadings, resolveMenuHeadingContents } from './menu-headings';
+import type { HeadingContent } from './menu-headings';
 import { FormConfig } from '@/types/form';
 import { STAFF_SCHEDULE_RUNTIME_JS } from './staff-schedule';
 import { ADVANCE_RULES_RUNTIME_JS } from './advance-rules';
@@ -4052,6 +4053,10 @@ if (document.readyState === 'loading') {
     // 見出し文言（メニュー構成 → 「見出しの文言を変更」。未設定は既定）
     const headings = resolveMenuHeadings(config);
     const optionsHeadingHtml = this.escapeHtml(headings.options_heading);
+    // 見出しの下に表示するテキスト / 画像（メニュー欄 / オプション欄。未設定なら空文字）
+    const headingContents = resolveMenuHeadingContents(config);
+    const menuHeadingContentHtml = this.renderHeadingContentHtml(headingContents.menu);
+    const optionsHeadingContentHtml = this.renderHeadingContentHtml(headingContents.options);
     const renderMenuButton = (menu: import('@/types/form').MenuItem, categoryId: string) => `
                                 <div>
                                     <button type="button" class="${menuItemClass}" data-menu-id="${menu.id}" data-category-id="${categoryId}">
@@ -4070,6 +4075,7 @@ if (document.readyState === 'loading') {
                                     ${!menu.has_submenu && menu.options && menu.options.length > 0 ? `
                                         <div id="options-${menu.id}" class="menu-options-container" style="display:none;margin-left:1.5rem;padding-left:1rem;border-left:2px solid #bbf7d0;margin-top:0.75rem;margin-bottom:0.75rem;">
                                             <div style="font-size:0.875rem;font-weight:500;color:#374151;margin-bottom:0.75rem;">${optionsHeadingHtml}</div>
+                                            ${optionsHeadingContentHtml}
                                             ${menu.options.map((option, optionIndex) => `
                                                 <button type="button" class="menu-option-item" data-menu-id="${menu.id}" data-option-id="${option.id || `option-${optionIndex}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
                                                     <div style="display:flex;align-items:center;">
@@ -4096,6 +4102,7 @@ if (document.readyState === 'loading') {
       return `
                             <div class="category-options-section" style="margin-top:1rem;padding-top:1rem;border-top:1px solid #e5e7eb;">
                                 <div style="font-size:0.875rem;font-weight:600;color:#374151;margin-bottom:0.75rem;">${optionsHeadingHtml}</div>
+                                ${optionsHeadingContentHtml}
                                 <div class="category-options-list">
                                     ${category.options.map((opt, idx) => `
                                         <button type="button" class="category-option-item" data-category-id="${category.id}" data-option-id="${opt.id || `catopt-${idx}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
@@ -4118,6 +4125,7 @@ if (document.readyState === 'loading') {
             <!-- メニュー選択（ご来店回数「選択するまで非表示」が ON なら選択まで隠す） -->
             <div class="field" id="menu-field"${hiddenUntilVisit ? ' style="display:none;"' : ''}>
                 <label class="field-label">${this.escapeHtml(headings.menu_heading)}</label>
+                ${menuHeadingContentHtml}
                 ${config.menu_structure.categories.map((category, idx) => `
                     ${multiCat ? `
                     <button type="button" class="category-header${idx === 0 ? ' open' : ''}" data-category-id="${category.id}" onclick="window.bookingForm.toggleCategory('${category.id}')">
@@ -4268,6 +4276,18 @@ if (document.readyState === 'loading') {
       return `<div class="content-block content-block-text">${this.renderColoredTextHtml(b.text || '')}</div>`;
     }).join('');
     return items + placedFieldsHtml;
+  }
+
+  /**
+   * 見出しの下に表示するテキスト / 画像（メニュー構成 → 「見出しの文言を変更」）。
+   * テキストは [color=#rrggbb] の色タグを反映、画像は https のみ（resolveMenuHeadingContents が検証済み）
+   */
+  private renderHeadingContentHtml(content: HeadingContent): string {
+    const textHtml = content.text ? `<div class="heading-content-text">${this.renderColoredTextHtml(content.text)}</div>` : '';
+    const imageHtml = content.image ? `<div class="heading-content-image"><img src="${this.escapeHtml(content.image)}" alt="" loading="lazy"></div>` : '';
+    if (!textHtml && !imageHtml) return '';
+    const inner = content.order === 'image_text' ? imageHtml + textHtml : textHtml + imageHtml;
+    return `<div class="heading-content">${inner}</div>`;
   }
 
   // エスケープしたうえで改行を <br> にする（メニュー名・オプション名・カスタムフィールド名の改行表示用）
@@ -4586,6 +4606,23 @@ if (document.readyState === 'loading') {
             padding: 14px 16px;
         }
         .content-block-image img {
+            display: block;
+            max-width: 100%;
+            margin: 0 auto;
+            border-radius: 4px;
+        }
+        /* 見出しの下のテキスト / 画像（メニュー欄・オプション欄） */
+        .heading-content { margin: 0 0 12px; }
+        .heading-content-text {
+            font-size: 14px;
+            color: var(--text-dark, #333);
+            line-height: 1.7;
+            white-space: normal;
+        }
+        .heading-content-image { margin-top: 8px; }
+        .heading-content-text + .heading-content-image { margin-top: 8px; }
+        .heading-content-image + .heading-content-text { margin-top: 8px; }
+        .heading-content-image img {
             display: block;
             max-width: 100%;
             margin: 0 auto;

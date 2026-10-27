@@ -356,7 +356,14 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           hide_detail_popup: existingConfig?.menu_structure?.display_options?.hide_detail_popup === true,
           menu_image_display: sanitizeMenuImageDisplay(existingConfig?.menu_structure?.display_options?.menu_image_display),
           menu_heading: typeof existingConfig?.menu_structure?.display_options?.menu_heading === 'string' ? existingConfig.menu_structure.display_options.menu_heading : undefined,
-          options_heading: typeof existingConfig?.menu_structure?.display_options?.options_heading === 'string' ? existingConfig.menu_structure.display_options.options_heading : undefined
+          options_heading: typeof existingConfig?.menu_structure?.display_options?.options_heading === 'string' ? existingConfig.menu_structure.display_options.options_heading : undefined,
+          // 見出しの下のテキスト / 画像（文字列以外は捨てる。並び順は image_text 以外を既定扱い）
+          menu_heading_text: typeof existingConfig?.menu_structure?.display_options?.menu_heading_text === 'string' ? existingConfig.menu_structure.display_options.menu_heading_text : undefined,
+          menu_heading_image: typeof existingConfig?.menu_structure?.display_options?.menu_heading_image === 'string' ? existingConfig.menu_structure.display_options.menu_heading_image : undefined,
+          menu_heading_order: existingConfig?.menu_structure?.display_options?.menu_heading_order === 'image_text' ? 'image_text' : undefined,
+          options_heading_text: typeof existingConfig?.menu_structure?.display_options?.options_heading_text === 'string' ? existingConfig.menu_structure.display_options.options_heading_text : undefined,
+          options_heading_image: typeof existingConfig?.menu_structure?.display_options?.options_heading_image === 'string' ? existingConfig.menu_structure.display_options.options_heading_image : undefined,
+          options_heading_order: existingConfig?.menu_structure?.display_options?.options_heading_order === 'image_text' ? 'image_text' : undefined,
         }
       },
       custom_fields: (existingConfig?.custom_fields ?? (typedConfig as Form['config'])?.custom_fields ?? []) as Form['config']['custom_fields'],
