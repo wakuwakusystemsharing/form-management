@@ -1,7 +1,9 @@
 'use client';
 
 import { SELECT_SEARCH_DEFAULT_UNKNOWN_LABEL, SELECT_SEARCH_UNKNOWN_LABEL_MAX } from '@/lib/searchable-select';
-import { DEFAULT_MENU_HEADING, DEFAULT_OPTIONS_HEADING, MENU_HEADING_MAX, resolveMenuHeadings } from '@/lib/menu-headings';
+import { DEFAULT_MENU_HEADING, DEFAULT_OPTIONS_HEADING, HEADING_CONTENT_ORDER_OPTIONS, HEADING_CONTENT_TEXT_MAX, MENU_HEADING_MAX, resolveMenuHeadings } from '@/lib/menu-headings';
+import type { HeadingContentOrder } from '@/lib/menu-headings';
+import { ColoredTextToolbar } from '@/components/FormEditor/Survey/SurveyContentBlockEditor';
 import React, { useState } from 'react';
 import { AdditionalQuestion, Form, MenuCategory, MenuItem, MenuOption, StaffScheduleSettings, SubMenuItem } from '@/types/form';
 import StaffScheduleEditor from './StaffScheduleEditor';
@@ -24,6 +26,118 @@ function renderContentTextPreview(text: string): string {
     .replace(/\[color=(#[0-9a-fA-F]{3,8})\]/g, '<span style="color:$1">')
     .replace(/\[\/color\]/g, '</span>')
     .replace(/\n/g, '<br>');
+}
+
+/**
+ * 見出しの下に表示するテキスト / 画像の編集（メニュー欄・オプション欄で共用）。
+ * テキストは「画像orテキスト設置」と同じ [color=#rrggbb] の色タグ、画像は /api/upload/menu-image にアップロード
+ */
+function HeadingContentEditor({
+  idPrefix, storeId, text, imageUrl, order, theme, onChange,
+}: {
+  idPrefix: string;
+  storeId: string;
+  text: string;
+  imageUrl: string;
+  order: HeadingContentOrder;
+  theme: ThemeType;
+  onChange: (patch: { text?: string; image?: string; order?: HeadingContentOrder }) => void;
+}) {
+  const themeClasses = getThemeClasses(theme);
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const uploadImage = async (file: File) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      formData.append('storeId', storeId);
+      formData.append('menuId', `heading_${idPrefix}`);
+      if (imageUrl) formData.append('oldImageUrl', imageUrl);
+      const res = await fetch('/api/upload/menu-image', { method: 'POST', body: formData, credentials: 'include' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(`アップロードに失敗しました: ${json.error || ''}`);
+        return;
+      }
+      onChange({ image: json.url });
+    } catch (e) {
+      console.error('Heading content image upload error:', e);
+      alert('アップロードに失敗しました');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className={`mt-2 p-3 rounded-md space-y-2 ${themeClasses.highlight}`}>
+      <p className={`text-xs ${themeClasses.text.secondary}`}>見出しの下に表示するテキスト / 画像（任意）</p>
+      <textarea
+        ref={textareaRef}
+        value={text}
+        maxLength={HEADING_CONTENT_TEXT_MAX}
+        onChange={(e) => onChange({ text: e.target.value })}
+        placeholder="見出しの下に表示するテキスト（空なら表示しません）"
+        rows={3}
+        className={`w-full text-sm rounded-md border px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
+          theme === 'light'
+            ? 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+            : 'bg-gray-700 border-gray-600 text-white placeholder-gray-500'
+        }`}
+      />
+      <ColoredTextToolbar getTextarea={() => textareaRef.current} value={text} onChange={(next) => onChange({ text: next })} />
+      {text.trim() && (
+        <div>
+          <p className={`text-[10px] ${themeClasses.text.tertiary} mb-1`}>フォーム上の表示イメージ:</p>
+          <div
+            className="text-sm rounded border p-3 leading-relaxed"
+            style={{ backgroundColor: '#f7f8fa', color: '#333' }}
+            dangerouslySetInnerHTML={{ __html: renderContentTextPreview(text) }}
+          />
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageUrl} alt="見出し下の画像" className="max-h-24 rounded-md border" />
+        ) : (
+          <span className={`text-xs ${themeClasses.text.tertiary}`}>画像は未設定です</span>
+        )}
+        <label className={`inline-block px-2 py-1 text-xs rounded-md cursor-pointer ${themeClasses.button.secondary}`}>
+          {uploading ? 'アップロード中…' : (imageUrl ? '画像を変更' : '画像をアップロード')}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={uploading}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) uploadImage(file);
+              e.target.value = '';
+            }}
+          />
+        </label>
+        {imageUrl && (
+          <button type="button" onClick={() => onChange({ image: '' })} className="px-2 py-1 text-xs rounded-md text-red-500 hover:text-red-400">
+            画像を削除
+          </button>
+        )}
+      </div>
+      {text.trim() && imageUrl && (
+        <div className="flex items-center gap-2">
+          <span className={`text-xs ${themeClasses.text.secondary}`}>並び順:</span>
+          <select
+            value={order}
+            onChange={(e) => onChange({ order: e.target.value as HeadingContentOrder })}
+            className={`${themeClasses.input} text-sm`}
+          >
+            {HEADING_CONTENT_ORDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
+      )}
+    </div>
+  );
 }
 
 
@@ -4373,6 +4487,19 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                   placeholder={DEFAULT_MENU_HEADING}
                   className={`w-full ${themeClasses.input} text-sm`}
                 />
+                <HeadingContentEditor
+                  idPrefix="menu"
+                  storeId={form.store_id}
+                  text={displayOptions?.menu_heading_text || ''}
+                  imageUrl={displayOptions?.menu_heading_image || ''}
+                  order={displayOptions?.menu_heading_order === 'image_text' ? 'image_text' : 'text_image'}
+                  theme={theme}
+                  onChange={(patch) => updateDisplayOptions({
+                    ...(patch.text !== undefined ? { menu_heading_text: patch.text } : {}),
+                    ...(patch.image !== undefined ? { menu_heading_image: patch.image } : {}),
+                    ...(patch.order !== undefined ? { menu_heading_order: patch.order } : {}),
+                  })}
+                />
               </div>
               <div>
                 <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>オプション欄の見出し（既定: {DEFAULT_OPTIONS_HEADING}）</label>
@@ -4385,12 +4512,31 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                   className={`w-full ${themeClasses.input} text-sm`}
                 />
                 <p className={`text-[10px] ${themeClasses.text.tertiary} mt-1`}>メニュー直下のオプションとカテゴリー共通オプションの両方に使われます</p>
+                <HeadingContentEditor
+                  idPrefix="options"
+                  storeId={form.store_id}
+                  text={displayOptions?.options_heading_text || ''}
+                  imageUrl={displayOptions?.options_heading_image || ''}
+                  order={displayOptions?.options_heading_order === 'image_text' ? 'image_text' : 'text_image'}
+                  theme={theme}
+                  onChange={(patch) => updateDisplayOptions({
+                    ...(patch.text !== undefined ? { options_heading_text: patch.text } : {}),
+                    ...(patch.image !== undefined ? { options_heading_image: patch.image } : {}),
+                    ...(patch.order !== undefined ? { options_heading_order: patch.order } : {}),
+                  })}
+                />
               </div>
             </div>
             <div className={`text-xs ${themeClasses.text.secondary} rounded border p-3 ${theme === 'light' ? 'bg-gray-50 border-gray-200' : 'bg-gray-900/50 border-gray-700'}`}>
               <p className={`text-[10px] ${themeClasses.text.tertiary} mb-1`}>フォーム上の表示:</p>
               <p className={`font-medium ${themeClasses.text.primary}`}>{resolveMenuHeadings(form.config).menu_heading}</p>
+              {((displayOptions?.menu_heading_text || '').trim() || displayOptions?.menu_heading_image) && (
+                <p className={`ml-2 ${themeClasses.text.tertiary}`}>（見出しの下にテキスト / 画像）</p>
+              )}
               <p className={`mt-1 ml-4`}>└ {resolveMenuHeadings(form.config).options_heading}</p>
+              {((displayOptions?.options_heading_text || '').trim() || displayOptions?.options_heading_image) && (
+                <p className={`ml-6 ${themeClasses.text.tertiary}`}>（見出しの下にテキスト / 画像）</p>
+              )}
             </div>
             <div className="flex justify-end">
               <button type="button" onClick={() => setHeadingsOpen(false)} className={`px-3 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}>閉じる</button>
