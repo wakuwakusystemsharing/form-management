@@ -5,6 +5,7 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { getSupabaseClient } from '@/lib/supabase';
 import ReservationInfoRows from '@/components/ReservationInfoRows';
+import { formatStayRangeShort, isStayReservation } from '@/lib/stay-display';
 import StoreAdminGuide, { GuideHint } from '@/components/StoreAdminGuide';
 import { STORE_ADMIN_HINTS } from '@/lib/store-admin-guide';
 import type { AdminReservationInput } from '@/lib/reservation-detail-items';
@@ -719,7 +720,7 @@ export default function StoreAdminPage() {
                         <div className="flex-1 min-w-0">
                           <p className="font-medium flex items-center gap-1.5">{reservation.customer_name}{manualEntryBadge(reservation)}</p>
                           <p className="text-sm text-muted-foreground">
-                            {new Intl.DateTimeFormat('ja-JP').format(new Date(reservation.reservation_date))} {reservation.reservation_time}
+                            {isStayReservation(reservation) ? formatStayRangeShort(reservation) : `${new Intl.DateTimeFormat('ja-JP').format(new Date(reservation.reservation_date))} ${reservation.reservation_time}`}
                           </p>
       </div>
                         <span data-slot="status-chip" className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
@@ -1107,7 +1108,7 @@ export default function StoreAdminPage() {
                                 <div className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
                                   <div>
                                     <span className="font-medium">予約日時: </span>
-                                    {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
+                                    {isStayReservation(reservation) ? formatStayRangeShort(reservation) : `${new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} ${reservation.reservation_time}`}
                                   </div>
                                   <div>
                                     <span className="font-medium">電話: </span>
@@ -1164,7 +1165,7 @@ export default function StoreAdminPage() {
                                     </TableCell>
                                     <TableCell>{reservation.customer_phone}</TableCell>
                                     <TableCell>
-                                      {new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} {reservation.reservation_time}
+                                      {isStayReservation(reservation) ? formatStayRangeShort(reservation) : `${new Date(reservation.reservation_date).toLocaleDateString('ja-JP')} ${reservation.reservation_time}`}
                                     </TableCell>
                                     <TableCell>
                                       {(reservation as any).menu_name || (reservation.selected_menus && Array.isArray(reservation.selected_menus) && reservation.selected_menus.length > 0
@@ -1877,9 +1878,11 @@ export default function StoreAdminPage() {
                       </div>
                     )}
                     <div>
-                      <Label className="text-sm text-muted-foreground">予約日時</Label>
+                      <Label className="text-sm text-muted-foreground">{isStayReservation(selectedReservation) ? 'ご宿泊' : '予約日時'}</Label>
                       <p className="font-medium">
-                        {new Date(selectedReservation.reservation_date).toLocaleDateString('ja-JP')} {selectedReservation.reservation_time}
+                        {isStayReservation(selectedReservation)
+                          ? `${formatStayRangeShort(selectedReservation)}（チェックイン ${String(selectedReservation.reservation_time || '').slice(0, 5)}）`
+                          : `${new Date(selectedReservation.reservation_date).toLocaleDateString('ja-JP')} ${selectedReservation.reservation_time}`}
                       </p>
                     </div>
                     <div>

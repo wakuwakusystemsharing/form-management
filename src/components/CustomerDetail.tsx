@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Customer, CustomerVisit } from '@/types/form';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { formatStayRangeShort, isStayReservation } from '@/lib/stay-display';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -601,7 +602,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                           title={onOpenReservation ? '予約詳細を開く' : undefined}
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium tabular-nums">{formatDateTime(reservation.reservation_date, reservation.reservation_time)}</p>
+                            <p className="font-medium tabular-nums">{isStayReservation(reservation) ? formatStayRangeShort(reservation) : formatDateTime(reservation.reservation_date, reservation.reservation_time)}</p>
                             <p className="text-sm text-muted-foreground truncate">{reservation.menu_name}</p>
                             {(() => {
                               const rb = reminderBadge(reservation.reminder_log, reservation.reminder_plan);

@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import type { FormConfig } from '@/types/form';
+import { isStayReservation } from '@/lib/stay-display';
+import { sanitizeStaySettings } from '@/lib/stay-pricing';
 
 // 予約詳細モーダル内の「予約内容を編集」フォーム。
 // 予約日時（開始〜終了）・メニュー・オプション・担当スタッフを変更し、PATCH /api/reservations/{id} で
@@ -103,6 +105,16 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
     }
   });
 
+  // 宿泊予約（booking_mode = 'stay'）: 日時の代わりにチェックイン日 / チェックアウト日 / 人数を編集する
+  const isStay = isStayReservation(reservation);
+  const staySettings = useMemo(() => (isStay ? sanitizeStaySettings(formConfig?.calendar_settings?.stay_settings) : null), [isStay, formConfig]);
+  const [checkout, setCheckout] = useState<string>(String(reservation.checkout_date || info.checkout_date || '').slice(0, 10));
+  const [guestCounts, setGuestCounts] = useState<Record<string, number>>(() => {
+    const src = (reservation.guest_counts && typeof reservation.guest_counts === 'object') ? reservation.guest_counts : (info.guest_counts || {});
+    const out: Record<string, number> = {};
+    (staySettings?.guest_categories || []).forEach((c) => { const v = Number(src[c.id]); out[c.id] = Number.isFinite(v) ? v : c.min; });
+    return out;
+  });
   const [date, setDate] = useState<string>(String(reservation.reservation_date || '').slice(0, 10));
   const [start, setStart] = useState<string>(startInit);
   const [end, setEnd] = useState<string>(toHHMM(toMin(startInit) + initialDuration));
@@ -184,6 +196,30 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
   }, [selectionDuration]);
 
   const handleSave = async () => {
+    if (isStay) {
+      if (!date || !checkout) { toast({ title: 'チェックイン日とチェックアウト日を入力してください', variant: 'destructive' }); return; }
+      if (checkout <= date) { toast({ title: 'チェックアウト日はチェックイン日より後にしてください', variant: 'destructive' }); return; }
+      const nights = Math.round((Date.parse(`${checkout}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / 86400000);
+      const guestText = (staySettings?.guest_categories || []).filter((c) => (guestCounts[c.id] || 0) > 0).map((c) => `${c.label} ${guestCounts[c.id]}名`).join(' / ');
+      if (!confirm(`宿泊予約を変更します。\n日程: ${date} 〜 ${checkout}（${nights}泊）\n人数: ${guestText || '-'}\n宿泊料金は現在の料金設定で計算し直されます。Googleカレンダーの予定も同じ日程に更新されます。よろしいですか？`)) return;
+      setSaving(true);
+      try {
+        const payload: Record<string, unknown> = { reservation_date: date, checkout_date: checkout, guest_counts: guestCounts };
+        if (staffList.length > 0 && (staffId || '') !== (reservation.staff_id || '')) payload.staff_id = staffId || null;
+        const res = await fetch(`/api/reservations/${reservation.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { toast({ title: '更新に失敗しました', description: data.error || '', variant: 'destructive' }); return; }
+        toast({ title: '宿泊予約を更新しました', description: typeof data.stay_price_total === 'number' ? `宿泊料金: ¥${Number(data.stay_price_total).toLocaleString()}` : undefined });
+        onSaved(data);
+      } catch {
+        toast({ title: '更新に失敗しました', variant: 'destructive' });
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     if (!date || !start || !end) { toast({ title: '予約日・開始時間・終了時間を入力してください', variant: 'destructive' }); return; }
     if (toMin(end) <= toMin(start)) { toast({ title: '終了時間は開始時間より後にしてください', variant: 'destructive' }); return; }
     const { menus, options } = buildSelection();
@@ -238,6 +274,40 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
 
   return (
     <div className="space-y-4">
+      {isStay && (
+        <Card>
+          <CardHeader><CardTitle className="text-lg">ご宿泊日</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="edit-checkin">チェックイン日</Label>
+                <Input id="edit-checkin" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="edit-checkout">チェックアウト日</Label>
+                <Input id="edit-checkout" type="date" value={checkout} min={date} onChange={(e) => setCheckout(e.target.value)} />
+              </div>
+            </div>
+            {(staySettings?.guest_categories || []).length > 0 && (
+              <div className="flex flex-wrap gap-3">
+                {(staySettings?.guest_categories || []).map((c) => (
+                  <label key={c.id} className="flex items-center gap-2 text-sm">
+                    <span>{c.label}</span>
+                    <select className="border rounded px-2 py-1 text-sm" value={guestCounts[c.id] ?? c.min} onChange={(e) => setGuestCounts((prev) => ({ ...prev, [c.id]: Number(e.target.value) }))}>
+                      {Array.from({ length: c.max - c.min + 1 }, (_, i) => c.min + i).map((n) => <option key={n} value={n}>{n}名</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {date && checkout && checkout > date ? `${Math.round((Date.parse(`${checkout}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / 86400000)}泊。` : ''}
+              保存すると宿泊料金は現在の料金設定で計算し直され、他の予約と重なる日程は保存できません。
+            </p>
+          </CardContent>
+        </Card>
+      )}
+      {!isStay && (
       <Card>
         <CardHeader><CardTitle className="text-lg">予約日時</CardTitle></CardHeader>
         <CardContent>
@@ -297,6 +367,7 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
           })()}
         </CardContent>
       </Card>
+      )}
 
       {menuChoices.length > 0 && (
         <Card>

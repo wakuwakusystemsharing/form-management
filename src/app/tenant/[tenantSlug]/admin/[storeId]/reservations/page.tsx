@@ -6,6 +6,7 @@ import ReservationAnalytics from '@/components/ReservationAnalytics';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { formatStayRangeShort, isStayReservation } from '@/lib/stay-display';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -245,7 +246,7 @@ export default function AdminStoreReservationsPage() {
                         {filteredReservations.map((reservation) => (
                           <TableRow key={reservation.id}>
                             <TableCell className="font-medium">
-                              {formatDate(reservation.reservation_date, reservation.reservation_time)}
+                              {isStayReservation(reservation) ? formatStayRangeShort(reservation) : formatDate(reservation.reservation_date, reservation.reservation_time)}
                             </TableCell>
                             <TableCell>{reservation.customer_name}</TableCell>
                             <TableCell className="text-muted-foreground">

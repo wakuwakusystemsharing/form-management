@@ -51,6 +51,8 @@ import {
 } from 'lucide-react';
 import { getStoreSetupStatus } from '@/lib/store-setup-status';
 import ReservationInfoRows from '@/components/ReservationInfoRows';
+import { formatShortDateJa, formatStayRangeShort, isStayReservation, stayCheckoutDate } from '@/lib/stay-display';
+import { createDefaultStaySettings } from '@/lib/stay-pricing';
 import type { AdminReservationInput } from '@/lib/reservation-detail-items';
 import Link from 'next/link';
 
@@ -371,6 +373,30 @@ const FORM_TEMPLATES = {
         show_coupon_selection: false,
         show_repeat_booking: false
       }
+    }
+  },
+  stay: {
+    name: '🏨 宿泊（1 部屋）',
+    description: 'チェックイン〜チェックアウトの日程で予約。人数別の料金表・連泊割引・段階式キャンセル料。作成後に「営業時間・ルール」で料金などを入力',
+    config: {
+      basic_info: { show_gender_selection: false },
+      menu_structure: { structure_type: 'category_based', categories: [] },
+      ui_settings: { show_visit_count: false, show_coupon_selection: false, show_repeat_booking: false },
+      calendar_settings: {
+        booking_mode: 'stay',
+        advance_booking_days: 365,
+        min_advance_days: 1,
+        conditional_advance_rules: [{ id: 'stay_noon', from_time: '12:00', min_days: 2 }],
+        hide_datetime_until_menu_selected: false,
+        stay_settings: createDefaultStaySettings(),
+      },
+      cancel_rules: {
+        show_policy_on_form: true,
+        policy_text: '',
+        fee_tiers: [{ days_before: 7, percent: 0 }, { days_before: 2, percent: 50 }, { days_before: 0, percent: 100 }],
+        fee_base: 'stay',
+        self_cancel_with_fee: 'confirm',
+      },
     }
   },
   ultimate: {
@@ -1742,7 +1768,7 @@ export default function StoreDetailPage() {
                             <p className="text-xs font-semibold text-foreground leading-tight">
                               {new Date(reservation.reservation_date).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
                             </p>
-                            <p className="text-xs text-muted-foreground">{reservation.reservation_time}</p>
+                            <p className="text-xs text-muted-foreground">{isStayReservation(reservation) ? `〜${formatShortDateJa(stayCheckoutDate(reservation) || '')}` : reservation.reservation_time}</p>
                           </div>
                           {/* 縦線 */}
                           <div className="w-px h-8 bg-border shrink-0" />
@@ -3035,9 +3061,11 @@ Form「{getReservationFormName(forms.find(f => f.id === deletingFormId), '')}」
                       </div>
                     )}
                     <div>
-                      <Label className="text-sm text-muted-foreground">予約日時</Label>
+                      <Label className="text-sm text-muted-foreground">{isStayReservation(selectedReservation) ? 'ご宿泊' : '予約日時'}</Label>
                       <p className="font-medium">
-                        {new Date(selectedReservation.reservation_date).toLocaleDateString('ja-JP')} {selectedReservation.reservation_time}
+                        {isStayReservation(selectedReservation)
+                          ? `${formatStayRangeShort(selectedReservation)}（チェックイン ${String(selectedReservation.reservation_time || '').slice(0, 5)}）`
+                          : `${new Date(selectedReservation.reservation_date).toLocaleDateString('ja-JP')} ${selectedReservation.reservation_time}`}
                       </p>
                     </div>
                     <div>

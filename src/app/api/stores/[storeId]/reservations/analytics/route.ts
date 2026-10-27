@@ -84,7 +84,7 @@ export async function GET(
         reservations = await fetchAllRows<AnalyticsReservation>((from, to) => {
           let query = (adminClient as any)
             .from('reservations')
-            .select('id, form_id, status, reservation_date, reservation_time, selected_menus, selected_options, customer_info, gender, visit_count, coupon')
+            .select('id, form_id, status, reservation_date, reservation_time, selected_menus, selected_options, customer_info, gender, visit_count, coupon, stay_price_total')
             .eq('store_id', storeId);
           if (dateFrom) query = query.gte('reservation_date', dateFrom);
           if (dateTo) query = query.lte('reservation_date', dateTo);
