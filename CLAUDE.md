@@ -640,6 +640,7 @@ export async function GET(req, { params }) {
 - 回答は 1 つの文字列 `第一希望: 2026年10月01日（木） 10:00 / 第二希望: …`（`responses[q.title]`）。復元機能 ON なら選択した日付・時間を端末に保存し再訪時に復元
 - **設定 UI は共通コンポーネント** `src/components/FormEditor/Reservation/MultipleDatesSettingsEditor.tsx`（`InfoTooltip` / `ExtraMinutesPicker` / `buildTimeList` もここから export）。予約フォームの `BusinessRulesEditor` とアンケートの `SurveyQuestionEditor` が同じものを使う。抽選フォームの事前質問では `allowMultipleDates={false}` で出さない
 - **生成 HTML の共通ロジック** `src/lib/multiple-dates-runtime-js.ts`（`HOLIDAY_RUNTIME_JS` = 祝日判定、`MULTIPLE_DATES_RUNTIME_JS` = `mdGetWeekdayHours` / `mdIsDateSelectable` / `mdPopulateDateOptions` / `mdPopulateTimeOptions` / `mdInsertExtraSlots` / `mdGenerateTimeSlots` / `mdFormatDateTimeJa`）。予約フォーム（`BookingForm` の同名メソッドは薄いラッパー）とアンケート（`initMultipleDatesQuestions` / `collectMultipleDatesAnswer`）の両方が埋め込む。日付判定を直すときはこのファイルだけを直す
+- **日付 → 時間 の順でしか選べない**: `mdPopulateTimeOptions` は日付未選択（`selectedDateStr` が空）のとき時間を出さず、`<select>` を `disabled` にして「先に日付を選択」（`MD_TIME_LOCKED_PLACEHOLDER`）だけを出す。日付を選ぶと有効化して「時間を選択」（`MD_TIME_PLACEHOLDER`）+ 時間の選択肢。グレーアウトは `MD_TIME_SELECT_DISABLED_CSS`（`select.datetime-input:disabled`）を両ジェネレータの CSS に埋め込む。予約フォーム / アンケート共通。Vitest: `multiple-dates-time-lock.test.ts`
 
 **アンケート質問の画像と表示トリガー（`SurveyQuestion.image_url` / `image_position` / `hidden_by_default` / `show_triggers` / `show_triggers_mode`）:**
 - 画像: 質問に 1 枚添える（https のみ）。位置は `above`（質問名の上。既定）/ `middle`（説明文の下・入力欄の上）/ `below`（入力欄の下）。生成は `renderQuestionImageHtml()`（`.question-image`）

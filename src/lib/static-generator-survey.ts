@@ -1,7 +1,7 @@
 import { SurveyConfig, SurveyQuestion } from '@/types/survey';
 import { computeAccentColor } from './color-utils';
 import { renderColoredTextHtml } from './colored-text';
-import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
+import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MD_TIME_SELECT_DISABLED_CSS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { SEARCHABLE_SELECT_CSS, SEARCHABLE_SELECT_RUNTIME_JS, renderSearchableSelectHtml, type SearchableSelectOption } from './searchable-select-runtime-js';
 import { FOLLOW_UP_NESTED_CSS, FOLLOW_UP_RUNTIME_JS, renderFollowUpBlocksHtml } from './survey-follow-up-runtime-js';
 import { getRequiredChoices, getVisibleChoices, normalizeMultipleDatesSettings } from './multiple-dates-settings';
@@ -896,6 +896,7 @@ export class StaticSurveyGenerator {
         .md-choice-label { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
         .md-optional { font-size: 11px; color: #6b7280; font-weight: normal; }
         .md-choice select.datetime-input { width: 100%; min-height: 44px; background: #fff; }
+        ${MD_TIME_SELECT_DISABLED_CSS}
         .required {
             margin-left: auto;
             background: var(--required-bg);
