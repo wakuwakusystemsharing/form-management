@@ -84,6 +84,15 @@ function formatLocalYmd(d) {
 // ========== 祝日判定ロジックここまで ==========
 `;
 
+/** 「時間を選択」プルダウンの先頭文言（日付選択後） */
+export const MD_TIME_PLACEHOLDER = '時間を選択';
+/** 日付を選ぶまで「時間を選択」は無効にし、この文言だけを出す（予約フォーム / アンケート共通） */
+export const MD_TIME_LOCKED_PLACEHOLDER = '先に日付を選択';
+/** 無効化した「時間を選択」のグレーアウト（両ジェネレータの CSS に埋め込む） */
+export const MD_TIME_SELECT_DISABLED_CSS = `
+        select.datetime-input:disabled { background-color: #f3f4f6; color: #9ca3af; cursor: not-allowed; opacity: 1; }
+`;
+
 export const MULTIPLE_DATES_RUNTIME_JS = `
 // ========== 第三希望日時選択（共通ロジック）==========
 // 臨時営業日: 設定リストから当日分（YYYY-MM-DD 一致）を返す。無ければ null
@@ -167,13 +176,22 @@ function mdPopulateDateOptions(select, settings, opts) {
 }
 // 時間の選択肢を作る。opts: { minAdvanceHours, earliestStart: { date: 'YYYY-MM-DD', time: 'HH:MM' }, placeholder }
 // earliestStart = 条件付き予約受付開始時間で決まる「最初に予約できる日とその開始時刻」。その日はこの時刻より前を出さない
+// 日付が未選択（selectedDateStr が空）のときは時間を出さず、プルダウンを無効化して「先に日付を選択」だけにする
+// （日付 → 時間 の順でしか選べないようにする。日付を選び直すと再度呼ばれて有効に戻る）
 function mdPopulateTimeOptions(select, settings, selectedDateStr, opts) {
     if (!select) return;
     opts = opts || {};
     select.innerHTML = '';
     const defaultOption = document.createElement('option');
     defaultOption.value = '';
-    defaultOption.textContent = opts.placeholder || '時間を選択';
+    if (!selectedDateStr) {
+        defaultOption.textContent = '${MD_TIME_LOCKED_PLACEHOLDER}';
+        select.appendChild(defaultOption);
+        select.disabled = true;
+        return;
+    }
+    select.disabled = false;
+    defaultOption.textContent = opts.placeholder || '${MD_TIME_PLACEHOLDER}';
     select.appendChild(defaultOption);
 
     let startTime = settings.start_time || '09:00';

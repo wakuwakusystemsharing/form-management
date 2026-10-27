@@ -4,7 +4,7 @@
  */
 
 import { computeAccentColor, hexToRgb } from './color-utils';
-import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
+import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MD_TIME_SELECT_DISABLED_CSS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { SEARCHABLE_SELECT_CSS, SEARCHABLE_SELECT_RUNTIME_JS, renderSearchableSelectHtml } from './searchable-select-runtime-js';
 import { resolveMenuHeadings, resolveMenuHeadingContents } from './menu-headings';
 import type { HeadingContent } from './menu-headings';
@@ -4611,6 +4611,8 @@ if (document.readyState === 'loading') {
             margin: 0 auto;
             border-radius: 4px;
         }
+        /* 第三希望日時: 日付を選ぶまで「時間を選択」はグレーアウト */
+        ${MD_TIME_SELECT_DISABLED_CSS}
         /* 見出しの下のテキスト / 画像（メニュー欄・オプション欄） */
         .heading-content { margin: 0 0 12px; }
         .heading-content-text {
