@@ -271,6 +271,13 @@ export interface FormConfig {
       // フォームの見出し文言（空 / 未設定 = 既定。src/lib/menu-headings.ts）
       menu_heading?: string;     // メニュー欄の見出し（既定「メニューをお選びください」）
       options_heading?: string;  // メニュー直下のオプション / カテゴリー共通オプションの見出し（既定「オプション」）
+      // 見出しの下に表示するテキスト（[color=#rrggbb] の色タグ可）/ 画像（https のみ）/ 両方あるときの並び順（既定 text_image）
+      menu_heading_text?: string;
+      menu_heading_image?: string;
+      menu_heading_order?: 'text_image' | 'image_text';
+      options_heading_text?: string;     // メニュー直下・カテゴリー共通の両方のオプション欄に同じ内容が出る
+      options_heading_image?: string;
+      options_heading_order?: 'text_image' | 'image_text';
     };
   };
   

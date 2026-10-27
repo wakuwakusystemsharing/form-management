@@ -625,6 +625,7 @@ export async function GET(req, { params }) {
 **メニュー / オプションの見出し文言 (`config.menu_structure.display_options.menu_heading` / `options_heading`):**
 - 予約フォームの「メニューをお選びください」（メニュー欄の見出し）と「オプション」（メニュー直下のオプション欄・カテゴリー共通オプション欄の両方）を店舗が変更できる。空 / 未設定 = 既定文言。40 文字まで。純粋ロジックは `src/lib/menu-headings.ts`（`resolveMenuHeadings(config)` / `DEFAULT_MENU_HEADING` / `DEFAULT_OPTIONS_HEADING`）
 - 編集 UI はメニュー構成 → 「カテゴリー・メニュー」見出しの右の「見出しの文言を変更」ボタン（`MenuStructureEditor` の `headingsOpen` パネル。2 つの入力 + フォーム上の表示プレビュー）。「更新して他のフォームにも反映」ではメニュー構成セクションに含まれる。Vitest: `menu-headings.test.ts`
+- **見出しの下のテキスト / 画像（`display_options.menu_heading_text` / `menu_heading_image` / `menu_heading_order`、`options_heading_*`）**: 見出しの直下に任意のテキスト（「画像orテキスト設置」と同じ `[color=#rrggbb]` の色タグ。1000 文字まで）と画像（https のみ。`/api/upload/menu-image`、`menuId = heading_menu` / `heading_options`）を表示。両方あるときの並び順は `text_image`（既定）/ `image_text`。オプション欄の設定はメニュー直下・カテゴリー共通オプションの両方に同じ内容が出る。正規化は `resolveMenuHeadingContents(config)`、生成は `renderHeadingContentHtml()`（`.heading-content` > `.heading-content-text` / `.heading-content-image`）。編集 UI は同じパネルの各見出し入力の下（`HeadingContentEditor`）。Vitest: `menu-heading-content.test.ts`
 
 **カテゴリーまたいでの複数選択 (`config.menu_structure`):**
 - `allow_cross_category_selection` ON のとき `max_cross_category_selections`（既定 3、1〜20）で同時に選べるメニュー数を制限。生成 HTML の `getMaxCrossSelections()` が上限で選択を止め「メニューは N つまで選択できます」と案内。編集 UI はトグルの下の「選択できるメニューの数（上限）」
