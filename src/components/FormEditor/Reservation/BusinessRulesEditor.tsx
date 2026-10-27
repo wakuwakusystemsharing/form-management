@@ -11,6 +11,8 @@ import MultipleDatesSettingsEditor, { ExtraMinutesPicker, InfoTooltip } from './
 import type { MultipleDatesSettings } from '@/types/form';
 import { HOLIDAY_TYPES } from '@/lib/holiday-types';
 import ConditionalAdvanceRulesEditor from './ConditionalAdvanceRulesEditor';
+import StaySettingsEditor from './StaySettingsEditor';
+import CancelFeeTiersEditor from './CancelFeeTiersEditor';
 
 // ON / OFF トグル（お名前 / 電話番号 / メッセージ欄の設定で使用）
 const ToggleSwitch: React.FC<{ checked: boolean; onChange: (v: boolean) => void; theme: ThemeType; disabled?: boolean }> = ({ checked, onChange, theme, disabled }) => {
@@ -97,7 +99,8 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
       : []
   );
 
-  const [bookingMode, setBookingMode] = useState<'calendar' | 'multiple_dates'>(
+  // 'stay'（宿泊）は第 5 段階で専用 UI を追加予定。現時点では型だけ受け付ける
+  const [bookingMode, setBookingMode] = useState<'calendar' | 'multiple_dates' | 'stay'>(
     form.config?.calendar_settings?.booking_mode || 'calendar'
   );
 
@@ -399,7 +402,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
   };
 
 
-  const handleBookingModeChange = (mode: 'calendar' | 'multiple_dates') => {
+  const handleBookingModeChange = (mode: 'calendar' | 'multiple_dates' | 'stay') => {
     setBookingMode(mode);
     
     const updatedForm = {
@@ -770,8 +773,26 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                     <div className={`text-sm ${themeClasses.text.secondary}`}>第一〜第三希望日時を選択（Google Calendar連携なし）</div>
                   </div>
                 </label>
+                <label className="flex items-center space-x-3">
+                  <input
+                    type="radio"
+                    value="stay"
+                    checked={bookingMode === 'stay'}
+                    onChange={(e) => handleBookingModeChange(e.target.value as 'stay')}
+                    className={accentClasses}
+                  />
+                  <div>
+                    <div className={`font-medium ${themeClasses.text.primary}`}>宿泊（チェックイン〜チェックアウト）</div>
+                    <div className={`text-sm ${themeClasses.text.secondary}`}>宿泊施設向け。日付の範囲を選び、人数別の料金表・連泊割引で宿泊料金を自動計算（空きは予約 DB + Google カレンダーで判定）</div>
+                  </div>
+                </label>
               </div>
             </div>
+
+            {/* 宿泊モード設定 */}
+            {bookingMode === 'stay' && (
+              <StaySettingsEditor form={form} onUpdate={onUpdate} theme={theme} />
+            )}
 
             {/* Google カレンダー連携モード設定 */}
             {bookingMode === 'calendar' && (
@@ -1187,7 +1208,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 </label>
                 <InfoTooltip
                   theme={theme}
-                  text={'何日後から予約を受け付けるかを設定します。\n\n「0」= 当日から予約可能（従来どおり）\n「1」= 翌日から予約可能\n「2」= 2日後から予約可能\n\nカレンダー表示・第三希望日時選択の両モードに適用されます。'}
+                  text={'何日後から予約を受け付けるかを設定します。\n\n「0」= 当日から予約可能（従来どおり）\n「1」= 翌日から予約可能\n「2」= 2日後から予約可能\n\nカレンダー表示・第三希望日時選択・宿泊のすべてのモードに適用されます。宿泊の「前日の午前中まで翌日の予約を受ける」は、これを 1 にして下の条件付き設定で「12:00 以降は 2 日後から」を追加します。'}
                 />
               </div>
               <input
@@ -1203,6 +1224,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               </p>
             </div>
 
+            {bookingMode !== 'stay' && (
             <div className="max-w-xs">
               <div className="flex items-center gap-1.5 mb-2">
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
@@ -1225,6 +1247,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 {minAdvanceHours === 0 ? '制限なし（直前でも予約可能）' : `現在時刻の${minAdvanceHours}時間後から予約可能`}
               </p>
             </div>
+            )}
 
             {/* 条件付き予約受付開始時間設定（現在時刻の条件 → N 日後の◯時から） */}
             <ConditionalAdvanceRulesEditor
@@ -1250,6 +1273,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               />
             </div>
 
+            {bookingMode !== 'stay' && (
             <div className="max-w-xs">
               <div className="flex items-center gap-1.5 mb-2">
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
@@ -1269,6 +1293,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 className={themeClasses.input}
               />
             </div>
+            )}
 
             <div className="max-w-xs">
               <div className="flex items-center gap-1.5 mb-2">
@@ -1361,6 +1386,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               )}
             </div>
 
+            {bookingMode !== 'stay' && (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>
@@ -1399,6 +1425,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 />
               </button>
             </div>
+            )}
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
@@ -1807,8 +1834,12 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               />
               <p className={`text-xs ${themeClasses.text.tertiary}`}>
                 キャンセル料の有無や連絡方法など、お客様に予約前に知っておいてほしいことを書いてください（改行できます）。
+                空のままでも、下の「キャンセル料の段階」があればそこから自動で作った文をフォームに表示します。
               </p>
             </div>
+
+            {/* 段階式キャンセル料（○日前まで ○%。LINE キャンセル時に金額を提示して確認 / 店舗へ誘導） */}
+            <CancelFeeTiersEditor rules={cancelRules} onChange={handleCancelRulesChange} theme={theme} />
 
             {/* キャンセル時の店舗通知 */}
             <div className="flex items-center justify-between">

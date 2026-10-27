@@ -7,6 +7,10 @@ import { createReservationEvent, getBusyCalendars } from '@/lib/google-calendar'
 import { normalizeForm } from '@/lib/form-normalizer';
 import { sendReservationEmails } from '@/lib/reservation-email';
 import { scheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
+import { isStayMode, prepareStayReservation, type StayPrepared } from '@/lib/stay-reservation';
+import { sanitizeStaySettings } from '@/lib/stay-pricing';
+import { occupiedCountByNight } from '@/lib/stay-availability';
+import { checkStayNightsFree, insertStayReservationChecked, newStayReservationId } from '@/lib/stay-service';
 import {
   findCustomerByLineOrPhone,
   createCustomer,
@@ -47,6 +51,12 @@ interface Reservation {
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
   created_at: string;
   updated_at: string;
+  // 宿泊予約（booking_mode = 'stay'）のみ
+  checkout_date?: string | null;
+  stay_nights?: number | null;
+  guest_counts?: Record<string, number> | null;
+  guest_count?: number | null;
+  stay_price_total?: number | null;
 }
 
 const VALID_SOURCE_MEDIUMS = ['line', 'instagram', 'facebook', 'x_twitter', 'google_maps', 'google_search', 'yahoo_search', 'direct'] as const;
@@ -411,19 +421,38 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!body.reservation_date || !body.reservation_time) {
-      return NextResponse.json(
-        { error: '予約日時は必須です' },
-        { status: 400 }
-      );
-    }
-
-    // フォーム設定を取得（同時予約数チェック + 名前/電話の表示設定で共用）
+    // フォーム設定を取得（同時予約数チェック + 名前/電話の表示設定 + 宿泊モードの判定で共用）
     let formCalendarSettings: any = null;
     try {
       formCalendarSettings = await getFormCalendarSettings(body.form_id);
     } catch (err) {
       console.error('[reservations] getFormCalendarSettings error:', err);
+    }
+
+    // === 宿泊モード（booking_mode = 'stay'）===
+    // チェックイン日 〜 チェックアウト日・人数を検証し、料金はサーバーで再計算する（クライアント値は使わない）
+    const isStay = isStayMode(formCalendarSettings);
+    let stayPrepared: StayPrepared | null = null;
+    if (isStay) {
+      const prepared = prepareStayReservation(formCalendarSettings, body);
+      if (!prepared.ok) {
+        return NextResponse.json({ error: prepared.error, code: 'stay_invalid' }, { status: 400 });
+      }
+      stayPrepared = prepared.value;
+      body.reservation_date = stayPrepared.reservation_date;
+      body.reservation_time = stayPrepared.reservation_time;
+      body.booking_mode = 'stay';
+      body.customer_info = { ...(body.customer_info || {}), ...stayPrepared.customer_info };
+      // 第二・第三希望は宿泊では使わない
+      body.reservation_date2 = null; body.reservation_time2 = null;
+      body.reservation_date3 = null; body.reservation_time3 = null;
+    }
+
+    if (!body.reservation_date || !body.reservation_time) {
+      return NextResponse.json(
+        { error: '予約日時は必須です' },
+        { status: 400 }
+      );
     }
 
     // 名前/電話の表示設定が false ならフォールバック値を埋め、必須バリデーションをスキップ
@@ -574,6 +603,33 @@ export async function POST(request: Request) {
       }
 
       const reservations = readReservations();
+
+      // 宿泊予約: 同じ夜の空きを確認してから保存（local はカレンダー予定なし）
+      if (stayPrepared) {
+        const settings = sanitizeStaySettings(formCalendarSettings?.stay_settings);
+        const occupied = occupiedCountByNight(
+          { from: stayPrepared.nights[0], to: stayPrepared.nights[stayPrepared.nights.length - 1] },
+          reservations.filter((r: any) => r.store_id === body.store_id),
+          [],
+          settings
+        );
+        const roomCount = Math.max(1, settings.room_count || 1);
+        const full = stayPrepared.nights.find((n) => (occupied.get(n) || 0) >= roomCount);
+        if (full) {
+          return NextResponse.json(
+            { error: '申し訳ありません。選択された日程はただいま埋まってしまいました。別の日程をお選びください。', code: 'slot_taken' },
+            { status: 409 }
+          );
+        }
+        Object.assign(newReservation as any, {
+          checkout_date: stayPrepared.checkout_date,
+          stay_nights: stayPrepared.stay_nights,
+          guest_counts: stayPrepared.guest_counts,
+          guest_count: stayPrepared.guest_count,
+          stay_price_total: stayPrepared.stay_price_total,
+        });
+      }
+
       reservations.push(newReservation);
       writeReservations(reservations);
 
@@ -588,7 +644,7 @@ export async function POST(request: Request) {
             visit_time: body.reservation_time,
             visit_type: 'reservation',
             treatment_menus: body.selected_menus,
-            amount: calculateTotalAmount(body.selected_menus, body.selected_options),
+            amount: calculateTotalAmount(body.selected_menus, body.selected_options) + (stayPrepared?.stay_price_total || 0),
           });
           await recalculateCustomerStats(customerId);
         } catch (error) {
@@ -747,7 +803,8 @@ export async function POST(request: Request) {
         const ss = formConfigForStaff?.staff_selection;
         const bookingModeForStaff = body.booking_mode || customerInfo.booking_mode
           || formConfigForStaff?.calendar_settings?.booking_mode || 'calendar';
-        const isCalendarMode = bookingModeForStaff !== 'multiple_dates';
+        // 宿泊モードはスタッフカレンダーの空きを見ない（担当名の記録のみ）
+        const isCalendarMode = bookingModeForStaff !== 'multiple_dates' && bookingModeForStaff !== 'stay';
 
         if (ss?.enabled === true) {
           const allStaff = Array.isArray(ss.staff) ? ss.staff : [];
@@ -896,19 +953,61 @@ export async function POST(request: Request) {
       status: 'pending'
     };
 
-     
-    const { data: reservation, error } = await (adminClient as any)
-      .from('reservations')
-      .insert([newReservation])
-      .select()
-      .single();
-
-    if (error || !reservation) {
-      console.error('[API] Reservation creation error:', error);
-      return NextResponse.json(
-        { error: '予約の作成に失敗しました' },
-        { status: 500 }
+    let reservation: any = null;
+    if (stayPrepared) {
+      // 宿泊予約: カレンダー予定との重なりを直前に確認 → DB 関数で同じ夜の予約数を確認しながら INSERT
+      const settings = sanitizeStaySettings(formCalendarSettings?.stay_settings);
+      try {
+        const free = await checkStayNightsFree({ storeId: body.store_id, settings, nights: stayPrepared.nights });
+        if (!free.ok) {
+          return NextResponse.json(
+            { error: '申し訳ありません。選択された日程はただいま埋まってしまいました。別の日程をお選びください。', code: 'slot_taken' },
+            { status: 409 }
+          );
+        }
+      } catch (freeError) {
+        console.error('[API] stay nights check error:', freeError);
+      }
+      const nowIso = new Date().toISOString();
+      const inserted = await insertStayReservationChecked(
+        {
+          ...newReservation,
+          id: newStayReservationId(),
+          checkout_date: stayPrepared.checkout_date,
+          stay_nights: stayPrepared.stay_nights,
+          guest_counts: stayPrepared.guest_counts,
+          guest_count: stayPrepared.guest_count,
+          stay_price_total: stayPrepared.stay_price_total,
+          created_at: nowIso,
+          updated_at: nowIso,
+        },
+        settings.room_count
       );
+      if (!inserted.ok) {
+        if (inserted.reason === 'stay_full') {
+          return NextResponse.json(
+            { error: '申し訳ありません。選択された日程はただいま埋まってしまいました。別の日程をお選びください。', code: 'slot_taken' },
+            { status: 409 }
+          );
+        }
+        console.error('[API] stay reservation insert error:', inserted.reason);
+        return NextResponse.json({ error: '予約の作成に失敗しました' }, { status: 500 });
+      }
+      reservation = inserted.row;
+    } else {
+      const { data, error } = await (adminClient as any)
+        .from('reservations')
+        .insert([newReservation])
+        .select()
+        .single();
+      if (error || !data) {
+        console.error('[API] Reservation creation error:', error);
+        return NextResponse.json(
+          { error: '予約の作成に失敗しました' },
+          { status: 500 }
+        );
+      }
+      reservation = data;
     }
 
     // 3. 来店履歴を作成 → 統計を再計算
@@ -922,7 +1021,7 @@ export async function POST(request: Request) {
           visit_time: body.reservation_time,
           visit_type: 'reservation',
           treatment_menus: body.selected_menus,
-          amount: calculateTotalAmount(body.selected_menus, body.selected_options),
+          amount: calculateTotalAmount(body.selected_menus, body.selected_options) + (stayPrepared?.stay_price_total || 0),
         });
         await recalculateCustomerStats(customerId);
       } catch (error) {
@@ -1000,7 +1099,15 @@ export async function POST(request: Request) {
             // スタッフのカレンダーに作成する場合はスタッフごとの色設定を使用（フォームの色設定は不使用）
             eventColorId: staffCalendarIdForEvent ? staffEventColorId : eventColorId,
             staffName: staffNameForEvent,
-            extraDurationMinutes: visitExtraMinutes
+            extraDurationMinutes: visitExtraMinutes,
+            // 宿泊予約: 終了はチェックアウト日のチェックアウト時刻、説明文に泊数・人数・料金
+            stay: stayPrepared ? {
+              checkoutDate: stayPrepared.checkout_date,
+              checkOutTime: stayPrepared.customer_info.check_out_time,
+              nights: stayPrepared.stay_nights,
+              guestText: stayPrepared.customer_info.guest_text || null,
+              priceText: `¥${stayPrepared.stay_price_total.toLocaleString()}`,
+            } : null
           },
           body.store_id
         );

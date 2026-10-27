@@ -204,6 +204,17 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - サーバー側の新 API は無し（反映先ごとに `GET /api/forms/{id}` → `PUT /api/forms/{id}` → `POST /api/forms/{id}/deploy` を順に呼ぶ）。反映先の選択は localStorage `form_sync_targets_{sourceId}` に記憶
 - **元に戻す（スナップショット）**: `form_config_snapshots`（`20261008000000_add_form_config_snapshots.sql`。フォームごとに直近 20 件）。「更新」「反映先」「復元」の直前に `POST /api/forms/{id}/snapshots`（reason: update / sync / restore）で config 全体を保存。`GET .../snapshots` 一覧、`GET .../snapshots/{snapshotId}` で config 取得。復元は `restoreFormFromSnapshot()`（`FormSnapshotDialog.tsx`）が 復元前を保存 → PUT → deploy。反映結果の「元に戻す」、編集モーダルの「更新履歴」（差分セクション表示 + 確認）から実行。サーバー側は `src/lib/form-snapshots.ts`（local は `data/form_config_snapshots.json`）。戻すのは config のみ（種別・URL・公開状態は不変）
 
+**宿泊モード（旅館・1 棟貸し向け。`calendar_settings.booking_mode = 'stay'`。設計: `docs/旅館用予約フォーム検討資料/旅館用予約フォーム_実装設計.md`）:**
+- 既存の予約フォームの 3 つ目の日時選択モード。お客様はカレンダーでチェックイン日 → チェックアウト日の順にタップし、人数（区分ごと）を選ぶ。**空きは「泊（夜）」単位**で判定（予約 `[checkin, checkout)` は checkout − 1 の夜まで使う。チェックアウト日の夜が埋まっていてもチェックアウト日には選べる）。空きの正本は **予約 DB + 店舗 Google カレンダー（+ `stay_settings.block_calendar_ids`）**
+- 設定 `calendar_settings.stay_settings`（型 `StaySettings`。`sanitizeStaySettings` が補完）: チェックイン / アウト時刻（`check_in_time_options` で選択式も可）、泊数の範囲、`room_count`、休業（曜日 / 特定日 / 期間）、人数の区分 `guest_categories`（`charge`: adult = 有料人数に数える / free / fixed_per_night）、料金表 `pricing.rate_tables`（`by_count` = 有料人数 → 1 泊料金 / `per_person`）と割り当て（優先順位: 特定日 > 季節 > 祝日 > 祝前日 > 曜日 > 基本）、連泊割引 `long_stay_discounts`。宿泊では `business_hours` / 時間間隔 / ✕時間帯 / `max_concurrent_events` / `min_advance_hours` / スタッフカレンダーは使わない。`advance_booking_days` / `min_advance_days` / `conditional_advance_rules`（日数部分）/ 祝日不可 / キャンセルルールは使う
+- 純粋ロジック（Vitest）: `src/lib/stay-pricing.ts`（料金・正規化・人数検証）/ `src/lib/stay-availability.ts`（夜ごとの使用数・状態・範囲の可否）/ `src/lib/stay-reservation.ts`（受付時の検証と保存項目 `prepareStayReservation`、キャンセル料 `resolveStayCancelFee`）/ `src/lib/stay-display.ts`（一覧・詳細の表示文）/ `src/lib/japanese-holidays.ts`（祝日判定の TS 版。埋め込み JS と一致をテスト）。サーバー専用は `src/lib/stay-service.ts`
+- 静的 HTML: `src/lib/stay-runtime-js.ts`（`STAY_RUNTIME_JS` / `STAY_CSS` / `renderStayFieldHtml`。**料金・空きの判定を直すときは TS 版と両方**）。空きと料金は公開 API `GET /api/stores/{storeId}/stay/availability?form_id&from&to&guests=` から取る（料金変更を再デプロイなしで反映。最大 93 日）。プレビュー（`PREVIEW_MODE`）は API を呼ばず埋め込み設定で料金のみ計算。LINE メッセージは `《チェックイン》《チェックアウト》《泊数》《宿泊人数》《宿泊料金》`
+- 予約 API: `POST /api/reservations` は宿泊なら検証 → **料金をサーバーで再計算** → カレンダー重なり確認 → DB 関数 `stay_insert_reservation_checked`（店舗ごとのアドバイザリロックで同じ夜の二重予約を防ぐ。local は JSON 内で同じ判定）。埋まっていれば `409 { code: 'slot_taken' }`。`PATCH` は `checkout_date` / `guest_counts` の編集で再計算 + 重なり確認、`cancelled` で `cancel_fee_percent` / `cancel_fee_amount` / `cancelled_at` を記録（復元でクリア）。列: `reservations.checkout_date` / `stay_nights` / `guest_counts` / `guest_count` / `stay_price_total`（`reservation_date` = チェックイン日、`reservation_time` = チェックイン時刻なのでリマインダー・フォロー・来店履歴は無変更）
+- **段階式キャンセル料** `cancel_rules.fee_tiers`（`{ days_before, until_time?, percent }` を日数の大きい順に判定）/ `fee_base`（stay / total）/ `self_cancel_with_fee`（confirm / deny）。宿泊以外のフォームでも使える。規定文が空なら `buildCancelPolicyText` が自動生成してフォームに表示。LINE Webhook は「キャンセル: N」でキャンセル料がかかるとき金額を提示し「キャンセル確定: N」で取り消す（deny なら店舗へ誘導）。**請求はしない**（記録・通知・管理画面表示まで）
+- 表示: `reservation-detail-items.ts` がメール用（チェックイン〜宿泊料金の行）/ 管理画面用（チェックアウト以降 + キャンセル料）を出す。予約一覧・顧客詳細は「11/1(日) 〜 11/4(水) 3泊」（`formatStayRangeShort`）。`ReservationEditForm` は宿泊ならチェックイン日 / チェックアウト日 / 人数の編集。分析の売上に `stay_price_total` を加算
+- 編集 UI: 営業時間・ルール → 日時選択モード「宿泊」→ `StaySettingsEditor.tsx`（① 基本 ② 人数の区分 ③ 休業日 ④ 料金表 ⑤ 割り当て ⑥ 連泊割引 ⑦ 空き判定に含めるカレンダー（`/calendar/list`）⑧ 料金プレビュー。担当者用の設定シート PDF と同じ並び）。キャンセルルール設定の `CancelFeeTiersEditor.tsx`。テンプレート「🏨 宿泊（1 部屋）」（`FORM_TEMPLATES.stay`。フォーム作成 API はテンプレートの `calendar_settings` / `cancel_rules` も反映）
+- マイグレーション: `20261101000000_add_stay_reservation.sql`（列 8 つ + CHECK + 部分インデックス + DB 関数）。**staging / production へは Dashboard の SQL Editor で手動適用**
+
 **プレビュー機能:**
 - `POST /api/preview/generate` - 保存前のフォーム編集状態からプレビュー HTML を生成
 - `formType`: `'reservation'` または `'survey'` を指定
@@ -469,6 +480,10 @@ export async function GET(req, { params }) {
 ### 予約分析 API:
 - `GET /api/stores/{storeId}/reservations/analytics` - 予約統計（`date_from` / `date_to` = 予約日 YYYY-MM-DD、`form_id` = フォーム絞り込み。認証必須）
 
+### 宿泊モード API:
+- `GET /api/stores/{storeId}/stay/availability?form_id=&from=&to=&guests=` - 夜ごとの空き・残り・料金（公開。予定のタイトル等は返さない。`guests` は `{ "<category_id>": n }` の JSON か `adult:2,child:1`。最大 93 日）
+- `POST /api/reservations` に `checkout_date` / `guest_counts`（宿泊フォームのとき。料金はサーバーで再計算）、`PATCH /api/reservations/{id}` に `checkout_date` / `guest_counts` / `cancel_fee_percent` / `cancel_fee_amount`
+
 ### Google Calendar 連携 API:
 - `GET /api/integrations/google-calendar/connect?store_id=xxx` - OAuth 認証開始（リダイレクト）
 - `GET /api/integrations/google-calendar/callback` - OAuth コールバック
@@ -592,6 +607,7 @@ export async function GET(req, { params }) {
 - `20260911000000_message_delivery_reliability.sql` - reminder_logs テーブル、stores.reminder_* の CHECK、follow_messages に sending / claimed_at、DB 関数 follow_message_schedule / follow_message_restore_for_user
 - `20261013000000_add_same_day_reminder.sql` - stores.reminder_same_day_enabled / reminder_same_day_time（当日リマインダー）、reminder_logs.kind + 一意キーの差し替え
 - `20261014000000_add_before_time_reminder.sql` - stores.reminder_before_time_enabled / reminder_before_time_minutes（直前リマインダー）、reminder_logs.kind に before_time
+- `20261101000000_add_stay_reservation.sql` - 宿泊モード: reservations に checkout_date / stay_nights / guest_counts / guest_count / stay_price_total / cancel_fee_percent / cancel_fee_amount / cancelled_at、DB 関数 `stay_insert_reservation_checked`
 - `20261009000000_add_wall.sql` - 寄せ書きウォールの 5 テーブル・RLS・DB 関数 `wall_insert_post_checked` / `wall_add_report`
 - `20261010000000_add_wall_daily_max.sql` - wall_boards.daily_max
 - `20261011000000_add_wall_engagement.sql` - 寄せ書きの追加機能（wall_topics / wall_empathies、wall_posts の reaction / topic_id / note_color / note_deco / empathy_count、wall_boards の empathy_* / customer_pick_enabled、DB 関数 `wall_toggle_empathy`）
