@@ -11,6 +11,8 @@ import type { HeadingContent } from './menu-headings';
 import { FormConfig } from '@/types/form';
 import { STAFF_SCHEDULE_RUNTIME_JS } from './staff-schedule';
 import { ADVANCE_RULES_RUNTIME_JS } from './advance-rules';
+import { STAY_CSS, STAY_RUNTIME_JS, renderStayFieldHtml } from './stay-runtime-js';
+import { buildCancelPolicyText } from './cancel-rules';
 
 export class StaticReservationGenerator {
   /**
@@ -271,6 +273,8 @@ const MANUAL_MODE = ${manualMode ? 'true' : 'false'};
 const SUBMIT_LABEL = ${JSON.stringify(submitLabel)};
 // 公式 LINE（LINE アプリ内）以外のブラウザからの予約を制限する
 const LINE_ONLY = ${lineOnly ? 'true' : 'false'};
+// 管理画面のプレビュー（空き状況 API を呼ばず、埋め込み設定で料金だけ計算する）
+const PREVIEW_MODE = ${previewMode ? 'true' : 'false'};
 
 ${HOLIDAY_RUNTIME_JS}
 ${MULTIPLE_DATES_RUNTIME_JS}
@@ -278,6 +282,7 @@ ${BIRTHDAY_RUNTIME_JS}
 ${SEARCHABLE_SELECT_RUNTIME_JS}
 ${STAFF_SCHEDULE_RUNTIME_JS}
 ${ADVANCE_RULES_RUNTIME_JS}
+${STAY_RUNTIME_JS}
 function formatDateTimeForDisplay(value) {
     // "2026-04-30T15:08[:00]" → "2026年04月30日 15:08"
     // "2026-04-30"            → "2026年04月30日"
@@ -362,6 +367,9 @@ class BookingForm {
             if (bookingMode === 'multiple_dates') {
                 // 第三希望日時モードの初期設定
                 this.initializeMultipleDates();
+            } else if (bookingMode === 'stay') {
+                // 宿泊モード: 人数・カレンダーの初期化（空き状況は表示されるタイミングで取得）
+                stayUiInit(this);
             } else {
                 // カレンダーモードの初期設定
                 const today = new Date();
@@ -2415,7 +2423,20 @@ class BookingForm {
         }
         if (this.state.selectedDate || this.state.selectedTime) {
             const bMode = this.config.calendar_settings?.booking_mode || 'calendar';
-            if (bMode === 'multiple_dates') {
+            if (bMode === 'stay' && this.state.stayCheckin && this.state.stayCheckout) {
+                const stayQ = stayUiQuote(this);
+                const stayS = stayUiSettings(this);
+                let stayHtml = '<strong>ご宿泊日:</strong><div style="margin-top:0.25rem;font-size:0.875rem;">'
+                    + stayFormatRangeJa(this.state.stayCheckin, this.state.stayCheckout, stayNightsBetween(this.state.stayCheckin, this.state.stayCheckout).length)
+                    + '<br>チェックイン ' + stayUiCheckInTime(this) + ' / チェックアウト ' + stayS.check_out_time;
+                const stayGt = stayUiGuestText(this);
+                if (stayGt) stayHtml += '<br>' + stayGt;
+                if (stayQ) {
+                    stayHtml += '<br>宿泊料金: ' + (stayQ.discount && stayQ.discount.amount > 0 ? stayYen(stayQ.subtotal) + ' − 連泊割引 ' + stayYen(stayQ.discount.amount) + ' = ' : '') + '<strong>' + stayYen(stayQ.total) + '</strong>';
+                }
+                stayHtml += '</div>';
+                items.push('<div class="summary-item" style="align-items:flex-start;"><div>' + stayHtml + '</div><button class="summary-edit-button" data-field="datetime-field">修正</button></div>');
+            } else if (bMode === 'multiple_dates') {
                 let dateHtml = \`<strong>希望日時:</strong><div style="margin-top:0.25rem;font-size:0.875rem;">\`;
                 dateHtml += \`第一希望: \${this.formatDateTimeJa(this.state.selectedDate, this.state.selectedTime)}\`;
                 if (this.state.selectedDate2 && this.state.selectedTime2) dateHtml += \`<br>第二希望: \${this.formatDateTimeJa(this.state.selectedDate2, this.state.selectedTime2)}\`;
@@ -2584,6 +2605,18 @@ class BookingForm {
             this.state.selectedTime2 = filledPairs[1] ? filledPairs[1][1] : '';
             this.state.selectedDate3 = filledPairs[2] ? filledPairs[2][0] : '';
             this.state.selectedTime3 = filledPairs[2] ? filledPairs[2][1] : '';
+        } else if ((this.config.calendar_settings?.booking_mode || 'calendar') === 'stay') {
+            // 宿泊モード: 最新の空きで日程を確認してから送信
+            const stayCheck = await stayUiVerifyBeforeSubmit(this);
+            if (!stayCheck.ok) {
+                alert(stayCheck.reason);
+                const stayField = document.getElementById('datetime-field');
+                if (stayField) stayField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                resetSubmitState();
+                return;
+            }
+            this.state.stayQuote = stayCheck.quote;
+            stayUiSyncSelected(this);
         } else if (!this.state.selectedDate || !this.state.selectedTime) {
             alert('予約日時を選択してください');
             resetSubmitState();
@@ -2753,6 +2786,11 @@ class BookingForm {
                 line_friend_flag: this.state.lineFriendFlag, // 友だち追加状態 (true/false/null)
                 source_medium: sourceMedium,
                 booking_mode: this.config.calendar_settings?.booking_mode || 'calendar',
+                // 宿泊モード: チェックアウト日・人数・参考値の料金（料金はサーバーで再計算される）
+                checkout_date: this.state.stayCheckout || null,
+                guest_counts: (this.config.calendar_settings?.booking_mode === 'stay') ? stayUiGuestCounts(this) : null,
+                stay_nights: this.state.stayQuote ? this.state.stayQuote.nights : null,
+                stay_price_total: this.state.stayQuote ? this.state.stayQuote.total : null,
                 // スタッフ選択（'none' = 指名なし → サーバー側で空きスタッフに自動割当）
                 staff_id: (this.state.selectedStaffId && this.state.selectedStaffId !== 'none') ? this.state.selectedStaffId : null,
                 staff_no_preference: this.state.selectedStaffId === 'none',
@@ -2938,7 +2976,21 @@ class BookingForm {
             if (showLineItem('datetime')) {
                 const bookingModeForDatetime = this.config.calendar_settings?.booking_mode || 'calendar';
                 let datetimeText = '【希望日時】\\n';
-                if (bookingModeForDatetime === 'multiple_dates') {
+                if (bookingModeForDatetime === 'stay') {
+                    const stayS = stayUiSettings(this);
+                    const stayQ = this.state.stayQuote || stayUiQuote(this);
+                    datetimeText += '《チェックイン》\\n' + stayFormatDateJa(this.state.stayCheckin) + ' ' + stayUiCheckInTime(this);
+                    datetimeText += '\\n《チェックアウト》\\n' + stayFormatDateJa(this.state.stayCheckout) + ' ' + stayS.check_out_time;
+                    datetimeText += '\\n《泊数》\\n' + stayNightsBetween(this.state.stayCheckin, this.state.stayCheckout).length + '泊';
+                    const stayGuestText = stayUiGuestText(this);
+                    if (stayGuestText) datetimeText += '\\n《宿泊人数》\\n' + stayGuestText;
+                    if (stayQ) {
+                        let stayNote = '';
+                        if (stayQ.discount && stayQ.discount.amount > 0) stayNote = '連泊割引 −' + stayYen(stayQ.discount.amount) + ' 適用' + (stayS.price_note ? '。' + stayS.price_note : '');
+                        else if (stayS.price_note) stayNote = stayS.price_note;
+                        datetimeText += '\\n《宿泊料金》\\n' + stayYen(stayQ.total) + (stayNote ? '（' + stayNote + '）' : '');
+                    }
+                } else if (bookingModeForDatetime === 'multiple_dates') {
                     datetimeText += '《第一希望日》\\n' + formattedDate;
                     if (formattedDate2) datetimeText += '\\n《第二希望日》\\n' + formattedDate2;
                     if (formattedDate3) datetimeText += '\\n《第三希望日》\\n' + formattedDate3;
@@ -3703,7 +3755,7 @@ class BookingForm {
         // （選択できるメニューが存在せず「メニュー選択で表示」が成立しないため）
         const hasAnyMenus = (this.config.menu_structure?.categories || []).some(c => (c.menus || []).length > 0)
             || ((this.config.menu_structure?.menus || []).length > 0);
-        const isMultiDatesNoMenus = (this.config.calendar_settings?.booking_mode || 'calendar') === 'multiple_dates' && !hasAnyMenus;
+        const isMultiDatesNoMenus = (bookingMode === 'multiple_dates' || bookingMode === 'stay') && !hasAnyMenus;
         const show = !hideUntilMenu || isMultiDatesNoMenus || (hasMenuSelection && staffSelected);
 
         const fieldIds = bookingMode === 'multiple_dates'
@@ -3721,6 +3773,12 @@ class BookingForm {
 
         // 非表示中はカレンダーの再描画をスキップ（表示されるタイミングで再度呼ばれる）
         if (!show) return;
+
+        if (bookingMode === 'stay') {
+            // 宿泊モード: 空き状況 API から夜ごとの空きと料金を取って描画
+            stayUiRefresh(this);
+            return;
+        }
 
         // カレンダーモード: 空き状況を再取得してカレンダーを再描画
         this.fetchAvailability(this.state.currentWeekStart).then(() => {
@@ -3928,7 +3986,8 @@ if (document.readyState === 'loading') {
   // キャンセルルール設定: キャンセル規定の文言を送信ボタンの上に表示（表示 ON かつ文言あり）
   private renderCancelPolicy(config: FormConfig): string {
     const rules = config.cancel_rules;
-    const text = typeof rules?.policy_text === 'string' ? rules.policy_text.trim() : '';
+    // 規定文が空でも段階式キャンセル料（fee_tiers）があれば自動生成した文を使う
+    const text = (typeof rules?.policy_text === 'string' ? rules.policy_text.trim() : '') || (rules ? buildCancelPolicyText(rules) : '');
     if (!rules || rules.show_policy_on_form !== true || !text) return '';
     const hours = typeof rules.deadline_hours === 'number' && rules.deadline_hours > 0 ? rules.deadline_hours : 0;
     return `
@@ -4153,8 +4212,12 @@ if (document.readyState === 'loading') {
     // ON（未設定含む）の場合はメニュー選択まで非表示のため、初期HTMLも非表示で出力。
     // ただし第三希望日時モードでメニューが1つもない場合は、選択できるメニューが存在しないため常に表示する
     const initiallyHidden = config.calendar_settings?.hide_datetime_until_menu_selected !== false
-      && !(bookingMode === 'multiple_dates' && !hasAnyMenus);
+      && !((bookingMode === 'multiple_dates' || bookingMode === 'stay') && !hasAnyMenus);
 
+    if (bookingMode === 'stay') {
+      // 宿泊モード: チェックイン〜チェックアウトのカレンダー（src/lib/stay-runtime-js.ts）
+      return renderStayFieldHtml(config, initiallyHidden);
+    }
     if (bookingMode === 'multiple_dates') {
       return this.renderMultipleDatesField(config, initiallyHidden);
     } else {
@@ -4767,6 +4830,7 @@ if (document.readyState === 'loading') {
             box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
         }
         ${BIRTHDAY_CSS}
+        ${STAY_CSS}
         ${SEARCHABLE_SELECT_CSS}
         /* キャンセル規定（送信ボタンの上） */
         .cancel-policy { margin: 0 0 1rem; padding: 0.75rem 0.9rem; border: 1px solid #f1c9a5; background: #fff7ef; border-radius: 0.375rem; font-size: 0.8rem; color: #444; line-height: 1.6; }

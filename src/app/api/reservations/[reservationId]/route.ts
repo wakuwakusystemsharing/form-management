@@ -17,6 +17,10 @@ import {
   restoreFollowMessageForUser,
   scheduleFollowMessageForReservation,
 } from '@/lib/follow-message-repository';
+import { prepareStayReservation, resolveStayCancelFee } from '@/lib/stay-reservation';
+import { sanitizeStaySettings } from '@/lib/stay-pricing';
+import { nightsBetween, occupiedCountByNight } from '@/lib/stay-availability';
+import { checkStayNightsFree } from '@/lib/stay-service';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
@@ -173,6 +177,57 @@ interface ContentEdit {
   selected_options?: Array<Record<string, any>>;
   staff_id?: string | null;   // '' or null = 指名解除
   hasStaffChange: boolean;
+  // 宿泊予約（checkout_date がある行）だけ
+  checkout_date?: string;
+  guest_counts?: Record<string, unknown>;
+}
+
+const STAY_EDIT_KEYS = ['reservation_date', 'reservation_time', 'checkout_date', 'guest_counts'] as const;
+
+/**
+ * 宿泊予約の日程・人数の編集: フォーム設定で検証し直し（受付期間は見ない）、料金を再計算して行に反映する。
+ * 他の予約・カレンダー予定との重なりは呼び出し側で確認する
+ */
+function applyStayEdit(row: any, edit: ContentEdit, formConfig: any): { error?: string; nights: string[] } {
+  const cs = formConfig?.calendar_settings;
+  const prepared = prepareStayReservation(
+    cs,
+    {
+      reservation_date: edit.reservation_date ?? row.reservation_date,
+      checkout_date: edit.checkout_date ?? row.checkout_date,
+      guest_counts: edit.guest_counts ?? row.guest_counts ?? (row.customer_info && row.customer_info.guest_counts),
+      reservation_time: edit.reservation_time ?? String(row.reservation_time || '').slice(0, 5),
+    },
+    new Date(),
+    { skipWindow: true }
+  );
+  if (!prepared.ok) return { error: prepared.error, nights: [] };
+  const v = prepared.value;
+  row.reservation_date = v.reservation_date;
+  row.reservation_time = edit.reservation_time && /^\d{2}:\d{2}$/.test(edit.reservation_time) ? edit.reservation_time : v.reservation_time;
+  row.checkout_date = v.checkout_date;
+  row.stay_nights = v.stay_nights;
+  row.guest_counts = v.guest_counts;
+  row.guest_count = v.guest_count;
+  row.stay_price_total = v.stay_price_total;
+  row.customer_info = { ...((row.customer_info && typeof row.customer_info === 'object') ? row.customer_info : {}), ...v.customer_info, check_in_time: row.reservation_time };
+  return { nights: v.nights };
+}
+
+/** キャンセル ↔ 復元に合わせてキャンセル料の記録を付け外しする（宿泊以外の予約でも段階設定があれば記録する） */
+function applyCancelFee(row: any, body: any, status: string | undefined, previousStatus: string | undefined, formConfig: any): void {
+  if (status === 'cancelled' && previousStatus !== 'cancelled') {
+    const fee = resolveStayCancelFee(formConfig, row);
+    const pct = typeof body.cancel_fee_percent === 'number' && Number.isFinite(body.cancel_fee_percent) ? Math.min(100, Math.max(0, Math.floor(body.cancel_fee_percent))) : fee.percent;
+    const amt = typeof body.cancel_fee_amount === 'number' && Number.isFinite(body.cancel_fee_amount) ? Math.max(0, Math.floor(body.cancel_fee_amount)) : (pct === fee.percent ? fee.amount : Math.floor(((Number(row.stay_price_total) || 0) * pct) / 100 / 10) * 10);
+    row.cancel_fee_percent = pct;
+    row.cancel_fee_amount = amt;
+    row.cancelled_at = new Date().toISOString();
+  } else if (status !== undefined && status !== 'cancelled' && previousStatus === 'cancelled') {
+    row.cancel_fee_percent = null;
+    row.cancel_fee_amount = null;
+    row.cancelled_at = null;
+  }
 }
 
 /** 予約内容編集のボディを検証して正規化する。エラー時はメッセージを返す */
@@ -227,6 +282,19 @@ function parseContentEdit(body: any, existing: any): { edit: ContentEdit } | { e
     edit.hasStaffChange = true;
   }
 
+  if (body.checkout_date !== undefined) {
+    if (typeof body.checkout_date !== 'string' || !DATE_RE.test(body.checkout_date)) {
+      return { error: 'チェックアウト日の形式が正しくありません' };
+    }
+    edit.checkout_date = body.checkout_date;
+  }
+  if (body.guest_counts !== undefined) {
+    if (!body.guest_counts || typeof body.guest_counts !== 'object' || Array.isArray(body.guest_counts)) {
+      return { error: '宿泊人数の形式が正しくありません' };
+    }
+    edit.guest_counts = body.guest_counts;
+  }
+
   return { edit };
 }
 
@@ -251,7 +319,7 @@ export async function PATCH(
       );
     }
 
-    const hasContentEdit = ['reservation_date', 'reservation_time', 'end_time', 'total_duration', 'selected_menus', 'selected_options', 'staff_id']
+    const hasContentEdit = ['reservation_date', 'reservation_time', 'end_time', 'total_duration', 'selected_menus', 'selected_options', 'staff_id', 'checkout_date', 'guest_counts']
       .some((k) => body[k] !== undefined);
 
     if (status === undefined && !hasContentEdit) {
@@ -276,12 +344,30 @@ export async function PATCH(
       const previousStatus = existing.status;
       const previousDate = existing.reservation_date;
 
+      const localFormConfig = existing.checkout_date || status !== undefined ? await loadLocalFormConfig(existing.form_id) : null;
       if (hasContentEdit) {
         const parsed = parseContentEdit(body, existing);
         if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
         applyContentEdit(existing, parsed.edit, null);
+        // 宿泊予約: 日程・人数の変更は料金を再計算し、同じ夜の空きを確認する
+        if (existing.checkout_date && STAY_EDIT_KEYS.some((k) => parsed.edit[k] !== undefined)) {
+          const applied = applyStayEdit(existing, parsed.edit, localFormConfig);
+          if (applied.error) return NextResponse.json({ error: applied.error }, { status: 400 });
+          const settings = sanitizeStaySettings(localFormConfig?.calendar_settings?.stay_settings);
+          const occupied = occupiedCountByNight(
+            { from: applied.nights[0], to: applied.nights[applied.nights.length - 1] },
+            reservations.filter((r: any) => r.store_id === existing.store_id && r.id !== existing.id),
+            [],
+            settings
+          );
+          const roomCount = Math.max(1, settings.room_count || 1);
+          if (applied.nights.some((n) => (occupied.get(n) || 0) >= roomCount)) {
+            return NextResponse.json({ error: 'その日程は他の予約と重なっています', code: 'slot_taken' }, { status: 409 });
+          }
+        }
       }
       if (status !== undefined) existing.status = status;
+      applyCancelFee(existing, body, status, previousStatus, localFormConfig);
       existing.updated_at = new Date().toISOString();
       reservations[index] = existing;
       writeReservations(reservations);
@@ -353,11 +439,37 @@ export async function PATCH(
 
       const working = { ...existing };
       applyContentEdit(working, edit, staffResolved);
+      // 宿泊予約: 日程・人数の変更は料金を再計算し、他の予約・カレンダー予定との重なりを確認する
+      if (existing.checkout_date && STAY_EDIT_KEYS.some((k) => edit[k] !== undefined)) {
+        if (!formConfig) formConfig = await loadFormConfig(adminClient, existing.form_id);
+        const applied = applyStayEdit(working, edit, formConfig);
+        if (applied.error) return NextResponse.json({ error: applied.error }, { status: 400 });
+        try {
+          const free = await checkStayNightsFree({
+            storeId: existing.store_id,
+            settings: sanitizeStaySettings(formConfig?.calendar_settings?.stay_settings),
+            nights: applied.nights,
+            excludeReservationId: existing.id,
+          });
+          if (!free.ok) return NextResponse.json({ error: 'その日程は他の予約と重なっています', code: 'slot_taken' }, { status: 409 });
+        } catch (e) {
+          console.error('[API] stay nights check error (edit):', e);
+        }
+      }
       // 変更されたカラムだけ更新対象にする
-      ['reservation_date', 'reservation_time', 'selected_menus', 'selected_options', 'menu_name', 'submenu_name', 'customer_info', 'staff_id', 'staff_name', 'staff_calendar_id', 'staff_no_preference']
+      ['reservation_date', 'reservation_time', 'selected_menus', 'selected_options', 'menu_name', 'submenu_name', 'customer_info', 'staff_id', 'staff_name', 'staff_calendar_id', 'staff_no_preference', 'checkout_date', 'stay_nights', 'guest_counts', 'guest_count', 'stay_price_total']
         .forEach((k) => { if (JSON.stringify(working[k]) !== JSON.stringify(existing[k])) updates[k] = working[k]; });
     }
     if (status !== undefined) updates.status = status;
+    // キャンセル料の記録（キャンセル時に確定 / 復元でクリア）
+    if (status !== undefined && status !== previousStatus) {
+      if (!formConfig) formConfig = await loadFormConfig(adminClient, existing.form_id);
+      const feeRow: any = { ...existing, ...updates };
+      applyCancelFee(feeRow, body, status, previousStatus, formConfig);
+      for (const k of ['cancel_fee_percent', 'cancel_fee_amount', 'cancelled_at']) {
+        if (feeRow[k] !== existing[k]) updates[k] = feeRow[k];
+      }
+    }
 
     const { data: reservation, error } = await (adminClient as any)
       .from('reservations')
@@ -566,5 +678,33 @@ function buildEventParamsFromReservation(
     eventColorId: staffColor || formConfig?.calendar_settings?.event_color_id || null,
     staffName: reservation.staff_name || null,
     durationMinutesOverride: typeof info.total_duration === 'number' && info.total_duration > 0 ? info.total_duration : null,
+    // 宿泊予約: 終了はチェックアウト日のチェックアウト時刻
+    stay: reservation.checkout_date ? {
+      checkoutDate: String(reservation.checkout_date),
+      checkOutTime: String(info.check_out_time || formConfig?.calendar_settings?.stay_settings?.check_out_time || '10:00'),
+      nights: Number(reservation.stay_nights) || nightsBetween(String(reservation.reservation_date), String(reservation.checkout_date)).length,
+      guestText: info.guest_text || null,
+      priceText: typeof reservation.stay_price_total === 'number' ? `¥${reservation.stay_price_total.toLocaleString()}` : null,
+    } : null,
   };
+}
+
+/** local: data/forms*.json からフォーム設定（normalize 済み config）を探す */
+async function loadLocalFormConfig(formId: string): Promise<any | null> {
+  if (!formId) return null;
+  try {
+    if (!fs.existsSync(DATA_DIR)) return null;
+    for (const file of fs.readdirSync(DATA_DIR).filter((f) => f.startsWith('forms') && f.endsWith('.json'))) {
+      try {
+        const arr = JSON.parse(fs.readFileSync(path.join(DATA_DIR, file), 'utf-8'));
+        const found = Array.isArray(arr) ? arr.find((f: any) => f?.id === formId) : null;
+        if (found) return normalizeForm(found).config;
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch (e) {
+    console.error('[API] loadLocalFormConfig error:', e);
+  }
+  return null;
 }

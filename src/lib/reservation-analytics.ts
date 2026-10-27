@@ -19,6 +19,8 @@ export interface AnalyticsReservation {
   selected_menus?: unknown[] | null;
   selected_options?: unknown[] | null;
   customer_info?: Record<string, unknown> | null;
+  // 宿泊予約の宿泊料金（割引後。売上に加える）
+  stay_price_total?: number | null;
   // 旧カラム（customer_info が無い古い予約のフォールバック）
   gender?: string | null;
   visit_count?: string | null;
@@ -108,6 +110,8 @@ export function reservationAmount(r: AnalyticsReservation): number {
   let total = 0;
   for (const m of asArray(r.selected_menus)) total += toNumber(m.price);
   for (const o of asArray(r.selected_options)) total += toNumber(o.price);
+  // 宿泊予約: 宿泊料金（割引後）を加える
+  if (typeof r.stay_price_total === 'number' && Number.isFinite(r.stay_price_total)) total += r.stay_price_total;
   return total;
 }
 

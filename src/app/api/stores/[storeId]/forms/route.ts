@@ -221,8 +221,11 @@ export async function POST(
             saturday: { open: '09:00', close: '18:00', closed: false },
             sunday: { open: '09:00', close: '18:00', closed: true }
           },
-          advance_booking_days: 30
+          advance_booking_days: 30,
+          // テンプレート固有の日時設定（宿泊テンプレートの booking_mode / stay_settings / 受付ルール等）
+          ...(((template?.config as FormConfig | undefined)?.calendar_settings || {}) as Partial<FormConfig['calendar_settings']>)
         },
+        ...((template?.config as FormConfig | undefined)?.cancel_rules ? { cancel_rules: (template!.config as FormConfig).cancel_rules } : {}),
         visit_options: [],
         gender_selection: { 
           enabled: baseConfig.basic_info?.show_gender_selection || false, 
@@ -449,8 +452,11 @@ export async function POST(
           saturday: { open: '09:00', close: '18:00', closed: false },
           sunday: { open: '09:00', close: '18:00', closed: true }
         },
-        advance_booking_days: 30
+        advance_booking_days: 30,
+        // テンプレート固有の日時設定（宿泊テンプレートの booking_mode / stay_settings / 受付ルール等）
+        ...(((template?.config as FormConfig | undefined)?.calendar_settings || {}) as Partial<FormConfig['calendar_settings']>)
       },
+      ...((template?.config as FormConfig | undefined)?.cancel_rules ? { cancel_rules: (template!.config as FormConfig).cancel_rules } : {}),
       ui_settings: {
         theme_color: '#3B82F6',
         button_style: 'rounded' as const,

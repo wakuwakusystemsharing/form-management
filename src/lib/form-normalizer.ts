@@ -7,6 +7,7 @@ import { Form, SpecialBusinessDay } from '@/types/form';
 import { resolveCancelRules } from './cancel-rules';
 import { normalizeStaffSchedule } from './staff-schedule';
 import { sanitizeConditionalAdvanceRules } from './advance-rules';
+import { sanitizeStaySettings } from './stay-pricing';
 
 /**
  * ✕にする時間帯の曜日指定を検証する。
@@ -546,7 +547,17 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
         special_business_days: sanitizeSpecialBusinessDays(
           existingConfig?.calendar_settings?.special_business_days
             ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.special_business_days
-        )
+        ),
+        // 宿泊モードの設定: 保存されていれば常に補完（モードを戻しても消えない）。宿泊モードなのに無ければ既定値を作る
+        stay_settings: (() => {
+          const cs = (existingConfig?.calendar_settings ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])) as
+            | { stay_settings?: unknown; booking_mode?: string }
+            | undefined;
+          const raw = existingConfig?.calendar_settings?.stay_settings
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.stay_settings;
+          if (raw === undefined && cs?.booking_mode !== 'stay') return undefined;
+          return sanitizeStaySettings(raw);
+        })()
       },
       staff_selection: (() => {
         const ss = existingConfig?.staff_selection

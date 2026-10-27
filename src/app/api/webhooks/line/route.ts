@@ -6,6 +6,7 @@ import { flexText } from '@/lib/flex-colored-text';
 import { deleteCustomerVisitByReservation, recalculateCustomerStats } from '@/lib/customer-utils';
 import { cancelFollowMessageForReservation, restoreFollowMessageForUser } from '@/lib/follow-message-repository';
 import { buildCancelDeadlineMessage, buildCancelNotificationEmail, isCancelAllowed, resolveCancelRules, type CancelRules } from '@/lib/cancel-rules';
+import { resolveStayCancelFee } from '@/lib/stay-reservation';
 import { sendEmail } from '@/lib/email-sender';
 
 export const runtime = 'nodejs';
@@ -68,13 +69,25 @@ function formatDate(dateStr: string): string {
   return `${year}年${parseInt(month)}月${parseInt(day)}日（${weekdays[d.getDay()]}）`;
 }
 
+/** 予約の日時表示。宿泊予約（checkout_date あり）は「11/1(日) 〜 11/4(月) 3泊」 */
+function reservationDateText(r: { reservation_date: string; reservation_time?: string | null; checkout_date?: string | null; stay_nights?: number | null }): string {
+  if (r.checkout_date) {
+    const nights = Number(r.stay_nights) || Math.max(1, Math.round((Date.parse(r.checkout_date) - Date.parse(r.reservation_date)) / 86400000));
+    return `${formatDate(r.reservation_date)} 〜 ${formatDate(r.checkout_date)}（${nights}泊）`;
+  }
+  const timeMinutes = r.reservation_time ? formatTime(r.reservation_time) : '';
+  const [h, m] = timeMinutes.split(':');
+  const timeText = h && m ? `${parseInt(h)}時${parseInt(m)}分` : timeMinutes;
+  return `${formatDate(r.reservation_date)} ${timeText}`;
+}
+
 function formatTime(timeStr: string): string {
   return timeStr.slice(0, 5);
 }
 
 function parseDateTimeString(str: string): Date | null {
   // "2026年03月25日 09:00" or "第一希望：2026年03月25日 09:00" 形式に対応
-  const match = str.match(/(\d{4})年(\d{1,2})月(\d{1,2})日\s+(\d{1,2}):(\d{2})/);
+  const match = str.match(/(\d{4})年(\d{1,2})月(\d{1,2})日(?:（.）)?\s+(\d{1,2}):(\d{2})/);
   if (!match) return null;
   return new Date(
     parseInt(match[1], 10),
@@ -97,6 +110,11 @@ function parseReservationForm(text: string) {
     dateTime?: Date | null;
     dateTime2?: Date | null;
     dateTime3?: Date | null;
+    // 宿泊予約（booking_mode = 'stay'）
+    checkOut?: Date | null;
+    stayNights?: string;
+    stayGuests?: string;
+    stayPrice?: string;
   } = {
     menus: [],
   };
@@ -115,9 +133,13 @@ function parseReservationForm(text: string) {
       else if (line === '《メニュー》') { pendingLabel = 'menu'; }
       else if (line === '《ご来店回数》') { pendingLabel = 'visitCount'; }
       else if (line === '《メッセージ》') { pendingLabel = 'message'; }
-      else if (line === '《第一希望日》' || line === '《希望日》') { pendingLabel = 'date1'; }
+      else if (line === '《第一希望日》' || line === '《希望日》' || line === '《チェックイン》') { pendingLabel = 'date1'; }
       else if (line === '《第二希望日》') { pendingLabel = 'date2'; }
       else if (line === '《第三希望日》') { pendingLabel = 'date3'; }
+      else if (line === '《チェックアウト》') { pendingLabel = 'checkout'; }
+      else if (line === '《泊数》') { pendingLabel = 'stayNights'; }
+      else if (line === '《宿泊人数》') { pendingLabel = 'stayGuests'; }
+      else if (line === '《宿泊料金》') { pendingLabel = 'stayPrice'; }
       else if (line.startsWith('【') || line.startsWith('《')) {
         pendingLabel = '';
       } else if (pendingLabel) {
@@ -133,6 +155,10 @@ function parseReservationForm(text: string) {
           case 'date1': { const dt = parseDateTimeString(line); if (dt) details.dateTime = dt; pendingLabel = ''; break; }
           case 'date2': { const dt = parseDateTimeString(line); if (dt) details.dateTime2 = dt; pendingLabel = ''; break; }
           case 'date3': { const dt = parseDateTimeString(line); if (dt) details.dateTime3 = dt; pendingLabel = ''; break; }
+          case 'checkout': { const dt = parseDateTimeString(line); if (dt) details.checkOut = dt; pendingLabel = ''; break; }
+          case 'stayNights': details.stayNights = line; pendingLabel = ''; break;
+          case 'stayGuests': details.stayGuests = line; pendingLabel = ''; break;
+          case 'stayPrice': details.stayPrice = line; pendingLabel = ''; break;
         }
       }
     }
@@ -482,7 +508,7 @@ export async function POST(req: NextRequest) {
     const todayStr = today.toISOString().split('T')[0];
     const { data: reservations } = await (adminClient as any)
       .from('reservations')
-      .select('reservation_date,reservation_time,menu_name,submenu_name,staff_name,staff_no_preference')
+      .select('reservation_date,reservation_time,menu_name,submenu_name,staff_name,staff_no_preference,checkout_date,stay_nights')
       .eq('store_id', storeId)
       .eq('line_user_id', userId)
       .neq('status', 'cancelled')
@@ -499,9 +525,6 @@ export async function POST(req: NextRequest) {
 
     const bubbles = reservations.map((r: any, index: number) => {
       const menu = r.submenu_name ? `${r.menu_name} > ${r.submenu_name}` : r.menu_name;
-      const timeMinutes = r.reservation_time ? formatTime(r.reservation_time) : '';
-      const [h, m] = timeMinutes.split(':');
-      const timeText = h && m ? `${parseInt(h)}時${parseInt(m)}分` : timeMinutes;
       return {
         type: 'bubble',
         size: 'mega',
@@ -513,17 +536,17 @@ export async function POST(req: NextRequest) {
             {
               type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
               contents: [
-                { type: 'text', text: '📅 日時', size: 'sm', color: themeColor, weight: 'bold' },
-                { type: 'text', text: `${formatDate(r.reservation_date)} ${timeText}`, size: 'sm', wrap: true }
+                { type: 'text', text: r.checkout_date ? '🏨 ご宿泊' : '📅 日時', size: 'sm', color: themeColor, weight: 'bold' },
+                { type: 'text', text: reservationDateText(r), size: 'sm', wrap: true }
               ]
             },
-            {
+            ...(menu && menu !== '未選択' ? [{
               type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
               contents: [
                 { type: 'text', text: '📋 メニュー', size: 'sm', color: themeColor, weight: 'bold' },
                 { type: 'text', text: `・${menu}`, size: 'sm', wrap: true }
               ]
-            },
+            }] : []),
             ...(r.staff_name ? [{
               type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
               contents: [
@@ -545,7 +568,7 @@ export async function POST(req: NextRequest) {
     const todayStr = today.toISOString().split('T')[0];
     const { data: reservations } = await (adminClient as any)
       .from('reservations')
-      .select('reservation_date,reservation_time,menu_name,submenu_name,staff_name,staff_no_preference,form_id')
+      .select('reservation_date,reservation_time,menu_name,submenu_name,staff_name,staff_no_preference,form_id,checkout_date,stay_nights')
       .eq('store_id', storeId)
       .eq('line_user_id', userId)
       .neq('status', 'cancelled')
@@ -571,9 +594,13 @@ export async function POST(req: NextRequest) {
     const eventList: object[] = [];
     reservations.forEach((r: any, index: number) => {
       const menu = r.submenu_name ? `${r.menu_name} > ${r.submenu_name}` : r.menu_name;
-      const timeMinutes = r.reservation_time ? formatTime(r.reservation_time) : '';
-      const [h, m] = timeMinutes.split(':');
-      const timeText = h && m ? `${parseInt(h)}時${parseInt(m)}分` : timeMinutes;
+      const dateLabel = r.checkout_date ? '🏨 ご宿泊' : '📅 日時';
+      const menuLines = menu && menu !== '未選択'
+        ? [
+          { type: 'text', text: '📋 メニュー', size: 'sm', color: themeColor, weight: 'bold', margin: 'md' },
+          { type: 'text', text: `・${menu}`, size: 'sm', wrap: true },
+        ]
+        : [];
       if (index > 0) {
         eventList.push({ type: 'separator', margin: 'lg' });
       }
@@ -583,10 +610,9 @@ export async function POST(req: NextRequest) {
           {
             type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
             contents: [
-              { type: 'text', text: '📅 日時', size: 'sm', color: themeColor, weight: 'bold' },
-              { type: 'text', text: `${formatDate(r.reservation_date)} ${timeText}`, size: 'sm', wrap: true },
-              { type: 'text', text: '📋 メニュー', size: 'sm', color: themeColor, weight: 'bold', margin: 'md' },
-              { type: 'text', text: `・${menu}`, size: 'sm', wrap: true },
+              { type: 'text', text: dateLabel, size: 'sm', color: themeColor, weight: 'bold' },
+              { type: 'text', text: reservationDateText(r), size: 'sm', wrap: true },
+              ...menuLines,
               { type: 'text', text: `キャンセル期限（${allowInfo.rules.deadline_hours} 時間前）を過ぎています。${store.phone ? `店舗（TEL: ${store.phone}）` : '店舗'}まで直接ご連絡ください。`, size: 'xs', wrap: true, color: '#b45309', margin: 'md' }
             ]
           }
@@ -597,10 +623,9 @@ export async function POST(req: NextRequest) {
         {
           type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
           contents: [
-            { type: 'text', text: '📅 日時', size: 'sm', color: themeColor, weight: 'bold' },
-            { type: 'text', text: `${formatDate(r.reservation_date)} ${timeText}`, size: 'sm', wrap: true },
-            { type: 'text', text: '📋 メニュー', size: 'sm', color: themeColor, weight: 'bold', margin: 'md' },
-            { type: 'text', text: `・${menu}`, size: 'sm', wrap: true },
+            { type: 'text', text: dateLabel, size: 'sm', color: themeColor, weight: 'bold' },
+            { type: 'text', text: reservationDateText(r), size: 'sm', wrap: true },
+            ...menuLines,
             ...(r.staff_name ? [
               { type: 'text', text: '👤 担当', size: 'sm', color: themeColor, weight: 'bold', margin: 'md' },
               { type: 'text', text: `${r.staff_name}${r.staff_no_preference ? '（指名なし）' : ''}`, size: 'sm', wrap: true }
@@ -642,8 +667,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   }
 
-  if (messageText.startsWith('キャンセル:') || messageText.startsWith('キャンセル: ')) {
-    const index = parseInt(messageText.replace(/^キャンセル:\s*/, '').trim(), 10);
+  const cancelCommand = /^キャンセル(確定)?:\s*(\d+)\s*$/.exec(messageText) || ((messageText.startsWith('キャンセル:') || messageText.startsWith('キャンセル確定:')) ? [messageText, messageText.startsWith('キャンセル確定:') ? '確定' : undefined, 'NaN'] : null);
+  if (cancelCommand) {
+    const cancelConfirmed = cancelCommand[1] === '確定';
+    const index = parseInt(String(cancelCommand[2]), 10);
     if (Number.isNaN(index)) {
       await replyFlexMessage(replyToken, accessToken, 'エラー', [
         makeSimpleBubble('エラー', 'キャンセル番号が正しくありません。\n\n「予約をキャンセル」と送ると予約一覧を確認できます。', store.name, themeColor)
@@ -682,9 +709,64 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
+    // 段階式キャンセル料: かかる期間なら金額を提示して確認（「キャンセル確定: N」で取り消す）。設定が deny なら店舗へ誘導
+    const cancelFee = resolveStayCancelFee(targetFormConfig, target);
+    const cancelDateLabel = reservationDateText(target);
+    if (cancelFee.percent > 0 && !cancelConfirmed) {
+      const feeText = `キャンセル料 ${cancelFee.percent}%${cancelFee.amount > 0 ? `（¥${cancelFee.amount.toLocaleString()}）` : ''}`;
+      if (cancelRules.self_cancel_with_fee === 'deny') {
+        await replyFlexMessage(replyToken, accessToken, 'キャンセル料が発生します', [
+          makeSimpleBubble(
+            'キャンセル料が発生します',
+            `このご予約（${cancelDateLabel}）のキャンセルには ${feeText} が発生します。\n\nこの期間のキャンセルは LINE では受け付けておりません。お手数ですが${store.phone ? `店舗（TEL: ${store.phone}）` : '店舗'}まで直接ご連絡ください。`,
+            store.name,
+            themeColor
+          )
+        ]);
+        return NextResponse.json({ success: true });
+      }
+      await replyFlexMessage(replyToken, accessToken, 'キャンセル料の確認', [{
+        type: 'bubble',
+        size: 'mega',
+        header: makeHeaderBox('【キャンセル料の確認】', store.name, themeColor),
+        body: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [
+            { type: 'text', text: 'このご予約のキャンセルにはキャンセル料が発生します。', size: 'sm', wrap: true, margin: 'md' },
+            {
+              type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
+              contents: [
+                { type: 'text', text: target.checkout_date ? '🏨 ご宿泊' : '📅 日時', size: 'sm', color: themeColor, weight: 'bold' },
+                { type: 'text', text: cancelDateLabel, size: 'sm', wrap: true },
+                { type: 'text', text: '💴 キャンセル料', size: 'sm', color: themeColor, weight: 'bold', margin: 'md' },
+                { type: 'text', text: feeText, size: 'md', weight: 'bold', wrap: true },
+              ]
+            },
+            { type: 'text', text: 'キャンセルする場合は下のボタンを押してください。キャンセル料のお支払い方法は店舗からご案内します。', size: 'xs', wrap: true, color: '#555555', margin: 'lg' },
+            {
+              type: 'button',
+              action: { type: 'message', label: 'キャンセル料に同意してキャンセルする', text: `キャンセル確定: ${index}` },
+              color: themeColor,
+              style: 'primary',
+              margin: 'md',
+              height: 'sm'
+            }
+          ],
+          paddingAll: '20px'
+        }
+      }]);
+      return NextResponse.json({ success: true });
+    }
+
     await (adminClient as any)
       .from('reservations')
-      .update({ status: 'cancelled' })
+      .update({
+        status: 'cancelled',
+        cancel_fee_percent: cancelFee.percent,
+        cancel_fee_amount: cancelFee.amount,
+        cancelled_at: new Date().toISOString(),
+      })
       .eq('id', target.id);
 
     // キャンセルルール: 店舗へメール通知（宛先: フォームの店舗側通知メール > オーナーのメール。失敗しても続行）
@@ -692,7 +774,7 @@ export async function POST(req: NextRequest) {
       const recipient = (targetFormConfig?.calendar_settings?.notification_email || '').trim() || (store.owner_email || '').trim();
       if (recipient) {
         try {
-          const mail = buildCancelNotificationEmail({ storeName: store.name || '', reservation: target, cancelledAt: new Date() });
+          const mail = buildCancelNotificationEmail({ storeName: store.name || '', reservation: target, cancelledAt: new Date(), cancelFee: cancelFee.percent > 0 ? cancelFee : null });
           const result = await sendEmail({ to: recipient, subject: mail.subject, body: mail.body, fromName: store.name || undefined });
           if (!result.ok) console.warn('[LINE Webhook] cancel notify mail skipped/failed:', result.error);
         } catch (e) {
@@ -755,10 +837,7 @@ export async function POST(req: NextRequest) {
     const menu = target.submenu_name
       ? `${target.menu_name} > ${target.submenu_name}`
       : target.menu_name;
-    const cancelTimeStr = target.reservation_time ? formatTime(target.reservation_time) : '';
-    const [ch, cm] = cancelTimeStr.split(':');
-    const cancelTimeText = ch && cm ? `${parseInt(ch)}時${parseInt(cm)}分` : cancelTimeStr;
-    const cancelDateText = `${formatDate(target.reservation_date)} ${cancelTimeText}`;
+    const cancelDateText = cancelDateLabel;
 
     // 通知編集: キャンセルした予約のフォーム設定から完了文言を取得
     const cancelDoneMessages = await getNotificationMessagesByFormId(
@@ -782,8 +861,14 @@ export async function POST(req: NextRequest) {
             contents: [
               { type: 'text', text: '📅 キャンセルした予約', size: 'sm', color: themeColor, weight: 'bold' },
               { type: 'text', text: cancelDateText, size: 'sm', wrap: true },
-              { type: 'text', text: '📋 メニュー', size: 'sm', color: themeColor, weight: 'bold', margin: 'md' },
-              { type: 'text', text: `・${menu}`, size: 'sm', wrap: true }
+              ...(menu && menu !== '未選択' ? [
+                { type: 'text', text: '📋 メニュー', size: 'sm', color: themeColor, weight: 'bold', margin: 'md' },
+                { type: 'text', text: `・${menu}`, size: 'sm', wrap: true }
+              ] : []),
+              ...(cancelFee.percent > 0 ? [
+                { type: 'text', text: '💴 キャンセル料', size: 'sm', color: themeColor, weight: 'bold', margin: 'md' },
+                { type: 'text', text: `${cancelFee.percent}%${cancelFee.amount > 0 ? `（¥${cancelFee.amount.toLocaleString()}）` : ''}。お支払い方法は店舗からご案内します。`, size: 'sm', wrap: true }
+              ] : [])
             ]
           }
         ],
@@ -854,8 +939,20 @@ export async function POST(req: NextRequest) {
 
     bodyContents.push({ type: 'separator', margin: 'lg' });
 
-    // 日時セクション
-    if (details.dateTime) {
+    // 宿泊セクション（《チェックイン》〜《宿泊料金》を送った宿泊予約）
+    if (details.dateTime && details.checkOut) {
+      bodyContents.push({
+        type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
+        contents: [
+          { type: 'text', text: '🏨 ご宿泊', size: 'sm', color: themeColor, weight: 'bold' },
+          { type: 'text', text: `チェックイン：${fmtDt(details.dateTime)}`, size: 'sm', wrap: true },
+          { type: 'text', text: `チェックアウト：${fmtDt(details.checkOut)}`, size: 'sm', wrap: true },
+          ...(details.stayNights ? [{ type: 'text', text: `泊数：${details.stayNights}`, size: 'sm', wrap: true }] : []),
+          ...(details.stayGuests ? [{ type: 'text', text: `人数：${details.stayGuests}`, size: 'sm', wrap: true }] : []),
+          ...(details.stayPrice ? [{ type: 'text', text: `宿泊料金：${details.stayPrice}`, size: 'sm', wrap: true }] : []),
+        ]
+      });
+    } else if (details.dateTime) {
       bodyContents.push({
         type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm',
         contents: [

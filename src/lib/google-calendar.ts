@@ -330,6 +330,14 @@ export interface ReservationEventParams {
   extraDurationMinutes?: number | null;
   // 所要時間（分）を直接指定する（管理画面からの予約内容編集で終了時刻を指定したとき）
   durationMinutesOverride?: number | null;
+  // 宿泊予約（booking_mode = 'stay'）: 終了はチェックアウト日のチェックアウト時刻。説明文はチェックイン / アウト / 泊数 / 人数 / 料金
+  stay?: {
+    checkoutDate: string;     // "YYYY-MM-DD"
+    checkOutTime: string;     // "10:00"
+    nights: number;
+    guestText?: string | null;
+    priceText?: string | null;
+  } | null;
 }
 
 /**
@@ -345,18 +353,30 @@ function buildReservationEventBody(params: ReservationEventParams) {
     : calculateDurationMinutes(params.selectedMenus, params.selectedOptions) + extraMinutes;
   const totalPrice = calculateTotalPrice(params.selectedMenus, params.selectedOptions);
   const startDate = new Date(`${params.reservationDate}T${params.reservationTime}:00+09:00`);
-  const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000);
+  const stay = params.stay || null;
+  const endDate = stay
+    ? new Date(`${stay.checkoutDate}T${stay.checkOutTime}:00+09:00`)
+    : new Date(startDate.getTime() + durationMinutes * 60 * 1000);
 
   const menuLines = buildMenuLines(params.selectedMenus);
   const menuText = menuLines.map(line => `・${line}`).join('\n');
 
-  // 希望日時セクション
-  const dateTimeLines = [`≪第一希望≫ ${params.reservationDate} ${params.reservationTime}`];
-  if (params.preferredDate2 && params.preferredTime2) {
-    dateTimeLines.push(`≪第二希望≫ ${params.preferredDate2} ${params.preferredTime2}`);
-  }
-  if (params.preferredDate3 && params.preferredTime3) {
-    dateTimeLines.push(`≪第三希望≫ ${params.preferredDate3} ${params.preferredTime3}`);
+  // 希望日時セクション（宿泊予約はチェックイン / チェックアウト / 泊数 / 人数 / 料金）
+  const dateTimeLines: string[] = [];
+  if (stay) {
+    dateTimeLines.push(`≪チェックイン≫ ${params.reservationDate} ${params.reservationTime}`);
+    dateTimeLines.push(`≪チェックアウト≫ ${stay.checkoutDate} ${stay.checkOutTime}`);
+    dateTimeLines.push(`≪泊数≫ ${stay.nights}泊`);
+    if (stay.guestText) dateTimeLines.push(`≪宿泊人数≫ ${stay.guestText}`);
+    if (stay.priceText) dateTimeLines.push(`≪宿泊料金≫ ${stay.priceText}`);
+  } else {
+    dateTimeLines.push(`≪第一希望≫ ${params.reservationDate} ${params.reservationTime}`);
+    if (params.preferredDate2 && params.preferredTime2) {
+      dateTimeLines.push(`≪第二希望≫ ${params.preferredDate2} ${params.preferredTime2}`);
+    }
+    if (params.preferredDate3 && params.preferredTime3) {
+      dateTimeLines.push(`≪第三希望≫ ${params.preferredDate3} ${params.preferredTime3}`);
+    }
   }
 
   // セクションごとに組み立て、空のセクションはスキップ
@@ -411,7 +431,9 @@ function buildReservationEventBody(params: ReservationEventParams) {
   const description = sections.join('\n\n');
 
   return {
-    summary: `予約: ${params.customerName}${params.staffName ? `（担当: ${params.staffName}）` : ''}`,
+    summary: stay
+      ? `宿泊: ${params.customerName}（${stay.nights}泊${stay.guestText ? `・${stay.guestText}` : ''}）`
+      : `予約: ${params.customerName}${params.staffName ? `（担当: ${params.staffName}）` : ''}`,
     start: {
       dateTime: startDate.toISOString(),
       timeZone: 'Asia/Tokyo'

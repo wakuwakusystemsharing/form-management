@@ -118,6 +118,78 @@ export interface ConditionalAdvanceRule {
   start_time?: string;   // その日の "HH:MM" から（未設定 = 営業開始から）
 }
 
+// ---- 宿泊モード（booking_mode = 'stay'。純粋ロジックは src/lib/stay-pricing.ts / src/lib/stay-availability.ts）----
+// 宿泊人数の区分（店舗が自由に作る。例: 6歳以上 / 0〜5歳 / 小学生）
+export interface StayGuestCategory {
+  id: string;
+  label: string;                                   // フォームに出す見出し
+  charge: 'adult' | 'free' | 'fixed_per_night';    // 有料人数に数える / 無料 / 1 人 1 泊 price 円を加算
+  price?: number;                                  // fixed_per_night のときの 1 人 1 泊の加算額
+  min: number;                                     // 選べる最小
+  max: number;                                     // 選べる最大
+  counts_toward_capacity: boolean;                 // 定員に数える
+}
+
+// 料金表: by_count = 有料人数ごとの 1 泊料金 / per_person = 1 人あたり単価 × 有料人数
+export interface StayRateTable {
+  id: string;
+  name: string;
+  mode: 'by_count' | 'per_person';
+  prices: { [count: string]: number };             // by_count: "1": 14000, "2": 20000 …
+  per_person_price?: number;                       // per_person
+  extra_person_price?: number;                     // by_count で表の最大人数を超えた 1 人あたりの加算（未設定 = 受けない）
+}
+
+export interface StaySeason {
+  id: string;
+  name: string;
+  start: string;          // "YYYY-MM-DD"（含む）
+  end: string;            // "YYYY-MM-DD"（含む）
+  rate_table_id: string;
+}
+
+export interface StayLongStayDiscount {
+  min_nights: number;                              // この泊数以上で適用
+  type: 'percent' | 'per_night' | 'total';         // 合計の % 引き / 1 泊あたり value 円引き / 合計から value 円引き
+  value: number;
+}
+
+export interface StayPricing {
+  rate_tables: StayRateTable[];                    // 最低 1 つ
+  default_rate_table_id: string;                   // どの条件にも当たらない夜に使う料金表
+  weekday_rate_table_ids?: { [dow: string]: string };  // "0"〜"6" → 料金表 ID（未設定の曜日は基本）
+  holiday_eve_rate_table_id?: string;              // 翌日が祝日の夜
+  holiday_rate_table_id?: string;                  // 祝日当日の夜
+  seasons?: StaySeason[];                          // 期間は重ならない（保存時に拒否）
+  date_rate_table_ids?: Array<{ date: string; rate_table_id: string }>;  // 特定日（最優先）
+  long_stay_discounts?: StayLongStayDiscount[];
+}
+
+export interface StaySettings {
+  check_in_time: string;                           // "15:00"（お客様は選ばない）
+  check_out_time: string;                          // "10:00"
+  check_in_time_options?: string[];                // 設定するとお客様がチェックイン時刻を選ぶ（空 = 固定表示）
+  min_nights: number;                              // 既定 1
+  max_nights: number;                              // 0 = 無制限
+  room_count: number;                              // 同じ夜に受けられる数。既定 1
+  closed_weekdays?: number[];                      // 休業の曜日（0=日〜6）。その夜は泊まれない
+  closed_dates?: string[];                         // 休業の特定日 "YYYY-MM-DD"
+  closed_ranges?: Array<{ start: string; end: string; label?: string }>;  // 休業の期間（両端含む）
+  total_capacity?: number;                         // 定員（counts_toward_capacity の区分の合計上限。未設定 = 各区分の max の合計）
+  guest_categories: StayGuestCategory[];           // 最低 1 つ（charge = 'adult' を 1 つ以上）
+  pricing: StayPricing;
+  show_price_on_calendar: boolean;                 // 既定 true（false = ◯ / 空室なし のみ）
+  price_note?: string;                             // 料金の注記（税込・1 室あたり 等）
+  block_calendar_ids?: string[];                   // 空き判定に含める追加の Google カレンダー ID（他媒体の iCal を購読したカレンダー等）
+}
+
+// 段階式キャンセル料（純粋ロジックは src/lib/cancel-rules.ts の resolveCancelFee）
+export interface CancelFeeTier {
+  days_before: number;    // チェックイン日（予約日）の何日前から（日付差。例: 7）
+  until_time?: string;    // "HH:MM" その日の何時まで（未設定 = その日いっぱい）
+  percent: number;        // 0〜100
+}
+
 // スタッフごとの「希望日時設定」: カレンダー表示モードの受付時間・予約ルールをスタッフ単位で上書きする。
 // 各項目は undefined = フォーム（営業時間・ルールタブ）の設定を使う。純粋ロジックは src/lib/staff-schedule.ts
 export interface StaffScheduleSettings {
@@ -292,7 +364,9 @@ export interface FormConfig {
     advance_booking_days: number;
     google_calendar_url?: string;
     // 日時選択モード
-    booking_mode?: 'calendar' | 'multiple_dates';  // カレンダー表示 or 第三希望日時選択
+    booking_mode?: 'calendar' | 'multiple_dates' | 'stay';  // カレンダー表示 / 第三希望日時選択 / 宿泊（チェックイン〜チェックアウト）
+    // 宿泊モード専用の設定（normalizeForm が sanitizeStaySettings で補完。他モードでも保持）
+    stay_settings?: StaySettings;
     // 予約イベントの色（Google Calendar の colorId '1'〜'11'。空/未設定 = カレンダーの既定色）
     event_color_id?: string;
     // カレンダー表示モードの時間間隔（分）。デフォルト 30
@@ -427,6 +501,9 @@ export interface FormConfig {
     policy_text?: string;             // キャンセル規定の文言（フォームの送信ボタンの上に表示）
     show_policy_on_form?: boolean;    // 上の文言をフォームに表示する
     notify_store_on_cancel?: boolean; // お客様が LINE でキャンセルしたとき店舗へメール通知（notification_email > owner_email）
+    fee_tiers?: CancelFeeTier[];      // 段階式キャンセル料（days_before の大きい順に判定。空 = キャンセル料なし）
+    fee_base?: 'stay' | 'total';      // キャンセル料の基準（宿泊料金のみ / オプション込みの合計）。既定 'stay'
+    self_cancel_with_fee?: 'confirm' | 'deny'; // キャンセル料がかかる期間の LINE キャンセル: 金額を確認して取り消す / 受け付けず店舗へ誘導。既定 'confirm'
   };
 
   // フォーム上の任意の位置に表示する画像/テキストブロック（詳細設定 → 画像orテキスト設置）

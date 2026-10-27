@@ -7,12 +7,21 @@
  */
 
 import type { Form } from '@/types/form';
+import { buildStayDetailRows, formatCancelFeeText, isStayReservation } from './stay-display';
 
 export interface DetailReservationInput {
   customer_name?: string | null;
   customer_phone?: string | null;
   reservation_date: string;
   reservation_time: string;
+  // 宿泊予約（booking_mode = 'stay'）。customer_info にも同じ内容が入る
+  checkout_date?: string | null;
+  stay_nights?: number | null;
+  guest_count?: number | null;
+  stay_price_total?: number | null;
+  status?: string | null;
+  cancel_fee_percent?: number | null;
+  cancel_fee_amount?: number | null;
   selected_menus?: Array<{
     menu_id?: string;
     menu_name?: string;
@@ -41,6 +50,15 @@ export interface DetailReservationInput {
     preferred_date3?: string;
     preferred_time3?: string;
     booking_mode?: string;
+    // 宿泊予約の内訳（src/lib/stay-reservation.ts の StayCustomerInfo）
+    checkout_date?: string;
+    stay_nights?: number;
+    check_in_time?: string;
+    check_out_time?: string;
+    guest_text?: string;
+    stay_subtotal?: number;
+    stay_discount?: { amount?: number; min_nights?: number } | null;
+    stay_price_total?: number;
   } | null;
   message?: string | null;
   staff_name?: string | null;
@@ -201,7 +219,10 @@ export function buildReservationDetailItems(config: FormConfigLike, reservation:
   if (show('datetime')) {
     const mode = reservation.booking_mode || info.booking_mode || cs?.booking_mode || 'calendar';
     const first = formatJpDateTime(reservation.reservation_date, reservation.reservation_time);
-    if (mode === 'multiple_dates') {
+    if (isStayReservation(reservation)) {
+      // 宿泊予約: ご来店日時の代わりに チェックイン / チェックアウト / 泊数 / 宿泊人数 / 宿泊料金
+      out.push(...buildStayDetailRows(reservation));
+    } else if (mode === 'multiple_dates') {
       out.push({ label: '第一希望日', value: first });
       const second = formatJpDateTime(info.preferred_date2, info.preferred_time2);
       if (second) out.push({ label: '第二希望日', value: second });
@@ -286,6 +307,10 @@ export function buildAdminReservationRows(config: FormConfigLike, reservation: A
     return opts?.find((o) => o.value === s)?.label || fallback[s] || s;
   };
 
+  // 宿泊予約: 基本情報カードに予約日時（チェックイン）が出るので、チェックアウト以降を先頭に出す
+  if (isStayReservation(reservation)) {
+    rows.push(...buildStayDetailRows(reservation, { includeCheckIn: false }));
+  }
   if (reservation.staff_name) {
     rows.push({
       label: '担当スタッフ',
@@ -331,5 +356,8 @@ export function buildAdminReservationRows(config: FormConfigLike, reservation: A
   if (third) rows.push({ label: '第三希望日', value: third });
   if ((reservation.message || '').trim()) rows.push({ label: 'メッセージ', value: String(reservation.message).trim() });
   if (info.notes && String(info.notes).trim()) rows.push({ label: 'メモ', value: String(info.notes).trim() });
+  // キャンセル済みで段階式キャンセル料が記録されていれば表示（請求は店舗が別途行う）
+  const cancelFee = formatCancelFeeText(reservation);
+  if (cancelFee) rows.push({ label: 'キャンセル料', value: cancelFee });
   return rows;
 }

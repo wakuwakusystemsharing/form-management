@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCancelDeadlineMessage,
   buildCancelNotificationEmail,
+  buildCancelPolicyText,
+  resolveCancelFee,
+  sanitizeFeeTiers,
   formatDeadlineJst,
   getCancelDeadline,
   isCancelAllowed,
@@ -12,15 +15,14 @@ import { StaticReservationGenerator } from '@/lib/static-generator-reservation';
 
 describe('cancel-rules（キャンセルルール設定）', () => {
   it('resolveCancelRules: 欠損・不正値は既定（制限なし / 表示なし / 通知なし）', () => {
-    expect(resolveCancelRules(undefined)).toEqual({ deadline_hours: 0, policy_text: '', show_policy_on_form: false, notify_store_on_cancel: false });
-    expect(resolveCancelRules({ cancel_rules: { deadline_hours: -5, policy_text: 3 as unknown as string, show_policy_on_form: 'yes' as unknown as boolean } })).toEqual({
-      deadline_hours: 0, policy_text: '', show_policy_on_form: false, notify_store_on_cancel: false,
-    });
+    const base = { deadline_hours: 0, policy_text: '', show_policy_on_form: false, notify_store_on_cancel: false, fee_tiers: [], fee_base: 'stay', self_cancel_with_fee: 'confirm' };
+    expect(resolveCancelRules(undefined)).toEqual(base);
+    expect(resolveCancelRules({ cancel_rules: { deadline_hours: -5, policy_text: 3 as unknown as string, show_policy_on_form: 'yes' as unknown as boolean } })).toEqual(base);
     expect(resolveCancelRules({ cancel_rules: { deadline_hours: 24.9, policy_text: '当日キャンセル不可', show_policy_on_form: true, notify_store_on_cancel: true } })).toEqual({
-      deadline_hours: 24, policy_text: '当日キャンセル不可', show_policy_on_form: true, notify_store_on_cancel: true,
+      ...base, deadline_hours: 24, policy_text: '当日キャンセル不可', show_policy_on_form: true, notify_store_on_cancel: true,
     });
     // normalizeForm でも補完される
-    expect(normalizeForm({ id: 'f', store_id: 's', config: {} }).config.cancel_rules).toEqual({ deadline_hours: 0, policy_text: '', show_policy_on_form: false, notify_store_on_cancel: false });
+    expect(normalizeForm({ id: 'f', store_id: 's', config: {} }).config.cancel_rules).toEqual(base);
   });
 
   it('期限: 予約日時（JST）の N 時間前。制限なしは null', () => {
@@ -72,5 +74,65 @@ describe('cancel-rules（キャンセルルール設定）', () => {
     expect(html.indexOf('id="cancel-policy"')).toBeLessThan(html.indexOf('id="submit-button"'));
     const off = normalizeForm({ ...base, config: { ...base.config, cancel_rules: { deadline_hours: 24, policy_text: 'x', show_policy_on_form: false } } });
     expect(gen.generateHTML(off.config, off.id, off.store_id, 'preview')).not.toContain('id="cancel-policy"');
+  });
+});
+
+describe('cancel-rules: 段階式キャンセル料（fee_tiers）', () => {
+  // 7 日前以前 無料 / 2〜6 日前 50% / 前日・当日 100%
+  const tiers = [{ days_before: 7, percent: 0 }, { days_before: 2, percent: 50 }, { days_before: 0, percent: 100 }];
+  const rules = { fee_tiers: tiers, fee_base: 'stay' as const };
+  const jst = (s: string) => new Date(`${s}+09:00`);
+
+  it('sanitizeFeeTiers: 不正値を除き、days_before の大きい順に並べ、% は 0〜100 の整数。同じ日数 + 時刻は後勝ち', () => {
+    expect(sanitizeFeeTiers(undefined)).toEqual([]);
+    expect(sanitizeFeeTiers([
+      { days_before: 0, percent: 100 },
+      { days_before: 7, percent: -1 },
+      { days_before: 2, percent: 50.7, until_time: '25:00' },
+      { days_before: 1, percent: 30, until_time: '18:00' },
+      { days_before: 'x', percent: 10 },
+      { days_before: 2, percent: 55 },
+    ])).toEqual([
+      { days_before: 7, percent: 0 },
+      { days_before: 2, percent: 55 },
+      { days_before: 1, until_time: '18:00', percent: 30 },
+      { days_before: 0, percent: 100 },
+    ]);
+    // resolveCancelRules でも補完される
+    expect(resolveCancelRules({ cancel_rules: { fee_tiers: tiers, fee_base: 'total', self_cancel_with_fee: 'deny' } })).toMatchObject({ fee_tiers: tiers, fee_base: 'total', self_cancel_with_fee: 'deny' });
+    expect(resolveCancelRules({ cancel_rules: { fee_base: 'x' as unknown as 'stay', self_cancel_with_fee: 'y' as unknown as 'deny' } })).toMatchObject({ fee_base: 'stay', self_cancel_with_fee: 'confirm' });
+  });
+
+  it('resolveCancelFee: 日付差で段階を選ぶ（7 / 6 / 2 / 1 / 0 日前・過ぎた後）。金額は 10 円未満切り捨て', () => {
+    const checkin = '2026-11-10';
+    expect(resolveCancelFee(rules, checkin, jst('2026-11-03T23:00:00'), 26000)).toMatchObject({ percent: 0, amount: 0, daysBefore: 7 });
+    expect(resolveCancelFee(rules, checkin, jst('2026-11-04T00:00:00'), 26000)).toMatchObject({ percent: 50, amount: 13000, daysBefore: 6 });
+    expect(resolveCancelFee(rules, checkin, jst('2026-11-08T12:00:00'), 26000)).toMatchObject({ percent: 50, daysBefore: 2 });
+    expect(resolveCancelFee(rules, checkin, jst('2026-11-09T09:00:00'), 26000)).toMatchObject({ percent: 100, amount: 26000, daysBefore: 1 });
+    expect(resolveCancelFee(rules, checkin, jst('2026-11-10T14:00:00'), 26000)).toMatchObject({ percent: 100, daysBefore: 0 });
+    expect(resolveCancelFee(rules, checkin, jst('2026-11-11T14:00:00'), 26000)).toMatchObject({ percent: 100, daysBefore: -1 });
+    expect(resolveCancelFee(rules, checkin, jst('2026-11-08T12:00:00'), 14555).amount).toBe(7270);
+    expect(resolveCancelFee({ fee_tiers: [] }, checkin, jst('2026-11-10T00:00:00'), 26000)).toEqual({ percent: 0, amount: 0, daysBefore: 0, tier: null });
+  });
+
+  it('resolveCancelFee: until_time 付きの段階（前日 18:00 まで 50%、以降 100%）', () => {
+    const r = { fee_tiers: [{ days_before: 7, percent: 0 }, { days_before: 1, until_time: '18:00', percent: 50 }, { days_before: 0, percent: 100 }] };
+    expect(resolveCancelFee(r, '2026-11-10', jst('2026-11-09T17:59:00'), 20000).percent).toBe(50);
+    expect(resolveCancelFee(r, '2026-11-10', jst('2026-11-09T18:00:00'), 20000).percent).toBe(100);
+    expect(resolveCancelFee(r, '2026-11-10', jst('2026-11-05T23:00:00'), 20000).percent).toBe(50); // 5 日前は until_time に関係なく 50%
+    // 最初の段階（7 日前以前）が時刻付きでも、それより前の日は無料
+    const r2 = { fee_tiers: [{ days_before: 7, until_time: '12:00', percent: 0 }, { days_before: 0, percent: 50 }] };
+    expect(resolveCancelFee(r2, '2026-11-10', jst('2026-11-01T20:00:00'), 20000).percent).toBe(0);
+    expect(resolveCancelFee(r2, '2026-11-10', jst('2026-11-03T11:59:00'), 20000).percent).toBe(0);
+    expect(resolveCancelFee(r2, '2026-11-10', jst('2026-11-03T12:00:00'), 20000).percent).toBe(50);
+  });
+
+  it('buildCancelPolicyText: 段階表から規定文を自動生成', () => {
+    expect(buildCancelPolicyText({ fee_tiers: tiers })).toBe('7日前まで: 無料\n2〜6日前: 50%\n前日・当日: 100%');
+    expect(buildCancelPolicyText({ fee_tiers: [{ days_before: 7, percent: 0 }, { days_before: 1, until_time: '18:00', percent: 50 }, { days_before: 0, percent: 100 }] }))
+      .toBe('7日前まで: 無料\n2〜6日前・前日18:00まで: 50%\n前日18:00以降・当日: 100%');
+    expect(buildCancelPolicyText({ fee_tiers: [{ days_before: 3, percent: 0 }, { days_before: 0, percent: 100 }] })).toBe('3日前まで: 無料\n2日前〜当日: 100%');
+    expect(buildCancelPolicyText({ fee_tiers: [{ days_before: 1, percent: 100 }] })).toBe('全期間: 100%');
+    expect(buildCancelPolicyText({ fee_tiers: [] })).toBe('');
   });
 });
