@@ -725,6 +725,7 @@ export async function GET(req, { params }) {
 - 生成 HTML の判定: `renderCalendar()` は `getRuleContexts()` が返す「設定の組」ごとに `evaluateSlotRules(ctx, …)`（受付期間 / 営業時間 / ✕にする時間帯 / 祝日 / 営業時間超過）を判定し、**1 つでも通れば候補**。指名あり = そのスタッフの設定 1 つ、指名なし / 未選択 = `getCapableCalendarStaff()`（メニューオプション設定で非表示にしたメニュー・オプションを含む予約では候補にしない）の各スタッフの設定。指名なしの空き判定は「ルールを満たし、かつカレンダーが空いているスタッフが 1 人でもいれば〇」。希望日時設定を持つスタッフがいない（または第三希望日時モード）ときは設定の組がフォーム設定 1 つになり**従来どおり**。時間間隔・追加で表示する分は指名中のスタッフの設定、それ以外はフォームの設定（`getPrimaryCalendarSettings`）。`getDayBusinessHoursFor(cs, date)` / `isBlockedTimeSlotFor` / `shouldBlockAsHolidayWith(cs, date)` が設定指定版、従来名は薄いラッパー
 - 編集 UI: `src/components/FormEditor/Reservation/StaffScheduleEditor.tsx`（各項目に「フォームの設定を使う / このスタッフ用に設定」。個別にした時点でフォームの現在値をコピー。`HOLIDAY_TYPES` は `src/lib/holiday-types.ts` に共通化）。`MenuStructureEditor` の「希望日時設定」ボタンは上書き項目数を `（N項目 個別設定）` で表示。「更新して他のフォームにも反映」の「詳細設定（スタッフ選択）」はスタッフの希望日時設定ごとコピーする
 - サーバー側（予約 API の空き再チェック・availability API）はカレンダーの予定だけを見るので変更なし
+- **スタッフの空き再確認は freeBusy ではなく予定一覧（`getBusyCalendarsByEvents` / 純粋ロジック `src/lib/staff-availability.ts`）で行う**。freeBusy は Google カレンダーの終日予定（既定で「予定なし」扱い）を返さないため、終日の「予約不可」を入れたスタッフが「指名なし」で割り当てられる事象があった。終日予定は JST の 1 日全体を埋まり扱い（availability API も終日予定を `YYYY-MM-DDT00:00:00+09:00` で返す）。指名なしで全員の確認ができないとき（API 失敗）は割り当てず 409 `slot_taken`
 
 **キャンセルルール設定 (`config.cancel_rules`。営業時間・ルール → 予約ルール設定とご予約内容の間):**
 - `deadline_hours`（0 = いつでも）: 予約日時（JST）の N 時間前までお客様自身が LINE の「予約をキャンセル」でキャンセルできる。期限後は一覧にボタンを出さず「店舗へご連絡ください（TEL）」の案内、「キャンセル: N」で来ても案内だけ返して取り消さない。**店舗管理画面（`PATCH /api/reservations/{id}`）からのキャンセルには適用しない**
