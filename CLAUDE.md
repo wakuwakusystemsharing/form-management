@@ -162,6 +162,13 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - BasicInfoEditor / SurveyFormEditor の基本情報タブで ON/OFF + 文言編集
 - 静的ジェネレータが `liff.sendMessages([msg1, msg2])` で配列送信
 
+**選択肢ごとの「送信時の追加メッセージ」と予約カスタム項目のタグ（設計: `docs/選択肢ごとの追加メッセージ_実装設計.md`）:**
+- 選択肢の「設定」ボタン → 「送信時に追加のメッセージを送る」（ON/OFF + 文言。型 `OptionExtraMessage { enabled, text }`、フィールド名 `extra_message`）。その選択肢が選ばれた状態で送信されると、本文（+ 2 通目）に続けて LINE トークへ送る。対象: アンケートの質問 / 追加質問（入れ子含む）の選択肢（`SurveyQuestionOption.extra_message`）、予約フォームのカスタム項目の選択肢・追加質問の選択肢・メニュー / サブメニュー / オプション（`MenuItem` / `SubMenuItem` / `MenuOption.extra_message`）。抽選の事前質問では出さない（`allowExtraMessage={false}`）。Web 予約フォーム（LIFF なし）では送らない
+- **LIFF `liff.sendMessages` は 1 回の送信で最大 5 通**（`LIFF_MAX_MESSAGES`）。保存時に「同時に選ばれうる最大の組み合わせ」を数え、超える設定は保存できない（`countSurveyMaxLineMessages` / `countReservationMaxLineMessages` → `validateLiffMessageLimit`。`FormEditModal` のトーストと `PUT /api/forms/{id}` / `PUT /api/surveys/{id}` の 400 の両方）。単一選択 / ドロップダウンは最も多い選択肢 1 つ、複数選択は全部、カテゴリーまたぎ複数選択は上限数ぶんのメニュー、非表示の項目も表示されうるものとして数える（保守的）。送信時は保険として `capLiffMessages`（同じ文言は 1 回、あふれた分は最後の 1 通に空行区切りで連結）
+- 純粋ロジック `src/lib/extra-messages.ts`（`resolveExtraMessage` / `capLiffMessages` / 件数計算 / `EXTRA_MESSAGE_RUNTIME_JS` = 埋め込み JS の `xmResolve` / `xmCapMessages`）。生成 HTML の収集はアンケート `svCollectExtraMessages(hiddenIds)`（非表示の質問・隠れた追加質問は数えない。`svSelectedValues` で入れ子をたどる）/ 予約 `BookingForm.collectExtraMessages()`（`getSelectedOwnerIds` + 選択中サブメニュー + `state.customFields`。非表示のカスタム項目・隠れた追加質問は数えない）。編集 UI は共通部品 `src/components/FormEditor/OptionExtraMessageEditor.tsx`（`optionSettingsButtonLabel` で「設定(N)」）。Vitest: `extra-messages.test.ts` / `extra-messages-static-forms.test.ts`
+- **予約カスタム項目の選択肢タグ**（`custom_fields[].options[].tags`。アンケートの選択肢タグと同じ）: カスタム項目の選択肢の「設定」モーダルに「タグ」（`TagInput`）。`POST /api/reservations` が予約保存後に `applyReservationCustomFieldTags()`（`src/lib/reservation-tags-apply.ts`。顧客は予約と同じ `findCustomerByLineOrPhone` で特定 = 予約に紐付いた顧客。失敗しても予約は成功扱い）でタグをマージ。集計は `src/lib/reservation-tags.ts` の `collectReservationCustomFieldTags(config, customer_info.custom_fields)`（追加質問の選択肢は対象外）
+- 「更新して他のフォームにも反映」ではメニュー構成 / カスタム項目セクションに含まれてそのままコピーされる
+
 **Web 予約フォーム自動メール通知:**
 - `form_type === 'web'` のフォーム送信時、お客様 / 店舗の両方に予約確認メールを自動送信
 - 送信エンジン: Resend（`src/lib/email-sender.ts`）。`RESEND_API_KEY` 未設定時はログ出力のみでスキップ

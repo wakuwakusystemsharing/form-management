@@ -13,6 +13,7 @@ import { STAFF_SCHEDULE_RUNTIME_JS } from './staff-schedule';
 import { ADVANCE_RULES_RUNTIME_JS } from './advance-rules';
 import { STAY_CSS, STAY_RUNTIME_JS, renderStayFieldHtml } from './stay-runtime-js';
 import { buildCancelPolicyText } from './cancel-rules';
+import { EXTRA_MESSAGE_RUNTIME_JS } from './extra-messages';
 
 export class StaticReservationGenerator {
   /**
@@ -283,6 +284,7 @@ ${SEARCHABLE_SELECT_RUNTIME_JS}
 ${STAFF_SCHEDULE_RUNTIME_JS}
 ${ADVANCE_RULES_RUNTIME_JS}
 ${STAY_RUNTIME_JS}
+${EXTRA_MESSAGE_RUNTIME_JS}
 function formatDateTimeForDisplay(value) {
     // "2026-04-30T15:08[:00]" → "2026年04月30日 15:08"
     // "2026-04-30"            → "2026年04月30日"
@@ -853,6 +855,47 @@ class BookingForm {
         });
         this._aqEntries = entries;
         return entries;
+    }
+
+    // 選択中のメニュー / サブメニュー / オプション / カスタム項目・追加質問の選択肢に設定された
+    // 「送信時の追加メッセージ」（extra_message）の文言を、フォーム上の並び順で集める
+    // （非表示のカスタム項目・隠れている追加質問の選択は数えない。純粋ロジックは src/lib/extra-messages.ts）
+    collectExtraMessages() {
+        const out = [];
+        const push = (raw) => { const t = xmResolve(raw); if (t) out.push(t); };
+        const sel = this.getSelectedOwnerIds();
+        const subIds = [];
+        if (this.state.selectedSubmenu && this.state.selectedSubmenu.id) subIds.push(this.state.selectedSubmenu.id);
+        Object.values(this.state.selectedSubMenus || {}).forEach(id => { if (id && subIds.indexOf(id) === -1) subIds.push(id); });
+        const processMenu = (menu) => {
+            if (!menu) return;
+            if (sel.menuIds.indexOf(menu.id) !== -1) {
+                push(menu.extra_message);
+                (menu.sub_menu_items || []).forEach(sm => { if (sm && subIds.indexOf(sm.id) !== -1) push(sm.extra_message); });
+            }
+            (menu.options || []).forEach(opt => { if (opt && sel.optionIds.indexOf(opt.id) !== -1) push(opt.extra_message); });
+        };
+        (this.config.menu_structure?.categories || []).forEach(cat => {
+            (cat.menus || []).forEach(processMenu);
+            (cat.options || []).forEach(opt => { if (opt && sel.optionIds.indexOf(opt.id) !== -1) push(opt.extra_message); });
+        });
+        (this.config.menu_structure?.menus || []).forEach(processMenu);
+        const valuesOf = (fieldId) => {
+            const v = (this.state.customFields || {})[fieldId];
+            return Array.isArray(v) ? v : (v ? [v] : []);
+        };
+        const hidden = this.getHiddenCustomFieldIds();
+        (this.config.custom_fields || []).forEach(field => {
+            if (!field || hidden.indexOf(field.id) !== -1) return;
+            const vals = valuesOf(field.id);
+            (field.options || []).forEach(opt => { if (opt && vals.indexOf(opt.value) !== -1) push(opt.extra_message); });
+        });
+        this.getAdditionalQuestionEntries().forEach(entry => {
+            if (!this.isAdditionalQuestionVisible(entry, sel)) return;
+            const vals = valuesOf(entry.field.id);
+            (entry.field.options || []).forEach(opt => { if (opt && vals.indexOf(opt.value) !== -1) push(opt.extra_message); });
+        });
+        return out;
     }
 
     // 現在選択中のメニューID / オプションID の一覧
@@ -3115,11 +3158,14 @@ class BookingForm {
             // LIFF メッセージ送信（Web予約フォームやLIFF未初期化の場合はスキップ）
             try {
                 if (this.state.lineUserId && typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
-                    const messages = [{ type: 'text', text: messageText }];
+                    const texts = [messageText];
                     const sm = this.config.basic_info?.second_message;
                     if (sm && sm.enabled === true && typeof sm.text === 'string' && sm.text.trim()) {
-                        messages.push({ type: 'text', text: sm.text.trim() });
+                        texts.push(sm.text.trim());
                     }
+                    // 選ばれた選択肢の「送信時の追加メッセージ」（本文・2 通目と合わせて最大 5 通に収める）
+                    this.collectExtraMessages().forEach(t => texts.push(t));
+                    const messages = xmCapMessages(texts).map(t => ({ type: 'text', text: t }));
                     liff.sendMessages(messages).then(() => {
                         // メッセージ送信成功後にウィンドウを閉じる
                         const completeMessage = (typeof this.config.basic_info?.complete_message === 'string' && this.config.basic_info.complete_message.trim())

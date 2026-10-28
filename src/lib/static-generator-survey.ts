@@ -4,6 +4,7 @@ import { renderColoredTextHtml } from './colored-text';
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MD_TIME_SELECT_DISABLED_CSS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { SEARCHABLE_SELECT_CSS, SEARCHABLE_SELECT_RUNTIME_JS, renderSearchableSelectHtml, type SearchableSelectOption } from './searchable-select-runtime-js';
 import { FOLLOW_UP_NESTED_CSS, FOLLOW_UP_RUNTIME_JS, renderFollowUpBlocksHtml } from './survey-follow-up-runtime-js';
+import { EXTRA_MESSAGE_RUNTIME_JS } from './extra-messages';
 import { getRequiredChoices, getVisibleChoices, normalizeMultipleDatesSettings } from './multiple-dates-settings';
 
 /**
@@ -103,6 +104,7 @@ export class StaticSurveyGenerator {
         ${BIRTHDAY_RUNTIME_JS}
         ${SEARCHABLE_SELECT_RUNTIME_JS}
         ${FOLLOW_UP_RUNTIME_JS}
+        ${EXTRA_MESSAGE_RUNTIME_JS}
         document.addEventListener('DOMContentLoaded', function () { bdInitAll(); ssInitAll(); });
 
         // ---- 質問型「第三希望日時選択」（予約フォームの日時選択モードと同じ設定・同じ選択 UI） ----
@@ -418,6 +420,33 @@ export class StaticSurveyGenerator {
             return out;
         }
 
+        // ===== 選択肢ごとの「送信時の追加メッセージ」（extra_message。純粋ロジックは src/lib/extra-messages.ts） =====
+        // 表示中の質問で選ばれている選択肢（追加質問の選択肢も入れ子でたどる）の追加メッセージ文言を上から順に集める
+        function svCollectExtraMessages(hiddenIds) {
+            var hidden = Array.isArray(hiddenIds) ? hiddenIds : svGetHiddenQuestionIds();
+            var out = [];
+            function fromOptions(qid, options, path, selected) {
+                (options || []).forEach(function (opt, i) {
+                    if (!opt) return;
+                    var v = opt.value || opt.label;
+                    if (selected.indexOf(v) === -1) return;
+                    var text = xmResolve(opt.extra_message);
+                    if (text) out.push(text);
+                    fuRawList(opt).forEach(function (fu, j) {
+                        if (!fuEnabled(fu) || !fuIsChoice(fu)) return;
+                        var p = path.concat([i, j]);
+                        fromOptions(qid, fu.options, p, svSelectedValues(qid, p));
+                    });
+                });
+            }
+            SURVEY_QUESTIONS.forEach(function (q) {
+                if (!q || hidden.indexOf(q.id) !== -1) return;
+                if (q.type !== 'radio' && q.type !== 'checkbox' && q.type !== 'select') return;
+                fromOptions(q.id, q.options, [], svSelectedValues(q.id, []));
+            });
+            return out;
+        }
+
         // 非表示にする質問 ID（トリガー元の質問が非表示なら不成立 = 連鎖。結果が変わらなくなるまで繰り返す）
         function svGetHiddenQuestionIds() {
             var hidden = [];
@@ -611,11 +640,14 @@ export class StaticSurveyGenerator {
                 return;
             }
 
-            const surveyMessages = [{ type: 'text', text: messageText.trim() }];${
+            const surveyTexts = [messageText.trim()];${
               safeConfig.basic_info?.second_message?.enabled && typeof safeConfig.basic_info?.second_message?.text === 'string' && safeConfig.basic_info.second_message.text.trim()
-                ? `\n            surveyMessages.push({ type: 'text', text: ${JSON.stringify(safeConfig.basic_info.second_message.text.trim())} });`
+                ? `\n            surveyTexts.push(${JSON.stringify(safeConfig.basic_info.second_message.text.trim())});`
                 : ''
             }
+            // 選ばれた選択肢の「送信時の追加メッセージ」（本文・2 通目と合わせて最大 5 通に収める）
+            svCollectExtraMessages(svHidden).forEach(function (t) { surveyTexts.push(t); });
+            const surveyMessages = xmCapMessages(surveyTexts).map(function (t) { return { type: 'text', text: t }; });
             try {
                 await liff.sendMessages(surveyMessages);
                 alert('ご記入ありがとうございます。');
