@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { validateFormExtraMessages } from '@/lib/extra-messages';
 import { NextRequest } from 'next/server';
 import fs from 'fs';
 import path from 'path';
@@ -90,6 +91,14 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
     const env = getAppEnvironment();
+
+    // 選択肢ごとの「送信時の追加メッセージ」が LIFF の上限（本文を含めて 5 通）に収まるか
+    if (body?.config) {
+      const limitError = validateFormExtraMessages(body.config, 'survey');
+      if (limitError) {
+        return NextResponse.json({ error: limitError }, { status: 400 });
+      }
+    }
     
     // 現在のユーザーIDを取得
     const currentUserId = await getCurrentUserId(request);

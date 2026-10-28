@@ -20,6 +20,7 @@ import FormSnapshotDialog from './FormSnapshotDialog';
 import { Copy, Eye, History, Save, Upload } from 'lucide-react';
 
 import { getReservationFormName } from '@/lib/form-display-name';
+import { validateFormExtraMessages } from '@/lib/extra-messages';
 export type EditableForm = Form | SurveyForm | LotteryForm;
 
 interface FormEditModalProps {
@@ -78,12 +79,22 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
     return !!form.config && 'questions' in form.config && !isLotteryForm(form);
   };
 
+  // 選択肢ごとの「送信時の追加メッセージ」が LIFF の上限（本文を含めて 5 通）を超える設定は保存しない
+  const checkExtraMessageLimit = (): boolean => {
+    if (isLotteryForm(editingForm)) return true;
+    const error = validateFormExtraMessages(editingForm.config, isSurvey(editingForm) ? 'survey' : 'reservation');
+    if (!error) return true;
+    toast({ title: '保存できません', description: error, variant: 'destructive' });
+    return false;
+  };
+
   const handleSaveDeployAndSync = async () => {
     const ok = await handleSaveAndDeploy();
     if (ok) setSyncOpen(true);
   };
 
   const handleSave = async () => {
+    if (!checkExtraMessageLimit()) return;
     try {
       setIsSaving(true);
       await onSave(editingForm);
@@ -104,6 +115,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
   };
 
   const handleSaveAndDeploy = async (): Promise<boolean> => {
+    if (!checkExtraMessageLimit()) return false;
     let succeeded = false;
     try {
       setIsSaving(true);

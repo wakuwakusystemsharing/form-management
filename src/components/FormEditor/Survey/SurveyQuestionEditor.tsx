@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { SurveyQuestion, SurveyQuestionType, SurveyQuestionOption, SurveyContentBlock } from '@/types/survey';
 import OptionFollowUpsEditor, { followUpButtonLabel } from './SurveyFollowUpEditor';
+import OptionExtraMessageEditor, { optionSettingsButtonLabel } from '../OptionExtraMessageEditor';
 import SurveyQuestionDisplaySettings from './SurveyQuestionDisplaySettings';
 import { countFollowUpsDeep, createFollowUp, getOptionFollowUps, setOptionFollowUps } from '@/lib/survey-follow-ups';
 import {
@@ -24,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowUp, ArrowDown, X, Plus, GripVertical, MessageSquarePlus, Tag } from 'lucide-react';
+import { ArrowUp, ArrowDown, X, Plus, GripVertical, MessageSquarePlus, Settings2, Tag } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,9 +47,11 @@ interface SurveyQuestionEditorProps {
   storeId?: string;
   /** 回答タイプに「第三希望日時選択」を出すか（既定 true。抽選フォームの事前質問では使わない） */
   allowMultipleDates?: boolean;
+  /** 選択肢の「設定」（送信時の追加メッセージ）を出すか（既定 true。抽選フォームの事前質問では送れないので出さない） */
+  allowExtraMessage?: boolean;
 }
 
-export default function SurveyQuestionEditor({ questions, onChange, contentBlocks, onContentBlocksChange, storeId, allowMultipleDates = true }: SurveyQuestionEditorProps) {
+export default function SurveyQuestionEditor({ questions, onChange, contentBlocks, onContentBlocksChange, storeId, allowMultipleDates = true, allowExtraMessage = true }: SurveyQuestionEditorProps) {
   const [deleteIndex, setDeleteIndex] = React.useState<number | null>(null);
   // 説明文の文字色ツールバー用（質問 ID → textarea）
   const descriptionRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
@@ -148,6 +151,17 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
   const toggleTagPanel = (questionId: string, optIndex: number) => {
     const key = `${questionId}:${optIndex}`;
     setOpenTagPanels((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  // 選択肢の「設定」パネル（送信時の追加メッセージ）の開閉（`${questionId}:${optIndex}`）
+  const [openSettingPanels, setOpenSettingPanels] = useState<Set<string>>(new Set());
+  const toggleSettingPanel = (questionId: string, optIndex: number) => {
+    const key = `${questionId}:${optIndex}`;
+    setOpenSettingPanels((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
@@ -411,6 +425,19 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                                 <MessageSquarePlus className="mr-1 h-4 w-4" />
                                 {followUpButtonLabel(opt)}
                               </Button>
+                              {allowExtraMessage && (
+                                <Button
+                                  type="button"
+                                  variant={opt.extra_message?.enabled === true ? 'default' : 'outline'}
+                                  size="sm"
+                                  onClick={() => toggleSettingPanel(q.id, optIndex)}
+                                  title="この選択肢の設定（送信時に追加で送るメッセージ）"
+                                  className="shrink-0"
+                                >
+                                  <Settings2 className="mr-1 h-4 w-4" />
+                                  {optionSettingsButtonLabel(opt.extra_message)}
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -446,6 +473,24 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                                 </div>
                               </div>
                             )}
+                            {/* 選択肢の設定パネル（送信時の追加メッセージ） */}
+                            {allowExtraMessage && openSettingPanels.has(`${q.id}:${optIndex}`) && (
+                              <div className="mt-2 ml-8 space-y-2">
+                                <OptionExtraMessageEditor
+                                  targetLabel={opt.label || `選択肢 ${optIndex + 1}`}
+                                  value={opt.extra_message}
+                                  idPrefix={`opt-xm-${q.id}-${optIndex}`}
+                                  onChange={(extra_message) => {
+                                    const newOptions = [...(q.options || [])];
+                                    newOptions[optIndex] = { ...newOptions[optIndex], extra_message };
+                                    updateOptions(index, newOptions);
+                                  }}
+                                />
+                                <div className="flex justify-end">
+                                  <Button type="button" variant="ghost" size="sm" onClick={() => toggleSettingPanel(q.id, optIndex)}>閉じる</Button>
+                                </div>
+                              </div>
+                            )}
                             {/* 追加質問の設定パネル（複数・入れ子） */}
                             {fuOpen && (
                               <OptionFollowUpsEditor
@@ -455,6 +500,7 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                                 depth={1}
                                 idPrefix={`fu-${q.id}-${optIndex}`}
                                 storeId={storeId}
+                                allowExtraMessage={allowExtraMessage}
                                 onChange={(nextOpt) => {
                                   const newOptions = [...(q.options || [])];
                                   newOptions[optIndex] = nextOpt;

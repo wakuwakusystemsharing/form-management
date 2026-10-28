@@ -1,4 +1,4 @@
-import { StaticDeploy, MultipleDatesSettings } from './form';
+import { StaticDeploy, MultipleDatesSettings, OptionExtraMessage } from './form';
 import type { SelectSearchSettings } from '@/lib/searchable-select';
 
 // multiple_dates = 第三希望日時選択（予約フォームの日時選択モードと同じ設定・同じ選択 UI。第一〜第三希望の日付 + 時間）
@@ -40,6 +40,8 @@ export interface SurveyQuestionOption {
   kana?: string;
   // この選択肢を選んで送信した回答者（LINE ユーザー ID で紐付く顧客）に付与するタグ（顧客管理のタグと同じ）
   tags?: string[];
+  // この選択肢が選ばれた状態で送信されたときに LINE トークへ追加で送るメッセージ（抽選の事前質問では使わない）
+  extra_message?: OptionExtraMessage;
 }
 
 export interface SurveyQuestion {
