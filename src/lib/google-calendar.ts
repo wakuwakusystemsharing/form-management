@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { busyCalendarIdsFromEvents, type CalendarEventLike } from './staff-availability';
 import { createAdminClient } from './supabase';
 import { decryptRefreshToken } from './google-calendar-token';
 
@@ -301,6 +302,46 @@ export async function getBusyCalendars(
     }
   }
   return busy;
+}
+
+/**
+ * 予約枠と重なる予定があるカレンダー ID の集合を「予定一覧（events.list）」で求める。
+ * getBusyCalendars（freeBusy）は Google カレンダーの終日予定（既定で「予定なし」扱い）を
+ * 返さないため、スタッフの空き再確認にはこちらを使う（終日予定は JST の 1 日全体を埋まり扱い）。
+ * 取得に失敗したカレンダーは安全側で埋まり扱い。認証情報が無いときは例外。
+ */
+export async function getBusyCalendarsByEvents(
+  calendarIds: string[],
+  slotStart: Date,
+  slotEnd: Date,
+  storeId?: string
+): Promise<Set<string>> {
+  if (calendarIds.length === 0) return new Set();
+  const calendar = await getCalendarClient(storeId);
+  if (!calendar) {
+    throw new Error('Google Calendar APIの認証情報が設定されていません');
+  }
+  // 終日予定（start.date）も timeMin / timeMax に重なれば返る
+  const eventsByCalendar: Record<string, CalendarEventLike[] | null> = {};
+  await Promise.all(
+    calendarIds.map(async (id) => {
+      try {
+        const response = await calendar.events.list({
+          calendarId: id,
+          timeMin: slotStart.toISOString(),
+          timeMax: slotEnd.toISOString(),
+          singleEvents: true,
+          orderBy: 'startTime',
+          maxResults: 250,
+        });
+        eventsByCalendar[id] = (response.data.items || []) as CalendarEventLike[];
+      } catch (e) {
+        console.error(`[GoogleCalendar] events.list failed (calendar=${id}):`, e instanceof Error ? e.message : e);
+        eventsByCalendar[id] = null;
+      }
+    })
+  );
+  return busyCalendarIdsFromEvents(eventsByCalendar, slotStart, slotEnd);
 }
 
 export interface ReservationEventParams {

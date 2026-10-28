@@ -3,6 +3,7 @@ import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { listCalendarEvents } from '@/lib/google-calendar';
 import { normalizeForm } from '@/lib/form-normalizer';
+import { normalizeEventTimeForClient } from '@/lib/staff-availability';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -93,8 +94,10 @@ export async function GET(
         try {
           const events = await listCalendarEvents(t.calendarId, start, end, storeId);
           return events.map(event => {
-            const startTime = event.start?.dateTime || event.start?.date || '';
-            const endTime = event.end?.dateTime || event.end?.date || '';
+            // 終日予定は JST 0:00 の ISO にして返す（日付だけだとブラウザが UTC 0:00 = JST 9:00 と解釈し、
+            // 当日 9:00 より前が空き・翌日 9:00 までが埋まりになる）
+            const startTime = normalizeEventTimeForClient(event.start);
+            const endTime = normalizeEventTimeForClient(event.end);
             return {
               title: event.summary || '',
               summary: event.summary || '',

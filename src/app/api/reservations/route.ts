@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
-import { createReservationEvent, getBusyCalendars } from '@/lib/google-calendar';
+import { createReservationEvent, getBusyCalendarsByEvents } from '@/lib/google-calendar';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { sendReservationEmails } from '@/lib/reservation-email';
 import { scheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
@@ -837,7 +837,7 @@ export async function POST(request: Request) {
                 ? member.event_color_id : null;
               // 直前の空き再チェック（失敗時は従来どおり続行）
               try {
-                const busy = await getBusyCalendars([member.calendar_id], slotStart.toISOString(), slotEnd.toISOString(), body.store_id);
+                const busy = await getBusyCalendarsByEvents([member.calendar_id], slotStart, slotEnd, body.store_id);
                 if (busy.has(member.calendar_id)) {
                   return NextResponse.json(
                     { error: '申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。', code: 'slot_taken' },
@@ -845,7 +845,7 @@ export async function POST(request: Request) {
                   );
                 }
               } catch (fbError) {
-                console.error('[API] staff freeBusy check error (named):', fbError);
+                console.error('[API] staff availability check error (named):', fbError);
               }
             }
           } else if (isCalendarMode && staffWithCalendar.length > 0) {
@@ -870,25 +870,28 @@ export async function POST(request: Request) {
                 { status: 409 }
               );
             }
-            let candidates = capableStaff;
+            // 空きは「予定一覧」で確認する（freeBusy は終日予定を返さないため、終日の「予約不可」を
+            // 入れたスタッフが空き扱いになり、画面では✕のスタッフに割り当てられる事象があった）。
+            // 取得に失敗したカレンダーは埋まり扱い。全員の確認ができないときは割り当てずに 409 で止める
+            // （予定のあるスタッフにランダムで入れてしまうより、お客様に選び直してもらう方が安全）
+            let candidates: any[];
             try {
-              const busy = await getBusyCalendars(
+              const busy = await getBusyCalendarsByEvents(
                 capableStaff.map((m: any) => m.calendar_id),
-                slotStart.toISOString(),
-                slotEnd.toISOString(),
+                slotStart,
+                slotEnd,
                 body.store_id
               );
               candidates = capableStaff.filter((m: any) => !busy.has(m.calendar_id));
-              if (candidates.length === 0) {
-                return NextResponse.json(
-                  { error: '申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。', code: 'slot_taken' },
-                  { status: 409 }
-                );
-              }
             } catch (fbError) {
-              // 照会失敗時は対応可能なスタッフ全員を候補にして続行（予約自体は止めない）
-              console.error('[API] staff freeBusy check error (no preference):', fbError);
-              candidates = capableStaff;
+              console.error('[API] staff availability check error (no preference):', fbError);
+              candidates = [];
+            }
+            if (candidates.length === 0) {
+              return NextResponse.json(
+                { error: '申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。', code: 'slot_taken' },
+                { status: 409 }
+              );
             }
             const member = candidates[Math.floor(Math.random() * candidates.length)];
             staffFields = {
