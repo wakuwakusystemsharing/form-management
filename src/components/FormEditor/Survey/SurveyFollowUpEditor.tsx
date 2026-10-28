@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import OptionExtraMessageEditor, { optionSettingsButtonLabel } from '../OptionExtraMessageEditor';
 import type { SurveyContentBlock, SurveyFollowUpQuestion, SurveyFollowUpType, SurveyQuestionOption } from '@/types/survey';
 import { AddContentBlockButton, SurveyContentBlockCard, createSurveyContentBlock } from './SurveyContentBlockEditor';
 import {
@@ -17,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MessageSquarePlus, Plus, Tag, X } from 'lucide-react';
+import { MessageSquarePlus, Plus, Tag, X, Settings2 } from 'lucide-react';
 
 /** 追加質問の回答タイプの選択肢（アンケート / 抽選の事前質問 共通） */
 const FOLLOW_UP_TYPE_OPTIONS: Array<{ value: SurveyFollowUpType; label: string }> = [
@@ -48,6 +49,8 @@ interface OptionFollowUpsEditorProps {
   idPrefix: string;
   /** タグ候補を取得する店舗 ID */
   storeId?: string;
+  /** 選択肢の「設定」（送信時の追加メッセージ）を出すか（既定 true） */
+  allowExtraMessage?: boolean;
   onChange: (option: SurveyQuestionOption) => void;
 }
 
@@ -55,11 +58,12 @@ interface OptionFollowUpsEditorProps {
  * 1 つの選択肢に付く追加質問の一覧を編集する（複数 OK）。
  * 追加質問が radio / checkbox / select のときは、その選択肢ごとにタグと（上限の深さまで）さらに追加質問を付けられる
  */
-export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle, depth, idPrefix, storeId, onChange }: OptionFollowUpsEditorProps) {
+export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle, depth, idPrefix, storeId, allowExtraMessage = true, onChange }: OptionFollowUpsEditorProps) {
   const list = getOptionFollowUps(option);
   // 配下の選択肢ごとの「タグ」「追加質問」パネルの開閉（`${追加質問 index}:${選択肢 index}`）
   const [openTagPanels, setOpenTagPanels] = useState<Set<string>>(new Set());
   const [openFuPanels, setOpenFuPanels] = useState<Set<string>>(new Set());
+  const [openSettingPanels, setOpenSettingPanels] = useState<Set<string>>(new Set());
   const togglePanel = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, key: string) => {
     setter((prev) => {
       const next = new Set(prev);
@@ -256,6 +260,19 @@ export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle
                             {followUpButtonLabel(fuOpt)}
                           </Button>
                         )}
+                        {allowExtraMessage && (
+                          <Button
+                            type="button"
+                            variant={fuOpt.extra_message?.enabled === true ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => togglePanel(setOpenSettingPanels, panelKey)}
+                            title="この選択肢の設定（送信時に追加で送るメッセージ）"
+                            className="shrink-0"
+                          >
+                            <Settings2 className="mr-1 h-4 w-4" />
+                            {optionSettingsButtonLabel(fuOpt.extra_message)}
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           variant="ghost"
@@ -291,6 +308,23 @@ export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle
                           </div>
                         </div>
                       )}
+                      {allowExtraMessage && openSettingPanels.has(panelKey) && (
+                        <div className="mt-2 ml-2 space-y-2">
+                          <OptionExtraMessageEditor
+                            targetLabel={fuOptLabel}
+                            value={fuOpt.extra_message}
+                            idPrefix={`${prefix}-opt${optIndex}-xm`}
+                            onChange={(extra_message) => {
+                              const fuOptions = [...(fu.options || [])];
+                              fuOptions[optIndex] = { ...fuOptions[optIndex], extra_message };
+                              updateFollowUpOptions(fuIndex, fuOptions);
+                            }}
+                          />
+                          <div className="flex justify-end">
+                            <Button type="button" variant="ghost" size="sm" onClick={() => togglePanel(setOpenSettingPanels, panelKey)}>閉じる</Button>
+                          </div>
+                        </div>
+                      )}
                       {canNest && openFuPanels.has(panelKey) && (
                         <OptionFollowUpsEditor
                           option={fuOpt}
@@ -298,6 +332,7 @@ export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle
                           parentTitle={fuTitleForChildren}
                           depth={depth + 1}
                           idPrefix={`${prefix}-opt${optIndex}`}
+                          allowExtraMessage={allowExtraMessage}
                           storeId={storeId}
                           onChange={(nextOpt) => {
                             const fuOptions = [...(fu.options || [])];

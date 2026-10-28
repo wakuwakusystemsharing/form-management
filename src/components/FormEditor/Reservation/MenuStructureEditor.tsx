@@ -5,7 +5,9 @@ import { DEFAULT_MENU_HEADING, DEFAULT_OPTIONS_HEADING, HEADING_CONTENT_ORDER_OP
 import type { HeadingContentOrder } from '@/lib/menu-headings';
 import { ColoredTextToolbar } from '@/components/FormEditor/Survey/SurveyContentBlockEditor';
 import React, { useState } from 'react';
-import { AdditionalQuestion, Form, MenuCategory, MenuItem, MenuOption, StaffScheduleSettings, SubMenuItem } from '@/types/form';
+import { AdditionalQuestion, Form, MenuCategory, MenuItem, MenuOption, OptionExtraMessage, StaffScheduleSettings, SubMenuItem } from '@/types/form';
+import OptionExtraMessageEditor, { optionSettingsButtonLabel } from '../OptionExtraMessageEditor';
+import TagInput from '@/components/customers/TagInput';
 import StaffScheduleEditor from './StaffScheduleEditor';
 import { countStaffScheduleOverrides } from '@/lib/staff-schedule';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
@@ -208,6 +210,15 @@ const AdditionalQuestionsEditor: React.FC<{
   theme?: 'light' | 'dark';
 }> = ({ questions, onChange, theme = 'dark' }) => {
   const themeClasses = getThemeClasses(theme);
+  // 選択肢の「設定」パネル（送信時の追加メッセージ）の開閉（`${質問 index}:${選択肢 index}`）
+  const [openSettingPanels, setOpenSettingPanels] = useState<Set<string>>(new Set());
+  const toggleSettingPanel = (key: string) => {
+    setOpenSettingPanels((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   const updateQuestion = (index: number, patch: Partial<AdditionalQuestion>) => {
     const next = [...questions];
@@ -364,31 +375,59 @@ const AdditionalQuestionsEditor: React.FC<{
                 <div className={`${theme === 'light' ? 'bg-gray-50' : 'bg-gray-900/50'} p-3 rounded border ${theme === 'light' ? 'border-gray-200' : 'border-gray-700'}`}>
                   <label className={`block text-xs ${themeClasses.text.secondary} mb-2`}>選択肢</label>
                   <div className="space-y-2">
-                    {(q.options || []).map((opt, optIndex) => (
-                      <div key={optIndex} className="flex items-center space-x-2">
-                        <input
-                          type="text"
-                          value={opt.label}
-                          onChange={(e) => {
-                            const newOptions = [...(q.options || [])];
-                            newOptions[optIndex] = { label: e.target.value, value: e.target.value };
-                            updateQuestion(index, { options: newOptions });
-                          }}
-                          className={`flex-1 ${themeClasses.input} text-sm`}
-                          placeholder={`選択肢 ${optIndex + 1}`}
-                        />
-                        <button
-                          onClick={() => {
-                            const newOptions = [...(q.options || [])];
-                            newOptions.splice(optIndex, 1);
-                            updateQuestion(index, { options: newOptions });
-                          }}
-                          className="text-red-400 hover:text-red-300"
-                        >
-                          ×
-                        </button>
+                    {(q.options || []).map((opt, optIndex) => {
+                      const settingKey = `${index}:${optIndex}`;
+                      return (
+                      <div key={optIndex}>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            value={opt.label}
+                            onChange={(e) => {
+                              const newOptions = [...(q.options || [])];
+                              newOptions[optIndex] = { ...newOptions[optIndex], label: e.target.value, value: e.target.value };
+                              updateQuestion(index, { options: newOptions });
+                            }}
+                            className={`flex-1 ${themeClasses.input} text-sm`}
+                            placeholder={`選択肢 ${optIndex + 1}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => toggleSettingPanel(settingKey)}
+                            title="この選択肢の設定（送信時に追加で送るメッセージ）"
+                            className={`shrink-0 px-2 py-1 text-xs rounded border ${opt.extra_message?.enabled === true ? (theme === 'light' ? 'border-[rgb(244,144,49)] text-[rgb(220,125,35)] bg-orange-50' : 'border-cyan-500 text-cyan-300 bg-cyan-950/40') : themeClasses.button.secondary}`}
+                          >
+                            {optionSettingsButtonLabel(opt.extra_message)}
+                          </button>
+                          <button
+                            onClick={() => {
+                              const newOptions = [...(q.options || [])];
+                              newOptions.splice(optIndex, 1);
+                              updateQuestion(index, { options: newOptions });
+                            }}
+                            className="text-red-400 hover:text-red-300"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        {openSettingPanels.has(settingKey) && (
+                          <div className="mt-2 ml-2">
+                            <OptionExtraMessageEditor
+                              targetLabel={opt.label || `選択肢 ${optIndex + 1}`}
+                              value={opt.extra_message}
+                              idPrefix={`aq-xm-${q.id}-${optIndex}`}
+                              theme={theme}
+                              onChange={(extra_message) => {
+                                const newOptions = [...(q.options || [])];
+                                newOptions[optIndex] = { ...newOptions[optIndex], extra_message };
+                                updateQuestion(index, { options: newOptions });
+                              }}
+                            />
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                     <button
                       onClick={() => updateQuestion(index, { options: [...(q.options || []), { label: '', value: '' }] })}
                       className={`text-sm ${theme === 'light' ? 'text-[rgb(244,144,49)] hover:text-[rgb(220,125,35)]' : 'text-cyan-400 hover:text-cyan-300'}`}
@@ -425,6 +464,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
   const [cropperOpen, setCropperOpen] = useState(false);
   const [hidePrice, setHidePrice] = useState(false);
   const [hideDuration, setHideDuration] = useState(false);
+  const [extraMessage, setExtraMessage] = useState<OptionExtraMessage | undefined>(undefined);
 
   React.useEffect(() => {
     if (subMenuItem) {
@@ -435,6 +475,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
       setImage(subMenuItem.image || '');
       setHidePrice(subMenuItem.hide_price || false);
       setHideDuration(subMenuItem.hide_duration || false);
+      setExtraMessage(subMenuItem.extra_message);
     } else {
       setName('');
       setPrice('');
@@ -443,6 +484,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
       setImage('');
       setHidePrice(false);
       setHideDuration(false);
+      setExtraMessage(undefined);
     }
   }, [subMenuItem]);
 
@@ -455,7 +497,8 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
       description: description || undefined,
       image: image || undefined,
       hide_price: hidePrice || undefined,
-      hide_duration: hideDuration || undefined
+      hide_duration: hideDuration || undefined,
+      extra_message: extraMessage
     };
     onSave(newSubMenuItem);
     onClose();
@@ -544,6 +587,14 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
               </div>
             </div>
           </div>
+
+          <OptionExtraMessageEditor
+            targetLabel={name || 'このサブメニュー'}
+            value={extraMessage}
+            onChange={setExtraMessage}
+            idPrefix="submenu-xm"
+            theme={theme}
+          />
 
           <div className="space-y-2">
             <Label htmlFor="submenu-description">説明（オプション）</Label>
@@ -705,6 +756,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
   const [timeWindowStart, setTimeWindowStart] = useState('09:00');
   const [timeWindowEnd, setTimeWindowEnd] = useState('18:00');
   const [additionalQuestions, setAdditionalQuestions] = useState<AdditionalQuestion[]>([]);
+  const [extraMessage, setExtraMessage] = useState<OptionExtraMessage | undefined>(undefined);
 
   React.useEffect(() => {
     if (option) {
@@ -719,6 +771,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       setTimeWindowStart(option.time_window_start || '09:00');
       setTimeWindowEnd(option.time_window_end || '18:00');
       setAdditionalQuestions(option.additional_questions || []);
+      setExtraMessage(option.extra_message);
     } else {
       setName('');
       setPrice('');
@@ -731,6 +784,7 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       setTimeWindowStart('09:00');
       setTimeWindowEnd('18:00');
       setAdditionalQuestions([]);
+      setExtraMessage(undefined);
     }
   }, [option]);
 
@@ -747,7 +801,8 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       time_window_enabled: timeWindowEnabled || undefined,
       time_window_start: timeWindowEnabled ? timeWindowStart : undefined,
       time_window_end: timeWindowEnabled ? timeWindowEnd : undefined,
-      additional_questions: additionalQuestions.length > 0 ? additionalQuestions : undefined
+      additional_questions: additionalQuestions.length > 0 ? additionalQuestions : undefined,
+      extra_message: extraMessage
     };
     onSave(newOption);
     onClose();
@@ -873,6 +928,15 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
               </label>
             </div>
 
+            {/* 送信時の追加メッセージ */}
+            <OptionExtraMessageEditor
+              targetLabel={name || 'このオプション'}
+              value={extraMessage}
+              onChange={setExtraMessage}
+              idPrefix="option-xm"
+              theme={theme}
+            />
+
             {/* このオプションの対応時間設定 */}
             <div className={`p-3 rounded-md ${themeClasses.card}`}>
               <div className="flex items-center justify-between">
@@ -973,6 +1037,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   const [timeWindowStart, setTimeWindowStart] = useState('09:00');
   const [timeWindowEnd, setTimeWindowEnd] = useState('18:00');
   const [additionalQuestions, setAdditionalQuestions] = useState<AdditionalQuestion[]>([]);
+  const [extraMessage, setExtraMessage] = useState<OptionExtraMessage | undefined>(undefined);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -992,6 +1057,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setTimeWindowStart(menuItem.time_window_start || '09:00');
         setTimeWindowEnd(menuItem.time_window_end || '18:00');
         setAdditionalQuestions(menuItem.additional_questions || []);
+        setExtraMessage(menuItem.extra_message);
       } else {
         setName('');
         setPrice('');
@@ -1008,6 +1074,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setTimeWindowStart('09:00');
         setTimeWindowEnd('18:00');
         setAdditionalQuestions([]);
+        setExtraMessage(undefined);
       }
     }
   }, [menuItem, isOpen]);
@@ -1030,7 +1097,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       time_window_enabled: timeWindowEnabled || undefined,
       time_window_start: timeWindowEnabled ? timeWindowStart : undefined,
       time_window_end: timeWindowEnabled ? timeWindowEnd : undefined,
-      additional_questions: additionalQuestions.length > 0 ? additionalQuestions : undefined
+      additional_questions: additionalQuestions.length > 0 ? additionalQuestions : undefined,
+      extra_message: extraMessage
     };
     onSave(newMenuItem);
     onClose();
@@ -1406,6 +1474,15 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                 </div>
               )}
 
+
+            {/* 送信時の追加メッセージ */}
+            <OptionExtraMessageEditor
+              targetLabel={name || 'このメニュー'}
+              value={extraMessage}
+              onChange={setExtraMessage}
+              idPrefix="menu-xm"
+              theme={theme}
+            />
 
             {/* このメニューの対応時間設定 */}
             <div className={`p-3 rounded-md ${themeClasses.card}`}>
@@ -2042,6 +2119,21 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
   };
   // カスタムフィールドの選択肢ごとの追加質問（モーダルで編集中の対象）
   const [followUpTarget, setFollowUpTarget] = useState<{ fieldIndex: number; optIndex: number } | null>(null);
+  // カスタムフィールドの選択肢ごとの「設定」モーダル（送信時の追加メッセージ / タグ）
+  const [optionSettingsTarget, setOptionSettingsTarget] = useState<{ fieldIndex: number; optIndex: number } | null>(null);
+  const optionSettingsField = optionSettingsTarget ? (form.config?.custom_fields || [])[optionSettingsTarget.fieldIndex] : undefined;
+  const optionSettingsOption = optionSettingsTarget && optionSettingsField ? (optionSettingsField.options || [])[optionSettingsTarget.optIndex] : undefined;
+  const updateOptionSettings = (patch: { extra_message?: OptionExtraMessage; tags?: string[] }) => {
+    if (!optionSettingsTarget) return;
+    const currentFields = [...(form.config?.custom_fields || [])];
+    const field = currentFields[optionSettingsTarget.fieldIndex];
+    if (!field) return;
+    const newOptions = [...(field.options || [])];
+    if (!newOptions[optionSettingsTarget.optIndex]) return;
+    newOptions[optionSettingsTarget.optIndex] = { ...newOptions[optionSettingsTarget.optIndex], ...patch };
+    currentFields[optionSettingsTarget.fieldIndex] = { ...field, options: newOptions };
+    onUpdate({ ...form, config: { ...form.config, custom_fields: currentFields } });
+  };
   const followUpField = followUpTarget ? (form.config?.custom_fields || [])[followUpTarget.fieldIndex] : undefined;
   const followUpOption = followUpTarget && followUpField ? (followUpField.options || [])[followUpTarget.optIndex] : undefined;
   const updateFollowUpQuestions = (questions: AdditionalQuestion[]) => {
@@ -4378,6 +4470,14 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                           追加質問{(opt.additional_questions || []).length > 0 ? `(${(opt.additional_questions || []).length})` : ''}
                         </button>
                         <button
+                          type="button"
+                          onClick={() => setOptionSettingsTarget({ fieldIndex: index, optIndex })}
+                          title="この選択肢の設定（送信時に追加で送るメッセージ / 予約した人に付けるタグ）"
+                          className={`shrink-0 px-2 py-1 text-xs rounded border ${(opt.extra_message?.enabled === true || (opt.tags || []).length > 0) ? (theme === 'light' ? 'border-[rgb(244,144,49)] text-[rgb(220,125,35)] bg-orange-50' : 'border-cyan-500 text-cyan-300 bg-cyan-950/40') : themeClasses.button.secondary}`}
+                        >
+                          {optionSettingsButtonLabel(opt.extra_message, (opt.tags || []).length > 0 ? 1 : 0)}
+                        </button>
+                        <button
                           onClick={() => {
                             const currentFields = [...(form.config?.custom_fields || [])];
                             const newOptions = [...(currentFields[index].options || [])];
@@ -4927,6 +5027,46 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
               />
               <div className={`flex justify-end mt-6 pt-4 border-t ${themeClasses.divider}`}>
                 <button type="button" onClick={() => setFollowUpTarget(null)} className={`px-4 py-2 rounded-md ${themeClasses.button.primary}`}>閉じる</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* カスタムフィールドの選択肢ごとの設定（送信時の追加メッセージ / タグ） */}
+      {optionSettingsTarget && optionSettingsField && optionSettingsOption && (
+        <div className={`fixed inset-0 flex items-center justify-center z-50 ${themeClasses.modalOverlay}`}>
+          <div className={`rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto ${themeClasses.modal}`}>
+            <div className="p-6 space-y-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className={`text-lg font-semibold ${themeClasses.text.primary}`}>選択肢の設定</h3>
+                  <p className={`text-xs ${themeClasses.text.tertiary} mt-1 break-words`}>
+                    「{optionSettingsField.title || '項目'}」の「{optionSettingsOption.label || `選択肢 ${optionSettingsTarget.optIndex + 1}`}」が選ばれた状態で予約が送信されたときの動作です。
+                  </p>
+                </div>
+                <button type="button" onClick={() => setOptionSettingsTarget(null)} className={`${themeClasses.text.secondary} text-xl leading-none shrink-0`} aria-label="閉じる">×</button>
+              </div>
+              <OptionExtraMessageEditor
+                targetLabel={optionSettingsOption.label || `選択肢 ${optionSettingsTarget.optIndex + 1}`}
+                value={optionSettingsOption.extra_message}
+                onChange={(extra_message) => updateOptionSettings({ extra_message })}
+                idPrefix={`cf-xm-${optionSettingsField.id}-${optionSettingsTarget.optIndex}`}
+                theme={theme}
+              />
+              <div className={`rounded-md border p-3 space-y-2 ${theme === 'light' ? 'border-gray-200 bg-gray-50' : 'border-gray-700 bg-gray-900/40'}`}>
+                <p className={`text-sm font-medium ${themeClasses.text.primary}`}>タグ</p>
+                <p className={`text-xs ${themeClasses.text.tertiary}`}>
+                  この選択肢を選んで予約した人（予約に紐付いた顧客）に、顧客管理で使えるタグを自動で付けます（配信の絞り込みなどに使えます）
+                </p>
+                <TagInput
+                  id={`cf-tags-${optionSettingsField.id}-${optionSettingsTarget.optIndex}`}
+                  value={optionSettingsOption.tags || []}
+                  onChange={(tags) => updateOptionSettings({ tags: tags.length > 0 ? tags : undefined })}
+                  storeId={form.store_id}
+                />
+              </div>
+              <div className={`flex justify-end pt-4 border-t ${themeClasses.divider}`}>
+                <button type="button" onClick={() => setOptionSettingsTarget(null)} className={`px-4 py-2 rounded-md ${themeClasses.button.primary}`}>閉じる</button>
               </div>
             </div>
           </div>

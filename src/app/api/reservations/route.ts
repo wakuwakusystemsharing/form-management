@@ -7,6 +7,7 @@ import { createReservationEvent, getBusyCalendarsByEvents } from '@/lib/google-c
 import { normalizeForm } from '@/lib/form-normalizer';
 import { sendReservationEmails } from '@/lib/reservation-email';
 import { scheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
+import { applyReservationCustomFieldTags } from '@/lib/reservation-tags-apply';
 import { isStayMode, prepareStayReservation, type StayPrepared } from '@/lib/stay-reservation';
 import { sanitizeStaySettings } from '@/lib/stay-pricing';
 import { occupiedCountByNight } from '@/lib/stay-availability';
@@ -482,6 +483,28 @@ export async function POST(request: Request) {
     const crmLookupPhone: string | null =
       (isManualEntry && body.line_user_id) ? null : (body.customer_phone || null);
 
+    // カスタム項目の選択肢に付けたタグを予約に紐付いた顧客へ付与する（失敗しても予約は成功扱い）
+    const applyCustomFieldTagsSafely = async (customerId: string | null) => {
+      if (!customerId) return;
+      const customFields = body.customer_info?.custom_fields;
+      if (!customFields || typeof customFields !== 'object') return;
+      try {
+        const formConfig = await getFormConfig(body.form_id);
+        const result = await applyReservationCustomFieldTags({
+          storeId: body.store_id,
+          lineUserId: body.line_user_id || null,
+          phone: crmLookupPhone,
+          formConfig,
+          customFields,
+        });
+        if (result.applied.length > 0 && !result.customerId) {
+          console.warn('[Reservation] タグ付与スキップ:', result.reason, { storeId: body.store_id, formId: body.form_id });
+        }
+      } catch (error) {
+        console.error('[Reservation] タグ付与に失敗しました:', error);
+      }
+    };
+
     // 同一ユーザーの同時予約数制限チェック（form 設定で >0 の場合のみ）
     try {
       const v = formCalendarSettings?.max_concurrent_reservations_per_user;
@@ -651,6 +674,7 @@ export async function POST(request: Request) {
           console.error('[CRM] Customer visit creation error:', error);
         }
       }
+      await applyCustomFieldTagsSafely(customerId);
 
       // 3-2. フォローメッセージの配信予定（店舗のフォロー設定が ON かつ LINE ユーザーの予約のみ。失敗しても予約は成功扱い）
       await scheduleFollowMessageForReservation({
@@ -1032,6 +1056,7 @@ export async function POST(request: Request) {
         // エラーが発生しても予約のレスポンスは返す
       }
     }
+    await applyCustomFieldTagsSafely(customerId);
 
     // 3-2. フォローメッセージの配信予定（店舗のフォロー設定が ON かつ LINE ユーザーの予約のみ。失敗しても予約は成功扱い）
     await scheduleFollowMessageForReservation({

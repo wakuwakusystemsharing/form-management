@@ -6,6 +6,16 @@ export type CustomFieldType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date
 // ドロップダウン選択（select）の検索・絞り込み機能（純粋ロジック: src/lib/searchable-select.ts）
 import type { SelectSearchSettings } from '@/lib/searchable-select';
 
+/**
+ * 選択肢（メニュー / サブメニュー / オプション / カスタム項目・追加質問・アンケートの選択肢）が選ばれた状態で
+ * フォームが送信されたとき、LINE トークへ追加で送る固定テキスト（基本情報の「2 通目のメッセージ」と同じ形）。
+ * 1 回の送信で送れるのは本文を含めて最大 5 通（純粋ロジック: src/lib/extra-messages.ts）
+ */
+export interface OptionExtraMessage {
+  enabled: boolean;
+  text: string;
+}
+
 export interface AdditionalQuestion {
   id: string;
   type: CustomFieldType;
@@ -14,6 +24,8 @@ export interface AdditionalQuestion {
   options?: Array<{
     label: string;
     value: string;
+    // この選択肢が選ばれた状態で送信されたときに LINE トークへ追加で送るメッセージ
+    extra_message?: OptionExtraMessage;
   }>;
   placeholder?: string;
   // 選択したボタン（メニュー / オプション / カスタム項目の選択肢）のすぐ下に表示する（既定 false = 項目の後ろにまとめて表示）
@@ -35,6 +47,7 @@ export interface MenuOption {
   time_window_start?: string;   // "09:00"
   time_window_end?: string;     // "15:00"
   additional_questions?: AdditionalQuestion[];  // 選択時に表示される追加質問
+  extra_message?: OptionExtraMessage;  // 選択した状態で送信されたときに LINE トークへ追加で送るメッセージ
 }
 
 // サブメニューの型定義
@@ -47,6 +60,7 @@ export interface SubMenuItem {
   image?: string;            // 画像URL
   hide_price?: boolean;      // 料金を非表示にするか
   hide_duration?: boolean;   // 所要時間を非表示にするか
+  extra_message?: OptionExtraMessage;  // 選択した状態で送信されたときに LINE トークへ追加で送るメッセージ
 }
 
 // 予約フォームの型定義
@@ -72,6 +86,7 @@ export interface MenuItem {
   time_window_start?: string;   // "09:00"
   time_window_end?: string;     // "15:00"
   additional_questions?: AdditionalQuestion[];  // 選択時に表示される追加質問
+  extra_message?: OptionExtraMessage;  // 選択した状態で送信されたときに LINE トークへ追加で送るメッセージ
 }
 
 export interface MenuCategory {
@@ -292,6 +307,10 @@ export interface FormConfig {
       kana?: string;
       // この選択肢が選ばれたときに表示される追加質問（アンケートの追加質問と同じ考え方。入れ子は不可）
       additional_questions?: AdditionalQuestion[];
+      // この選択肢が選ばれた状態で送信されたときに LINE トークへ追加で送るメッセージ
+      extra_message?: OptionExtraMessage;
+      // この選択肢を選んで予約した人（予約に紐付いた顧客）に付与するタグ（アンケートの選択肢タグと同じ）
+      tags?: string[];
     }>;
     placeholder?: string;
     // 入力/選択内容を端末の localStorage に保存し、再訪時に復元する（他ユーザーには共有されない）

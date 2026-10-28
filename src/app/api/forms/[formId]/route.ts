@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { Form } from '@/types/form';
 import { normalizeForm } from '@/lib/form-normalizer';
+import { validateFormExtraMessages } from '@/lib/extra-messages';
 import { getAppEnvironment } from '@/lib/env';
 import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
@@ -146,6 +147,14 @@ export async function PUT(
     const { formId } = await params;
     const updatedFormData = await request.json();
     const env = getAppEnvironment();
+
+    // 選択肢ごとの「送信時の追加メッセージ」が LIFF の上限（本文を含めて 5 通）に収まるか
+    if (updatedFormData?.config) {
+      const limitError = validateFormExtraMessages(updatedFormData.config, 'reservation');
+      if (limitError) {
+        return NextResponse.json({ error: limitError }, { status: 400 });
+      }
+    }
 
     // ローカル環境: JSON を更新（正規化されたフォーム形式で保存）
     if (env === 'local') {
