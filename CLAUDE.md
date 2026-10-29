@@ -710,7 +710,7 @@ export async function GET(req, { params }) {
 - `extra_minutes?: number[]` - 追加で表示する分（0〜59）。時間間隔の行に加えて営業時間内の毎時この分の行を表示（例: 30 分間隔 + `[10]` → 09:00, 09:10, 09:30 …）。`multiple_dates_settings.extra_minutes` も同じ（時間の選択肢に追加）。生成 HTML は `addExtraMinuteSlots()`、正規化は `sanitizeExtraMinutes()`
 - `business_hours` - 曜日別営業時間
 - `advance_booking_days` - 何日先まで予約可能か（デフォルト 30）
-- `max_concurrent_events` - 同時刻にこの件数以上のカレンダーイベントが重なる時間帯は ✕（デフォルト 1）
+- `max_concurrent_events` - 同時刻にこの件数以上のカレンダーイベントが重なる時間帯は ✕（デフォルト 1）。**サーバー側でも再確認**: `POST /api/reservations` はカレンダー表示モードで店舗カレンダーへ予定を作る予約（手動予約フォーム含む）について、送信時点の店舗カレンダーの予定を数え（営業日イベント除外・終日予定は JST の 1 日全体 = 画面の〇✕と同じ数え方。`countStoreCalendarEventsInSlot` / `src/lib/staff-availability.ts` の `countEventsOverlappingSlot` / `resolveReservationSlotWindow`）、上限に達していれば `409 { code: 'slot_taken' }`。予定を取得できないときも安全側で 409（「空き状況を確認できませんでした」）。静的フォームも送信直前に `recheckSelectedSlot()` でキャッシュを捨てて空き状況を取り直し、✕になっていれば送信しない（取得失敗時は止めずサーバーに任せる）。フォームを開いたまま他の予約が入ったことでダブルブッキングが起きた事例への対策。Vitest: `reservation-slot-recheck.test.ts` / `staff-availability.test.ts`
 - `max_concurrent_reservations_per_user` - 同一ユーザーの未来予約最大件数（0 = 制限なし）
 - `holidays_as_closed` + `excluded_holiday_types` - 日本の祝日を予約不可にする（1980-2099 年計算）。除外配列で個別の祝日を ✕ 対象から外せる
 - `allow_exceed_business_hours` - 営業時間超過の予約を許可
