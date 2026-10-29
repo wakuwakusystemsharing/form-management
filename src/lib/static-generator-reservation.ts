@@ -6,6 +6,7 @@
 import { computeAccentColor, hexToRgb } from './color-utils';
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MD_TIME_SELECT_DISABLED_CSS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { SEARCHABLE_SELECT_CSS, SEARCHABLE_SELECT_RUNTIME_JS, renderSearchableSelectHtml } from './searchable-select-runtime-js';
+import { CHOICE_CHECK_CSS, choiceGroupClass } from './choice-style';
 import { resolveMenuHeadings, resolveMenuHeadingContents } from './menu-headings';
 import type { HeadingContent } from './menu-headings';
 import { FormConfig } from '@/types/form';
@@ -4005,7 +4006,7 @@ if (document.readyState === 'loading') {
         return `
             <div class="field" id="custom-field-wrap-${field.id}">
                 <label class="field-label">${label}</label>
-                <div class="button-group custom-field-radios">${optionsHtml}</div>
+                <div class="button-group custom-field-radios${choiceGroupClass(field)}">${optionsHtml}</div>
             </div>`;
       }
       if (field.type === 'checkbox' && field.options?.length) {
@@ -4015,7 +4016,7 @@ if (document.readyState === 'loading') {
         return `
             <div class="field" id="custom-field-wrap-${field.id}">
                 <label class="field-label">${label}</label>
-                <div class="custom-field-checkboxes">${optionsHtml}</div>
+                <div class="custom-field-checkboxes${choiceGroupClass(field)}">${optionsHtml}</div>
             </div>`;
       }
       if (field.type === 'date') {
@@ -5079,6 +5080,7 @@ if (document.readyState === 'loading') {
             background-color: var(--accent-color);
             color: var(--white);
         }
+        ${CHOICE_CHECK_CSS}
         /* カテゴリー開閉ボタン: タップで開閉できることが分かるデザイン */
         .category-header {
             background: var(--white) !important;

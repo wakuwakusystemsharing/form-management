@@ -1,5 +1,6 @@
 import { StaticDeploy, MultipleDatesSettings, OptionExtraMessage } from './form';
 import type { SelectSearchSettings } from '@/lib/searchable-select';
+import type { ChoiceSize, ChoiceStyle } from '@/lib/choice-style';
 
 // multiple_dates = 第三希望日時選択（予約フォームの日時選択モードと同じ設定・同じ選択 UI。第一〜第三希望の日付 + 時間）
 // birthday = 誕生日選択（年 / 月 / 日を別々のプルダウンで選択。値は "YYYY-MM-DD"）
@@ -23,6 +24,9 @@ export interface SurveyFollowUpQuestion {
   required?: boolean; // 親の選択肢が選ばれているときのみ必須チェック
   options?: SurveyQuestionOption[]; // radio/checkbox/select 用（各選択肢に follow_ups / tags を付けられる）
   allow_other?: boolean; // radio/checkbox/select: 選択肢の最後に「その他」+ 理由入力欄を表示（通常の質問と同じ）
+  // radio / checkbox の表示形式（未設定 = ボタン式。'checkbox' = チェックボックス式 1 列）と大きさ（未設定 = 中）。純粋ロジック: src/lib/choice-style.ts
+  choice_style?: ChoiceStyle;
+  choice_size?: ChoiceSize;
   // この追加質問の上下に表示するテキスト / 画像ブロック（`anchor` は未使用。`position` で上下を決める）
   content_blocks?: SurveyContentBlock[];
 }
@@ -53,6 +57,9 @@ export interface SurveyQuestion {
   options?: SurveyQuestionOption[]; // For radio/checkbox
   placeholder?: string;
   allow_other?: boolean; // radio/checkbox/select: 選択肢の最後に「その他」+ 理由入力欄を表示
+  // radio / checkbox の表示形式（未設定 = ボタン式。'checkbox' = チェックボックス式 1 列・行全体をタップ）と大きさ（未設定 = 中）
+  choice_style?: ChoiceStyle;
+  choice_size?: ChoiceSize;
   restore_enabled?: boolean; // 回答内容を端末の localStorage に保存し、再訪時に復元する（他ユーザーには共有されない）
   // type = 'select' のとき: 名前検索 + 五十音ボタンで絞り込み、「不明」を独立したボタンで表示する（選択肢が多いとき用）
   select_search?: SelectSearchSettings;

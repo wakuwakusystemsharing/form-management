@@ -1,6 +1,8 @@
 'use client';
 
 import { SELECT_SEARCH_DEFAULT_UNKNOWN_LABEL, SELECT_SEARCH_UNKNOWN_LABEL_MAX } from '@/lib/searchable-select';
+import { CHOICE_SIZE_OPTIONS, CHOICE_TYPE_SELECT_OPTIONS, choiceTypeKey, isCheckboxStyle, parseChoiceTypeKey, resolveChoiceSize } from '@/lib/choice-style';
+import type { ChoiceSize } from '@/lib/choice-style';
 import { DEFAULT_MENU_HEADING, DEFAULT_OPTIONS_HEADING, HEADING_CONTENT_ORDER_OPTIONS, HEADING_CONTENT_TEXT_MAX, MENU_HEADING_MAX, resolveMenuHeadings } from '@/lib/menu-headings';
 import type { HeadingContentOrder } from '@/lib/menu-headings';
 import { ColoredTextToolbar } from '@/components/FormEditor/Survey/SurveyContentBlockEditor';
@@ -311,12 +313,15 @@ const AdditionalQuestionsEditor: React.FC<{
                 <div>
                   <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>回答タイプ</label>
                   <select
-                    value={q.type}
+                    value={choiceTypeKey(q.type, q.choice_style)}
                     onChange={(e) => {
-                      const newType = e.target.value as AdditionalQuestion['type'];
+                      // 単一 / 複数選択は「ボタン式 / チェックボックス式」をキーで表し、type と choice_style に分けて保存する
+                      const parsed = parseChoiceTypeKey(e.target.value);
+                      const newType = parsed.type as AdditionalQuestion['type'];
                       const needsOptions = newType === 'radio' || newType === 'checkbox' || newType === 'select';
                       updateQuestion(index, {
                         type: newType,
+                        choice_style: parsed.choice_style,
                         options: needsOptions ? (q.options || [{ label: '', value: '' }]) : undefined,
                       });
                     }}
@@ -328,9 +333,25 @@ const AdditionalQuestionsEditor: React.FC<{
                     <option value="datetime">日時選択</option>
                     <option value="birthday">誕生日選択</option>
                     <option value="select">ドロップダウン選択</option>
-                    <option value="radio">単一選択 (ボタン)</option>
-                    <option value="checkbox">複数選択 (ボタン)</option>
+                    {CHOICE_TYPE_SELECT_OPTIONS.map((o) => (
+                      <option key={o.key} value={o.key}>{o.label}</option>
+                    ))}
                   </select>
+                  {isCheckboxStyle(q) && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-xs ${themeClasses.text.secondary} whitespace-nowrap`}>チェックボックスの大きさ</span>
+                      <select
+                        value={resolveChoiceSize(q)}
+                        onChange={(e) => updateQuestion(index, { choice_size: e.target.value as ChoiceSize })}
+                        className={`${themeClasses.input} text-sm w-24`}
+                      >
+                        {CHOICE_SIZE_OPTIONS.map((s) => (
+                          <option key={s.value} value={s.value}>{s.label}</option>
+                        ))}
+                      </select>
+                      <span className={`text-[10px] ${themeClasses.text.tertiary}`}>1 列で表示。行全体をタップで選べます</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center mt-6">
                   <label className="flex items-center space-x-2 cursor-pointer">
@@ -4105,14 +4126,17 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                 <div>
                   <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>回答タイプ</label>
                   <select
-                    value={field.type}
+                    value={choiceTypeKey(field.type, field.choice_style)}
                     onChange={(e) => {
                       const currentFields = [...(form.config?.custom_fields || [])];
-                      const newType = e.target.value as NonNullable<Form['config']['custom_fields']>[number]['type'];
+                      // 単一 / 複数選択は「ボタン式 / チェックボックス式」をキーで表し、type と choice_style に分けて保存する
+                      const parsed = parseChoiceTypeKey(e.target.value);
+                      const newType = parsed.type as NonNullable<Form['config']['custom_fields']>[number]['type'];
                       const needsOptions = newType === 'radio' || newType === 'checkbox' || newType === 'select';
                       currentFields[index] = {
                         ...currentFields[index],
                         type: newType,
+                        choice_style: parsed.choice_style,
                         options: needsOptions ? (currentFields[index].options || [{ label: '', value: '' }]) : undefined
                       };
                       const updatedForm = {
@@ -4132,9 +4156,25 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     <option value="datetime">日時選択</option>
                     <option value="birthday">誕生日選択</option>
                     <option value="select">ドロップダウン選択</option>
-                    <option value="radio">単一選択 (ボタン)</option>
-                    <option value="checkbox">複数選択 (ボタン)</option>
+                    {CHOICE_TYPE_SELECT_OPTIONS.map((o) => (
+                      <option key={o.key} value={o.key}>{o.label}</option>
+                    ))}
                   </select>
+                  {isCheckboxStyle(field) && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-xs ${themeClasses.text.secondary} whitespace-nowrap`}>チェックボックスの大きさ</span>
+                      <select
+                        value={resolveChoiceSize(field)}
+                        onChange={(e) => updateCustomFieldAt(index, { choice_size: e.target.value as ChoiceSize })}
+                        className={`${themeClasses.input} text-sm w-24`}
+                      >
+                        {CHOICE_SIZE_OPTIONS.map((s) => (
+                          <option key={s.value} value={s.value}>{s.label}</option>
+                        ))}
+                      </select>
+                      <span className={`text-[10px] ${themeClasses.text.tertiary}`}>1 列で表示。行全体をタップで選べます</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center mt-6 gap-4 flex-wrap">
                   <label className="flex items-center space-x-2 cursor-pointer">
