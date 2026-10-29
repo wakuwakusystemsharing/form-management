@@ -79,3 +79,41 @@ export function normalizeEventTimeForClient(
   if (value.date && DATE_ONLY.test(value.date)) return jstDateStartIso(value.date);
   return value.date || '';
 }
+
+/**
+ * 予約枠 [slotStart, slotEnd) と重なる予定の数（営業日イベントは数えない。終日予定は JST の 1 日全体）。
+ * フォーム画面が「同時刻に埋まるイベント数」の〇✕を描くときと同じ数え方。
+ */
+export function countEventsOverlappingSlot(events: CalendarEventLike[], slotStart: Date, slotEnd: Date): number {
+  return events.reduce((acc, ev) => acc + (eventOverlapsSlot(ev, slotStart, slotEnd) ? 1 : 0), 0);
+}
+
+/** `calendar_settings.max_concurrent_events` を 1 以上の整数に正規化（未設定・不正は 1） */
+export function resolveMaxConcurrentEvents(calendarSettings: { max_concurrent_events?: unknown } | null | undefined): number {
+  const raw = calendarSettings?.max_concurrent_events;
+  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
+}
+
+/**
+ * 店舗カレンダーの空き再確認に使う予約枠。
+ * 所要時間があればその長さ、無ければフォームの時間間隔ぶん（画面の判定と同じ。既定 30 分）。
+ */
+export function resolveReservationSlotWindow(
+  reservationDate: string,
+  reservationTime: string,
+  totalDurationMinutes: unknown,
+  calendarSettings: { time_interval?: unknown } | null | undefined
+): { slotStart: Date; slotEnd: Date } | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reservationDate) || !/^\d{2}:\d{2}$/.test(reservationTime)) return null;
+  const slotStart = new Date(`${reservationDate}T${reservationTime}:00+09:00`);
+  if (Number.isNaN(slotStart.getTime())) return null;
+  const duration = Number(totalDurationMinutes);
+  const interval = Number(calendarSettings?.time_interval);
+  const width = duration > 0 ? duration : (interval > 0 ? interval : 30);
+  return { slotStart, slotEnd: new Date(slotStart.getTime() + width * 60 * 1000) };
+}
+
+/** 同時刻の予定数が上限に達しているか（count >= max で埋まり） */
+export function isSlotFull(events: CalendarEventLike[], slotStart: Date, slotEnd: Date, maxConcurrent: number): boolean {
+  return countEventsOverlappingSlot(events, slotStart, slotEnd) >= maxConcurrent;
+}

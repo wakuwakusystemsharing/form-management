@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { busyCalendarIdsFromEvents, type CalendarEventLike } from './staff-availability';
+import { busyCalendarIdsFromEvents, countEventsOverlappingSlot, type CalendarEventLike } from './staff-availability';
 import { createAdminClient } from './supabase';
 import { decryptRefreshToken } from './google-calendar-token';
 
@@ -342,6 +342,31 @@ export async function getBusyCalendarsByEvents(
     })
   );
   return busyCalendarIdsFromEvents(eventsByCalendar, slotStart, slotEnd);
+}
+
+/**
+ * 店舗カレンダーの予定一覧を取得して予約枠と重なる予定の数を返す（営業日イベントは数えない。
+ * 終日予定は JST の 1 日全体）。取得に失敗したら例外を投げる（呼び出し側で「確認できない = 止める」を判断）。
+ */
+export async function countStoreCalendarEventsInSlot(
+  calendarId: string,
+  slotStart: Date,
+  slotEnd: Date,
+  storeId?: string
+): Promise<number> {
+  const calendar = await getCalendarClient(storeId);
+  if (!calendar) {
+    throw new Error('Google Calendar APIの認証情報が設定されていません');
+  }
+  const response = await calendar.events.list({
+    calendarId,
+    timeMin: slotStart.toISOString(),
+    timeMax: slotEnd.toISOString(),
+    singleEvents: true,
+    orderBy: 'startTime',
+    maxResults: 250,
+  });
+  return countEventsOverlappingSlot((response.data.items || []) as CalendarEventLike[], slotStart, slotEnd);
 }
 
 export interface ReservationEventParams {
