@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
+import StoreRankingPanel from '@/components/StoreRankingPanel';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Calendar, BarChart3, Download, X, Pencil } from 'lucide-react';
+import { ArrowLeft, Calendar, BarChart3, Download, X, Pencil, Trophy } from 'lucide-react';
 
 interface Reservation {
   id: string;
@@ -84,7 +85,7 @@ export default function AllReservationsPage() {
   const [editingHiddenNames, setEditingHiddenNames] = useState<boolean>(false);
   const [newHiddenName, setNewHiddenName] = useState<string>('');
   const [exporting, setExporting] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
+  const [activeTab, setActiveTab] = useState<'list' | 'analytics' | 'ranking'>('list');
 
   // 非表示リストを localStorage から復元
   useEffect(() => {
@@ -430,8 +431,8 @@ export default function AllReservationsPage() {
         </Card>
 
         {/* タブナビゲーション */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'list' | 'analytics')} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'list' | 'analytics' | 'ranking')} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="list">
               <Calendar className="mr-2 h-4 w-4" />
               予約一覧
@@ -440,7 +441,16 @@ export default function AllReservationsPage() {
               <BarChart3 className="mr-2 h-4 w-4" />
               分析
             </TabsTrigger>
+            <TabsTrigger value="ranking">
+              <Trophy className="mr-2 h-4 w-4" />
+              ランキング
+            </TabsTrigger>
           </TabsList>
+
+          {/* ランキングタブ（全店舗の予約数・売上・アンケート回答数・LINE 友だち追加率・キャンセル率） */}
+          <TabsContent value="ranking" className="space-y-6">
+            <StoreRankingPanel hiddenStoreIds={hideTestStores ? hiddenStoreIds : []} />
+          </TabsContent>
 
           {/* 分析タブ */}
           <TabsContent value="analytics" className="space-y-6">
