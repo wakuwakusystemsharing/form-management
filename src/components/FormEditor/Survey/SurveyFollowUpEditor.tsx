@@ -12,6 +12,8 @@ import {
   setOptionFollowUps,
   isChoiceFollowUpType,
 } from '@/lib/survey-follow-ups';
+import { CHOICE_SIZE_OPTIONS, CHOICE_TYPE_SELECT_OPTIONS, choiceTypeKey, isCheckboxStyle, parseChoiceTypeKey, resolveChoiceSize } from '@/lib/choice-style';
+import type { ChoiceSize } from '@/lib/choice-style';
 import TagInput from '@/components/customers/TagInput';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,14 +22,16 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MessageSquarePlus, Plus, Tag, X, Settings2 } from 'lucide-react';
 
-/** 追加質問の回答タイプの選択肢（アンケート / 抽選の事前質問 共通） */
-const FOLLOW_UP_TYPE_OPTIONS: Array<{ value: SurveyFollowUpType; label: string }> = [
+/**
+ * 追加質問の回答タイプの選択肢（アンケート / 抽選の事前質問 共通）。
+ * 単一 / 複数選択はボタン式 / チェックボックス式をキー（`CHOICE_TYPE_SELECT_OPTIONS`）で表す
+ */
+const FOLLOW_UP_TYPE_OPTIONS: Array<{ value: string; label: string; checkStyle?: boolean }> = [
   { value: 'text', label: 'テキスト入力 (1行)' },
   { value: 'textarea', label: 'テキスト入力 (複数行)' },
   { value: 'birthday', label: '誕生日選択' },
   { value: 'select', label: 'ドロップダウン選択' },
-  { value: 'radio', label: '単一選択 (ボタン)' },
-  { value: 'checkbox', label: '複数選択 (ボタン)' },
+  ...CHOICE_TYPE_SELECT_OPTIONS.map((o) => ({ value: o.key, label: o.label, checkStyle: o.style === 'checkbox' })),
 ];
 
 /** 追加質問ボタンの表示用: 「追加質問(3)」のように配下の件数（入れ子含む）を付ける */
@@ -51,6 +55,8 @@ interface OptionFollowUpsEditorProps {
   storeId?: string;
   /** 選択肢の「設定」（送信時の追加メッセージ）を出すか（既定 true） */
   allowExtraMessage?: boolean;
+  /** 単一 / 複数選択の「チェックボックス式」を回答タイプに出すか（既定 true。抽選の事前質問では出さない） */
+  allowChoiceStyle?: boolean;
   onChange: (option: SurveyQuestionOption) => void;
 }
 
@@ -58,7 +64,7 @@ interface OptionFollowUpsEditorProps {
  * 1 つの選択肢に付く追加質問の一覧を編集する（複数 OK）。
  * 追加質問が radio / checkbox / select のときは、その選択肢ごとにタグと（上限の深さまで）さらに追加質問を付けられる
  */
-export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle, depth, idPrefix, storeId, allowExtraMessage = true, onChange }: OptionFollowUpsEditorProps) {
+export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle, depth, idPrefix, storeId, allowExtraMessage = true, allowChoiceStyle = true, onChange }: OptionFollowUpsEditorProps) {
   const list = getOptionFollowUps(option);
   // 配下の選択肢ごとの「タグ」「追加質問」パネルの開閉（`${追加質問 index}:${選択肢 index}`）
   const [openTagPanels, setOpenTagPanels] = useState<Set<string>>(new Set());
@@ -170,18 +176,37 @@ export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle
               <div className="space-y-1">
                 <Label className="text-xs">回答タイプ</Label>
                 <Select
-                  value={fu.type}
-                  onValueChange={(value) => updateFollowUp(fuIndex, { type: value as SurveyFollowUpType })}
+                  value={choiceTypeKey(fu.type, fu.choice_style)}
+                  onValueChange={(key) => {
+                    const parsed = parseChoiceTypeKey(key);
+                    updateFollowUp(fuIndex, { type: parsed.type as SurveyFollowUpType, choice_style: parsed.choice_style });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {FOLLOW_UP_TYPE_OPTIONS.map((t) => (
+                    {FOLLOW_UP_TYPE_OPTIONS.filter((t) => allowChoiceStyle || !t.checkStyle).map((t) => (
                       <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {isCheckboxStyle(fu) && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <Label className="text-xs whitespace-nowrap">チェックボックスの大きさ</Label>
+                    <Select
+                      value={resolveChoiceSize(fu)}
+                      onValueChange={(v) => updateFollowUp(fuIndex, { choice_size: v as ChoiceSize })}
+                    >
+                      <SelectTrigger className="h-8 w-24"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {CHOICE_SIZE_OPTIONS.map((s) => (
+                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center space-x-2">
@@ -333,6 +358,7 @@ export default function OptionFollowUpsEditor({ option, optionLabel, parentTitle
                           depth={depth + 1}
                           idPrefix={`${prefix}-opt${optIndex}`}
                           allowExtraMessage={allowExtraMessage}
+                          allowChoiceStyle={allowChoiceStyle}
                           storeId={storeId}
                           onChange={(nextOpt) => {
                             const fuOptions = [...(fu.options || [])];

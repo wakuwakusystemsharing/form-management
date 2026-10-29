@@ -18,6 +18,8 @@ import TagInput from '@/components/customers/TagInput';
 import MultipleDatesSettingsEditor from '../Reservation/MultipleDatesSettingsEditor';
 import { createDefaultMultipleDatesSettings, normalizeMultipleDatesSettings } from '@/lib/multiple-dates-settings';
 import { SELECT_SEARCH_DEFAULT_UNKNOWN_LABEL, SELECT_SEARCH_UNKNOWN_LABEL_MAX } from '@/lib/searchable-select';
+import { CHOICE_SIZE_OPTIONS, CHOICE_TYPE_SELECT_OPTIONS, choiceTypeKey, isCheckboxStyle, parseChoiceTypeKey, resolveChoiceSize } from '@/lib/choice-style';
+import type { ChoiceSize } from '@/lib/choice-style';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -49,9 +51,11 @@ interface SurveyQuestionEditorProps {
   allowMultipleDates?: boolean;
   /** 選択肢の「設定」（送信時の追加メッセージ）を出すか（既定 true。抽選フォームの事前質問では送れないので出さない） */
   allowExtraMessage?: boolean;
+  /** 単一 / 複数選択の「チェックボックス式」を回答タイプに出すか（既定 true。抽選の事前質問では出さない） */
+  allowChoiceStyle?: boolean;
 }
 
-export default function SurveyQuestionEditor({ questions, onChange, contentBlocks, onContentBlocksChange, storeId, allowMultipleDates = true, allowExtraMessage = true }: SurveyQuestionEditorProps) {
+export default function SurveyQuestionEditor({ questions, onChange, contentBlocks, onContentBlocksChange, storeId, allowMultipleDates = true, allowExtraMessage = true, allowChoiceStyle = true }: SurveyQuestionEditorProps) {
   const [deleteIndex, setDeleteIndex] = React.useState<number | null>(null);
   // 説明文の文字色ツールバー用（質問 ID → textarea）
   const descriptionRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
@@ -247,12 +251,18 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                   <div className="space-y-2">
                     <Label>回答タイプ</Label>
                     <Select
-                      value={q.type}
-                      onValueChange={(value) => updateQuestion(index, {
-                        type: value as SurveyQuestionType,
-                        // 第三希望日時選択に切り替えたときは予約フォームと同じ既定設定を用意する
-                        ...(value === 'multiple_dates' && !q.multiple_dates ? { multiple_dates: createDefaultMultipleDatesSettings() } : {}),
-                      })}
+                      value={choiceTypeKey(q.type, q.choice_style)}
+                      onValueChange={(key) => {
+                        // 単一 / 複数選択は「ボタン式 / チェックボックス式」をキーで表し、type と choice_style に分けて保存する
+                        const parsed = parseChoiceTypeKey(key);
+                        const value = parsed.type;
+                        updateQuestion(index, {
+                          type: value as SurveyQuestionType,
+                          choice_style: parsed.choice_style,
+                          // 第三希望日時選択に切り替えたときは予約フォームと同じ既定設定を用意する
+                          ...(value === 'multiple_dates' && !q.multiple_dates ? { multiple_dates: createDefaultMultipleDatesSettings() } : {}),
+                        });
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -265,10 +275,28 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                         <SelectItem value="birthday">誕生日選択</SelectItem>
                         {allowMultipleDates && <SelectItem value="multiple_dates">第三希望日時選択</SelectItem>}
                         <SelectItem value="select">ドロップダウン選択</SelectItem>
-                        <SelectItem value="radio">単一選択 (ボタン)</SelectItem>
-                        <SelectItem value="checkbox">複数選択 (ボタン)</SelectItem>
+                        {CHOICE_TYPE_SELECT_OPTIONS.filter((o) => allowChoiceStyle || o.style === 'button').map((o) => (
+                          <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
+                    {isCheckboxStyle(q) && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <Label className="text-xs whitespace-nowrap">チェックボックスの大きさ</Label>
+                        <Select
+                          value={resolveChoiceSize(q)}
+                          onValueChange={(v) => updateQuestion(index, { choice_size: v as ChoiceSize })}
+                        >
+                          <SelectTrigger className="h-8 w-24"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {CHOICE_SIZE_OPTIONS.map((s) => (
+                              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-[11px] text-muted-foreground">1 列で表示。行全体をタップで選べます</span>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-4 pt-8 flex-wrap">
                     <div className="flex items-center space-x-2">
@@ -501,6 +529,7 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                                 idPrefix={`fu-${q.id}-${optIndex}`}
                                 storeId={storeId}
                                 allowExtraMessage={allowExtraMessage}
+                                allowChoiceStyle={allowChoiceStyle}
                                 onChange={(nextOpt) => {
                                   const newOptions = [...(q.options || [])];
                                   newOptions[optIndex] = nextOpt;

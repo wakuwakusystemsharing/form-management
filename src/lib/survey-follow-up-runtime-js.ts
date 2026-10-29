@@ -17,6 +17,7 @@ import type { SurveyContentBlock, SurveyFollowUpQuestion, SurveyQuestionOption }
 import { renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { renderColoredTextHtml } from './colored-text';
 import { FOLLOW_UP_OTHER_VALUE, followUpTitle, getOptionFollowUps, isChoiceFollowUpType } from './survey-follow-ups';
+import { choiceGroupClass } from './choice-style';
 
 export interface FollowUpRenderOptions {
   /** 追加質問の見出しに付けるクラス */
@@ -109,7 +110,7 @@ function renderFollowUpFieldHtml(qid: string, fid: string, fu: SurveyFollowUpQue
         `<button type="button" class="choice-button" data-opt-index="${k}" data-value="${esc(o.value || o.label)}" onclick="fuSelectChoice(this, '${qid}', '${fu.type}')">${esc(o.label)}</button>`
       ).join('\n');
       if (allowOther) buttons += `\n<button type="button" class="choice-button" data-other="1" data-value="${FOLLOW_UP_OTHER_VALUE}" onclick="fuSelectChoice(this, '${qid}', '${fu.type}')">その他</button>`;
-      return `<div class="${render.buttonGroupClass}" id="fu-container-${fid}">${buttons}</div>`;
+      return `<div class="${render.buttonGroupClass}${choiceGroupClass(fu)}" id="fu-container-${fid}">${buttons}</div>`;
     }
     case 'textarea':
       return `<textarea id="${fieldId}" class="input" rows="3" placeholder="入力してください"></textarea>`;
