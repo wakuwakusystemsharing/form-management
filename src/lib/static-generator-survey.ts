@@ -4,6 +4,7 @@ import { renderColoredTextHtml } from './colored-text';
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MD_TIME_SELECT_DISABLED_CSS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { SEARCHABLE_SELECT_CSS, SEARCHABLE_SELECT_RUNTIME_JS, renderSearchableSelectHtml, type SearchableSelectOption } from './searchable-select-runtime-js';
 import { FOLLOW_UP_NESTED_CSS, FOLLOW_UP_RUNTIME_JS, renderFollowUpBlocksHtml } from './survey-follow-up-runtime-js';
+import { CHOICE_CHECK_CSS, choiceGroupClass } from './choice-style';
 import { EXTRA_MESSAGE_RUNTIME_JS } from './extra-messages';
 import { getRequiredChoices, getVisibleChoices, normalizeMultipleDatesSettings } from './multiple-dates-settings';
 
@@ -768,7 +769,7 @@ export class StaticSurveyGenerator {
         if (q.allow_other) {
           buttons += `\n<button type="button" class="choice-button" data-other="1" onclick="selectOption(this, '${q.id}', '${q.type}')">その他</button>`;
         }
-        fieldHtml = `<div class="button-group" id="container-${q.id}">${buttons}</div>${this.renderFollowUps(q)}${this.renderOtherReason(q)}`;
+        fieldHtml = `<div class="button-group${choiceGroupClass(q)}" id="container-${q.id}">${buttons}</div>${this.renderFollowUps(q)}${this.renderOtherReason(q)}`;
         break;
       }
     }
@@ -982,6 +983,7 @@ export class StaticSurveyGenerator {
         }
         ${BIRTHDAY_CSS}
         ${SEARCHABLE_SELECT_CSS}
+        ${CHOICE_CHECK_CSS}
         /* 日付・日時入力: スマホで横幅をページに収める + 未選択時ヒント */
         input[type="date"].input,
         input[type="datetime-local"].input {

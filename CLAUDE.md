@@ -662,6 +662,12 @@ export async function GET(req, { params }) {
 - `hide_menu_until_selected?: boolean`（既定 true）- ご来店回数選択が ON のとき、選択肢をタップするまでメニュー欄（`#menu-field` = カテゴリーとメニュー）を隠す。初期 HTML で `display:none`、`applyVisitMenuVisibility()` が選択 / 復元時に表示。編集 UI は「来店回数選択を必須にする」の下のチェック
 - `label?: string` - フォームに出す見出し（空 / 未設定 = 「ご来店回数」）。フォームの項目名、ご予約内容の行、LINE メッセージの《見出し》、メール・管理画面の項目名（`reservation-detail-items.ts`）に共通で使う。編集 UI はメニュー構成 → 詳細設定 → ご来店回数選択の「項目の見出し」。Webhook の送信テキスト解析は `《ご来店回数》` 固定のまま（`details.visitCount` は未使用のため影響なし）
 
+**単一 / 複数選択の「チェックボックス式」（`choice_style` / `choice_size`。純粋ロジック `src/lib/choice-style.ts`）:**
+- 回答タイプのプルダウンに「単一選択 (チェックボックス)」「複数選択 (チェックボックス)」を追加（`CHOICE_TYPE_SELECT_OPTIONS` の 4 つ。キー `radio` / `checkbox` / `radio_check` / `checkbox_check` を `choiceTypeKey` / `parseChoiceTypeKey` で `type` + `choice_style` に相互変換）。**`type` は従来どおり `radio` / `checkbox` のまま**で、`choice_style: 'checkbox'`（未設定 = ボタン式）だけが変わるので、回答値・追加質問・タグ・表示トリガー・復元・LINE メッセージは無変更
+- 見た目: 1 列（縦並び）・行全体をタップ。単一は丸（ラジオ風）、複数は四角に ✓。大きさ `choice_size`（`small` 18px / `medium` 24px 既定 / `large` 32px。`CHOICE_SIZE_OPTIONS`）は回答タイプの下の「チェックボックスの大きさ」で選ぶ
+- 生成 HTML は選択肢の入れ物（アンケート `.button-group` / 追加質問 `fu-container` / 予約 `.custom-field-radios` `.custom-field-checkboxes`）に `choiceGroupClass()`（`choice-check choice-check--single|multi choice-check--small|medium|large`）を付け、`CHOICE_CHECK_CSS` で描く（DOM 構造・埋め込み JS は従来と同じ。ボタン式の「✓ 選択中」バッジは出さない）
+- 対象: アンケートの質問（`SurveyQuestionEditor`）・選択肢の追加質問（入れ子含む。`SurveyFollowUpEditor`）・予約フォームのカスタム項目と選択肢の追加質問・メニュー / オプションの追加質問（`MenuStructureEditor`）。抽選の事前質問では出さない（`allowChoiceStyle={false}`）。Vitest: `choice-style.test.ts` / `choice-style-static-forms.test.ts`
+
 **アンケートの質問型「第三希望日時選択」（`SurveyQuestionType = 'multiple_dates'`）:**
 - 回答タイプの「日時選択」の下に追加。予約フォームの日時選択モード「第三希望日時選択」と**同じ設定・同じ選択 UI**（第一〜第三希望の日付 + 時間のプルダウン、曜日別受付時間 / カスタム / 追加の時間帯 / 祝日 / 臨時営業日 / ✕にする時間帯 / 追加で表示する分 / 選択可能日数 / 必須選択 / 非表示設定）
 - 設定は `SurveyQuestion.multiple_dates`（型 `MultipleDatesSettings` = `calendar_settings.multiple_dates_settings` と同じ。`src/types/form.ts`）。既定値・正規化は `src/lib/multiple-dates-settings.ts`（`createDefaultMultipleDatesSettings` / `normalizeMultipleDatesSettings` / `getVisibleChoices` / `getRequiredChoices`）。質問の「必須項目にする」が ON のときだけ `required_choices` を検証（第一希望は常に必須）、OFF なら全て任意

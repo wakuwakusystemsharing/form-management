@@ -261,6 +261,7 @@ export default function LotteryFormEditor({ form, onUpdate, userRole = 'service_
                 onChange={(questions: SurveyQuestion[]) => setRules({ pre_questions: questions })}
                 allowMultipleDates={false}
                 allowExtraMessage={false}
+                allowChoiceStyle={false}
               />
             </div>
           </div>

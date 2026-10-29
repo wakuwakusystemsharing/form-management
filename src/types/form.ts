@@ -5,6 +5,7 @@ export type CustomFieldType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date
 
 // ドロップダウン選択（select）の検索・絞り込み機能（純粋ロジック: src/lib/searchable-select.ts）
 import type { SelectSearchSettings } from '@/lib/searchable-select';
+import type { ChoiceSize, ChoiceStyle } from '@/lib/choice-style';
 
 /**
  * 選択肢（メニュー / サブメニュー / オプション / カスタム項目・追加質問・アンケートの選択肢）が選ばれた状態で
@@ -28,6 +29,9 @@ export interface AdditionalQuestion {
     extra_message?: OptionExtraMessage;
   }>;
   placeholder?: string;
+  // radio / checkbox の表示形式（未設定 = ボタン式。'checkbox' = チェックボックス式 1 列）と大きさ（未設定 = 中）。純粋ロジック: src/lib/choice-style.ts
+  choice_style?: ChoiceStyle;
+  choice_size?: ChoiceSize;
   // 選択したボタン（メニュー / オプション / カスタム項目の選択肢）のすぐ下に表示する（既定 false = 項目の後ろにまとめて表示）
   show_below_choice?: boolean;
 }
@@ -313,6 +317,9 @@ export interface FormConfig {
       tags?: string[];
     }>;
     placeholder?: string;
+    // radio / checkbox の表示形式（未設定 = ボタン式。'checkbox' = チェックボックス式 1 列・行全体をタップ）と大きさ（未設定 = 中）
+    choice_style?: ChoiceStyle;
+    choice_size?: ChoiceSize;
     // 入力/選択内容を端末の localStorage に保存し、再訪時に復元する（他ユーザーには共有されない）
     restore_enabled?: boolean;
     // type = 'select' のとき: 名前検索 + 五十音ボタンで絞り込み、「不明」を独立したボタンで表示する（選択肢が多いとき用）
