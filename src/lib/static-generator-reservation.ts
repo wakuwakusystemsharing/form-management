@@ -2150,6 +2150,27 @@ class BookingForm {
         this.updateSummary();
     }
     
+    // 送信直前の空き再確認: キャッシュを捨てて選択中の日付の週を取り直し、選択中の枠がまだ〇か返す
+    // （renderCalendar が✕になった選択をリセットするので、リセットされていなければ〇）。
+    // 空き状況を取得できなかったときは画面では止めず、サーバー側の確認に任せる
+    async recheckSelectedSlot() {
+        if (PREVIEW_MODE) return true;
+        const date = this.state.selectedDate;
+        const time = this.state.selectedTime;
+        if (!date || !time) return false;
+        const parts = date.split('-').map(n => parseInt(n, 10));
+        const selected = new Date(parts[0], parts[1] - 1, parts[2]);
+        if (isNaN(selected.getTime())) return true;
+        this.availabilityCache = {};
+        this.state.currentWeekStart = this.getWeekStart(selected);
+        try {
+            await this.fetchAvailability(this.state.currentWeekStart);
+        } catch (e) {
+            return true;
+        }
+        return this.state.selectedDate === date && this.state.selectedTime === time;
+    }
+
     // 週移動
     navigateWeek(direction) {
         const newWeekStart = new Date(this.state.currentWeekStart);
@@ -2664,6 +2685,17 @@ class BookingForm {
             alert('予約日時を選択してください');
             resetSubmitState();
             return;
+        } else {
+            // カレンダー表示モード: 送信直前に空き状況を取り直し、開いてから他の予約で埋まった枠なら止める
+            // （サーバー側でも同じ確認をするが、画面で先に気づけるようにする）
+            const stillOpen = await this.recheckSelectedSlot();
+            if (!stillOpen) {
+                alert('申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。');
+                const calendarField = document.getElementById('datetime-field');
+                if (calendarField) calendarField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                resetSubmitState();
+                return;
+            }
         }
         // カスタムフィールドの必須チェック（非表示になっている項目 = ご来店回数の設定 / 表示トリガー未成立 は対象外）
         if (this.config.custom_fields && this.config.custom_fields.length > 0) {

@@ -3,7 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
-import { createReservationEvent, getBusyCalendarsByEvents } from '@/lib/google-calendar';
+import { createReservationEvent, getBusyCalendarsByEvents, countStoreCalendarEventsInSlot } from '@/lib/google-calendar';
+import { resolveMaxConcurrentEvents, resolveReservationSlotWindow } from '@/lib/staff-availability';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { sendReservationEmails } from '@/lib/reservation-email';
 import { scheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
@@ -933,6 +934,50 @@ export async function POST(request: Request) {
       } catch (staffError) {
         console.error('[API] staff resolution error:', staffError);
         // スタッフ解決に失敗しても予約は継続（従来どおり店舗カレンダーへ）
+      }
+    }
+
+    // 店舗カレンダーの「同時刻に埋まるイベント数」をサーバー側でも再確認する（ダブルブッキング防止）。
+    // 画面の〇✕はフォームを開いたときの予定で描かれるため、開いてから送信するまでに他の予約が入ると
+    // 古い〇のまま送信される。ここで送信時点の予定を数え、上限に達していれば 409 で選び直してもらう。
+    // 対象: カレンダー表示モードで店舗カレンダーへ予定を作る予約（スタッフカレンダーへ作るときは上で確認済み）。
+    // 店舗側の手動予約フォームも対象。予定を確認できないときは安全側で止める。
+    {
+      const bookingModeForCheck = body.booking_mode || customerInfo.booking_mode
+        || formCalendarSettings?.booking_mode || 'calendar';
+      if (!stayPrepared && bookingModeForCheck === 'calendar' && !staffCalendarIdForEvent) {
+        const { data: storeForCheck } = await (adminClient as any)
+          .from('stores')
+          .select('google_calendar_id')
+          .eq('id', body.store_id)
+          .single();
+        const storeCalendarId: string | null = storeForCheck?.google_calendar_id || null;
+        const window = resolveReservationSlotWindow(
+          body.reservation_date,
+          body.reservation_time,
+          customerInfo.total_duration,
+          formCalendarSettings
+        );
+        if (storeCalendarId && window) {
+          const maxConcurrent = resolveMaxConcurrentEvents(formCalendarSettings);
+          let count: number;
+          try {
+            count = await countStoreCalendarEventsInSlot(storeCalendarId, window.slotStart, window.slotEnd, body.store_id);
+          } catch (checkError) {
+            console.error('[API] store calendar availability check error:', checkError);
+            return NextResponse.json(
+              { error: '空き状況を確認できませんでした。しばらく時間をおいてからもう一度お試しください。', code: 'slot_taken' },
+              { status: 409 }
+            );
+          }
+          if (count >= maxConcurrent) {
+            console.warn('[API] slot taken (store calendar):', { storeId: body.store_id, date: body.reservation_date, time: body.reservation_time, count, maxConcurrent });
+            return NextResponse.json(
+              { error: '申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。', code: 'slot_taken' },
+              { status: 409 }
+            );
+          }
+        }
       }
     }
 
