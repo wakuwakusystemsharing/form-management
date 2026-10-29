@@ -245,6 +245,11 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - `ReservationAnalytics.tsx` - 上部に期間チップ + フォームのプルダウン（既定は過去12か月 / すべてのフォーム）、予約数・キャンセル・売上・1件あたりのタイル、概要（フォーム別 / ステータス別 / 日別 / 月別）・メニュー分析（メニュー・オプションの人気と売上）・時間帯分析・顧客属性・売上分析（月別 / フォーム別 / メニュー別）。`fetchWithAuth` を使う。店舗管理者ページとテナント側 店舗ページで共用
 - 顧客分析 API（`/customers/analytics`）も `fetchAllRows` で全件取得。月別新規顧客数は JST の月で数える
 
+**全店舗ランキング（全予約一覧 `/tenant/{slug}/admin/reservations` → ランキングタブ）:**
+- `GET /api/stores/ranking?date_from&date_to`（マスター = 全店舗 / システム管理者 = 同テナント。店舗管理者は 403。local は認証スキップで `data/*.json`）。件数・金額だけを返す
+- 純粋ロジック `src/lib/store-ranking.ts`: `computeStoreRankings(stores, reservations, surveys, customers, period)` → 店舗ごとの 予約数（キャンセル除く）/ キャンセル率 / 売上（`reservationAmount`）/ アンケート回答数（回答日時を JST 日付に）/ LINE 友だち追加率（分母 = `line_user_id` あり。期間に依らない現在値）。`rankRows(rows, metric)` が同値同順位で順位付け（null は除外、キャンセル率は低い順）。指標の定義は `RANKING_METRICS`
+- UI `src/components/StoreRankingPanel.tsx`: 期間チップ（`ANALYTICS_PERIOD_OPTIONS` から期間指定を除く。既定 今月）、合計タイル、指標ごとのカード（上位 10 件 + 「すべて表示」）。予約一覧タブの「テスト店舗の非表示」の店舗はランキングから除外（`hiddenStoreIds`）。Vitest: `store-ranking.test.ts` / `store-ranking-api.local.test.ts`
+
 **公開ページ:**
 - `/home` - 公開ホームページ（Web 予約フォーム機能紹介）
 - `/privacy` - プライバシーポリシー
