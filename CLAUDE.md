@@ -169,6 +169,10 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - **予約カスタム項目の選択肢タグ**（`custom_fields[].options[].tags`。アンケートの選択肢タグと同じ）: カスタム項目の選択肢の「設定」モーダルに「タグ」（`TagInput`）。`POST /api/reservations` が予約保存後に `applyReservationCustomFieldTags()`（`src/lib/reservation-tags-apply.ts`。顧客は予約と同じ `findCustomerByLineOrPhone` で特定 = 予約に紐付いた顧客。失敗しても予約は成功扱い）でタグをマージ。集計は `src/lib/reservation-tags.ts` の `collectReservationCustomFieldTags(config, customer_info.custom_fields)`（追加質問の選択肢は対象外）
 - 「更新して他のフォームにも反映」ではメニュー構成 / カスタム項目セクションに含まれてそのままコピーされる
 
+**外部予約メール連携（ホットペッパー / エキテンの予約通知メール → Google カレンダー。設計: `docs/メールに届いた予約通知を自動的にGoogleカレンダーに予定を作成する資料/外部予約メール連携_実装設計.md`）:**
+- テナント側 店舗ページ → 「メール連携」（`/tenant/{slug}/admin/{storeId}/mail-integration`）。設定画面は `ExternalMailIntegrationSettings.tsx`（ON/OFF・受信用アドレス `rsv-{token}@…`・デフォルト所要時間・メニュー別所要時間ルール・受信ログ）。受信は Resend Inbound → `POST /api/webhooks/inbound-email`（svix 署名検証 → 宛先で店舗特定 → 媒体判定 `src/lib/external-mail/` → 予約番号で重複防止 → `external_reservations` に記録 → `createGenericCalendarEvent`）。local では利用不可
+- **設定画面の先頭に「連携の進め方」ガイド** `ExternalMailIntegrationGuide.tsx`（文言・進み具合は純粋ロジック `src/lib/external-mail-guide.ts` の `buildMailGuideSteps` / `buildStoreGuideText`）。手順は ① 店舗の Google カレンダー設定（弊社）② 連携 ON + 保存で受信用アドレス発行（弊社）③ 予約通知メールを受信用アドレスへ転送（店舗。方法 A = Gmail の自動転送 → Google の確認メールは受信ログの「Gmail転送の確認メール」で確認 / 方法 B = 媒体の通知先に直接設定）④ 所要時間（任意）⑤ 受信ログで「登録済み」を確認。画面の状態（カレンダー有無・保存済み ON・ログ）から「完了 / いまここ / 未着手」を出し、受信用アドレス入りの「店舗への案内文」をコピーできる。Vitest: `external-mail-guide.test.ts`
+
 **Web 予約フォーム自動メール通知:**
 - `form_type === 'web'` のフォーム送信時、お客様 / 店舗の両方に予約確認メールを自動送信
 - 送信エンジン: Resend（`src/lib/email-sender.ts`）。`RESEND_API_KEY` 未設定時はログ出力のみでスキップ
