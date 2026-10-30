@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/components/ui/use-toast';
 import { Copy, Plus, Trash2, ArrowUp, ArrowDown, RefreshCw, Mail, AlertTriangle } from 'lucide-react';
+import ExternalMailIntegrationGuide from '@/components/ExternalMailIntegrationGuide';
 
 interface DurationRule {
   keyword: string;
@@ -56,7 +57,7 @@ const STATUS_BADGES: Record<string, { label: string; variant: 'default' | 'secon
   unknown: { label: '未処理', variant: 'outline' },
 };
 
-export default function ExternalMailIntegrationSettings({ storeId }: { storeId: string }) {
+export default function ExternalMailIntegrationSettings({ storeId, storeName = '' }: { storeId: string; storeName?: string }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -64,6 +65,8 @@ export default function ExternalMailIntegrationSettings({ storeId }: { storeId: 
   const [hasStoreCalendar, setHasStoreCalendar] = useState(true);
 
   const [enabled, setEnabled] = useState(false);
+  // 保存済みの ON/OFF（ガイドの進み具合用。画面のスイッチを触っただけでは変わらない）
+  const [enabledSaved, setEnabledSaved] = useState(false);
   const [inboundAddress, setInboundAddress] = useState<string | null>(null);
   const [defaultDuration, setDefaultDuration] = useState(60);
   const [targetCalendarId, setTargetCalendarId] = useState('');
@@ -85,6 +88,7 @@ export default function ExternalMailIntegrationSettings({ storeId }: { storeId: 
       const integ: IntegrationSettings | null = data.integration;
       if (integ) {
         setEnabled(integ.enabled);
+        setEnabledSaved(integ.enabled);
         setInboundAddress(integ.inbound_address);
         setDefaultDuration(integ.default_duration_minutes);
         setTargetCalendarId(integ.target_calendar_id || '');
@@ -137,6 +141,7 @@ export default function ExternalMailIntegrationSettings({ storeId }: { storeId: 
       }
       const data = await res.json();
       setInboundAddress(data.integration?.inbound_address || inboundAddress);
+      setEnabledSaved(data.integration?.enabled ?? enabled);
       toast({ title: '設定を保存しました' });
     } catch (e) {
       toast({ title: e instanceof Error ? e.message : '保存に失敗しました', variant: 'destructive' });
@@ -174,16 +179,38 @@ export default function ExternalMailIntegrationSettings({ storeId }: { storeId: 
 
   if (!available) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          外部予約メール連携は local 環境では利用できません（staging / 本番で利用可能です）
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        <ExternalMailIntegrationGuide
+          storeName={storeName}
+          inboundAddress={null}
+          hasStoreCalendar={false}
+          hasInboundAddress={false}
+          enabledSaved={false}
+          hasCreatedLog={false}
+          hasGmailForwardingLog={false}
+        />
+        <Card>
+          <CardContent className="py-8 text-center text-muted-foreground">
+            外部予約メール連携は local 環境では利用できません（staging / 本番で利用可能です）
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      {/* 連携の進め方（現在の状態から次にやることを示す） */}
+      <ExternalMailIntegrationGuide
+        storeName={storeName}
+        inboundAddress={inboundAddress}
+        hasStoreCalendar={hasStoreCalendar}
+        hasInboundAddress={!!inboundAddress}
+        enabledSaved={enabledSaved}
+        hasCreatedLog={logs.some((l) => l.status === 'created')}
+        hasGmailForwardingLog={logs.some((l) => l.source === 'gmail_forwarding')}
+      />
+
       {/* 連携設定 */}
       <Card>
         <CardHeader>
