@@ -58,7 +58,7 @@ export default function MailIntegrationPage() {
           </CardHeader>
         </Card>
 
-        <ExternalMailIntegrationSettings storeId={storeId} />
+        <ExternalMailIntegrationSettings storeId={storeId} storeName={store?.name || ''} />
       </div>
     </div>
   );
