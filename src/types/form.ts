@@ -6,6 +6,7 @@ export type CustomFieldType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date
 // ドロップダウン選択（select）の検索・絞り込み機能（純粋ロジック: src/lib/searchable-select.ts）
 import type { SelectSearchSettings } from '@/lib/searchable-select';
 import type { ChoiceSize, ChoiceStyle } from '@/lib/choice-style';
+import type { CategoryContentBlock } from '@/lib/category-content-blocks';
 
 /**
  * 選択肢（メニュー / サブメニュー / オプション / カスタム項目・追加質問・アンケートの選択肢）が選ばれた状態で
@@ -102,6 +103,8 @@ export interface MenuCategory {
   options: MenuItem[];       // オプションメニュー
   selection_mode: 'single' | 'multiple';
   gender_condition?: 'male' | 'female' | 'all';  // 性別による表示条件
+  // このカテゴリーのメニュー欄 / 共通オプション欄に置くテキスト・画像ブロック（src/lib/category-content-blocks.ts）
+  content_blocks?: CategoryContentBlock[];
 }
 
 export interface VisitOption {
