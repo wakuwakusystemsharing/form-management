@@ -9,6 +9,7 @@ import { SEARCHABLE_SELECT_CSS, SEARCHABLE_SELECT_RUNTIME_JS, renderSearchableSe
 import { CHOICE_CHECK_CSS, choiceGroupClass } from './choice-style';
 import { resolveMenuHeadings, resolveMenuHeadingContents } from './menu-headings';
 import type { HeadingContent } from './menu-headings';
+import { renderCategoryBlocksAt } from './category-content-blocks';
 import { FormConfig } from '@/types/form';
 import { STAFF_SCHEDULE_RUNTIME_JS } from './staff-schedule';
 import { ADVANCE_RULES_RUNTIME_JS } from './advance-rules';
@@ -4235,12 +4236,18 @@ if (document.readyState === 'loading') {
                                     ` : ''}
                                 </div>`;
 
+    // カテゴリーごとの「テキスト・画像」ブロック（src/lib/category-content-blocks.ts）
+    // メニュー欄: 一覧の上 / 下 / 各メニューのすぐ下。オプション欄: 一覧の上 / 下 / 各オプションのすぐ下
+    const renderMenuButtonWithBlocks = (menu: import('@/types/form').MenuItem, category: import('@/types/form').MenuCategory) =>
+      renderMenuButton(menu, category.id) + renderCategoryBlocksAt(category, 'menus', 'after', menu.id);
+
     const renderCategoryOptions = (category: import('@/types/form').MenuCategory) => {
       if (!category.options || category.options.length === 0) return '';
       return `
                             <div class="category-options-section" style="margin-top:1rem;padding-top:1rem;border-top:1px solid #e5e7eb;">
                                 <div style="font-size:0.875rem;font-weight:600;color:#374151;margin-bottom:0.75rem;">${optionsHeadingHtml}</div>
                                 ${optionsHeadingContentHtml}
+                                ${renderCategoryBlocksAt(category, 'options', 'top')}
                                 <div class="category-options-list">
                                     ${category.options.map((opt, idx) => `
                                         <button type="button" class="category-option-item" data-category-id="${category.id}" data-option-id="${opt.id || `catopt-${idx}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
@@ -4253,8 +4260,10 @@ if (document.readyState === 'loading') {
                                                 ${(opt.duration || 0) > 0 && !opt.hide_duration ? `<div style="font-size:0.75rem;opacity:0.7;">+${opt.duration}分</div>` : ''}
                                             </div>
                                         </button>
+                                        ${renderCategoryBlocksAt(category, 'options', 'after', opt.id)}
                                     `).join('')}
                                 </div>
+                                ${renderCategoryBlocksAt(category, 'options', 'bottom')}
                             </div>`;
     };
 
@@ -4274,9 +4283,11 @@ if (document.readyState === 'loading') {
                     <div id="category-section-${category.id}" class="category-section" style="${multiCat && idx > 0 ? 'display:none;' : ''}">
                         ${category.image && /^https?:/i.test(category.image.trim()) ? `
                         <div class="category-image"><img src="${this.escapeHtml(category.image.trim())}" alt="${this.escapeHtml(category.display_name || category.name)}" loading="lazy"></div>` : ''}
+                        ${renderCategoryBlocksAt(category, 'menus', 'top')}
                         <div class="menu-list">
-                            ${category.menus.map(menu => renderMenuButton(menu, category.id)).join('')}
+                            ${category.menus.map(menu => renderMenuButtonWithBlocks(menu, category)).join('')}
                         </div>
+                        ${renderCategoryBlocksAt(category, 'menus', 'bottom')}
                         ${renderCategoryOptions(category)}
                     </div>
                 `).join('')}
@@ -4737,6 +4748,10 @@ if (document.readyState === 'loading') {
         .content-block {
             margin-bottom: 20px;
         }
+        /* カテゴリーごとのテキスト・画像（メニュー一覧 / オプション一覧の中に置くので余白を詰める） */
+        .content-block.category-block { margin: 0 0 12px; }
+        .menu-list .content-block.category-block { margin: 4px 0 12px; }
+        .category-options-list .content-block.category-block { margin: 0 0 10px; }
         .content-block-text {
             font-size: 14px;
             color: var(--text-dark, #333);
