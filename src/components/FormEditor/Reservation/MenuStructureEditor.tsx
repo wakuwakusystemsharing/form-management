@@ -11,6 +11,8 @@ import { AdditionalQuestion, Form, MenuCategory, MenuItem, MenuOption, OptionExt
 import OptionExtraMessageEditor, { optionSettingsButtonLabel } from '../OptionExtraMessageEditor';
 import TagInput from '@/components/customers/TagInput';
 import StaffScheduleEditor from './StaffScheduleEditor';
+import CategoryContentBlocksEditor from './CategoryContentBlocksEditor';
+import type { CategoryContentBlock } from '@/lib/category-content-blocks';
 import { countStaffScheduleOverrides } from '@/lib/staff-schedule';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
 
@@ -1758,6 +1760,11 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
         }
       }
     });
+  };
+
+  // カテゴリーごとのテキスト・画像ブロック（メニュー欄 / 共通オプション欄）
+  const updateCategoryContentBlocks = (categoryId: string, blocks: CategoryContentBlock[]) => {
+    updateCategories(categories.map((c) => (c.id === categoryId ? { ...c, content_blocks: blocks } : c)));
   };
 
   const toggleCategory = (id: string) => {
@@ -4846,6 +4853,13 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                         ))}
                       </div>
                     )}
+                    <CategoryContentBlocksEditor
+                      category={category}
+                      target="menus"
+                      storeId={form.store_id}
+                      theme={theme}
+                      onChange={(blocks) => updateCategoryContentBlocks(category.id, blocks)}
+                    />
                   </div>
 
                   {/* カテゴリー共通オプション */}
@@ -4933,6 +4947,13 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                         ))}
                       </div>
                     )}
+                    <CategoryContentBlocksEditor
+                      category={category}
+                      target="options"
+                      storeId={form.store_id}
+                      theme={theme}
+                      onChange={(blocks) => updateCategoryContentBlocks(category.id, blocks)}
+                    />
                   </div>
                 </div>
               )}
