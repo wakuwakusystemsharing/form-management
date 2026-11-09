@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import WallAdminPanel from '@/components/wall/WallAdminPanel';
+import LineFlexPanel from '@/components/line-flex/LineFlexPanel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { getBaseUrl } from '@/lib/env';
@@ -1546,12 +1547,13 @@ export default function StoreDetailPage() {
 
         {/* ── タブナビゲーション ── */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="h-auto sm:h-10 bg-card border border-border p-1 w-full sm:w-auto grid grid-cols-3 sm:grid-cols-6 sm:inline-grid">
+          <TabsList className="h-auto sm:h-10 bg-card border border-border p-1 w-full sm:w-auto grid grid-cols-4 sm:grid-cols-7 sm:inline-grid">
             <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">概要</TabsTrigger>
             <TabsTrigger value="forms" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">予約フォーム</TabsTrigger>
             <TabsTrigger value="surveys" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">アンケート</TabsTrigger>
             <TabsTrigger value="lotteries" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">抽選フォーム</TabsTrigger>
             <TabsTrigger value="walls" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">寄せ書き</TabsTrigger>
+            <TabsTrigger value="line_messages" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">LINE メッセージ</TabsTrigger>
             <TabsTrigger value="settings" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">設定</TabsTrigger>
           </TabsList>
 
@@ -2463,6 +2465,11 @@ export default function StoreDetailPage() {
 
           <TabsContent value="walls" className="space-y-6">
             <WallAdminPanel storeId={storeId} showGuide={false} />
+          </TabsContent>
+
+          {/* LINE メッセージ（公式 LINE 向け Flex Message） */}
+          <TabsContent value="line_messages" className="space-y-6">
+            <LineFlexPanel storeId={storeId} />
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">
