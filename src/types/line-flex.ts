@@ -7,7 +7,16 @@
  * - ボタンの URL は計測リンク（/go/{id}/{key}）に置き換え、タップ数を数える（track_taps）
  */
 
-export type LineFlexTemplate = 'booking_card' | 'menu_carousel' | 'store_card' | 'custom';
+export type LineFlexTemplate =
+  | 'custom'
+  | 'booking_card'
+  | 'menu_carousel'
+  | 'store_card'
+  | 'coupon_card'
+  | 'notice_card'
+  | 'menu_list'
+  | 'staff_carousel'
+  | 'steps_card';
 
 export interface FlexButtonInput {
   key: string; // 行の識別子（編集 UI 用）
@@ -52,7 +61,87 @@ export interface StoreCardData {
   color?: string;
 }
 
-export type LineFlexTemplateData = BookingCardData | MenuCarouselData | StoreCardData | Record<string, never>;
+/** クーポン・キャンペーンカード */
+export interface CouponCardData {
+  image_url?: string;
+  title: string; // 例: 友だち限定クーポン
+  highlight: string; // 大きく出す文字（例: 10% OFF）
+  description?: string;
+  expires?: string; // 有効期限（表示文字列）
+  conditions?: string; // 利用条件
+  code?: string; // 提示コード（枠で強調）
+  button?: FlexButtonInput | null;
+  color?: string;
+}
+
+/** お知らせ・営業案内カード（色付きヘッダー） */
+export interface NoticeCardData {
+  label?: string; // ヘッダー上の小さな分類（例: お知らせ）
+  title: string;
+  date?: string; // 表示文字列（例: 2026年11月20日）
+  body: string;
+  image_url?: string;
+  button?: FlexButtonInput | null;
+  color?: string; // ヘッダーの背景色
+}
+
+export interface MenuListItem {
+  key: string;
+  name: string;
+  price?: string;
+  note?: string; // 所要時間や補足
+}
+
+/** 料金表（1 枚のリスト型。カルーセルにしたくないとき） */
+export interface MenuListData {
+  title: string;
+  items: MenuListItem[]; // 最大 15 行
+  footnote?: string;
+  button?: FlexButtonInput | null;
+  color?: string;
+}
+
+export interface StaffCarouselItem {
+  key: string;
+  image_url?: string;
+  name: string;
+  role?: string; // 役職・得意分野
+  comment?: string;
+  button?: FlexButtonInput | null;
+}
+
+/** スタッフ紹介カルーセル */
+export interface StaffCarouselData {
+  items: StaffCarouselItem[]; // 最大 12
+  button_label?: string; // 共通ボタン（例: このスタッフで予約）
+  button_url?: string;
+  color?: string;
+}
+
+export interface StepItem {
+  key: string;
+  title: string;
+  text?: string;
+}
+
+/** ご利用の流れ（番号付きステップ） */
+export interface StepsCardData {
+  title: string;
+  steps: StepItem[]; // 最大 8
+  button?: FlexButtonInput | null;
+  color?: string;
+}
+
+export type LineFlexTemplateData =
+  | BookingCardData
+  | MenuCarouselData
+  | StoreCardData
+  | CouponCardData
+  | NoticeCardData
+  | MenuListData
+  | StaffCarouselData
+  | StepsCardData
+  | Record<string, never>;
 
 /** Flex Message の contents（bubble / carousel）。構造は LINE の仕様どおりなので型は緩くしておく */
 export type FlexContainer = Record<string, unknown>;
