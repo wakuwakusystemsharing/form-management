@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import { busyCalendarIdsFromEvents, countEventsOverlappingSlot, type CalendarEventLike } from './staff-availability';
 import { createAdminClient } from './supabase';
 import { decryptRefreshToken } from './google-calendar-token';
+import { getServiceAccountCredentials } from './google-service-account';
 
 const GOOGLE_CALENDAR_SCOPES = [
   'https://www.googleapis.com/auth/calendar',
@@ -13,44 +14,6 @@ const GOOGLE_CALENDAR_SCOPES = [
  * このメールで Google Calendar にログインすると「カレンダーを追加」で表示・編集できる。
  */
 const DEFAULT_CALENDAR_SHARE_EMAIL = 'wakuwakusystemsharing@gmail.com';
-
-function parseServiceAccountJson(raw: string): { client_email?: string; private_key?: string } | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    try {
-      const decoded = Buffer.from(trimmed, 'base64').toString('utf-8');
-      return JSON.parse(decoded);
-    } catch {
-      return null;
-    }
-  }
-}
-
-async function getServiceAccountJson(): Promise<string | null> {
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    return process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  }
-
-  const adminClient = createAdminClient();
-  if (!adminClient) return null;
-
-  const { data, error } = await (adminClient as any)
-    .from('admin_settings')
-    .select('value')
-    .eq('key', 'google_service_account_json')
-    .maybeSingle();
-
-  if (error) {
-    console.error('[GoogleCalendar] admin_settings fetch error:', error);
-    return null;
-  }
-
-  return data?.value || null;
-}
 
 async function getOAuthClientCredentials(): Promise<{ clientId: string; clientSecret: string } | null> {
   if (process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET) {
@@ -80,14 +43,8 @@ async function getOAuthClientCredentials(): Promise<{ clientId: string; clientSe
 }
 
 async function getServiceAccountCalendarClient() {
-  const rawJson = await getServiceAccountJson();
-  if (!rawJson) return null;
-
-  const credentials = parseServiceAccountJson(rawJson);
-  if (!credentials?.client_email || !credentials?.private_key) {
-    console.error('[GoogleCalendar] Invalid service account JSON');
-    return null;
-  }
+  const credentials = await getServiceAccountCredentials();
+  if (!credentials) return null;
 
   const auth = new google.auth.JWT({
     email: credentials.client_email,

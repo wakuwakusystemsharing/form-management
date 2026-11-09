@@ -695,6 +695,15 @@ export async function GET(req, { params }) {
 - `POST /api/surveys/submit` が回答保存後に `applySurveyTagsToCustomer()`（`src/lib/survey-tags-apply.ts`）を呼び、`line_user_id` で店舗内の顧客を検索してタグをマージ（顧客が無ければ何もしない。失敗しても送信は成功扱い）。回答 → タグの集計は `src/lib/survey-tags.ts` の `collectSurveyOptionTags()`（radio / select はラベル一致、checkbox は ", " 区切り）
 - 顧客一覧はセグメントの隣に「タグで絞り込み」プルダウン（`GET /customers/tags` の一覧。将来の配信機能の絞り込みにも流用予定）
 
+**アンケート回答の Google スプレッドシート自動転記（`SurveyConfig.basic_info.google_sheets`。設計メモは本節のみ）:**
+- アンケート編集 → 基本情報 → 「Google スプレッドシート連携」（`SurveySheetsSettings.tsx`）に スプレッドシートの ID（URL 貼り付け可。`parseSpreadsheetId` で ID 化）と シート名（タブ。空 = 1 枚目。無ければ自動作成）を入力。ID が空 = 連携しない。再デプロイ不要（サーバー側で参照）
+- 認証は **マスター管理に登録済みのサービスアカウント**（カレンダー作成と同じ `google_service_account_json`。共通化 `src/lib/google-service-account.ts`）。店舗（弊社）はシートの「共有」でサービスアカウントのメールアドレスを**編集者**に追加するだけ（編集画面にメールとコピーボタンを表示）。他アカウントから共有されたシートも wakuwakusystemsharing@gmail.com から再共有できれば可
+- 送信 `POST /api/surveys/submit` が回答保存 → タグ付与のあと `syncSurveyResponseToSheet()`（`src/lib/survey-sheets-service.ts`）で 1 行追記。**失敗しても回答の保存は成功扱い**（ログのみ）。1 行目（見出し）は `回答日時 / LINE表示名 / LINEユーザーID / 回答ID / 質問の文言…` を自動で作り、新しいキー（質問の追加・改名・追加質問）は右端に列を足す。列は**見出し名で対応**させるので店舗が列を並べ替えても壊れない。値は `=` `+` `-` `@` 始まりを `'` で無害化（`sanitizeSheetCell`）。日時は JST
+- LINE 表示名はフォームの LIFF ID トークンの `name` を `line_display_name` で送り `surveys.line_display_name` に保存。無い回答（過去分）は顧客台帳（`customers.name`）で補う
+- 「接続を確認」`POST /api/surveys/{id}/sheets/test`、「過去の回答を書き出す」`POST /api/surveys/{id}/sheets/export`（`surveys.sheet_synced_at IS NULL` の回答を古い順に最大 1000 件追記して `sheet_synced_at` を更新。残りは `remaining` で返しもう一度押す）、状態 `GET /api/surveys/{id}/sheets`（サービスアカウントのメール / 未転記件数）。いずれも `authorizeStoreAccess`
+- 純粋ロジック `src/lib/survey-sheets.ts`（`parseSpreadsheetId` / `resolveSurveySheetsSettings` / `mergeSurveySheetHeader` / `buildSurveySheetRow` / `quoteSheetName`）。Vitest: `survey-sheets.test.ts` / `survey-sheets-service.test.ts`（偽の Sheets クライアント）
+- マイグレーション: `20261109000000_add_survey_sheets_sync.sql`（`surveys.line_display_name` / `sheet_synced_at`）。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも送信 API は列なしで再試行して回答を保存する
+
 **アンケートの「テキスト/画像表示」ブロックと文字色 (`SurveyContentBlock`, `config.content_blocks`):**
 - 質問項目の編集画面で Q と Q の間（Q1 の上・最後の Q の下も）に「テキスト/画像表示を追加」。`anchor` = 基準の質問 ID、`position` = `above | below`
 - テキストは `[color=#rrggbb]〜[/color]` で部分的に文字色変更（予約フォームの「画像orテキスト設置」と同じ書式）。各質問の説明文も同じ書式に対応
