@@ -11,6 +11,7 @@ const SURVEY_RESPONSES_FILE = path.join(DATA_DIR, 'survey_responses.json');
 // GET /api/stores/[storeId]/surveys/responses - 店舗のアンケート回答一覧取得
 //   ?survey_form_id=... でフォーム別に絞り込み
 //   ?search=... で responses JSONB 内の text 部分一致 + 紐付き顧客の name/email/phone を検索
+//   ?line_user_id=... で回答者（LINE ユーザー ID）を絞り込み（顧客詳細のアンケートタブ）
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ storeId: string }> }
@@ -21,6 +22,7 @@ export async function GET(
     const url = new URL(request.url);
     const surveyFormId = url.searchParams.get('survey_form_id');
     const search = url.searchParams.get('search')?.trim() || null;
+    const lineUserId = url.searchParams.get('line_user_id')?.trim() || null;
 
     // ローカル環境: JSON ファイルから取得
     if (env === 'local') {
@@ -32,6 +34,20 @@ export async function GET(
       if (surveyFormId) {
         responses = responses.filter((r: any) => r.survey_form_id === surveyFormId);
       }
+      if (lineUserId) {
+        responses = responses.filter((r: any) => r.line_user_id === lineUserId);
+      }
+      // フォーム名を付ける（Supabase の survey_forms 結合と同じ形）
+      const formsFile = path.join(DATA_DIR, `surveys_${storeId}.json`);
+      const formNames = new Map<string, { id: string; name: string; config: unknown }>();
+      if (fs.existsSync(formsFile)) {
+        try {
+          for (const f of JSON.parse(fs.readFileSync(formsFile, 'utf-8')) as any[]) {
+            formNames.set(f.id, { id: f.id, name: f.config?.basic_info?.title || f.name || '', config: { basic_info: { title: f.config?.basic_info?.title || '' } } });
+          }
+        } catch { /* 読めなければ名前なし */ }
+      }
+      responses = responses.map((r: any) => ({ ...r, survey_forms: formNames.get(r.survey_form_id) ?? null }));
       if (search) {
         const q = search.toLowerCase();
         responses = responses.filter((r: any) => {
@@ -81,6 +97,9 @@ export async function GET(
     // survey_form_idが指定されている場合はフィルタ
     if (surveyFormId) {
       query = query.eq('survey_form_id', surveyFormId);
+    }
+    if (lineUserId) {
+      query = query.eq('line_user_id', lineUserId);
     }
 
     const { data: surveys, error } = await query;

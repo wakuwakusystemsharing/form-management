@@ -98,6 +98,17 @@ export interface SurveyGoogleSheetsSettings {
   enabled?: boolean; // 連携の ON/OFF。未設定（旧データ）は spreadsheet_id があれば ON 扱い
   spreadsheet_id: string; // URL ではなく ID（編集画面で URL を貼ると ID に変換）
   sheet_name?: string; // タブ名。空 = 1 枚目のタブ
+  // 列のカスタマイズ（未設定 = おすすめ: 固定 4 列 + 質問の順）。並び順 = 配列順
+  columns?: SurveySheetColumn[];
+  // 一覧に無い回答キー（追加質問など）を右端に自動で足すか（既定 true）
+  include_unlisted?: boolean;
+}
+
+/** スプレッドシートの 1 列。key = 'submitted_at' | 'line_display_name' | 'line_user_id' | 'response_id' | 'q:<質問の文言>' */
+export interface SurveySheetColumn {
+  key: string;
+  label?: string; // 見出し名（空 = 既定）
+  enabled?: boolean; // false = 転記しない（既定 true）
 }
 
 export interface SurveyConfig {
