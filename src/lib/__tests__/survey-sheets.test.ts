@@ -3,6 +3,7 @@ import {
   buildSurveySheetRow,
   columnLetter,
   formatSheetDateTimeJst,
+  isSurveySheetsEnabled,
   mergeSurveySheetHeader,
   parseSpreadsheetGid,
   parseSpreadsheetId,
@@ -38,13 +39,21 @@ describe('resolveSurveySheetsSettings', () => {
     questions: [],
     ui_settings: { submit_button_text: '送信', theme_color: '#000' },
   } as unknown as SurveyConfig;
-  const withSheets = (google_sheets: { spreadsheet_id: string; sheet_name?: string }): SurveyConfig =>
+  const withSheets = (google_sheets: { enabled?: boolean; spreadsheet_id: string; sheet_name?: string }): SurveyConfig =>
     ({ ...base, basic_info: { ...base.basic_info, google_sheets } }) as SurveyConfig;
 
   it('未設定 / ID 空 / ID 不正は null', () => {
     expect(resolveSurveySheetsSettings(base)).toBeNull();
     expect(resolveSurveySheetsSettings(withSheets({ spreadsheet_id: '' }))).toBeNull();
     expect(resolveSurveySheetsSettings(withSheets({ spreadsheet_id: 'x' }))).toBeNull();
+  });
+  it('enabled: false なら ID があっても null。enabled 未設定（旧データ）は ID があれば ON、true は通常どおり', () => {
+    expect(resolveSurveySheetsSettings(withSheets({ enabled: false, spreadsheet_id: ID }))).toBeNull();
+    expect(resolveSurveySheetsSettings(withSheets({ spreadsheet_id: ID }))?.spreadsheetId).toBe(ID);
+    expect(resolveSurveySheetsSettings(withSheets({ enabled: true, spreadsheet_id: ID }))?.spreadsheetId).toBe(ID);
+    expect(isSurveySheetsEnabled(undefined)).toBe(false);
+    expect(isSurveySheetsEnabled({ spreadsheet_id: '' })).toBe(false);
+    expect(isSurveySheetsEnabled({ enabled: true, spreadsheet_id: '' })).toBe(true);
   });
   it('URL を ID に変換し、タブ名は trim（空は null）', () => {
     expect(resolveSurveySheetsSettings(withSheets({ spreadsheet_id: `https://docs.google.com/spreadsheets/d/${ID}/edit`, sheet_name: ' 回答 ' })))

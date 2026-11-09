@@ -5,7 +5,7 @@
  * - 1 行目は見出し。先頭に固定列（回答日時 / LINE表示名 / LINEユーザーID / 回答ID）、以降は質問の文言
  *   （responses のキー）。新しいキーが出たら右端に列を足し、既存の列はそのまま。列は見出し名で対応させる
  */
-import type { SurveyConfig } from '@/types/survey';
+import type { SurveyConfig, SurveyGoogleSheetsSettings } from '@/types/survey';
 
 export const SURVEY_SHEET_FIXED_COLUMNS = ['回答日時', 'LINE表示名', 'LINEユーザーID', '回答ID'] as const;
 export const SURVEY_SHEET_NAME_MAX = 100;
@@ -45,10 +45,17 @@ export function normalizeSheetName(name: string | null | undefined): string | nu
   return trimmed || null;
 }
 
-/** 設定を正規化。連携しない（ID が空 / 不正）なら null */
+/** 連携の ON/OFF。enabled 未設定（旧データ）は ID が入っていれば ON 扱い */
+export function isSurveySheetsEnabled(raw: SurveyGoogleSheetsSettings | null | undefined): boolean {
+  if (!raw) return false;
+  if (typeof raw.enabled === 'boolean') return raw.enabled;
+  return !!parseSpreadsheetId(raw.spreadsheet_id);
+}
+
+/** 設定を正規化。連携しない（OFF / ID が空 / 不正）なら null */
 export function resolveSurveySheetsSettings(config: SurveyConfig | null | undefined): ResolvedSurveySheetsSettings | null {
   const raw = config?.basic_info?.google_sheets;
-  if (!raw) return null;
+  if (!raw || !isSurveySheetsEnabled(raw)) return null;
   const spreadsheetId = parseSpreadsheetId(raw.spreadsheet_id);
   if (!spreadsheetId) return null;
   return { spreadsheetId, sheetName: normalizeSheetName(raw.sheet_name) };
