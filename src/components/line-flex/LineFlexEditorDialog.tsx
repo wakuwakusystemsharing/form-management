@@ -15,6 +15,7 @@ import { useToast } from '@/components/ui/use-toast';
 import FlexPreview from './FlexPreview';
 import type {
   BookingCardData,
+  CouponCardData,
   FlexButtonInput,
   FlexContainer,
   LineFlexMessage,
@@ -23,6 +24,10 @@ import type {
   LineFlexTemplateData,
   MenuCarouselData,
   MenuCarouselItem,
+  MenuListData,
+  NoticeCardData,
+  StaffCarouselData,
+  StepsCardData,
   StoreCardData,
 } from '@/types/line-flex';
 import {
@@ -32,9 +37,12 @@ import {
   LINE_FLEX_BUTTONS_MAX,
   LINE_FLEX_CAROUSEL_MAX,
   LINE_FLEX_KEYWORD_MAX,
+  LINE_FLEX_MENU_LIST_MAX,
   LINE_FLEX_NAME_MAX,
+  LINE_FLEX_STEPS_MAX,
   LINE_FLEX_TEMPLATES,
   menuCarouselFromForm,
+  menuListFromForm,
   normalizeKeywords,
   resolveFlexContents,
   storeCardFromStore,
@@ -153,6 +161,38 @@ function ButtonsEditor({ buttons, forms, onChange, max }: { buttons: FlexButtonI
           ＋ ボタンを追加（{buttons.length}/{max}）
         </Button>
       )}
+    </div>
+  );
+}
+
+function SingleButtonField({ value, forms, onChange, placeholder = '予約する' }: { value: FlexButtonInput | null | undefined; forms: FlexFormOption[]; onChange: (b: FlexButtonInput | null) => void; placeholder?: string }) {
+  const btn = value ?? { key: 'b1', label: '', url: '' };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Input value={btn.label} maxLength={40} onChange={(e) => onChange({ ...btn, label: e.target.value })} placeholder={`ボタンの文言（例: ${placeholder}）`} className="h-8 w-40 text-xs" />
+      <Input value={btn.url} onChange={(e) => onChange({ ...btn, url: e.target.value })} placeholder="https://… または tel:0312345678" className="h-8 flex-1 min-w-[12rem] text-xs" />
+      <UrlPicker forms={forms} onPick={(url) => onChange({ ...btn, url })} />
+      {(btn.label || btn.url) && (
+        <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => onChange(null)}>ボタンなし</button>
+      )}
+    </div>
+  );
+}
+
+function moveItem<T>(arr: T[], index: number, dir: -1 | 1): T[] {
+  const to = index + dir;
+  if (to < 0 || to >= arr.length) return arr;
+  const next = [...arr];
+  [next[index], next[to]] = [next[to], next[index]];
+  return next;
+}
+
+function RowTools({ index, length, onMove, onRemove }: { index: number; length: number; onMove: (dir: -1 | 1) => void; onRemove: () => void }) {
+  return (
+    <div className="ml-auto flex items-center gap-1">
+      <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" disabled={index === 0} onClick={() => onMove(-1)}>↑</Button>
+      <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" disabled={index === length - 1} onClick={() => onMove(1)}>↓</Button>
+      <button type="button" className="text-xs text-destructive hover:underline" onClick={onRemove}>削除</button>
     </div>
   );
 }
@@ -383,9 +423,19 @@ export default function LineFlexEditorDialog({ storeId, store, forms, open, init
   const bc = data as BookingCardData;
   const mc = data as MenuCarouselData;
   const sc = data as StoreCardData;
+  const cc = data as CouponCardData;
+  const nc = data as NoticeCardData;
+  const ml = data as MenuListData;
+  const st = data as StaffCarouselData;
+  const sp = data as StepsCardData;
   const setBc = (patch: Partial<BookingCardData>) => { setData({ ...bc, ...patch }); touch(); };
   const setMc = (patch: Partial<MenuCarouselData>) => { setData({ ...mc, ...patch }); touch(); };
   const setSc = (patch: Partial<StoreCardData>) => { setData({ ...sc, ...patch }); touch(); };
+  const setCc = (patch: Partial<CouponCardData>) => { setData({ ...cc, ...patch }); touch(); };
+  const setNc = (patch: Partial<NoticeCardData>) => { setData({ ...nc, ...patch }); touch(); };
+  const setMl = (patch: Partial<MenuListData>) => { setData({ ...ml, ...patch }); touch(); };
+  const setSt = (patch: Partial<StaffCarouselData>) => { setData({ ...st, ...patch }); touch(); };
+  const setSp = (patch: Partial<StepsCardData>) => { setData({ ...sp, ...patch }); touch(); };
   const updateItem = (key: string, patch: Partial<MenuCarouselItem>) => setMc({ items: mc.items.map((x) => (x.key === key ? { ...x, ...patch } : x)) });
 
   const renderTemplateFields = () => {
@@ -490,6 +540,132 @@ export default function LineFlexEditorDialog({ storeId, store, forms, open, init
               </div>
             </div>
             <ColorField value={sc.color} onChange={(v) => setSc({ color: v })} />
+          </div>
+        );
+      case 'coupon_card':
+        return (
+          <div className="space-y-3">
+            <ImageField slot="hero" value={cc.image_url} uploading={uploading} onUpload={(slot, f, cur) => uploadImage(slot, f, cur, (url) => setCc({ image_url: url }))} onChange={(url) => setCc({ image_url: url })} />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="space-y-1"><Label className="text-xs">見出し</Label><Input value={cc.title} maxLength={40} onChange={(e) => setCc({ title: e.target.value })} placeholder="例: LINE 友だち限定クーポン" /></div>
+              <div className="space-y-1"><Label className="text-xs">大きく出す文字</Label><Input value={cc.highlight} maxLength={20} onChange={(e) => setCc({ highlight: e.target.value })} placeholder="例: 10% OFF / 500円引き" /></div>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">説明文</Label><Textarea value={cc.description ?? ''} maxLength={300} rows={2} onChange={(e) => setCc({ description: e.target.value })} placeholder="例: このメッセージをご来店時にご提示ください" /></div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="space-y-1"><Label className="text-xs">有効期限</Label><Input value={cc.expires ?? ''} maxLength={40} onChange={(e) => setCc({ expires: e.target.value })} placeholder="例: 2026年12月31日まで" /></div>
+              <div className="space-y-1"><Label className="text-xs">利用条件</Label><Input value={cc.conditions ?? ''} maxLength={60} onChange={(e) => setCc({ conditions: e.target.value })} placeholder="例: 他クーポン併用不可" /></div>
+              <div className="space-y-1"><Label className="text-xs">提示コード（任意）</Label><Input value={cc.code ?? ''} maxLength={20} onChange={(e) => setCc({ code: e.target.value })} placeholder="例: LINE10" /></div>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">ボタン（任意）</Label><SingleButtonField value={cc.button} forms={forms} onChange={(button) => setCc({ button })} /></div>
+            <ColorField value={cc.color} onChange={(v) => setCc({ color: v })} />
+          </div>
+        );
+      case 'notice_card':
+        return (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="space-y-1"><Label className="text-xs">分類（帯の上の小さな文字）</Label><Input value={nc.label ?? ''} maxLength={20} onChange={(e) => setNc({ label: e.target.value })} placeholder="例: お知らせ / 重要" /></div>
+              <div className="space-y-1 sm:col-span-2"><Label className="text-xs">見出し</Label><Input value={nc.title} maxLength={60} onChange={(e) => setNc({ title: e.target.value })} placeholder="例: 年末年始の営業について" /></div>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">日付（任意）</Label><Input value={nc.date ?? ''} maxLength={40} onChange={(e) => setNc({ date: e.target.value })} placeholder="例: 2026年12月28日" /></div>
+            <div className="space-y-1"><Label className="text-xs">本文</Label><Textarea value={nc.body} maxLength={800} rows={4} onChange={(e) => setNc({ body: e.target.value })} placeholder="例: 12月31日〜1月3日は休業いたします。" /></div>
+            <div className="space-y-1"><Label className="text-xs">画像（任意）</Label><ImageField slot="hero" value={nc.image_url} uploading={uploading} onUpload={(slot, f, cur) => uploadImage(slot, f, cur, (url) => setNc({ image_url: url }))} onChange={(url) => setNc({ image_url: url })} /></div>
+            <div className="space-y-1"><Label className="text-xs">ボタン（任意）</Label><SingleButtonField value={nc.button} forms={forms} onChange={(button) => setNc({ button })} placeholder="詳しく見る" /></div>
+            <ColorField value={nc.color} onChange={(v) => setNc({ color: v })} />
+          </div>
+        );
+      case 'menu_list':
+        return (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-2">
+              <span className="text-xs">予約フォームのメニュー構成から下書きを作る:</span>
+              <Select onValueChange={(formId) => { const f = forms.find((x) => x.id === formId); if (f) setMl(menuListFromForm(f.form as never, ml)); }}>
+                <SelectTrigger className="h-8 w-[12rem] text-xs"><SelectValue placeholder="フォームを選ぶ" /></SelectTrigger>
+                <SelectContent>
+                  {forms.map((f) => (
+                    <SelectItem key={f.id} value={f.id} className="text-xs">{f.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-[11px] text-muted-foreground">先頭 {LINE_FLEX_MENU_LIST_MAX} 件まで</span>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">見出し</Label><Input value={ml.title} maxLength={40} onChange={(e) => setMl({ title: e.target.value })} placeholder="例: メニュー・料金" /></div>
+            <div className="space-y-1">
+              <Label className="text-xs">行（最大 {LINE_FLEX_MENU_LIST_MAX}）</Label>
+              {(ml.items ?? []).map((item, i) => (
+                <div key={item.key} className="flex flex-wrap items-center gap-2 rounded border p-2">
+                  <Input value={item.name} maxLength={40} onChange={(e) => setMl({ items: ml.items.map((x) => (x.key === item.key ? { ...x, name: e.target.value } : x)) })} placeholder="メニュー名" className="h-8 flex-1 min-w-[8rem] text-xs" />
+                  <Input value={item.price ?? ''} maxLength={20} onChange={(e) => setMl({ items: ml.items.map((x) => (x.key === item.key ? { ...x, price: e.target.value } : x)) })} placeholder="料金" className="h-8 w-28 text-xs" />
+                  <Input value={item.note ?? ''} maxLength={40} onChange={(e) => setMl({ items: ml.items.map((x) => (x.key === item.key ? { ...x, note: e.target.value } : x)) })} placeholder="補足（所要時間など）" className="h-8 w-40 text-xs" />
+                  <RowTools index={i} length={ml.items.length} onMove={(dir) => setMl({ items: moveItem(ml.items, i, dir) })} onRemove={() => setMl({ items: ml.items.filter((x) => x.key !== item.key) })} />
+                </div>
+              ))}
+              {(ml.items?.length ?? 0) < LINE_FLEX_MENU_LIST_MAX && (
+                <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => setMl({ items: [...(ml.items ?? []), { key: rowKey(), name: '', price: '', note: '' }] })}>＋ 行を追加</Button>
+              )}
+            </div>
+            <div className="space-y-1"><Label className="text-xs">注記（任意）</Label><Input value={ml.footnote ?? ''} maxLength={80} onChange={(e) => setMl({ footnote: e.target.value })} placeholder="例: ※ 価格は税込です" /></div>
+            <div className="space-y-1"><Label className="text-xs">ボタン（任意）</Label><SingleButtonField value={ml.button} forms={forms} onChange={(button) => setMl({ button })} /></div>
+            <ColorField value={ml.color} onChange={(v) => setMl({ color: v })} />
+          </div>
+        );
+      case 'staff_carousel':
+        return (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              {(st.items ?? []).map((item, i) => (
+                <div key={item.key} className="space-y-2 rounded border p-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">スタッフ {i + 1}</span>
+                    <RowTools index={i} length={st.items.length} onMove={(dir) => setSt({ items: moveItem(st.items, i, dir) })} onRemove={() => setSt({ items: st.items.filter((x) => x.key !== item.key) })} />
+                  </div>
+                  <ImageField slot={`staff_${item.key}`} value={item.image_url} uploading={uploading} onUpload={(slot, f, cur) => uploadImage(slot, f, cur, (url) => setSt({ items: st.items.map((x) => (x.key === item.key ? { ...x, image_url: url } : x)) }))} onChange={(url) => setSt({ items: st.items.map((x) => (x.key === item.key ? { ...x, image_url: url } : x)) })} />
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <Input value={item.name} maxLength={30} onChange={(e) => setSt({ items: st.items.map((x) => (x.key === item.key ? { ...x, name: e.target.value } : x)) })} placeholder="名前" className="h-8 text-xs" />
+                    <Input value={item.role ?? ''} maxLength={40} onChange={(e) => setSt({ items: st.items.map((x) => (x.key === item.key ? { ...x, role: e.target.value } : x)) })} placeholder="役職・得意分野（例: カラー担当）" className="h-8 text-xs" />
+                  </div>
+                  <Textarea value={item.comment ?? ''} maxLength={200} rows={2} onChange={(e) => setSt({ items: st.items.map((x) => (x.key === item.key ? { ...x, comment: e.target.value } : x)) })} placeholder="ひとこと（任意）" className="text-xs" />
+                </div>
+              ))}
+              {(st.items?.length ?? 0) < LINE_FLEX_CAROUSEL_MAX && (
+                <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSt({ items: [...(st.items ?? []), { key: rowKey(), name: '', role: '', comment: '', image_url: '', button: null }] })}>
+                  ＋ スタッフを追加（{st.items?.length ?? 0}/{LINE_FLEX_CAROUSEL_MAX}）
+                </Button>
+              )}
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">全カード共通のボタン（任意）</Label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input value={st.button_label ?? ''} maxLength={40} onChange={(e) => setSt({ button_label: e.target.value })} placeholder="ボタンの文言（例: このスタッフで予約）" className="h-8 w-48 text-xs" />
+                <Input value={st.button_url ?? ''} onChange={(e) => setSt({ button_url: e.target.value })} placeholder="https://…" className="h-8 flex-1 min-w-[12rem] text-xs" />
+                <UrlPicker forms={forms} onPick={(url) => setSt({ button_url: url })} />
+              </div>
+            </div>
+            <ColorField value={st.color} onChange={(v) => setSt({ color: v })} />
+          </div>
+        );
+      case 'steps_card':
+        return (
+          <div className="space-y-3">
+            <div className="space-y-1"><Label className="text-xs">見出し</Label><Input value={sp.title} maxLength={40} onChange={(e) => setSp({ title: e.target.value })} placeholder="例: ご利用の流れ" /></div>
+            <div className="space-y-1">
+              <Label className="text-xs">ステップ（最大 {LINE_FLEX_STEPS_MAX}）</Label>
+              {(sp.steps ?? []).map((step, i) => (
+                <div key={step.key} className="space-y-2 rounded border p-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ backgroundColor: sp.color || '#06C755' }}>{i + 1}</span>
+                    <Input value={step.title} maxLength={40} onChange={(e) => setSp({ steps: sp.steps.map((x) => (x.key === step.key ? { ...x, title: e.target.value } : x)) })} placeholder="ステップ名" className="h-8 flex-1 text-xs" />
+                    <RowTools index={i} length={sp.steps.length} onMove={(dir) => setSp({ steps: moveItem(sp.steps, i, dir) })} onRemove={() => setSp({ steps: sp.steps.filter((x) => x.key !== step.key) })} />
+                  </div>
+                  <Input value={step.text ?? ''} maxLength={120} onChange={(e) => setSp({ steps: sp.steps.map((x) => (x.key === step.key ? { ...x, text: e.target.value } : x)) })} placeholder="説明（任意）" className="h-8 text-xs" />
+                </div>
+              ))}
+              {(sp.steps?.length ?? 0) < LINE_FLEX_STEPS_MAX && (
+                <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSp({ steps: [...(sp.steps ?? []), { key: rowKey(), title: '', text: '' }] })}>＋ ステップを追加</Button>
+              )}
+            </div>
+            <div className="space-y-1"><Label className="text-xs">ボタン（任意）</Label><SingleButtonField value={sp.button} forms={forms} onChange={(button) => setSp({ button })} /></div>
+            <ColorField value={sp.color} onChange={(v) => setSp({ color: v })} />
           </div>
         );
       default:
