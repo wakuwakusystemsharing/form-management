@@ -13,7 +13,8 @@ import type { SurveyConfig, SurveyForm } from '@/types/survey';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
-async function loadSurveyConfig(surveyFormId: string): Promise<SurveyConfig | null> {
+/** アンケートフォームの config を取得（local = data/surveys_*.json / それ以外 = survey_forms）。スプレッドシート連携でも使う */
+export async function loadSurveyConfig(surveyFormId: string): Promise<SurveyConfig | null> {
   if (getAppEnvironment() === 'local') {
     if (!fs.existsSync(DATA_DIR)) return null;
     const files = fs.readdirSync(DATA_DIR).filter((f) => f.startsWith('surveys_') && f.endsWith('.json'));
