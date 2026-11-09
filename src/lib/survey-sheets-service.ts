@@ -121,7 +121,7 @@ export async function appendResponsesToSheet(sheets: SheetsClient, settings: Res
 
   const headerRes = await sheets.spreadsheets.values.get({ spreadsheetId: settings.spreadsheetId, range: `${quoted}!1:1` });
   const existingHeader = (headerRes.data.values?.[0] ?? []).map((v) => String(v ?? ''));
-  const { header, added } = mergeSurveySheetHeader(existingHeader, responses.map((r) => r.responses));
+  const { header, added } = mergeSurveySheetHeader(existingHeader, responses.map((r) => r.responses), settings.plan);
   if (added.length > 0) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: settings.spreadsheetId,
@@ -139,7 +139,7 @@ export async function appendResponsesToSheet(sheets: SheetsClient, settings: Res
       range: `${quoted}!A1`,
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
-      requestBody: { values: chunk.map((r) => buildSurveySheetRow(r, header)) },
+      requestBody: { values: chunk.map((r) => buildSurveySheetRow(r, header, settings.plan)) },
     });
     appended += chunk.length;
   }

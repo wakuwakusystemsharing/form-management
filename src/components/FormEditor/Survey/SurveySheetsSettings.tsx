@@ -4,16 +4,28 @@
 // 回答が届くたびに指定したスプレッドシート（タブ）の末尾に 1 行追記する。
 // 認証はマスター管理に登録したサービスアカウント。店舗側の作業は「シートをそのメールアドレスに編集者で共有する」だけ。
 // ON/OFF トグルが OFF のときは入力欄・ボタンを隠す（設定値は残す）。
+// 「列をカスタマイズ」で 列の ON/OFF・並び順・見出し名 を変えられる（既定 = おすすめ: 固定 4 列 + 質問の順）。
 
 import React, { useEffect, useState } from 'react';
-import type { SurveyGoogleSheetsSettings } from '@/types/survey';
+import type { SurveyGoogleSheetsSettings, SurveyQuestion, SurveySheetColumn } from '@/types/survey';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { isSurveySheetsEnabled, parseSpreadsheetId, SURVEY_SHEET_FIXED_COLUMNS, SURVEY_SHEET_NAME_MAX } from '@/lib/survey-sheets';
+import {
+  buildSurveySheetColumnPlan,
+  defaultSurveySheetColumnLabel,
+  isQuestionColumnKey,
+  isSurveySheetsEnabled,
+  normalizeSurveySheetColumns,
+  parseSpreadsheetId,
+  questionColumnKey,
+  SURVEY_SHEET_LABEL_MAX,
+  SURVEY_SHEET_NAME_MAX,
+} from '@/lib/survey-sheets';
 
 interface Props {
   surveyId: string;
+  questions: SurveyQuestion[];
   value: SurveyGoogleSheetsSettings | undefined;
   onChange: (next: SurveyGoogleSheetsSettings | undefined) => void;
 }
@@ -29,7 +41,7 @@ type TestResult =
 
 type ExportResult = { kind: 'ok'; exported: number; remaining: number } | { kind: 'error'; message: string };
 
-export default function SurveySheetsSettings({ surveyId, value, onChange }: Props) {
+export default function SurveySheetsSettings({ surveyId, questions, value, onChange }: Props) {
   const [status, setStatus] = useState<StatusInfo | null>(null);
   const [copied, setCopied] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -37,6 +49,7 @@ export default function SurveySheetsSettings({ surveyId, value, onChange }: Prop
   const [exportConfirm, setExportConfirm] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
+  const [columnsOpen, setColumnsOpen] = useState(false);
 
   const enabled = isSurveySheetsEnabled(value);
   const spreadsheetInput = value?.spreadsheet_id ?? '';
@@ -44,6 +57,13 @@ export default function SurveySheetsSettings({ surveyId, value, onChange }: Prop
   const parsedId = parseSpreadsheetId(spreadsheetInput);
   const inputInvalid = spreadsheetInput.trim() !== '' && !parsedId;
   const ready = enabled && !!parsedId;
+
+  // 列: 保存値 + 現在の質問（あとから足した質問は末尾に ON で入る）
+  const columns = normalizeSurveySheetColumns(value?.columns, questions);
+  const includeUnlisted = value?.include_unlisted !== false;
+  const customized = !!value?.columns || value?.include_unlisted === false;
+  const plan = buildSurveySheetColumnPlan({ columns: value?.columns, include_unlisted: value?.include_unlisted }, questions);
+  const currentQuestionKeys = new Set(questions.map((q) => questionColumnKey(q.title || '')));
 
   useEffect(() => {
     if (!enabled) return;
@@ -65,13 +85,36 @@ export default function SurveySheetsSettings({ surveyId, value, onChange }: Prop
     setExportConfirm(false);
   };
 
+  const base = (): SurveyGoogleSheetsSettings => ({
+    enabled,
+    spreadsheet_id: spreadsheetInput,
+    sheet_name: sheetName,
+    ...(value?.columns ? { columns: value.columns } : {}),
+    ...(typeof value?.include_unlisted === 'boolean' ? { include_unlisted: value.include_unlisted } : {}),
+  });
+
   const update = (patch: Partial<SurveyGoogleSheetsSettings>) => {
-    onChange({ enabled, spreadsheet_id: spreadsheetInput, sheet_name: sheetName, ...patch });
+    onChange({ ...base(), ...patch });
     resetFeedback();
   };
 
-  const toggle = () => {
-    onChange({ enabled: !enabled, spreadsheet_id: spreadsheetInput, sheet_name: sheetName });
+  const toggle = () => update({ enabled: !enabled });
+
+  const setColumns = (next: SurveySheetColumn[]) => update({ columns: next });
+  const updateColumn = (key: string, patch: Partial<SurveySheetColumn>) => setColumns(columns.map((c) => (c.key === key ? { ...c, ...patch } : c)));
+  const moveColumn = (index: number, dir: -1 | 1) => {
+    const to = index + dir;
+    if (to < 0 || to >= columns.length) return;
+    const next = [...columns];
+    [next[index], next[to]] = [next[to], next[index]];
+    setColumns(next);
+  };
+  const removeColumn = (key: string) => setColumns(columns.filter((c) => c.key !== key));
+  const resetColumns = () => {
+    const next = base();
+    delete next.columns;
+    delete next.include_unlisted;
+    onChange(next);
     resetFeedback();
   };
 
@@ -124,7 +167,7 @@ export default function SurveySheetsSettings({ surveyId, value, onChange }: Prop
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ spreadsheet_id: parsedId, sheet_name: sheetName }),
+        body: JSON.stringify({ spreadsheet_id: parsedId, sheet_name: sheetName, columns: value?.columns, include_unlisted: value?.include_unlisted }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -167,9 +210,87 @@ export default function SurveySheetsSettings({ surveyId, value, onChange }: Prop
 
       {enabled && (
         <>
-          <p className="text-xs text-muted-foreground">
-            転記する列: {SURVEY_SHEET_FIXED_COLUMNS.join(' / ')} / 各質問の回答。見出し行は自動で作られ、質問を増やすと右端に列が足されます。
-          </p>
+          {/* 転記する列 + カスタマイズ */}
+          <div className="rounded-md border p-3 text-xs space-y-2" data-slot="survey-sheets-columns">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-medium">転記する列{customized ? '（カスタマイズ済み）' : '（おすすめ）'}</p>
+                <p className="text-muted-foreground mt-0.5 break-words">
+                  {plan.columns.map((c) => c.header).join(' / ') || '（列がありません）'}
+                  {includeUnlisted ? '　＋ 一覧に無い回答（追加質問など）は右端に自動追加' : ''}
+                </p>
+              </div>
+              <Button type="button" size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => setColumnsOpen((v) => !v)}>
+                {columnsOpen ? '閉じる' : '列をカスタマイズ'}
+              </Button>
+            </div>
+
+            {columnsOpen && (
+              <div className="space-y-2 pt-2 border-t">
+                <p className="text-muted-foreground">
+                  チェックで列の ON/OFF、↑↓ で並び順、入力欄で見出し名を変えられます。見出し行は 1 行目にこの名前で作られます。
+                  すでに回答が入っているシートで見出し名を変えると、新しい列として右端に追加されます（既存の列はそのまま）。
+                </p>
+                <ul className="space-y-1">
+                  {columns.map((c, index) => {
+                    const on = c.enabled !== false;
+                    const isQuestion = isQuestionColumnKey(c.key);
+                    const deleted = isQuestion && !currentQuestionKeys.has(c.key);
+                    return (
+                      <li key={c.key} className={`flex flex-wrap items-center gap-2 rounded border px-2 py-1.5 ${on ? 'bg-background' : 'bg-muted/50 text-muted-foreground'}`}>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 shrink-0"
+                          checked={on}
+                          onChange={(e) => updateColumn(c.key, { enabled: e.target.checked })}
+                          aria-label={`${defaultSurveySheetColumnLabel(c.key)} を転記する`}
+                        />
+                        <span className="inline-flex items-center gap-1 min-w-0 flex-1 basis-32">
+                          <span className="truncate" title={defaultSurveySheetColumnLabel(c.key)}>
+                            {isQuestion ? `質問: ${defaultSurveySheetColumnLabel(c.key)}` : defaultSurveySheetColumnLabel(c.key)}
+                          </span>
+                          {deleted && <span className="shrink-0 rounded bg-amber-100 px-1 text-[10px] text-amber-800">削除された質問</span>}
+                        </span>
+                        <Input
+                          type="text"
+                          value={c.label ?? ''}
+                          maxLength={SURVEY_SHEET_LABEL_MAX}
+                          onChange={(e) => updateColumn(c.key, { label: e.target.value })}
+                          placeholder={`見出し: ${defaultSurveySheetColumnLabel(c.key)}`}
+                          className="h-7 text-xs flex-1 basis-40 min-w-[8rem]"
+                          disabled={!on}
+                        />
+                        <span className="flex items-center gap-0.5 shrink-0">
+                          <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" disabled={index === 0} onClick={() => moveColumn(index, -1)} aria-label="上へ">↑</Button>
+                          <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" disabled={index === columns.length - 1} onClick={() => moveColumn(index, 1)} aria-label="下へ">↓</Button>
+                          {deleted && (
+                            <Button type="button" size="sm" variant="ghost" className="h-7 px-1.5 text-xs text-destructive" onClick={() => removeColumn(c.key)}>
+                              一覧から外す
+                            </Button>
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={includeUnlisted}
+                    onChange={(e) => update({ include_unlisted: e.target.checked })}
+                  />
+                  <span>一覧に無い回答（選択肢の追加質問など）も右端に自動で列を足して転記する</span>
+                </label>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-muted-foreground">おすすめ: 回答日時 / LINE表示名 / LINEユーザーID / 回答ID のあとに質問の順。</p>
+                  <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" disabled={!customized} onClick={resetColumns}>
+                    おすすめに戻す
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="rounded-md border bg-muted/40 p-3 text-xs space-y-1">
             <p className="font-medium">事前準備（1 回だけ）</p>

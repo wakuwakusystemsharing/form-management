@@ -2088,6 +2088,7 @@ export default function StoreAdminPage() {
         open={showCustomerDetail}
         showReservationHistory={adminOptions.customer_reservation_history}
         showLotteryHistory={adminOptions.customer_lottery_history}
+        showSurveyHistory={adminOptions.customer_survey_history}
         onTagClick={(tag) => {
           setCustomersTagFilter(tag);
           const params = new URLSearchParams(searchParams.toString());

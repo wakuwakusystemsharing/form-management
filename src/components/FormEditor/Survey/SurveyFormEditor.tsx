@@ -184,6 +184,7 @@ export default function SurveyFormEditor({ form, onUpdate, userRole = 'service_a
             {/* Google スプレッドシート連携 */}
             <SurveySheetsSettings
               surveyId={form.id}
+              questions={form.config.questions}
               value={form.config.basic_info?.google_sheets}
               onChange={(google_sheets) => handleBasicInfoUpdate({ google_sheets })}
             />
