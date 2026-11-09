@@ -1,0 +1,285 @@
+{
+  "type": "flex",
+  "altText": "【期間限定】秋の髪質改善キャンペーンのご案内",
+  "contents": {
+    "type": "carousel",
+    "contents": [
+      {
+        "type": "bubble",
+        "size": "mega",
+        "body": {
+          "type": "box",
+          "layout": "vertical",
+          "paddingAll": "0px",
+          "contents": [
+            {
+              "type": "image",
+              "url": "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=1040",
+              "size": "full",
+              "aspectMode": "cover",
+              "aspectRatio": "4:5",
+              "gravity": "top"
+            },
+            {
+              "type": "box",
+              "layout": "vertical",
+              "position": "absolute",
+              "offsetBottom": "0px",
+              "offsetStart": "0px",
+              "offsetEnd": "0px",
+              "paddingAll": "20px",
+              "paddingTop": "72px",
+              "background": {
+                "type": "linearGradient",
+                "angle": "0deg",
+                "startColor": "#1A1A1AEE",
+                "endColor": "#1A1A1A00"
+              },
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "AUTUMN CAMPAIGN",
+                  "size": "xxs",
+                  "color": "#D8C3A5",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "秋のケアで、髪に艶を。",
+                  "size": "xl",
+                  "color": "#FFFFFF",
+                  "weight": "bold",
+                  "margin": "sm",
+                  "wrap": true
+                },
+                {
+                  "type": "text",
+                  "text": "髪質改善トリートメント",
+                  "size": "sm",
+                  "color": "#FFFFFFCC",
+                  "margin": "md"
+                },
+                {
+                  "type": "box",
+                  "layout": "baseline",
+                  "margin": "md",
+                  "spacing": "sm",
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": "¥8,800",
+                      "size": "sm",
+                      "color": "#FFFFFF88",
+                      "decoration": "line-through",
+                      "flex": 0
+                    },
+                    {
+                      "type": "text",
+                      "text": "→",
+                      "size": "sm",
+                      "color": "#FFFFFF88",
+                      "flex": 0
+                    },
+                    {
+                      "type": "text",
+                      "text": "¥6,600",
+                      "size": "xxl",
+                      "color": "#D8C3A5",
+                      "weight": "bold",
+                      "flex": 0
+                    },
+                    {
+                      "type": "text",
+                      "text": "税込",
+                      "size": "xxs",
+                      "color": "#FFFFFF88",
+                      "flex": 0
+                    }
+                  ]
+                },
+                {
+                  "type": "box",
+                  "layout": "vertical",
+                  "margin": "lg",
+                  "cornerRadius": "30px",
+                  "borderWidth": "1px",
+                  "borderColor": "#FFFFFF",
+                  "paddingAll": "12px",
+                  "action": {
+                    "type": "uri",
+                    "label": "予約する",
+                    "uri": "https://example.com/reserve"
+                  },
+                  "contents": [
+                    {
+                      "type": "text",
+                      "text": "ご予約はこちら",
+                      "size": "sm",
+                      "color": "#FFFFFF",
+                      "weight": "bold",
+                      "align": "center"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "box",
+              "layout": "vertical",
+              "position": "absolute",
+              "offsetTop": "16px",
+              "offsetStart": "16px",
+              "backgroundColor": "#D8C3A5",
+              "cornerRadius": "20px",
+              "paddingTop": "4px",
+              "paddingBottom": "4px",
+              "paddingStart": "12px",
+              "paddingEnd": "12px",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": "11/30まで",
+                  "size": "xxs",
+                  "color": "#1A1A1A",
+                  "weight": "bold"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "bubble",
+        "size": "mega",
+        "body": {
+          "type": "box",
+          "layout": "vertical",
+          "backgroundColor": "#F7F3EE",
+          "paddingAll": "24px",
+          "contents": [
+            {
+              "type": "text",
+              "text": "MENU",
+              "size": "xxs",
+              "color": "#A68A64",
+              "weight": "bold"
+            },
+            {
+              "type": "text",
+              "text": "人気メニュー",
+              "size": "xl",
+              "color": "#1A1A1A",
+              "weight": "bold",
+              "margin": "sm"
+            },
+            {
+              "type": "box",
+              "layout": "vertical",
+              "margin": "lg",
+              "width": "32px",
+              "height": "2px",
+              "backgroundColor": "#A68A64",
+              "contents": []
+            },
+            {
+              "type": "box",
+              "layout": "vertical",
+              "margin": "xl",
+              "spacing": "lg",
+              "contents": [
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "contents": [
+                    {
+                      "type": "box",
+                      "layout": "vertical",
+                      "flex": 1,
+                      "contents": [
+                        { "type": "text", "text": "カット", "size": "sm", "color": "#1A1A1A", "weight": "bold" },
+                        { "type": "text", "text": "シャンプー・ブロー込み", "size": "xxs", "color": "#8C8C8C", "margin": "xs" }
+                      ]
+                    },
+                    { "type": "text", "text": "¥4,400", "size": "sm", "color": "#1A1A1A", "align": "end", "gravity": "center", "flex": 0 }
+                  ]
+                },
+                { "type": "separator", "color": "#E5DDD3" },
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "contents": [
+                    {
+                      "type": "box",
+                      "layout": "vertical",
+                      "flex": 1,
+                      "contents": [
+                        { "type": "text", "text": "カット＋カラー", "size": "sm", "color": "#1A1A1A", "weight": "bold" },
+                        { "type": "text", "text": "透明感カラー対応", "size": "xxs", "color": "#8C8C8C", "margin": "xs" }
+                      ]
+                    },
+                    { "type": "text", "text": "¥9,900", "size": "sm", "color": "#1A1A1A", "align": "end", "gravity": "center", "flex": 0 }
+                  ]
+                },
+                { "type": "separator", "color": "#E5DDD3" },
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "contents": [
+                    {
+                      "type": "box",
+                      "layout": "vertical",
+                      "flex": 1,
+                      "contents": [
+                        { "type": "text", "text": "髪質改善トリートメント", "size": "sm", "color": "#1A1A1A", "weight": "bold" },
+                        { "type": "text", "text": "今月限定価格", "size": "xxs", "color": "#A68A64", "margin": "xs", "weight": "bold" }
+                      ]
+                    },
+                    { "type": "text", "text": "¥6,600", "size": "sm", "color": "#A68A64", "weight": "bold", "align": "end", "gravity": "center", "flex": 0 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "footer": {
+          "type": "box",
+          "layout": "vertical",
+          "backgroundColor": "#F7F3EE",
+          "paddingAll": "24px",
+          "paddingTop": "0px",
+          "spacing": "sm",
+          "contents": [
+            {
+              "type": "box",
+              "layout": "vertical",
+              "backgroundColor": "#1A1A1A",
+              "cornerRadius": "30px",
+              "paddingAll": "14px",
+              "action": {
+                "type": "uri",
+                "label": "メニューから予約",
+                "uri": "https://example.com/reserve"
+              },
+              "contents": [
+                { "type": "text", "text": "メニューから予約する", "size": "sm", "color": "#FFFFFF", "weight": "bold", "align": "center" }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "すべてのメニューを見る ›",
+              "size": "xs",
+              "color": "#8C8C8C",
+              "align": "center",
+              "margin": "md",
+              "action": {
+                "type": "uri",
+                "label": "メニュー一覧",
+                "uri": "https://example.com/menu"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
