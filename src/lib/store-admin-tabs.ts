@@ -13,7 +13,7 @@ export type StoreAdminTabId = (typeof STORE_ADMIN_TAB_IDS)[number];
 export const STORE_ADMIN_TABS: { id: StoreAdminTabId; label: string; description: string }[] = [
   { id: 'dashboard', label: 'ダッシュボード', description: '予約・顧客・アンケートの概況' },
   { id: 'reservations', label: '予約管理', description: '予約フォームと予約一覧・分析' },
-  { id: 'customers', label: '顧客管理 β', description: '顧客一覧・顧客分析（CRM）' },
+  { id: 'customers', label: '顧客管理', description: '顧客一覧・顧客分析（CRM）' },
   { id: 'surveys', label: 'アンケート管理', description: 'アンケートフォームと回答一覧' },
   { id: 'lotteries', label: '抽選管理', description: '抽選フォームと抽選履歴・引換' },
   { id: 'walls', label: '寄せ書き', description: '匿名の寄せ書きウォールの確認・公開設定' },
@@ -44,6 +44,7 @@ export const STORE_ADMIN_OPTION_KEYS = [
   'lottery_forms',
   'customer_reservation_history',
   'customer_lottery_history',
+  'customer_survey_history',
 ] as const;
 export type StoreAdminOptionKey = (typeof STORE_ADMIN_OPTION_KEYS)[number];
 
@@ -69,6 +70,7 @@ export const STORE_ADMIN_OPTIONS: StoreAdminOptionDef[] = [
   { key: 'lottery_forms', tab: 'lotteries', label: 'フォーム管理を表示', description: '抽選フォームの一覧（編集・プレビュー・URL）', followsTab: 'lotteries' },
   { key: 'customer_reservation_history', tab: 'customers', label: '顧客詳細に予約履歴・来店履歴・統計情報を表示', description: '未設定のときは「予約管理」の表示に連動します', followsTab: 'reservations' },
   { key: 'customer_lottery_history', tab: 'customers', label: '顧客詳細に抽選履歴を表示', description: '未設定のときは「抽選管理」の表示に連動します', followsTab: 'lotteries' },
+  { key: 'customer_survey_history', tab: 'customers', label: '顧客詳細にアンケートの回答を表示', description: '未設定のときは「アンケート管理」の表示に連動します', followsTab: 'surveys' },
 ];
 
 export function isStoreAdminOptionKey(value: unknown): value is StoreAdminOptionKey {

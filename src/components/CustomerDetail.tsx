@@ -60,9 +60,11 @@ interface CustomerDetailProps {
   showReservationHistory?: boolean;
   /** 抽選履歴を表示するか（同上。既定 true） */
   showLotteryHistory?: boolean;
+  /** アンケートの回答を表示するか（同上。既定 true） */
+  showSurveyHistory?: boolean;
   /** 基本情報のタグをタップしたとき（一覧をそのタグで絞り込む） */
   onTagClick?: (tag: string) => void;
-  /** 最初に開く履歴タブ（'reservations' | 'visits' | 'lotteries' | 'line'。表示できないタブは無視） */
+  /** 最初に開く履歴タブ（'reservations' | 'surveys' | 'visits' | 'lotteries' | 'line'。表示できないタブは無視） */
   initialTab?: string;
 }
 
@@ -70,6 +72,31 @@ interface CustomerDetailData {
   customer: Customer;
   reservations: any[];
   visits: CustomerVisit[];
+}
+
+/** 顧客詳細のアンケートタブに出す 1 回答（GET /api/stores/{storeId}/surveys/responses?line_user_id=） */
+interface CustomerSurveyResponse {
+  id: string;
+  survey_form_id: string;
+  submitted_at: string;
+  responses?: Record<string, unknown> | string | null;
+  answers?: Record<string, unknown> | string | null;
+  survey_forms?: { id: string; name?: string | null; config?: { basic_info?: { title?: string } } | null } | null;
+}
+
+function surveyResponseTitle(r: CustomerSurveyResponse): string {
+  return r.survey_forms?.config?.basic_info?.title || r.survey_forms?.name || 'アンケート';
+}
+function surveyResponseEntries(r: CustomerSurveyResponse): Array<[string, string]> {
+  let raw: unknown = r.answers ?? r.responses ?? {};
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch { raw = {}; }
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  return Object.entries(raw as Record<string, unknown>).map(([k, v]) => [
+    k,
+    Array.isArray(v) ? v.map((x) => String(x ?? '')).join(', ') : v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v),
+  ]);
 }
 
 const dateFormatter = new Intl.DateTimeFormat('ja-JP');
@@ -158,9 +185,11 @@ function visitMenus(visit: CustomerVisit): string {
   return (visit.treatment_menus as Array<{ name?: string; menu_name?: string }>).map((m) => m.menu_name || m.name || '').filter(Boolean).join(', ') || '-';
 }
 
-export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated, onDeleted, onOpenReservation, showReservationHistory = true, showLotteryHistory = true, onTagClick, initialTab }: CustomerDetailProps) {
+export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated, onDeleted, onOpenReservation, showReservationHistory = true, showLotteryHistory = true, showSurveyHistory = true, onTagClick, initialTab }: CustomerDetailProps) {
   const [data, setData] = useState<CustomerDetailData | null>(null);
   const [lotteryEntries, setLotteryEntries] = useState<LotteryEntryView[]>([]);
+  // アンケートの回答（取得した顧客の LINE ユーザー ID と一緒に持ち、別の顧客の分を一瞬でも見せない）
+  const [surveyData, setSurveyData] = useState<{ lineUserId: string; items: CustomerSurveyResponse[] } | null>(null);
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -194,13 +223,34 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
       setIsEditing(false);
       setEditingVisitId(null);
       const allowed = [
-        ...(showReservationHistory ? ['reservations', 'visits'] : []),
+        ...(showReservationHistory ? ['reservations'] : []),
+        ...(showSurveyHistory ? ['surveys'] : []),
+        ...(showReservationHistory ? ['visits'] : []),
         ...(showLotteryHistory ? ['lotteries'] : []),
         'line',
       ];
       setTab(initialTab && allowed.includes(initialTab) ? initialTab : allowed[0]);
     }
-  }, [customerId, open, fetchCustomerDetail, showReservationHistory, showLotteryHistory, initialTab]);
+  }, [customerId, open, fetchCustomerDetail, showReservationHistory, showLotteryHistory, showSurveyHistory, initialTab]);
+
+  // アンケートの回答（回答者の LINE ユーザー ID で絞り込み。LINE 未連携の顧客は空）
+  const surveyLineUserId = data?.customer?.line_user_id ?? null;
+  const surveyResponses = surveyData && surveyData.lineUserId === surveyLineUserId ? surveyData.items : [];
+  useEffect(() => {
+    if (!customerId || !open || !showSurveyHistory || !surveyLineUserId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchWithAuth(`/api/stores/${storeId}/surveys/responses?line_user_id=${encodeURIComponent(surveyLineUserId)}`);
+        if (!res.ok || cancelled) return;
+        const json = await res.json();
+        if (!cancelled) setSurveyData({ lineUserId: surveyLineUserId, items: Array.isArray(json) ? json : [] });
+      } catch (e) {
+        console.error('Failed to fetch survey responses:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [storeId, customerId, open, showSurveyHistory, surveyLineUserId]);
 
   useEffect(() => {
     if (!customerId || !open || !showLotteryHistory) return;
@@ -567,6 +617,14 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
           </section>
           )}
 
+          {/* メモ */}
+          {customer.notes && (
+            <section className="px-4 py-4 md:rounded-lg md:border md:bg-card" aria-label="メモ">
+              <h4 className="text-xs text-muted-foreground mb-1">メモ</h4>
+              <p className="whitespace-pre-wrap text-sm">{customer.notes}</p>
+            </section>
+          )}
+
           {/* 履歴タブ */}
           <section className="py-3 md:py-0" aria-label="履歴">
             <Tabs value={tab} onValueChange={setTab} className="w-full">
@@ -574,10 +632,9 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                 <ChipTabsList
                   desktopGrid
                   items={[
-                    ...(showReservationHistory ? [
-                      { value: 'reservations', label: '予約', count: reservations.length },
-                      { value: 'visits', label: '来店', count: visits.length },
-                    ] : []),
+                    ...(showReservationHistory ? [{ value: 'reservations', label: '予約', count: reservations.length }] : []),
+                    ...(showSurveyHistory ? [{ value: 'surveys', label: 'アンケート', count: surveyResponses.length }] : []),
+                    ...(showReservationHistory ? [{ value: 'visits', label: '来店', count: visits.length }] : []),
                     ...(showLotteryHistory ? [{ value: 'lotteries', label: '抽選', count: lotteryEntries.length }] : []),
                     { value: 'line', label: 'LINE' },
                   ]}
@@ -621,6 +678,44 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                         </div>
                       </li>
                     ))}
+                  </ul>
+                )}
+              </TabsContent>
+              )}
+
+              {showSurveyHistory && (
+              <TabsContent value="surveys" className="px-4 md:px-0 mt-3">
+                {!customer.line_user_id ? (
+                  <p className="text-center text-sm text-muted-foreground py-6">LINE 未連携の顧客のため、アンケートの回答を紐付けできません</p>
+                ) : surveyResponses.length === 0 ? (
+                  <p className="text-center text-sm text-muted-foreground py-6">アンケートの回答がありません</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {surveyResponses.map((r) => {
+                      const entries = surveyResponseEntries(r);
+                      return (
+                        <li key={r.id} data-slot="list-item" className="rounded-lg border bg-card px-3 py-2.5 text-sm">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="font-medium truncate">{surveyResponseTitle(r)}</div>
+                            <div className="text-xs text-muted-foreground tabular-nums shrink-0">
+                              {new Date(r.submitted_at).toLocaleString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                          {entries.length === 0 ? (
+                            <p className="mt-1 text-xs text-muted-foreground">回答内容がありません</p>
+                          ) : (
+                            <dl className="mt-2 space-y-1.5">
+                              {entries.map(([q, a]) => (
+                                <div key={q}>
+                                  <dt className="text-xs text-muted-foreground">{q}</dt>
+                                  <dd className="whitespace-pre-wrap break-words">{a || '-'}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </TabsContent>
@@ -742,13 +837,6 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
             </Tabs>
           </section>
 
-          {/* メモ */}
-          {customer.notes && (
-            <section className="px-4 py-4 md:rounded-lg md:border md:bg-card" aria-label="メモ">
-              <h4 className="text-xs text-muted-foreground mb-1">メモ</h4>
-              <p className="whitespace-pre-wrap text-sm">{customer.notes}</p>
-            </section>
-          )}
           {/* 下端の余白（最後の項目が画面端に貼り付かないように） */}
           <div className="h-4 md:hidden" aria-hidden="true" />
         </div>
