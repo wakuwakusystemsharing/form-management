@@ -679,14 +679,14 @@ export default function LineFlexEditorDialog({ storeId, store, forms, open, init
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-[calc(100%-1rem)] sm:max-w-5xl max-h-[92dvh] overflow-hidden flex flex-col p-0">
+      <DialogContent className="max-w-[calc(100%-1rem)] sm:max-w-6xl max-h-[92dvh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="px-5 pt-5 pb-3 border-b">
           <DialogTitle>{initial ? 'LINE メッセージを編集' : 'LINE メッセージを作成'}</DialogTitle>
           <DialogDescription>テンプレートに項目を入れるだけで、公式 LINE に送れる Flex Message ができます。右側で見た目を確認できます。</DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
             {/* 左: 入力 */}
             <div className="space-y-5 min-w-0">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
