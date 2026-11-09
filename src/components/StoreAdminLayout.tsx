@@ -39,7 +39,7 @@ interface StoreAdminLayoutProps {
 const allMenuItems: { id: StoreAdminTabId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
   { id: 'reservations', label: '予約管理', icon: Calendar },
-  { id: 'customers', label: '顧客管理 β', icon: Users },
+  { id: 'customers', label: '顧客管理', icon: Users },
   { id: 'surveys', label: 'アンケート管理', icon: ClipboardList },
   { id: 'lotteries', label: '抽選管理', icon: Gift },
   { id: 'walls', label: '寄せ書き', icon: StickyNote },

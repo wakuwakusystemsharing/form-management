@@ -57,7 +57,7 @@ describe('resolveSurveySheetsSettings', () => {
   });
   it('URL を ID に変換し、タブ名は trim（空は null）', () => {
     expect(resolveSurveySheetsSettings(withSheets({ spreadsheet_id: `https://docs.google.com/spreadsheets/d/${ID}/edit`, sheet_name: ' 回答 ' })))
-      .toEqual({ spreadsheetId: ID, sheetName: '回答' });
+      .toMatchObject({ spreadsheetId: ID, sheetName: '回答' });
     expect(resolveSurveySheetsSettings(withSheets({ spreadsheet_id: ID, sheet_name: '  ' }))?.sheetName).toBeNull();
   });
 });

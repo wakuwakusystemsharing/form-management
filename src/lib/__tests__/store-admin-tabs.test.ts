@@ -29,6 +29,7 @@ describe('resolveAdminVisibleOptions', () => {
       lottery_forms: false,
       customer_reservation_history: false, // 予約管理 OFF に連動
       customer_lottery_history: false,     // 抽選管理 OFF に連動
+      customer_survey_history: false,      // アンケート管理 OFF に連動
     });
     const all = resolveAdminVisibleOptions(null, null);
     expect(Object.values(all).every(Boolean)).toBe(true);
