@@ -8,6 +8,7 @@ import { cancelFollowMessageForReservation, restoreFollowMessageForUser } from '
 import { buildCancelDeadlineMessage, buildCancelNotificationEmail, isCancelAllowed, resolveCancelRules, type CancelRules } from '@/lib/cancel-rules';
 import { resolveStayCancelFee } from '@/lib/stay-reservation';
 import { sendEmail } from '@/lib/email-sender';
+import { findLineFlexReplyForText, listLineFlexAttachments } from '@/lib/line-flex-service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -225,22 +226,28 @@ async function replyLineMessage(replyToken: string, accessToken: string, message
   });
 }
 
-async function replyFlexMessage(replyToken: string, accessToken: string, altText: string, bubbles: object[]) {
+/** 店舗が作った Flex Message（line_flex_messages.payload）など、組み立て済みのメッセージをそのまま返信する（最大 5 通） */
+async function replyRawMessages(replyToken: string, accessToken: string, messages: Array<Record<string, unknown>>) {
+  if (messages.length === 0) return;
   await fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=UTF-8',
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({
-      replyToken,
-      messages: [{
-        type: 'flex',
-        altText,
-        contents: { type: 'carousel', contents: bubbles }
-      }]
-    }),
+    body: JSON.stringify({ replyToken, messages: messages.slice(0, 5) }),
   });
+}
+
+async function replyFlexMessage(replyToken: string, accessToken: string, altText: string, bubbles: object[], extraMessages: Array<Record<string, unknown>> = []) {
+  await replyRawMessages(replyToken, accessToken, [
+    {
+      type: 'flex',
+      altText,
+      contents: { type: 'carousel', contents: bubbles }
+    },
+    ...extraMessages,
+  ]);
 }
 
 const DEFAULT_HEADER_COLOR = '#f7a3a3';
@@ -1003,6 +1010,8 @@ export async function POST(req: NextRequest) {
     // フッターメッセージ
     bodyContents.push(flexText(notifMessages.confirmation_footer, { size: 'sm', align: 'center', margin: 'lg', color: '#555555' }));
 
+    // 店舗が「予約確認のあとに送る」にした Flex Message を続けて送る（LINE メッセージタブ）
+    const flexAttachments = await listLineFlexAttachments(storeId, 'confirm');
     await replyFlexMessage(replyToken, accessToken, '予約通知', [{
       type: 'bubble',
       size: 'mega',
@@ -1013,7 +1022,14 @@ export async function POST(req: NextRequest) {
         contents: bodyContents,
         paddingAll: '20px'
       }
-    }]);
+    }], flexAttachments);
+    return NextResponse.json({ success: true });
+  }
+
+  // 店舗が登録した Flex Message のキーワード自動応答（完全一致。LINE メッセージタブ）
+  const flexReply = await findLineFlexReplyForText(storeId, messageText);
+  if (flexReply) {
+    await replyRawMessages(replyToken, accessToken, [flexReply]);
     return NextResponse.json({ success: true });
   }
 

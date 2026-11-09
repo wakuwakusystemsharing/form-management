@@ -194,7 +194,46 @@ function buildFlexMessage(template, ctx) {
 }
 
 // ===== LINE push（タイムアウト付き。例外は投げず結果で返す） =====
-async function sendLinePush(accessToken: string, to: string, flexMessage: Record<string, unknown>, retryKey: string | null) {
+
+// ===== 店舗が作った Flex Message の差し込み（line_flex_messages。LINE メッセージタブ） =====
+// payload は保存時にサーバーで組み立て済みの LINE メッセージ。店舗ごとに最大 4 通（本体と合わせて 5 通）
+async function loadFlexAttachments(storeIds: string[], column: "attach_reminder" | "attach_follow"): Promise<Map<string, { ids: string[]; messages: Record<string, unknown>[] }>> {
+  const map = new Map<string, { ids: string[]; messages: Record<string, unknown>[] }>();
+  if (storeIds.length === 0) return map;
+  try {
+    const { data, error } = await supabase
+      .from("line_flex_messages")
+      .select("id,store_id,payload")
+      .eq("enabled", true)
+      .eq(column, true)
+      .in("store_id", storeIds)
+      .order("updated_at", { ascending: false });
+    if (error) {
+      console.warn("Flex 差し込みの取得に失敗:", error.message);
+      return map;
+    }
+    for (const row of (data || []) as Array<{ id: string; store_id: string; payload: Record<string, unknown> | null }>) {
+      if (!row.payload) continue;
+      const entry = map.get(row.store_id) ?? { ids: [], messages: [] };
+      if (entry.messages.length < 4) {
+        entry.ids.push(row.id);
+        entry.messages.push(row.payload);
+      }
+      map.set(row.store_id, entry);
+    }
+  } catch (e) {
+    console.warn("Flex 差し込みの取得エラー:", e);
+  }
+  return map;
+}
+async function countFlexAttachmentSends(ids: string[]) {
+  if (ids.length === 0) return;
+  try {
+    await supabase.rpc("line_flex_increment_reply", { p_ids: ids });
+  } catch (_) { /* 統計なので失敗しても送信は成功扱い */ }
+}
+
+async function sendLinePush(accessToken: string, to: string, flexMessage: Record<string, unknown>, retryKey: string | null, extraMessages: Record<string, unknown>[] = []) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LINE_TIMEOUT_MS);
   try {
@@ -206,7 +245,7 @@ async function sendLinePush(accessToken: string, to: string, flexMessage: Record
     const res = await fetch("https://api.line.me/v2/bot/message/push", {
       method: "POST",
       headers,
-      body: JSON.stringify({ to, messages: [flexMessage] }),
+      body: JSON.stringify({ to, messages: [flexMessage, ...extraMessages].slice(0, 5) }),
       signal: controller.signal,
     });
     const body = await res.text();
@@ -335,6 +374,7 @@ async function processBatch(now: Date, totals) {
     .in("id", storeIds);
   if (storeError) throw new Error(`店舗取得エラー: ${storeError.message}`);
   const storeMap = new Map((stores || []).map((s) => [s.id, s]));
+  const flexAttachMap = await loadFlexAttachments(storeIds, "attach_follow");
 
   // 3. フォロー元の予約（本文用・キャンセル確認）
   const { data: sourceReservations, error: srcError } = await supabase
@@ -419,8 +459,10 @@ async function processBatch(now: Date, totals) {
       });
 
       // ---- 送信 ----
-      const result = await sendLinePush(store.line_channel_access_token, row.line_user_id, flexMessage, toLineRetryKey(row.id));
+      const flexAttach = flexAttachMap.get(row.store_id);
+      const result = await sendLinePush(store.line_channel_access_token, row.line_user_id, flexMessage, toLineRetryKey(row.id), flexAttach?.messages ?? []);
       if (result.ok) {
+        if (flexAttach) await countFlexAttachmentSends(flexAttach.ids);
         const { error } = await supabase
           .from("follow_messages")
           .update({ status: "sent", sent_at: new Date().toISOString(), last_error: null })
