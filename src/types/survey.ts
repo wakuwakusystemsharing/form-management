@@ -95,6 +95,7 @@ export interface SurveyContentBlock {
 
 /** アンケート回答の Google スプレッドシート自動転記。spreadsheet_id が空 = 連携しない */
 export interface SurveyGoogleSheetsSettings {
+  enabled?: boolean; // 連携の ON/OFF。未設定（旧データ）は spreadsheet_id があれば ON 扱い
   spreadsheet_id: string; // URL ではなく ID（編集画面で URL を貼ると ID に変換）
   sheet_name?: string; // タブ名。空 = 1 枚目のタブ
 }

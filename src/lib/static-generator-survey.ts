@@ -91,6 +91,8 @@ export class StaticSurveyGenerator {
     <script>
         // LINEユーザーIDを保持する変数
         let lineUserId = null;
+        // 送信中フラグ（送信ボタンの連打で回答・LINE メッセージが重複しないように）
+        let svSubmitting = false;
         // 公式 LINE の表示名（ID トークンの name。スプレッドシート連携の「LINE表示名」に使う）
         let lineDisplayName = null;
         // null = 取得失敗（不明）。サーバ側で既存値を上書きしない。
@@ -541,7 +543,37 @@ export class StaticSurveyGenerator {
             return value;
         }
 
+        // 送信ボタン: 送信中は 2 回目以降のタップを無視し、ボタンを押せなくする。
+        // 入力エラーで止まったときだけ元に戻す（送信まで進んだらページが閉じるので戻さない）
         async function submitForm() {
+            if (svSubmitting) return;
+            svSubmitting = true;
+            const submitBtn = document.getElementById('section-submit');
+            const submitLabel = submitBtn ? submitBtn.textContent : '';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.setAttribute('aria-busy', 'true');
+                submitBtn.textContent = '送信中…';
+            }
+            let reachedSend = false;
+            try {
+                reachedSend = (await submitFormInner()) === true;
+            } catch (err) {
+                console.error('送信処理でエラーが発生しました', err);
+            } finally {
+                if (!reachedSend) {
+                    svSubmitting = false;
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.removeAttribute('aria-busy');
+                        submitBtn.textContent = submitLabel;
+                    }
+                }
+            }
+        }
+
+        // 戻り値 true = 回答の保存・送信まで進んだ（ボタンは戻さない）/ false・undefined = 入力エラーで中断
+        async function submitFormInner() {
             const formData = {};
             const formDataDisplay = {};
             const questions = SURVEY_QUESTIONS;
@@ -644,7 +676,7 @@ export class StaticSurveyGenerator {
             // LINEトークにメッセージを送信
             if (!liff.isInClient()) {
                 alert('LINEアプリ内から開いてください。\\n\\n送信内容:\\n' + messageText);
-                return;
+                return true;
             }
 
             const surveyTexts = [messageText.trim()];${
@@ -659,6 +691,7 @@ export class StaticSurveyGenerator {
                 await liff.sendMessages(surveyMessages);
                 alert('ご記入ありがとうございます。');
                 liff.closeWindow();
+                return true;
             } catch (err) {
                 console.error('メッセージの送信に失敗しました', err);
                 const errText = String((err && err.message) || err);
@@ -670,11 +703,12 @@ export class StaticSurveyGenerator {
                     } catch (e) {}
                     try { liff.logout(); } catch (e) {}
                     liff.login({ redirectUri: window.location.href });
-                    return;
+                    return true;
                 }
                 // その他のエラー: 回答は保存済みなので生のエラーは表示しない
                 alert('アンケートの回答は送信されました。\\n（LINEトークへの確認メッセージの表示に失敗しました）');
                 liff.closeWindow();
+                return true;
             }
         }
 
@@ -1026,6 +1060,7 @@ export class StaticSurveyGenerator {
             border-bottom: 4px solid var(--accent-color);
         }
         .submit-button:active { transform: translateY(2px); border-bottom-width: 2px; box-shadow: none; }
+        .submit-button:disabled, .submit-button[aria-busy="true"] { opacity: 0.6; cursor: not-allowed; transform: none; }
         .side-nav { background: var(--primary-color); }
         .side-nav a { color: #ffffff; }
         @media (max-width: 600px) {

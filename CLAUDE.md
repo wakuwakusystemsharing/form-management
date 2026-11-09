@@ -695,8 +695,11 @@ export async function GET(req, { params }) {
 - `POST /api/surveys/submit` が回答保存後に `applySurveyTagsToCustomer()`（`src/lib/survey-tags-apply.ts`）を呼び、`line_user_id` で店舗内の顧客を検索してタグをマージ（顧客が無ければ何もしない。失敗しても送信は成功扱い）。回答 → タグの集計は `src/lib/survey-tags.ts` の `collectSurveyOptionTags()`（radio / select はラベル一致、checkbox は ", " 区切り）
 - 顧客一覧はセグメントの隣に「タグで絞り込み」プルダウン（`GET /customers/tags` の一覧。将来の配信機能の絞り込みにも流用予定）
 
+**アンケートフォームの送信ボタン連打対策（`static-generator-survey.ts`）:**
+- `submitForm()` は送信中フラグ `svSubmitting` で 2 回目以降のタップを無視し、ボタンを `disabled` + 「送信中…」にする。本体は `submitFormInner()`（戻り値 true = 回答の保存・LINE 送信まで進んだ。false = 入力エラーで中断）。入力エラーのときだけボタンを元に戻し、送信まで進んだら戻さない（成功時はページが閉じる。保存済みの回答を再送させないため）。連打で回答と LINE メッセージが重複した事例への対策。Vitest: `survey-submit-double-click.test.ts`
+
 **アンケート回答の Google スプレッドシート自動転記（`SurveyConfig.basic_info.google_sheets`。設計メモは本節のみ）:**
-- アンケート編集 → 基本情報 → 「Google スプレッドシート連携」（`SurveySheetsSettings.tsx`）に スプレッドシートの ID（URL 貼り付け可。`parseSpreadsheetId` で ID 化）と シート名（タブ。空 = 1 枚目。無ければ自動作成）を入力。ID が空 = 連携しない。再デプロイ不要（サーバー側で参照）
+- アンケート編集 → 基本情報 → 「Google スプレッドシート連携」（`SurveySheetsSettings.tsx`）。**ON/OFF トグル**（`google_sheets.enabled`。OFF のときは ID 等の入力欄・ボタンを隠す。`enabled` 未設定の旧データは ID があれば ON 扱い = `isSurveySheetsEnabled`）、スプレッドシートの ID（URL 貼り付け可。`parseSpreadsheetId` で ID 化）、シート名（タブ。空 = 1 枚目。無ければ自動作成）。OFF または ID が空 = 連携しない。再デプロイ不要（サーバー側で参照）
 - 認証は **マスター管理に登録済みのサービスアカウント**（カレンダー作成と同じ `google_service_account_json`。共通化 `src/lib/google-service-account.ts`）。店舗（弊社）はシートの「共有」でサービスアカウントのメールアドレスを**編集者**に追加するだけ（編集画面にメールとコピーボタンを表示）。他アカウントから共有されたシートも wakuwakusystemsharing@gmail.com から再共有できれば可
 - 送信 `POST /api/surveys/submit` が回答保存 → タグ付与のあと `syncSurveyResponseToSheet()`（`src/lib/survey-sheets-service.ts`）で 1 行追記。**失敗しても回答の保存は成功扱い**（ログのみ）。1 行目（見出し）は `回答日時 / LINE表示名 / LINEユーザーID / 回答ID / 質問の文言…` を自動で作り、新しいキー（質問の追加・改名・追加質問）は右端に列を足す。列は**見出し名で対応**させるので店舗が列を並べ替えても壊れない。値は `=` `+` `-` `@` 始まりを `'` で無害化（`sanitizeSheetCell`）。日時は JST
 - LINE 表示名はフォームの LIFF ID トークンの `name` を `line_display_name` で送り `surveys.line_display_name` に保存。無い回答（過去分）は顧客台帳（`customers.name`）で補う
