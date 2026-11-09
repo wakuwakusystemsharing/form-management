@@ -13,7 +13,7 @@
 
 | 機能 | 内容 |
 | --- | --- |
-| テンプレート式ビルダー | 予約導線カード / メニュー・料金カルーセル / 店舗紹介カード。項目を埋めるだけ。右にプレビュー |
+| テンプレート式ビルダー | 予約導線カード / メニュー・料金カルーセル / 料金表（リスト）/ 店舗紹介カード / クーポン・キャンペーン / お知らせ・営業案内 / スタッフ紹介カルーセル / ご利用の流れ。項目を埋めるだけ。右に LINE 仕様値に合わせたプレビュー |
 | 上級者向け JSON 編集 | 生成された JSON を直接直せる（`flex_override`）。`custom` は JSON だけで作る |
 | 下書きの自動作成 | カルーセル = 予約フォームのメニュー構成から / 店舗紹介 = 店舗情報から |
 | キーワード自動応答 | お客様の発言と完全一致したら Webhook が返信（無料）。リッチメニューの「テキスト」アクションと組み合わせる |
@@ -30,7 +30,7 @@
 | 列 | 内容 |
 | --- | --- |
 | id | 12 文字 `[a-z0-9]`（画像アップロードのため編集画面で先に決める） |
-| template | `booking_card` / `menu_carousel` / `store_card` / `custom` |
+| template | `custom` / `booking_card` / `menu_carousel` / `menu_list` / `store_card` / `coupon_card` / `notice_card` / `staff_carousel` / `steps_card`（CHECK 制約は `20261111000000_line_flex_more_templates.sql`） |
 | data | テンプレートの入力値（`BookingCardData` 等） |
 | flex_override | JSON 直接編集の contents（NULL = テンプレートから生成） |
 | alt_text / keywords | 代替テキスト / 完全一致キーワード（最大 10。「予約確認」「キャンセル」は不可、同じ店舗で重複不可） |

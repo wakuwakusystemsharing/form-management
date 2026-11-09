@@ -10,21 +10,34 @@
  */
 import type {
   BookingCardData,
+  CouponCardData,
   FlexButtonInput,
   FlexContainer,
   LineFlexTemplate,
   LineFlexTemplateData,
   MenuCarouselData,
   MenuCarouselItem,
+  MenuListData,
+  NoticeCardData,
+  StaffCarouselData,
+  StaffCarouselItem,
+  StepsCardData,
   StoreCardData,
 } from '@/types/line-flex';
 
 export const LINE_FLEX_TEMPLATES: Array<{ id: LineFlexTemplate; label: string; description: string }> = [
+  { id: 'custom', label: 'JSON から作成（上級者向け）', description: 'LINE の Flex Message Simulator などで作った JSON を貼り付ける' },
   { id: 'booking_card', label: '予約導線カード', description: '画像 + 見出し + 説明 + ボタン（予約フォーム / 電話 / 地図など最大 3 つ）。いちばん使われる形' },
   { id: 'menu_carousel', label: 'メニュー・料金カルーセル', description: '横にスワイプするカード列（最大 12 枚）。予約フォームのメニュー構成から下書きを作れる' },
+  { id: 'menu_list', label: '料金表（リスト）', description: '1 枚のカードにメニュー名と料金を縦に並べる（最大 15 行）。スワイプなしで全部見せたいとき' },
   { id: 'store_card', label: '店舗紹介カード', description: '営業時間・電話・住所（地図）・公式サイト・予約ボタン。店舗情報から自動で埋める' },
-  { id: 'custom', label: 'JSON から作成（上級者向け）', description: 'LINE の Flex Message Simulator などで作った JSON を貼り付ける' },
+  { id: 'coupon_card', label: 'クーポン・キャンペーン', description: '割引を大きく見せるカード。有効期限・利用条件・提示コード・ボタン' },
+  { id: 'notice_card', label: 'お知らせ・営業案内', description: '色付きの見出し帯 + 日付 + 本文（臨時休業・新メニュー・イベント告知など）' },
+  { id: 'staff_carousel', label: 'スタッフ紹介カルーセル', description: '写真・名前・得意分野・ひとことを横に並べる。指名予約のボタン付き' },
+  { id: 'steps_card', label: 'ご利用の流れ', description: '番号付きのステップで予約〜来店までの流れを案内。初めてのお客様向け' },
 ];
+export const LINE_FLEX_MENU_LIST_MAX = 15;
+export const LINE_FLEX_STEPS_MAX = 8;
 
 export const LINE_FLEX_MAX_JSON_BYTES = 30 * 1024;
 export const LINE_FLEX_ALT_TEXT_MAX = 400;
@@ -150,8 +163,8 @@ function infoRow(icon: string, label: string, value: string): Record<string, unk
     layout: 'baseline',
     spacing: 'sm',
     contents: [
-      { type: 'text', text: `${icon} ${label}`, size: 'sm', color: TEXT_MUTED, flex: 3 },
-      { type: 'text', text: textOrSpace(value), size: 'sm', color: TEXT_DARK, wrap: true, flex: 7 },
+      { type: 'text', text: `${icon} ${label}`, size: 'sm', color: TEXT_MUTED, flex: 0 },
+      { type: 'text', text: textOrSpace(value), size: 'sm', color: TEXT_DARK, wrap: true, flex: 1, margin: 'md' },
     ],
   };
 }
@@ -190,6 +203,186 @@ export function buildStoreCardFlex(data: StoreCardData): FlexContainer | null {
   };
 }
 
+function optionalButton(btn: FlexButtonInput | null | undefined, accent: string): Record<string, unknown> | null {
+  if (!btn || !nonEmpty(btn.label) || !nonEmpty(btn.url)) return null;
+  return buttonComponent(btn, accent, true);
+}
+
+export function buildCouponCardFlex(data: CouponCardData): FlexContainer | null {
+  const title = nonEmpty(data.title);
+  const highlight = nonEmpty(data.highlight);
+  if (!title && !highlight) return null;
+  const accent = color(data.color);
+  const body: Record<string, unknown>[] = [];
+  if (title) body.push({ type: 'text', text: title, size: 'sm', color: accent, weight: 'bold', wrap: true });
+  if (highlight) body.push({ type: 'text', text: highlight, size: '3xl', weight: 'bold', color: TEXT_DARK, wrap: true, margin: title ? 'sm' : 'none' });
+  const description = nonEmpty(data.description);
+  if (description) body.push({ type: 'text', text: description, size: 'sm', color: '#555555', wrap: true, margin: 'md' });
+  const rows: Record<string, unknown>[] = [];
+  if (nonEmpty(data.expires)) rows.push(infoRow('⏰', '有効期限', nonEmpty(data.expires)));
+  if (nonEmpty(data.conditions)) rows.push(infoRow('📝', '条件', nonEmpty(data.conditions)));
+  if (rows.length > 0) {
+    body.push({ type: 'separator', margin: 'lg', color: '#eeeeee' });
+    body.push({ type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg', contents: rows });
+  }
+  const code = nonEmpty(data.code);
+  if (code) {
+    body.push({
+      type: 'box',
+      layout: 'vertical',
+      margin: 'lg',
+      paddingAll: '12px',
+      backgroundColor: '#f5f5f5',
+      cornerRadius: 'md',
+      borderWidth: 'normal',
+      borderColor: accent,
+      contents: [
+        { type: 'text', text: 'ご提示コード', size: 'xxs', color: TEXT_MUTED, align: 'center' },
+        { type: 'text', text: code, size: 'xl', weight: 'bold', color: TEXT_DARK, align: 'center', margin: 'xs' },
+      ],
+    });
+  }
+  const button = optionalButton(data.button, accent);
+  const hero = heroImage(data.image_url);
+  return {
+    type: 'bubble',
+    size: 'mega',
+    ...(hero ? { hero } : {}),
+    body: { type: 'box', layout: 'vertical', contents: body, paddingAll: '20px' },
+    ...(button ? { footer: { type: 'box', layout: 'vertical', contents: [button], paddingAll: '16px' } } : {}),
+  };
+}
+
+export function buildNoticeCardFlex(data: NoticeCardData): FlexContainer | null {
+  const title = nonEmpty(data.title);
+  const text = nonEmpty(data.body);
+  if (!title && !text) return null;
+  const accent = color(data.color);
+  const headerContents: Record<string, unknown>[] = [];
+  if (nonEmpty(data.label)) headerContents.push({ type: 'text', text: nonEmpty(data.label), size: 'xs', color: '#ffffffcc' });
+  headerContents.push({ type: 'text', text: textOrSpace(title), size: 'lg', weight: 'bold', color: '#ffffff', wrap: true, margin: nonEmpty(data.label) ? 'xs' : 'none' });
+  const body: Record<string, unknown>[] = [];
+  if (nonEmpty(data.date)) body.push({ type: 'text', text: nonEmpty(data.date), size: 'xs', color: TEXT_MUTED });
+  if (text) body.push({ type: 'text', text, size: 'sm', color: TEXT_DARK, wrap: true, margin: nonEmpty(data.date) ? 'md' : 'none' });
+  const button = optionalButton(data.button, accent);
+  const hero = heroImage(data.image_url);
+  return {
+    type: 'bubble',
+    size: 'mega',
+    header: { type: 'box', layout: 'vertical', contents: headerContents, paddingAll: '16px', backgroundColor: accent },
+    ...(hero ? { hero } : {}),
+    body: { type: 'box', layout: 'vertical', contents: body.length ? body : [{ type: 'text', text: ' ' }], paddingAll: '20px' },
+    ...(button ? { footer: { type: 'box', layout: 'vertical', contents: [button], paddingAll: '16px' } } : {}),
+  };
+}
+
+export function buildMenuListFlex(data: MenuListData): FlexContainer | null {
+  const items = (data.items ?? []).filter((i) => nonEmpty(i.name)).slice(0, LINE_FLEX_MENU_LIST_MAX);
+  const title = nonEmpty(data.title);
+  if (items.length === 0 && !title) return null;
+  const accent = color(data.color);
+  const body: Record<string, unknown>[] = [];
+  if (title) body.push({ type: 'text', text: title, size: 'lg', weight: 'bold', color: TEXT_DARK, wrap: true });
+  const rows: Record<string, unknown>[] = items.map((item) => {
+    const left: Record<string, unknown>[] = [{ type: 'text', text: nonEmpty(item.name), size: 'sm', color: TEXT_DARK, wrap: true }];
+    if (nonEmpty(item.note)) left.push({ type: 'text', text: nonEmpty(item.note), size: 'xs', color: TEXT_MUTED, wrap: true });
+    return {
+      type: 'box',
+      layout: 'horizontal',
+      contents: [
+        { type: 'box', layout: 'vertical', contents: left, flex: 1 },
+        { type: 'text', text: textOrSpace(nonEmpty(item.price)), size: 'sm', weight: 'bold', color: accent, align: 'end', flex: 0, gravity: 'center' },
+      ],
+      paddingTop: '8px',
+      paddingBottom: '8px',
+    };
+  });
+  const list: Record<string, unknown>[] = [];
+  rows.forEach((r, i) => {
+    if (i > 0) list.push({ type: 'separator', color: '#eeeeee' });
+    list.push(r);
+  });
+  if (list.length > 0) body.push({ type: 'box', layout: 'vertical', contents: list, margin: title ? 'md' : 'none' });
+  if (nonEmpty(data.footnote)) body.push({ type: 'text', text: nonEmpty(data.footnote), size: 'xxs', color: TEXT_MUTED, wrap: true, margin: 'md' });
+  const button = optionalButton(data.button, accent);
+  return {
+    type: 'bubble',
+    size: 'mega',
+    body: { type: 'box', layout: 'vertical', contents: body, paddingAll: '20px' },
+    ...(button ? { footer: { type: 'box', layout: 'vertical', contents: [button], paddingAll: '16px' } } : {}),
+  };
+}
+
+function staffBubble(item: StaffCarouselItem, data: StaffCarouselData): FlexContainer | null {
+  const name = nonEmpty(item.name);
+  if (!name) return null;
+  const accent = color(data.color);
+  const body: Record<string, unknown>[] = [{ type: 'text', text: name, size: 'md', weight: 'bold', color: TEXT_DARK, wrap: true }];
+  if (nonEmpty(item.role)) body.push({ type: 'text', text: nonEmpty(item.role), size: 'xs', color: accent, wrap: true, margin: 'xs' });
+  if (nonEmpty(item.comment)) body.push({ type: 'text', text: nonEmpty(item.comment), size: 'sm', color: '#555555', wrap: true, margin: 'md' });
+  const btnInput: FlexButtonInput | null = item.button && nonEmpty(item.button.label) && nonEmpty(item.button.url)
+    ? item.button
+    : nonEmpty(data.button_label) && nonEmpty(data.button_url)
+      ? { key: 'common', label: data.button_label as string, url: data.button_url as string }
+      : null;
+  const button = btnInput ? buttonComponent(btnInput, accent, true) : null;
+  const hero = heroImage(item.image_url, '1:1');
+  return {
+    type: 'bubble',
+    size: 'kilo',
+    ...(hero ? { hero } : {}),
+    body: { type: 'box', layout: 'vertical', contents: body, paddingAll: '16px' },
+    ...(button ? { footer: { type: 'box', layout: 'vertical', contents: [button], paddingAll: '12px' } } : {}),
+  };
+}
+
+export function buildStaffCarouselFlex(data: StaffCarouselData): FlexContainer | null {
+  const bubbles = (data.items ?? []).map((i) => staffBubble(i, data)).filter((b): b is FlexContainer => !!b).slice(0, LINE_FLEX_CAROUSEL_MAX);
+  if (bubbles.length === 0) return null;
+  return bubbles.length === 1 ? bubbles[0] : { type: 'carousel', contents: bubbles };
+}
+
+export function buildStepsCardFlex(data: StepsCardData): FlexContainer | null {
+  const steps = (data.steps ?? []).filter((s) => nonEmpty(s.title)).slice(0, LINE_FLEX_STEPS_MAX);
+  const title = nonEmpty(data.title);
+  if (steps.length === 0 && !title) return null;
+  const accent = color(data.color);
+  const body: Record<string, unknown>[] = [];
+  if (title) body.push({ type: 'text', text: title, size: 'lg', weight: 'bold', color: TEXT_DARK, wrap: true });
+  const stepBoxes: Record<string, unknown>[] = steps.map((s, i) => {
+    const texts: Record<string, unknown>[] = [{ type: 'text', text: nonEmpty(s.title), size: 'sm', weight: 'bold', color: TEXT_DARK, wrap: true }];
+    if (nonEmpty(s.text)) texts.push({ type: 'text', text: nonEmpty(s.text), size: 'xs', color: TEXT_MUTED, wrap: true, margin: 'xs' });
+    return {
+      type: 'box',
+      layout: 'horizontal',
+      spacing: 'md',
+      contents: [
+        {
+          type: 'box',
+          layout: 'vertical',
+          width: '28px',
+          height: '28px',
+          cornerRadius: '14px',
+          backgroundColor: accent,
+          justifyContent: 'center',
+          alignItems: 'center',
+          flex: 0,
+          contents: [{ type: 'text', text: String(i + 1), size: 'sm', weight: 'bold', color: '#ffffff', align: 'center' }],
+        },
+        { type: 'box', layout: 'vertical', contents: texts, flex: 1 },
+      ],
+    };
+  });
+  if (stepBoxes.length > 0) body.push({ type: 'box', layout: 'vertical', spacing: 'lg', contents: stepBoxes, margin: title ? 'lg' : 'none' });
+  const button = optionalButton(data.button, accent);
+  return {
+    type: 'bubble',
+    size: 'mega',
+    body: { type: 'box', layout: 'vertical', contents: body, paddingAll: '20px' },
+    ...(button ? { footer: { type: 'box', layout: 'vertical', contents: [button], paddingAll: '16px' } } : {}),
+  };
+}
+
 export function buildTemplateFlex(template: LineFlexTemplate, data: LineFlexTemplateData): FlexContainer | null {
   switch (template) {
     case 'booking_card':
@@ -198,6 +391,16 @@ export function buildTemplateFlex(template: LineFlexTemplate, data: LineFlexTemp
       return buildMenuCarouselFlex(data as MenuCarouselData);
     case 'store_card':
       return buildStoreCardFlex(data as StoreCardData);
+    case 'coupon_card':
+      return buildCouponCardFlex(data as CouponCardData);
+    case 'notice_card':
+      return buildNoticeCardFlex(data as NoticeCardData);
+    case 'menu_list':
+      return buildMenuListFlex(data as MenuListData);
+    case 'staff_carousel':
+      return buildStaffCarouselFlex(data as StaffCarouselData);
+    case 'steps_card':
+      return buildStepsCardFlex(data as StepsCardData);
     default:
       return null;
   }
@@ -305,6 +508,25 @@ export function defaultTemplateData(template: LineFlexTemplate, accent?: string)
       return { items: [], color: c, button_label: '予約する', button_url: '' } as MenuCarouselData;
     case 'store_card':
       return { image_url: '', name: '', hours: '', phone: '', address: '', map_url: '', website_url: '', booking_url: '', color: c } as StoreCardData;
+    case 'coupon_card':
+      return { image_url: '', title: 'LINE 友だち限定クーポン', highlight: '10% OFF', description: 'このメッセージをご来店時にスタッフへご提示ください。', expires: '', conditions: '他のクーポンとの併用不可', code: '', button: { key: 'b1', label: '予約する', url: '' }, color: c } as CouponCardData;
+    case 'notice_card':
+      return { label: 'お知らせ', title: '', date: '', body: '', image_url: '', button: null, color: c } as NoticeCardData;
+    case 'menu_list':
+      return { title: 'メニュー・料金', items: [], footnote: '※ 価格は税込です', button: { key: 'b1', label: '予約する', url: '' }, color: c } as MenuListData;
+    case 'staff_carousel':
+      return { items: [], button_label: 'このスタッフで予約', button_url: '', color: c } as StaffCarouselData;
+    case 'steps_card':
+      return {
+        title: 'ご利用の流れ',
+        steps: [
+          { key: 's1', title: 'LINE で予約', text: '下のボタンから希望のメニューと日時を選びます' },
+          { key: 's2', title: '予約確認メッセージが届く', text: '前日にはリマインドもお送りします' },
+          { key: 's3', title: 'ご来店', text: '受付でお名前をお伝えください' },
+        ],
+        button: { key: 'b1', label: '予約する', url: '' },
+        color: c,
+      } as StepsCardData;
     default:
       return {} as Record<string, never>;
   }
@@ -349,6 +571,26 @@ export function menuCarouselFromForm(form: FormLike, base?: MenuCarouselData): M
     button_label: nonEmpty(base?.button_label) || '予約する',
     button_url: formLiffUrl(form) || nonEmpty(base?.button_url),
   };
+}
+
+/** 予約フォームのメニュー構成から料金表（リスト）の下書き（先頭 15 件） */
+export function menuListFromForm(form: FormLike, base?: MenuListData): MenuListData {
+  const items: MenuListData['items'] = [];
+  for (const cat of form?.config?.menu_structure?.categories ?? []) {
+    for (const m of cat.menus ?? []) {
+      if (!nonEmpty(m.name)) continue;
+      items.push({
+        key: nonEmpty(m.id) || `m${items.length + 1}`,
+        name: nonEmpty(m.name),
+        price: typeof m.price === 'number' && m.price > 0 ? `¥${m.price.toLocaleString('ja-JP')}` : '',
+        note: typeof m.duration === 'number' && m.duration > 0 ? `${m.duration}分` : '',
+      });
+      if (items.length >= LINE_FLEX_MENU_LIST_MAX) break;
+    }
+    if (items.length >= LINE_FLEX_MENU_LIST_MAX) break;
+  }
+  const b = base ?? (defaultTemplateData('menu_list') as MenuListData);
+  return { ...b, items, button: b.button && nonEmpty(b.button.url) ? b.button : { key: 'b1', label: b.button?.label || '予約する', url: formLiffUrl(form) } };
 }
 
 type StoreLike = { name?: string; phone?: string | null; address?: string | null; website_url?: string | null; logo_url?: string | null; theme_color?: string | null } | null | undefined;
