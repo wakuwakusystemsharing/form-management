@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { SurveyForm, SurveyConfig } from '@/types/survey';
 import SurveyQuestionEditor from './SurveyQuestionEditor';
+import SurveySheetsSettings from './SurveySheetsSettings';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -179,6 +180,13 @@ export default function SurveyFormEditor({ form, onUpdate, userRole = 'service_a
                 placeholder="例: アンケート回答"
               />
             </div>
+
+            {/* Google スプレッドシート連携 */}
+            <SurveySheetsSettings
+              surveyId={form.id}
+              value={form.config.basic_info?.google_sheets}
+              onChange={(google_sheets) => handleBasicInfoUpdate({ google_sheets })}
+            />
 
             {/* システム管理者のみ表示 */}
             {userRole === 'service_admin' && (

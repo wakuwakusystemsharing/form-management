@@ -91,6 +91,8 @@ export class StaticSurveyGenerator {
     <script>
         // LINEユーザーIDを保持する変数
         let lineUserId = null;
+        // 公式 LINE の表示名（ID トークンの name。スプレッドシート連携の「LINE表示名」に使う）
+        let lineDisplayName = null;
         // null = 取得失敗（不明）。サーバ側で既存値を上書きしない。
         let lineFriendFlag = null;
 
@@ -324,6 +326,9 @@ export class StaticSurveyGenerator {
                         const idToken = await liff.getDecodedIDToken();
                         if (idToken && idToken.sub) {
                             lineUserId = idToken.sub;
+                        }
+                        if (idToken && typeof idToken.name === 'string' && idToken.name) {
+                            lineDisplayName = idToken.name;
                         }
                     } catch (idTokenError) {
                         console.warn('LINE User ID取得に失敗しました:', idTokenError);
@@ -627,6 +632,7 @@ export class StaticSurveyGenerator {
                             store_id: storeId,
                             responses: formData,
                             line_user_id: lineUserId || null, // LINEユーザーID
+                            line_display_name: lineDisplayName || null, // 公式 LINE の表示名
                             line_friend_flag: lineFriendFlag // 友だち追加状態
                         })
                     });

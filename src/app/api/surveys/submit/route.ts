@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase';
 import fs from 'fs';
 import path from 'path';
 import { applySurveyTagsToCustomer } from '@/lib/survey-tags-apply';
+import { syncSurveyResponseToSheet } from '@/lib/survey-sheets-service';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const SURVEY_RESPONSES_FILE = path.join(DATA_DIR, 'survey_responses.json');
@@ -28,6 +29,29 @@ async function applyTagsSafely(storeId: string, surveyFormId: string, responses:
   }
 }
 
+/**
+ * Google スプレッドシート連携が設定されていれば回答を 1 行追記する。
+ * 回答の保存は済んでいるため、失敗してもログだけ残して送信自体は成功として返す。
+ */
+async function syncToSheetSafely(
+  storeId: string,
+  surveyFormId: string,
+  response: { id: string; submitted_at: string; line_user_id: string | null; line_display_name: string | null; responses: Record<string, unknown> }
+) {
+  try {
+    const result = await syncSurveyResponseToSheet({ surveyFormId, storeId, response });
+    if (!result.ok) console.warn('[Survey] スプレッドシート転記失敗:', result.error, { storeId, surveyFormId, responseId: response.id });
+  } catch (e) {
+    console.error('[Survey] スプレッドシート転記エラー:', e);
+  }
+}
+
+function normalizeDisplayName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().slice(0, 100);
+  return trimmed || null;
+}
+
 // POST /api/surveys/submit - アンケート回答を送信
 export async function POST(request: Request) {
   try {
@@ -44,6 +68,8 @@ export async function POST(request: Request) {
 
     const env = getAppEnvironment();
     const parsedResponses = typeof responses === 'string' ? JSON.parse(responses) : responses;
+    const lineUserId: string | null = typeof body.line_user_id === 'string' && body.line_user_id ? body.line_user_id : null;
+    const lineDisplayName = normalizeDisplayName(body.line_display_name);
 
     // ローカル環境: JSON ファイルに保存
     if (env === 'local') {
@@ -61,7 +87,8 @@ export async function POST(request: Request) {
         survey_form_id,
         store_id,
         responses: parsedResponses,
-        line_user_id: body.line_user_id || null,
+        line_user_id: lineUserId,
+        line_display_name: lineDisplayName,
         // null = LIFF で取得失敗（不明）→ false 扱いで記録（webhook 側で後から true に更新される想定）
         line_friend_flag: body.line_friend_flag === true,
         submitted_at: new Date().toISOString(),
@@ -73,6 +100,13 @@ export async function POST(request: Request) {
       fs.writeFileSync(SURVEY_RESPONSES_FILE, JSON.stringify(existing, null, 2));
 
       await applyTagsSafely(store_id, survey_form_id, parsedResponses, body.line_user_id);
+      await syncToSheetSafely(store_id, survey_form_id, {
+        id: newResponse.id,
+        submitted_at: newResponse.submitted_at,
+        line_user_id: lineUserId,
+        line_display_name: lineDisplayName,
+        responses: parsedResponses,
+      });
       return NextResponse.json(newResponse, { status: 201 });
     }
 
@@ -86,17 +120,25 @@ export async function POST(request: Request) {
     }
 
     // アンケート回答を挿入
-    const { data: survey, error } = await (adminClient as any)
+    const submittedAt = new Date().toISOString();
+    const insertRow = {
+      survey_form_id,
+      store_id,
+      answers: parsedResponses,
+      line_user_id: lineUserId,
+      submitted_at: submittedAt
+    };
+    let { data: survey, error } = await (adminClient as any)
       .from('surveys')
-      .insert({
-        survey_form_id,
-        store_id,
-        answers: parsedResponses,
-        line_user_id: body.line_user_id || null,
-        submitted_at: new Date().toISOString()
-      })
+      .insert({ ...insertRow, line_display_name: lineDisplayName })
       .select()
       .single();
+
+    // line_display_name 列が無い（マイグレーション未適用）環境では列なしで再試行（回答の保存を優先）
+    if (error && (error.code === '42703' || error.code === 'PGRST204' || /line_display_name/.test(String(error.message ?? '')))) {
+      console.warn('[API] surveys.line_display_name 列が無いため表示名なしで保存します。マイグレーション 20261109000000_add_survey_sheets_sync.sql を適用してください');
+      ({ data: survey, error } = await (adminClient as any).from('surveys').insert(insertRow).select().single());
+    }
 
     if (error) {
       console.error('[API] Survey submit error:', error);
@@ -107,6 +149,13 @@ export async function POST(request: Request) {
     }
 
     await applyTagsSafely(store_id, survey_form_id, parsedResponses, body.line_user_id);
+    await syncToSheetSafely(store_id, survey_form_id, {
+      id: String(survey?.id ?? ''),
+      submitted_at: survey?.submitted_at ?? submittedAt,
+      line_user_id: lineUserId,
+      line_display_name: lineDisplayName,
+      responses: parsedResponses,
+    });
     return NextResponse.json(survey, { status: 201 });
   } catch (error) {
     console.error('Survey submit error:', error);

@@ -93,6 +93,12 @@ export interface SurveyContentBlock {
   position: 'above' | 'below';
 }
 
+/** アンケート回答の Google スプレッドシート自動転記。spreadsheet_id が空 = 連携しない */
+export interface SurveyGoogleSheetsSettings {
+  spreadsheet_id: string; // URL ではなく ID（編集画面で URL を貼ると ID に変換）
+  sheet_name?: string; // タブ名。空 = 1 枚目のタブ
+}
+
 export interface SurveyConfig {
   basic_info: {
     title: string;
@@ -106,6 +112,8 @@ export interface SurveyConfig {
       enabled: boolean;
       text: string;
     };
+    // Google スプレッドシート連携（回答が届くたびに 1 行追記。純粋ロジック src/lib/survey-sheets.ts）
+    google_sheets?: SurveyGoogleSheetsSettings;
   };
   questions: SurveyQuestion[];
   content_blocks?: SurveyContentBlock[]; // 質問間のテキスト / 画像ブロック
