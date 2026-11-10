@@ -26,6 +26,10 @@ export default function BroadcastSettingsCard({ storeId, used, onSaved }: { stor
   const [optIn, setOptIn] = useState('');
   const [time, setTime] = useState('10:00');
   const [quota, setQuota] = useState<LineQuotaInfo | null>(null);
+  // 友だちの取り込み
+  const [friendCount, setFriendCount] = useState<number | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importNote, setImportNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -49,6 +53,46 @@ export default function BroadcastSettingsCard({ storeId, used, onSaved }: { stor
   useEffect(() => {
     load();
   }, [load]);
+
+  const friendsUrl = `/api/stores/${encodeURIComponent(storeId)}/line-friends/import`;
+  const loadFriendCount = useCallback(async () => {
+    try {
+      const res = await fetch(friendsUrl, { credentials: 'include', cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) setFriendCount(typeof json.friend_only_count === 'number' ? json.friend_only_count : 0);
+    } catch {
+      /* 件数は補助 */
+    }
+  }, [friendsUrl]);
+
+  useEffect(() => {
+    loadFriendCount();
+  }, [loadFriendCount]);
+
+  const importFriends = async () => {
+    setImporting(true);
+    setImportNote(null);
+    try {
+      const res = await fetch(friendsUrl, { method: 'POST', credentials: 'include' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setImportNote(json.error || '友だちの取り込みに失敗しました');
+        return;
+      }
+      setImportNote(
+        json.remaining
+          ? `${json.imported} 人を取り込みました。まだ続きがあります。もう一度「友だちを取り込む」を押してください。`
+          : json.imported > 0
+            ? `${json.imported} 人を取り込みました（すでに登録済み ${json.existing} 人）。`
+            : `新しく取り込む友だちはいませんでした（すでに登録済み ${json.existing} 人）。`
+      );
+      loadFriendCount();
+    } catch {
+      setImportNote('友だちの取り込みに失敗しました（通信エラー）');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -95,6 +139,25 @@ export default function BroadcastSettingsCard({ storeId, used, onSaved }: { stor
             <p className="text-sm text-muted-foreground">LINE から通数を取得できませんでした（チャネルアクセストークンが未設定か、一時的な通信エラーです）。この配信タブから今月送った数は {used} 通です。</p>
           )}
           <p className="text-[11px] text-muted-foreground">通数は「送った相手の人数」で数えます（1 人に 5 通まとめて送っても 1 通）。上限を超えた分は LINE のプランによって追加料金がかかるか、送れなくなります。</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-2 p-4" data-slot="friend-import">
+          <h3 className="text-sm font-semibold">友だち登録だけのお客様</h3>
+          <p className="text-sm">
+            予約もアンケートもしていない LINE 友だち: <span className="font-semibold tabular-nums">{friendCount ?? '—'}</span> 人
+            <span className="text-muted-foreground">（配信先に含まれます）</span>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            友だち追加されたとき、またはお客様が公式 LINE に何か送ってきたとき（リッチメニューの操作を含む）に、LINE の表示名で顧客管理へ自動登録します。
+            顧客管理の一覧では「LINE 友だちのみも表示」にチェックすると確認でき、タグを付けて絞り込みにも使えます。予約すると通常の顧客に切り替わります。
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" variant="outline" disabled={importing} onClick={importFriends}>{importing ? '取り込み中…' : '友だちを取り込む'}</Button>
+            <span className="text-[11px] text-muted-foreground">この機能より前からの友だちを一括で登録します。LINE の認証済みアカウント（青・緑のバッジ）だけが使えます</span>
+          </div>
+          {importNote && <p className="rounded bg-muted/60 px-2 py-1 text-xs">{importNote}</p>}
         </CardContent>
       </Card>
 

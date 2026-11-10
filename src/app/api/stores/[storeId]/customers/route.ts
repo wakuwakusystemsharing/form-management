@@ -61,6 +61,12 @@ function escapeForOrFilter(value: string): string {
   return value.replace(/[(),\\]/g, ' ').trim();
 }
 
+/** 列が無い（マイグレーション未適用）ことによるエラーか */
+function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return error.code === '42703' || error.code === 'PGRST204' || /line_friend_only/.test(error.message || '');
+}
+
 /**
  * GET /api/stores/[storeId]/customers
  * 自店舗の顧客一覧を取得
@@ -90,6 +96,8 @@ export async function GET(
     const segment = searchParams.get('segment');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
+    // 予約なしの LINE 友だち（自動登録）は既定で一覧に出さない。include_friends=1 で含める
+    const includeFriends = searchParams.get('include_friends') === '1';
 
     const env = getAppEnvironment();
 
@@ -104,6 +112,8 @@ export async function GET(
 
       // 店舗IDでフィルタ
       customers = customers.filter((c) => c.store_id === storeId);
+      const friendOnlyCount = customers.filter((c) => c.line_friend_only === true).length;
+      if (!includeFriends) customers = customers.filter((c) => c.line_friend_only !== true);
 
       // 検索クエリでフィルタ
       if (search) {
@@ -145,6 +155,7 @@ export async function GET(
       return NextResponse.json({
         customers: paginatedCustomers,
         total,
+        friend_only_count: friendOnlyCount,
       });
     }
 
@@ -157,11 +168,13 @@ export async function GET(
       );
     }
 
-    // クエリビルド
+    // クエリビルド（excludeFriends = 予約なしの LINE 友だちを除く）
+    const buildQuery = (excludeFriends: boolean) => {
     let query = (adminClient as any)
       .from('customers')
       .select('*', { count: 'exact' })
       .eq('store_id', storeId);
+    if (excludeFriends) query = query.eq('line_friend_only', false);
 
     // 検索クエリ（フィルタ構文文字を除去してから埋め込む）
     if (search) {
@@ -187,11 +200,16 @@ export async function GET(
     }
 
     // ページネーション
-    query = query
+    return query
       .order('last_visit_date', { ascending: false, nullsFirst: false })
       .range(offset, offset + limit - 1);
+    };
 
-    const { data: customers, error, count } = await query;
+    let { data: customers, error, count } = await buildQuery(!includeFriends);
+    // line_friend_only 列が未適用の環境（マイグレーション前）では、絞り込みなしで取り直す
+    if (error && !includeFriends && isMissingColumnError(error)) {
+      ({ data: customers, error, count } = await buildQuery(false));
+    }
 
     if (error) {
       console.error('[API] Customers fetch error:', error);
@@ -209,9 +227,19 @@ export async function GET(
       );
     }
 
+    // 予約なしの LINE 友だちの人数（一覧の「LINE 友だちのみも表示」の件数表示用。取得できなければ 0）
+    let friendOnlyCount = 0;
+    try {
+      const fr = await (adminClient as any).from('customers').select('id', { count: 'exact', head: true }).eq('store_id', storeId).eq('line_friend_only', true);
+      if (!fr.error) friendOnlyCount = fr.count ?? 0;
+    } catch {
+      /* 件数は補助 */
+    }
+
     return NextResponse.json({
       customers: filteredCustomers,
       total: count || 0,
+      friend_only_count: friendOnlyCount,
     });
   } catch (error) {
     console.error('Customers fetch error:', error);

@@ -10,6 +10,7 @@ import { resolveStayCancelFee } from '@/lib/stay-reservation';
 import { sendEmail } from '@/lib/email-sender';
 import { findLineFlexReplyForText, listLineFlexAttachments } from '@/lib/line-flex-service';
 import { handleBroadcastOptCommand } from '@/lib/broadcast-opt-out';
+import { ensureFriendCustomer } from '@/lib/line-friend-customers';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -497,6 +498,14 @@ export async function POST(req: NextRequest) {
         console.error('[LINE Webhook] unfollow apply error:', e);
       }
     }
+  }
+
+  // 友だち登録だけの人（予約もアンケートもしていない人）にも配信できるよう、顧客台帳に無ければ LINE の表示名で登録する。
+  // 友だち追加・発言・リッチメニュー操作のどれかがあったユーザーが対象。失敗しても以降の処理は続ける
+  const friendUserIds = [...new Set(events.filter((ev) => ev.type === 'follow' || ev.type === 'message' || ev.type === 'postback').map((ev) => ev.source?.userId).filter((id): id is string => !!id))];
+  for (const friendUserId of friendUserIds) {
+    const followEvent = events.find((ev) => ev.type === 'follow' && ev.source?.userId === friendUserId);
+    await ensureFriendCustomer(adminClient, storeId, friendUserId, accessToken, { timestampMs: followEvent?.timestamp });
   }
 
   // 以下の reply 系処理は最初のメッセージ系イベントに対して実施

@@ -346,7 +346,7 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
                           条件に合う人のうち、
                           {[
                             estimate.excluded_opt_out > 0 ? `配信停止 ${estimate.excluded_opt_out} 人` : '',
-                            estimate.excluded_blocked > 0 ? `ブロック中 ${estimate.excluded_blocked} 人` : '',
+                            estimate.excluded_blocked > 0 ? `友だちでない（未追加・ブロック）${estimate.excluded_blocked} 人` : '',
                             estimate.excluded_no_line > 0 ? `LINE 未連携 ${estimate.excluded_no_line} 人` : '',
                           ].filter(Boolean).join('・')}
                           は除いています

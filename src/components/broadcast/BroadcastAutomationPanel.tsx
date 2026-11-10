@@ -430,7 +430,7 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
                       <>
                         いま ON にすると、次の判定で <span className="font-semibold tabular-nums">{preview.count} 人</span> に送られます
                         {preview.sample.length > 0 && <span className="block truncate text-[11px] text-muted-foreground">例: {preview.sample.join('、')}{preview.count > preview.sample.length ? ' ほか' : ''}</span>}
-                        <span className="block text-[11px] text-muted-foreground">以後は、新しく当てはまったお客様にだけ送ります（配信停止・ブロック中・LINE 未連携の方は除きます）</span>
+                        <span className="block text-[11px] text-muted-foreground">以後は、新しく当てはまったお客様にだけ送ります（配信停止・友だちでない・LINE 未連携の方は除きます）</span>
                       </>
                     ) : (
                       <span className="text-muted-foreground">人数を計算しています…</span>
