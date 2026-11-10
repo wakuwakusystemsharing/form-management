@@ -24,6 +24,8 @@ export interface RankingCustomerInput {
   store_id: string;
   line_user_id?: string | null;
   line_friend_flag?: boolean | null;
+  /** 予約なしの LINE 友だち（自動登録）。友だち追加率には数えない */
+  line_friend_only?: boolean | null;
 }
 
 export interface RankingPeriod {
@@ -129,7 +131,7 @@ export function computeStoreRankings(
 
   for (const c of customers) {
     const row = rows.get(c?.store_id);
-    if (!row || !c.line_user_id) continue;
+    if (!row || !c.line_user_id || c.line_friend_only === true) continue;
     row.line_linked_customers += 1;
     if (c.line_friend_flag === true) row.line_friend_connected += 1;
   }

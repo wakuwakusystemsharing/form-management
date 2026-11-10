@@ -1,3 +1,4 @@
+import { promoteFriendOnlyPatch } from '@/lib/line-friend-customers';
 import { NextResponse, after } from 'next/server';
 import fs from 'fs';
 import path from 'path';
@@ -559,6 +560,8 @@ export async function POST(request: Request) {
               typeof body.line_friend_flag === 'boolean'
                 ? body.line_friend_flag
                 : existingCustomer.line_friend_flag,
+            // 友だち登録だけで自動登録されていた顧客なら、印を外して予約時の名前・電話番号を入れる
+            ...promoteFriendOnlyPatch(existingCustomer, { name: body.customer_name, phone: body.customer_phone, email: body.customer_email }),
           });
           customerId = existingCustomer.id;
         } else {
@@ -757,6 +760,8 @@ export async function POST(request: Request) {
           line_status_message: body.line_status_message || existingCustomer.line_status_message,
           line_os: body.line_os || existingCustomer.line_os,
           line_friend_flag: body.line_friend_flag || existingCustomer.line_friend_flag,
+          // 友だち登録だけで自動登録されていた顧客なら、印を外して予約時の名前・電話番号を入れる
+          ...promoteFriendOnlyPatch(existingCustomer, { name: body.customer_name, phone: body.customer_phone, email: body.customer_email }),
         });
         customerId = existingCustomer.id;
       } else {

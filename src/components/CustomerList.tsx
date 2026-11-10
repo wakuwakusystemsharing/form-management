@@ -111,6 +111,9 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange, 
     onTagFilterChange?.(tag);
   };
   const [total, setTotal] = useState(0);
+  // 予約なしの LINE 友だち（友だち登録だけで自動登録された顧客）は既定で隠す。切り替えで一覧に含める
+  const [showFriends, setShowFriends] = useState(false);
+  const [friendOnlyCount, setFriendOnlyCount] = useState(0);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const { toast } = useToast();
@@ -121,11 +124,13 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange, 
     if (debouncedSearch) params.append('search', debouncedSearch);
     if (segmentFilter !== 'all') params.append('segment', segmentFilter);
     if (tagFilter) params.append('tag', tagFilter);
+    if (showFriends) params.append('include_friends', '1');
     params.append('limit', String(PAGE_SIZE));
     if (offset > 0) params.append('offset', String(offset));
     const response = await fetchWithAuth(`/api/stores/${storeId}/customers?${params.toString()}`);
     if (response.ok) {
       const data = await response.json();
+      setFriendOnlyCount(typeof data.friend_only_count === 'number' ? data.friend_only_count : 0);
       return { customers: data.customers || [], total: data.total || 0 };
     }
     if (response.status === 401) {
@@ -135,7 +140,7 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange, 
     const data = await response.json().catch(() => ({}));
     toast({ title: '顧客一覧の取得に失敗しました', description: data.error || `エラーコード: ${response.status}`, variant: 'destructive' });
     return null;
-  }, [storeId, debouncedSearch, segmentFilter, tagFilter, toast]);
+  }, [storeId, debouncedSearch, segmentFilter, tagFilter, showFriends, toast]);
 
   const fetchCustomers = useCallback(async () => {
     const seq = ++requestSeq.current;
@@ -254,9 +259,13 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange, 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-base font-medium truncate flex-1">{customer.name}</p>
+                        {customer.line_friend_only ? (
+                          <Badge variant="outline" className="shrink-0 text-[11px] px-1.5 py-0 border-[#06C755]/40 text-[#06A94A]">LINE 友だち（予約なし）</Badge>
+                        ) : (
                         <Badge variant={getSegmentBadgeVariant(segment)} className="shrink-0 text-[11px] px-1.5 py-0">
                           {getSegmentLabel(segment)}
                         </Badge>
+                        )}
                       </div>
                       <p className="text-sm text-muted-foreground truncate">{customer.phone || '電話番号なし'}</p>
                       {renderTags(customer, 'mt-0.5')}
@@ -304,7 +313,7 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange, 
                       <TableCell className="font-medium">{customer.name}</TableCell>
                       <TableCell>{customer.phone || '-'}</TableCell>
                       <TableCell>{renderTags(customer) ?? <span className="text-muted-foreground">-</span>}</TableCell>
-                      <TableCell><Badge variant={getSegmentBadgeVariant(segment)}>{getSegmentLabel(segment)}</Badge></TableCell>
+                      <TableCell>{customer.line_friend_only ? <Badge variant="outline" className="border-[#06C755]/40 text-[#06A94A]">LINE 友だち（予約なし）</Badge> : <Badge variant={getSegmentBadgeVariant(segment)}>{getSegmentLabel(segment)}</Badge>}</TableCell>
                       <TableCell className="text-right tabular-nums">{customer.total_visits}回</TableCell>
                       <TableCell className="text-right tabular-nums">{yenFmt.format(customer.total_spent)}</TableCell>
                       <TableCell>{customer.last_visit_date ? dateFullFmt.format(new Date(customer.last_visit_date)) : '-'}</TableCell>
@@ -369,6 +378,13 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange, 
             {[...new Set([...(tagFilter ? [tagFilter] : []), ...storeTags])].map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
           </SelectContent>
         </Select>
+      )}
+      {/* 予約なしの LINE 友だち（自動登録）がいるときだけ切り替えを出す */}
+      {(friendOnlyCount > 0 || showFriends) && (
+        <label className="flex items-center gap-2 text-xs text-muted-foreground md:whitespace-nowrap" data-slot="friends-toggle">
+          <input type="checkbox" className="h-4 w-4" checked={showFriends} onChange={(e) => setShowFriends(e.target.checked)} />
+          LINE 友だちのみも表示（{friendOnlyCount} 人）
+        </label>
       )}
     </div>
   );
