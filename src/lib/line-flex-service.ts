@@ -30,6 +30,8 @@ import {
   updateLineFlexMessage,
 } from '@/lib/line-flex-repository';
 import { buildLineFlexPayloads, lineFlexItemsReference, LINE_FLEX_ATTACH_MAX, normalizeLineFlexItems, validateLineFlexItems } from '@/lib/line-flex-items';
+import { getBroadcastSettings } from '@/lib/broadcast-repository';
+import { DEFAULT_OPT_IN_KEYWORD, DEFAULT_OPT_OUT_KEYWORD } from '@/lib/broadcast-quota';
 
 export type ServiceResult<T> = { ok: true; value: T } | { ok: false; status: number; error: string };
 
@@ -136,6 +138,17 @@ function findKeywordConflict(rows: LineFlexMessage[], candidate: LineFlexMessage
 /** このシステムが既に使っている言葉（予約確認・キャンセル）は登録できない */
 const RESERVED_KEYWORDS = ['予約確認', 'キャンセル'];
 
+/** 予約語 + その店舗の配信停止 / 再開キーワード（Webhook が先に処理するため、自動応答には使えない） */
+async function reservedKeywordsFor(storeId: string): Promise<string[]> {
+  try {
+    const s = await getBroadcastSettings(storeId);
+    return [...RESERVED_KEYWORDS, s.opt_out_keyword, s.opt_in_keyword];
+  } catch {
+    // 配信機能の列が未適用の環境でも LINE メッセージの保存は止めない
+    return [...RESERVED_KEYWORDS, DEFAULT_OPT_OUT_KEYWORD, DEFAULT_OPT_IN_KEYWORD];
+  }
+}
+
 /**
  * 参照先（ref）が変わった・消えたとき、それを含む同じ店舗のメッセージの payloads を作り直す
  * （payloads は展開済みなので、参照先の更新を送信内容に反映させるため）
@@ -162,7 +175,8 @@ export async function createLineFlexMessage(storeId: string, input: LineFlexMess
   const prepared = prepareLineFlexMessage(storeId, input, origin, null, rows);
   if (!prepared.ok) return prepared;
   if (rows.some((r) => r.id === prepared.value.id)) return { ok: false, status: 409, error: '同じ ID のメッセージがあります。もう一度お試しください' };
-  const reserved = prepared.value.keywords.find((k) => RESERVED_KEYWORDS.includes(k));
+  const reservedList = await reservedKeywordsFor(storeId);
+  const reserved = prepared.value.keywords.find((k) => reservedList.includes(k));
   if (reserved) return { ok: false, status: 400, error: `「${reserved}」はシステムが使う言葉のためキーワードにできません` };
   const conflict = findKeywordConflict(rows, prepared.value);
   if (conflict) return { ok: false, status: 400, error: conflict };
@@ -175,7 +189,8 @@ export async function saveLineFlexMessage(storeId: string, id: string, input: Li
   const rows = await listLineFlexMessages(storeId);
   const prepared = prepareLineFlexMessage(storeId, input, origin, existing, rows);
   if (!prepared.ok) return prepared;
-  const reserved = prepared.value.keywords.find((k) => RESERVED_KEYWORDS.includes(k));
+  const reservedList = await reservedKeywordsFor(storeId);
+  const reserved = prepared.value.keywords.find((k) => reservedList.includes(k));
   if (reserved) return { ok: false, status: 400, error: `「${reserved}」はシステムが使う言葉のためキーワードにできません` };
   const conflict = findKeywordConflict(rows, prepared.value);
   if (conflict) return { ok: false, status: 400, error: conflict };

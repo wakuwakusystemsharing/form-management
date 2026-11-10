@@ -96,7 +96,15 @@ export function validateLineFlexItems(items: LineFlexItem[], opts: { selfId?: st
   if (items.length > LINE_FLEX_ITEMS_MAX) return `1 回に送れるのは ${LINE_FLEX_ITEMS_MAX} 通までです`;
   if (items.filter((x) => x.type === 'main').length !== 1) return 'メッセージの構成が壊れています（Flex 本体が 1 つ必要です）';
   for (const [i, item] of items.entries()) {
-    const at = `${i + 1} 通目`;
+    const err = validateLineFlexItem(item, `${i + 1} 通目`, opts);
+    if (err) return err;
+  }
+  return null;
+}
+
+/** 1 件ぶんの入力チェック（配信機能の並びでも使う）。`at` = エラー文の先頭に付ける位置（例: 「2 通目」） */
+export function validateLineFlexItem(item: LineFlexItem, at: string, opts: { selfId?: string; existingIds?: ReadonlySet<string> } = {}): string | null {
+  {
     switch (item.type) {
       case 'text':
         if (!item.text.trim()) return `${at}（テキスト）の文章を入力してください`;

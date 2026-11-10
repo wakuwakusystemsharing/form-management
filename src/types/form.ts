@@ -848,6 +848,7 @@ export interface Database {
           line_email: string | null;
           line_friend_flag: boolean;
           line_friend_added_at: string | null;
+          line_opt_out_at?: string | null; // 配信停止した日時（null / 無し = 配信する。配信タブ）
           line_language: string | null;
           line_os: 'ios' | 'android' | 'web' | null;
           // 顧客属性
@@ -885,6 +886,7 @@ export interface Database {
           line_email?: string | null;
           line_friend_flag?: boolean;
           line_friend_added_at?: string | null;
+          line_opt_out_at?: string | null;
           line_language?: string | null;
           line_os?: 'ios' | 'android' | 'web' | null;
           // 顧客属性
@@ -922,6 +924,7 @@ export interface Database {
           line_email?: string | null;
           line_friend_flag?: boolean;
           line_friend_added_at?: string | null;
+          line_opt_out_at?: string | null;
           line_language?: string | null;
           line_os?: 'ios' | 'android' | 'web' | null;
           // 顧客属性

@@ -18,6 +18,7 @@ import LotteryFormList from '@/components/LotteryFormList';
 import LotteryEntryList from '@/components/LotteryEntryList';
 import LotteryDeferredPanel from '@/components/LotteryDeferredPanel';
 import WallAdminPanel from '@/components/wall/WallAdminPanel';
+import BroadcastPanel from '@/components/broadcast/BroadcastPanel';
 import type { WallStats } from '@/types/wall';
 import type { LotteryFormWithStats } from '@/types/lottery';
 import StoreAdminLayout from '@/components/StoreAdminLayout';
@@ -1567,6 +1568,18 @@ export default function StoreAdminPage() {
               <p className="text-sm text-muted-foreground">お客様が匿名で貼った付箋の確認と、寄せ書きボードの設定を行います</p>
             </div>
             <WallAdminPanel storeId={storeId} />
+          </div>
+        );
+
+      case 'broadcasts':
+        return (
+          <div className="space-y-5 p-4 lg:p-6">
+            <div>
+              <h2 className="text-lg font-semibold">配信</h2>
+              <p className="text-sm text-muted-foreground">公式 LINE の友だちへ、タグや予約したメニューなどで絞り込んでメッセージを送ります</p>
+            </div>
+            <StoreAdminGuide tab="broadcasts" />
+            <BroadcastPanel storeId={storeId} showGuide={false} />
           </div>
         );
 

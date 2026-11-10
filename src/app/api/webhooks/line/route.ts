@@ -9,6 +9,7 @@ import { buildCancelDeadlineMessage, buildCancelNotificationEmail, isCancelAllow
 import { resolveStayCancelFee } from '@/lib/stay-reservation';
 import { sendEmail } from '@/lib/email-sender';
 import { findLineFlexReplyForText, listLineFlexAttachments } from '@/lib/line-flex-service';
+import { handleBroadcastOptCommand } from '@/lib/broadcast-opt-out';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -507,6 +508,13 @@ export async function POST(req: NextRequest) {
   console.log(`[LINE Webhook] storeId=${storeId} eventCount=${events.length} type=${event.type || 'unknown'} userId=${userId ? 'yes' : 'no'} message=${messageText ? messageText.substring(0, 30) : '(empty)'}`);
 
   if (!replyToken || !userId) {
+    return NextResponse.json({ success: true });
+  }
+
+  // 配信の停止 / 再開（配信タブ。既定「配信停止」「配信再開」。予約確認・リマインダーは止めない）
+  const optReply = await handleBroadcastOptCommand(storeId, userId, messageText);
+  if (optReply) {
+    await replyRawMessages(replyToken, accessToken, [{ type: 'text', text: optReply }]);
     return NextResponse.json({ success: true });
   }
 

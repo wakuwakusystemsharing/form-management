@@ -300,6 +300,11 @@ export async function PATCH(
       (updateData as any)[field] = value;
     }
 
+    // 配信の停止 / 再開（配信タブのセグメント配信・自動配信から外す。予約確認・リマインダーは止めない）
+    if (typeof body.line_opt_out === 'boolean') {
+      updateData.line_opt_out_at = body.line_opt_out ? new Date().toISOString() : null;
+    }
+
     const updatedCustomer = await updateCustomer(customerId, updateData);
 
     return NextResponse.json(updatedCustomer);
