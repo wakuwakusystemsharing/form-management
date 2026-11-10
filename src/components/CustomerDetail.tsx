@@ -1,6 +1,7 @@
 'use client';
 
 import { fetchWithAuth } from '@/lib/client-auth';
+import CustomerLineAnswers from '@/components/line-flex/CustomerLineAnswers';
 
 import { useState, useEffect, useCallback } from 'react';
 import { Customer, CustomerVisit } from '@/types/form';
@@ -869,6 +870,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                     <p className="col-span-2 text-xs text-muted-foreground">LINE 未連携の顧客です（電話番号などで手動登録）</p>
                   )}
                 </dl>
+                {customer.line_user_id && <CustomerLineAnswers storeId={storeId} lineUserId={customer.line_user_id} />}
               </TabsContent>
             </Tabs>
           </section>

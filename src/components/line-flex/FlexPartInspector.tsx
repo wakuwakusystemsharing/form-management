@@ -10,6 +10,8 @@ import React, { useState } from 'react';
 import { ancestorPaths, describeFlexNode, getAt, isInlineEditableText, newFlexPart, parentInfo } from '@/lib/flex-tree';
 import type { FlexContainer } from '@/types/line-flex';
 import type { FlexEditOp } from '@/lib/flex-edit';
+import { isBranchLink, parseChoiceLink } from '@/lib/line-flex-branch';
+import FlexLinkField, { type FlexLinkTarget } from './FlexLinkField';
 
 export type { FlexEditOp };
 
@@ -22,6 +24,10 @@ interface Props {
   templateLinked: boolean;
   /** 予約フォームの URL（ボタンのリンク先の候補） */
   formUrls: Array<{ name: string; url: string }>;
+  /** 「押したら次のメッセージを送る」で選べる保存済みの LINE メッセージ */
+  targets?: FlexLinkTarget[];
+  /** タグの候補を出す店舗 */
+  storeId?: string;
   uploading: string | null;
   onUpload: (slot: string, file: File, apply: (url: string) => void) => void;
   canUndo: boolean;
@@ -117,7 +123,7 @@ function UploadButton({ slot, uploading, label, onFile }: { slot: string; upload
   );
 }
 
-export default function FlexPartInspector({ contents, selected, onSelect, onOp, templateLinked, formUrls, uploading, onUpload, canUndo, canRedo, onUndo, onRedo, error }: Props) {
+export default function FlexPartInspector({ contents, selected, onSelect, onOp, templateLinked, formUrls, targets = [], storeId, uploading, onUpload, canUndo, canRedo, onUndo, onRedo, error }: Props) {
   const node = contents && selected !== null ? getAt(contents, selected) : undefined;
   const path = selected ?? '';
   const info = contents && selected !== null ? parentInfo(contents, selected) : null;
@@ -202,10 +208,13 @@ export default function FlexPartInspector({ contents, selected, onSelect, onOp, 
           <>
             <Row label="ボタンの文言"><DraftInput value={str(action?.label)} valid={(v) => v.trim() !== '' && v.length <= 40} onCommit={(v) => onOp({ type: 'buttonLabel', path, label: v })} /></Row>
             {!action || action.type === 'uri' ? (
-              <Row label="リンク先">
-                <DraftInput value={str(action?.uri)} valid={isLink} placeholder="https://… または tel:0312345678" onCommit={(v) => onOp({ type: 'buttonUrl', path, url: v })} />
-                {linkPicker((url) => onOp({ type: 'buttonUrl', path, url }))}
-              </Row>
+              parseChoiceLink(action?.uri) ? (
+                <p className="text-[11px] text-muted-foreground">分岐アンケートの選択肢です。選んだあとの動き・タグは、左の「内容」の選択肢で設定します。</p>
+              ) : (
+                <Row label="押したとき">
+                  <FlexLinkField value={str(action?.uri)} onChange={(v) => onOp({ type: 'buttonUrl', path, url: v })} formUrls={formUrls} targets={targets} storeId={storeId} validUrl={(v) => isLink(v) || isBranchLink(v)} />
+                </Row>
+              )
             ) : (
               <p className="text-[11px] text-muted-foreground">このボタンはリンク以外の動作（{str(action.type)}）です。動作の変更は JSON で行ってください。</p>
             )}

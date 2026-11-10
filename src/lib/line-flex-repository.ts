@@ -74,6 +74,9 @@ function normalizeRow(row: Record<string, unknown>): LineFlexMessage {
     links: parse<Record<string, string>>(row.links, {}),
     reply_count: typeof row.reply_count === 'number' ? row.reply_count : 0,
     tap_counts: parse<Record<string, number>>(row.tap_counts, {}),
+    branches: parse<LineFlexMessage['branches']>(row.branches, {}) ?? {},
+    branch_payloads: parse<LineFlexMessage['branch_payloads']>(row.branch_payloads, {}) ?? {},
+    show_choice_text: row.show_choice_text !== false,
     created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
     updated_at: typeof row.updated_at === 'string' ? row.updated_at : new Date().toISOString(),
   };
@@ -119,8 +122,10 @@ export async function insertLineFlexMessage(row: LineFlexMessage): Promise<LineF
     writeAll(rows);
     return row;
   }
-  const { data, error } = await client().from('line_flex_messages').insert(toDbRow(row)).select('*').single();
-  if (error) throw new Error(`LINE メッセージの保存に失敗しました: ${error.message}`);
+  let { data, error } = await client().from('line_flex_messages').insert(toDbRow(row)).select('*').single();
+  // 分岐の列が未適用の環境では、分岐の無いメッセージだけ列なしで保存する
+  if (error && isMissingBranchColumn(error) && !usesBranching(row)) ({ data, error } = await client().from('line_flex_messages').insert(withoutBranchColumns(toDbRow(row))).select('*').single());
+  if (error) throw new Error(`LINE メッセージの保存に失敗しました: ${branchColumnHint(error)}`);
   return normalizeRow(data as Record<string, unknown>);
 }
 
@@ -135,8 +140,9 @@ export async function updateLineFlexMessage(row: LineFlexMessage): Promise<LineF
   }
   const { id, store_id, created_at, reply_count, tap_counts, ...rest } = toDbRow(row);
   void created_at; void reply_count; void tap_counts;
-  const { data, error } = await client().from('line_flex_messages').update(rest).eq('id', id).eq('store_id', store_id).select('*').single();
-  if (error) throw new Error(`LINE メッセージの更新に失敗しました: ${error.message}`);
+  let { data, error } = await client().from('line_flex_messages').update(rest).eq('id', id).eq('store_id', store_id).select('*').single();
+  if (error && isMissingBranchColumn(error) && !usesBranching(row)) ({ data, error } = await client().from('line_flex_messages').update(withoutBranchColumns(rest)).eq('id', id).eq('store_id', store_id).select('*').single());
+  if (error) throw new Error(`LINE メッセージの更新に失敗しました: ${branchColumnHint(error)}`);
   return normalizeRow(data as Record<string, unknown>);
 }
 
@@ -191,6 +197,24 @@ export async function incrementLineFlexTap(id: string, key: string): Promise<voi
   if (error) console.warn('[line-flex] tap_counts 更新に失敗:', error.message);
 }
 
+// ---- 分岐の列（20261116000000_add_line_flex_branching.sql）が未適用の環境への備え ----
+const BRANCH_COLUMNS = ['branches', 'branch_payloads', 'show_choice_text'];
+function isMissingBranchColumn(error: { message?: string; code?: string }): boolean {
+  const m = error?.message ?? '';
+  return BRANCH_COLUMNS.some((c) => m.includes(c)) || (error?.code === 'PGRST204' && /column/i.test(m));
+}
+function usesBranching(row: LineFlexMessage): boolean {
+  return row.template === 'scenario' || Object.keys(row.branches ?? {}).length > 0;
+}
+function withoutBranchColumns(dbRow: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...dbRow };
+  for (const c of BRANCH_COLUMNS) delete out[c];
+  return out;
+}
+function branchColumnHint(error: { message?: string; code?: string }): string {
+  return isMissingBranchColumn(error) ? '分岐機能のデータベース更新（マイグレーション）がまだ適用されていません' : (error.message ?? '');
+}
+
 function toDbRow(row: LineFlexMessage): Record<string, unknown> {
   return {
     id: row.id,
@@ -212,6 +236,9 @@ function toDbRow(row: LineFlexMessage): Record<string, unknown> {
     links: row.links,
     reply_count: row.reply_count,
     tap_counts: row.tap_counts,
+    branches: row.branches ?? {},
+    branch_payloads: row.branch_payloads ?? {},
+    show_choice_text: row.show_choice_text !== false,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

@@ -152,6 +152,7 @@ export default function LineFlexQuickEdit({ storeId, message, forms, others, onS
         enabled: message.enabled,
         track_taps: message.track_taps,
         items,
+        show_choice_text: message.show_choice_text,
       };
       const res = await fetch(`/api/stores/${encodeURIComponent(storeId)}/line-messages/${message.id}`, {
         method: 'PUT',
@@ -199,6 +200,8 @@ export default function LineFlexQuickEdit({ storeId, message, forms, others, onS
             onSelect={setSelectedPath}
             onOp={(op) => applyEditRef.current(op)}
             templateLinked={isTemplateLinked(state)}
+            targets={others.filter((o) => o.id !== message.id).map((o) => ({ id: o.id, name: o.name }))}
+            storeId={storeId}
             formUrls={forms.filter((f) => f.liffUrl).map((f) => ({ name: f.name, url: f.liffUrl }))}
             uploading={uploading}
             onUpload={uploadImage}
