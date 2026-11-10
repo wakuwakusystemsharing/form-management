@@ -3,34 +3,53 @@
 /**
  * Flex Message のプレビュー（iPhone の LINE トーク画面に寄せた HTML 近似）
  *
- * - 幅 390px（iPhone の CSS px）のスマホ画面の枠に、LINE と同じ縮尺でトーク画面を再現し、欄の幅に合わせて自動で縮小する（CSS zoom）
- * - LINE の仕様値: バブル幅 nano 120 / micro 160 / deca 220 / hecto 241 / kilo 260 / mega 300 / giga 386 px、角丸 17px
+ * - 幅 390px（iPhone の CSS px。枠の内側）のスマホ画面に、LINE と同じ縮尺でトーク画面を再現し、欄の幅に合わせて自動で縮小する（CSS zoom）
+ * - LINE の仕様値: バブル幅 nano 120 / micro 160 / deca 220 / hecto 241 / kilo 260 / mega 300 / giga 386 px。
+ *   画面より広い指定（giga）は「画面幅 − 左右 8px」= 374px に収まる。角丸は mega 17 / giga 5 / それより小さいサイズ 10（実機計測）
  *   文字サイズ xxs 11 / xs 13 / sm 14 / md 16（既定）/ lg 19 / xl 22 / xxl 29 / 3xl 35 / 4xl 48 / 5xl 74 px
  *   余白 none 0 / xs 2 / sm 4 / md 8 / lg 12 / xl 16 / xxl 20 px、ブロック（header / body / footer）の既定 padding 20px
  *   画像 xxs 40 … 5xl 220 px / full（既定 md・1:1・fit）、ボタン高さ sm 40 / md 52 px・角丸 8px
  *   horizontal / baseline の子は flex 1、vertical の子は flex 0 が既定。カルーセルのバブルは最も高いものに揃う（body が伸びる）
- * - フォントは iPhone の LINE（ヒラギノ角ゴ）に寄せる。無い環境では Noto Sans JP（Web フォント）
+ * - 行の高さは文字サイズ × 約 1.193（システムフォントの自然な行高。1/3 px 単位に切り上げ）
+ * - フォントは iPhone の LINE に寄せる（src/lib/flex-preview-fonts.ts）: 英数字 = システムフォント（無い環境は Inter）、
+ *   日本語 = ヒラギノ角ゴ（無い環境は Noto Sans JP の 350 / 600）を **92% の大きさ**で描く（実機では日本語だけ小さく描かれる）
+ * - 実機との比較資料: docs/フレックスメッセージプレビュー/（mega カルーセル）、docs/フレックスメッセージプレビュー修正2回目/（giga）
  * 対応: bubble / carousel / box / text / span / image / button / separator / spacer / icon / filler / video（静止画）
  */
 import React, { useEffect, useRef, useState } from 'react';
 import type { FlexContainer } from '@/types/line-flex';
 import type { PreviewMessage } from '@/lib/line-flex-items';
+import { APPLE_JP_FONT_CSS, buildScaledJpFontCss, FLEX_PREVIEW_FONT_STACK, flexLineHeightPx, GOOGLE_JP_FONT_CSS_URL, GOOGLE_LATIN_FONT_CSS_URL } from '@/lib/flex-preview-fonts';
 
 type Node = Record<string, any>;
 type Layout = 'vertical' | 'horizontal' | 'baseline';
 
-export const PHONE_WIDTH = 390;
+export const PHONE_WIDTH = 390; // スマホ画面（枠の内側）の幅。iPhone の CSS px
+const PHONE_BORDER = 6; // 枠の太さ（画面の外側に足す）
+const PHONE_OUTER_WIDTH = PHONE_WIDTH + PHONE_BORDER * 2;
+const CHAT_SIDE_PADDING = 8; // トーク画面の左右の余白（実機計測: 画面幅 390 に対してバブル左右 8）
+/** バブルが取れる最大幅。giga（386）のように画面より広い指定は、実機と同じく画面幅 − 左右の余白に収まる */
+const BUBBLE_MAX_WIDTH = PHONE_WIDTH - CHAT_SIDE_PADDING * 2;
+/** バブルの角丸（実機計測: mega = 17 / giga = 5。それより小さいサイズは 10） */
+const BUBBLE_RADIUS: Record<string, number> = { nano: 10, micro: 10, deca: 10, hecto: 10, kilo: 10, mega: 17, giga: 5 };
 const SPACING: Record<string, number> = { none: 0, xs: 2, sm: 4, md: 8, lg: 12, xl: 16, xxl: 20 };
 const TEXT_SIZE: Record<string, number> = { xxs: 11, xs: 13, sm: 14, md: 16, lg: 19, xl: 22, xxl: 29, '3xl': 35, '4xl': 48, '5xl': 74 };
 const BUBBLE_WIDTH: Record<string, number> = { nano: 120, micro: 160, deca: 220, hecto: 241, kilo: 260, mega: 300, giga: 386 };
 const IMAGE_SIZE: Record<string, string> = { xxs: '40px', xs: '60px', sm: '80px', md: '100px', lg: '120px', xl: '140px', xxl: '160px', '3xl': '180px', '4xl': '200px', '5xl': '220px', full: '100%' };
 const BORDER_WIDTH: Record<string, string> = { none: '0px', light: '0.5px', normal: '1px', medium: '2px', 'semi-bold': '3px', bold: '4px' };
 const CORNER: Record<string, string> = { none: '0px', xs: '2px', sm: '4px', md: '8px', lg: '12px', xl: '16px', xxl: '20px' };
-const FONT = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP", -apple-system, BlinkMacSystemFont, Roboto, sans-serif';
+/**
+ * フォント（src/lib/flex-preview-fonts.ts）。iPhone の LINE は 英数字 = San Francisco / 日本語 = ヒラギノ角ゴで、
+ * 日本語は英数字の約 92% の大きさで描かれる。日本語の範囲だけを受け持つ FlexPreviewJP（92%）を先頭に置き、
+ * 英数字は後ろのシステムフォント（Apple）/ Inter に任せる
+ */
+const FONT = FLEX_PREVIEW_FONT_STACK;
+const WEIGHT_REGULAR = 400;
+const WEIGHT_BOLD = 700;
 const LINK_COLOR = '#42659a';
 const DEFAULT_TEXT = '#000000';
 const CHAT_BG = '#7e9ccb';
-const WEBFONT_ID = 'flex-preview-noto-sans-jp';
+const FONT_STYLE_ID = 'flex-preview-fonts';
 
 function len(v: unknown, table?: Record<string, string | number>): string | undefined {
   if (typeof v === 'number') return `${v}px`;
@@ -137,8 +156,8 @@ function Text({ node, parentLayout }: { node: Node; parentLayout: Layout }) {
   const maxLines = typeof node.maxLines === 'number' && node.maxLines > 0 ? node.maxLines : undefined;
   const style: React.CSSProperties = {
     fontSize: size,
-    lineHeight: node.lineSpacing ? `calc(1.4em + ${len(node.lineSpacing)})` : 1.4,
-    fontWeight: node.weight === 'bold' ? 700 : 400,
+    lineHeight: node.lineSpacing ? `calc(${flexLineHeightPx(size)}px + ${len(node.lineSpacing)})` : `${flexLineHeightPx(size)}px`,
+    fontWeight: node.weight === 'bold' ? WEIGHT_BOLD : WEIGHT_REGULAR,
     color: node.color ?? DEFAULT_TEXT,
     textAlign: node.align === 'center' ? 'center' : node.align === 'end' ? 'right' : 'left',
     whiteSpace: node.wrap ? 'pre-wrap' : 'nowrap',
@@ -160,7 +179,7 @@ function Text({ node, parentLayout }: { node: Node; parentLayout: Layout }) {
             key={i}
             style={{
               color: s.color,
-              fontWeight: s.weight === 'bold' ? 700 : undefined,
+              fontWeight: s.weight === 'bold' ? WEIGHT_BOLD : s.weight === 'regular' ? WEIGHT_REGULAR : undefined,
               fontSize: TEXT_SIZE[s.size as string],
               textDecoration: s.decoration === 'underline' ? 'underline' : s.decoration === 'line-through' ? 'line-through' : undefined,
               fontStyle: s.style === 'italic' ? 'italic' : undefined,
@@ -211,7 +230,7 @@ function Button({ node, parentLayout }: { node: Node; parentLayout: Layout }) {
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: 16,
-    fontWeight: 400,
+    fontWeight: WEIGHT_REGULAR,
     backgroundColor: primary ? accent : secondary ? accent : 'transparent',
     color: primary ? '#ffffff' : secondary ? '#111111' : accent,
     paddingLeft: 12,
@@ -258,14 +277,15 @@ function Component({ node, parentLayout }: { node: Node; parentLayout: Layout })
       return <img src={typeof node.url === 'string' ? node.url : ''} alt="" style={{ height: s, aspectRatio: aspect(node.aspectRatio) ?? '1 / 1', objectFit: 'contain', flex: '0 0 auto', marginLeft: parentLayout !== 'vertical' ? len(node.margin) : undefined, marginTop: parentLayout === 'vertical' ? len(node.margin) : undefined, alignSelf: 'baseline' }} />;
     }
     case 'span':
-      return <span style={{ color: node.color, fontWeight: node.weight === 'bold' ? 700 : undefined }}>{node.text}</span>;
+      return <span style={{ color: node.color, fontWeight: node.weight === 'bold' ? WEIGHT_BOLD : undefined }}>{node.text}</span>;
     default:
       return null;
   }
 }
 
 function Bubble({ node }: { node: Node }) {
-  const width = BUBBLE_WIDTH[node.size as string] ?? BUBBLE_WIDTH.mega;
+  const sizeKey = typeof node.size === 'string' && node.size in BUBBLE_WIDTH ? node.size : 'mega';
+  const width = Math.min(BUBBLE_WIDTH[sizeKey], BUBBLE_MAX_WIDTH);
   const styles = (node.styles ?? {}) as Node;
   const header = node.header as Node | undefined;
   const body = node.body as Node | undefined;
@@ -281,7 +301,7 @@ function Bubble({ node }: { node: Node }) {
         display: 'flex',
         flexDirection: 'column',
         backgroundColor: '#ffffff',
-        borderRadius: 17,
+        borderRadius: BUBBLE_RADIUS[sizeKey] ?? 17,
         overflow: 'hidden',
         fontFamily: FONT,
         direction: node.direction === 'rtl' ? 'rtl' : 'ltr',
@@ -372,7 +392,7 @@ function ChatMessage({ message, scale }: { message: PreviewMessage; scale: numbe
   }
   if (message.type === 'text') {
     return (
-      <div style={{ maxWidth: 260, backgroundColor: '#ffffff', borderRadius: 17, padding: '9px 13px', fontSize: 16, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: DEFAULT_TEXT, fontFamily: FONT, width: 'fit-content' }} data-slot="chat-text">
+      <div style={{ maxWidth: 260, backgroundColor: '#ffffff', borderRadius: 17, padding: '9px 13px', fontSize: 16, lineHeight: `${flexLineHeightPx(16)}px`, fontWeight: WEIGHT_REGULAR, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: DEFAULT_TEXT, fontFamily: FONT, width: 'fit-content' }} data-slot="chat-text">
         {message.text}
       </div>
     );
@@ -396,15 +416,53 @@ function ChatMessage({ message, scale }: { message: PreviewMessage; scale: numbe
   );
 }
 
-/** Noto Sans JP（ヒラギノが無い Windows 用）を 1 回だけ読み込む */
+/** Apple のフォント（ヒラギノ角ゴ）が使える環境か */
+function isApplePlatform(): boolean {
+  try {
+    return /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+  } catch {
+    return false;
+  }
+}
+
+let fontsRequested = false;
+
+/**
+ * プレビュー用のフォントを 1 回だけ読み込む。
+ * - Apple 環境: 端末のヒラギノ角ゴを 92% で使う @font-face を入れるだけ（通信なし）
+ * - それ以外: 英数字用の Inter を <link> で、日本語用の Noto Sans JP は Google の CSS を取得して
+ *   「92%・日本語の範囲だけ・350 / 600 を regular / bold に」書き換えてから <style> で入れる（buildScaledJpFontCss）。
+ *   取得に失敗したら通常の Noto Sans JP を <link> で読み込む（大きさは合わないが表示はできる）
+ */
 function useWebFont() {
   useEffect(() => {
-    if (typeof document === 'undefined' || document.getElementById(WEBFONT_ID)) return;
-    const link = document.createElement('link');
-    link.id = WEBFONT_ID;
-    link.rel = 'stylesheet';
-    link.href = 'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap';
-    document.head.appendChild(link);
+    if (typeof document === 'undefined' || fontsRequested || document.getElementById(FONT_STYLE_ID)) return;
+    fontsRequested = true;
+    const addStyle = (css: string) => {
+      const style = document.createElement('style');
+      style.id = FONT_STYLE_ID;
+      style.textContent = css;
+      document.head.appendChild(style);
+    };
+    const addLink = (href: string) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      document.head.appendChild(link);
+    };
+    if (isApplePlatform()) {
+      addStyle(APPLE_JP_FONT_CSS);
+      return;
+    }
+    addLink(GOOGLE_LATIN_FONT_CSS_URL);
+    fetch(GOOGLE_JP_FONT_CSS_URL)
+      .then((res) => (res.ok ? res.text() : Promise.reject(new Error(String(res.status)))))
+      .then((css) => {
+        const scaled = buildScaledJpFontCss(css);
+        if (!scaled) throw new Error('empty');
+        addStyle(scaled);
+      })
+      .catch(() => addLink('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap'));
   }, []);
 }
 
@@ -417,7 +475,7 @@ function useFitScale(maxScale: number) {
     if (!el || typeof ResizeObserver === 'undefined') return;
     const update = () => {
       const w = el.clientWidth;
-      if (w > 0) setScale(Math.min(maxScale, w / PHONE_WIDTH));
+      if (w > 0) setScale(Math.min(maxScale, w / PHONE_OUTER_WIDTH));
     };
     update();
     const ro = new ResizeObserver(update);
@@ -460,14 +518,18 @@ export default function FlexPreview({
   const hasCarousel = list.some((m) => m.type === 'flex' && (m.contents as Node).type === 'carousel');
   return (
     <div className={className} data-slot="flex-preview" ref={ref}>
-      <div style={{ zoom: scale, width: PHONE_WIDTH, fontFamily: FONT }} className="overflow-hidden rounded-[28px] border-[6px] border-[#1c1c1e] bg-black shadow-md">
+      <div
+        style={{ zoom: scale, width: PHONE_OUTER_WIDTH, borderWidth: PHONE_BORDER, fontFamily: FONT }}
+        className="overflow-hidden rounded-[28px] border-solid border-[#1c1c1e] bg-black shadow-md"
+        data-slot="flex-phone"
+      >
         {/* ステータスバー */}
         <div className="flex items-center justify-between px-6 pt-2 pb-1 text-[13px] font-semibold text-white" style={{ backgroundColor: CHAT_BG }}>
           <span>{time}</span>
           <span className="flex items-center gap-1 text-[11px]">●●● <span className="inline-block h-[10px] w-[20px] rounded-[3px] border border-white/90 align-middle" /></span>
         </div>
         {/* トーク画面 */}
-        <div style={{ backgroundColor: CHAT_BG, minHeight: 260 }} className="px-[10px] pb-4 pt-3">
+        <div style={{ backgroundColor: CHAT_BG, minHeight: 260, paddingLeft: CHAT_SIDE_PADDING, paddingRight: CHAT_SIDE_PADDING }} className="pb-4 pt-3">
           {notice ? (
             <div className="mb-2 flex justify-center">
               <span className="max-w-[80%] truncate rounded-full bg-black/20 px-3 py-0.5 text-[11px] text-white" title="通知・トーク一覧に出る文">通知: {notice}</span>
