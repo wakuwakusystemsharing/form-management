@@ -89,7 +89,9 @@
 | 来店 N 回目 | `total_visits` が **5 / 10** に到達した翌日 | VIP 向けの案内 |
 | タグが付いたとき | 指定タグが付いた当日（アンケートの選択肢タグ・予約のカスタム項目タグと連動） | タグに応じた案内（例: 「縮毛矯正に興味」→ 縮毛矯正の紹介） |
 
-判定は **毎日 10:00 JST**（Edge Function）。各ルールに「1 人に送るのは 1 回だけ / N 日に 1 回」「配信先の追加条件（タグなど）」を付けられる。送る前に上限ガードを通す（上限超過時はスキップして履歴に「上限のため見送り」）。
+判定は **店舗ごとの実行時刻**（既定 10:00 JST。Edge Function は毎時 0 分に動き、時刻を過ぎた店舗だけ 1 日 1 回判定）。各ルールに「同じきっかけでは 1 回だけ / 次に送るまで最短 N 日あける」「配信先の追加条件（タグなど）」を付けられる。
+
+**一斉送信の防止**: 日数で決まるきっかけ（休眠 / 初回来店 N 日後 / 来店 N 回目）は「到達してから 14 日以内」の人だけが対象（`AUTOMATION_WINDOW_DAYS`）。ルールを ON にした日に、何年も前から休眠している人へ一斉に送ることはない（そういう相手には 1 回配信で「最終来店 N 日以上前」を使う）。タグは付いた日が分からないため、ON にした時点でタグが付いている人にも送る（ON にする前に該当人数を表示する）。送る前に上限ガードを通す（上限超過時はスキップして履歴に「上限のため見送り」）。
 
 ### 3-5. スタンプ・素材（`BroadcastStickerPanel`）
 
@@ -196,7 +198,7 @@ interface BroadcastAudience {
 
 ### 7-2. 自動配信
 
-- Edge Function `run-broadcast-automations`（pg_cron **毎日 10:00 JST** = `0 1 * * *` UTC）。店舗ごとに ON のルールを読み、対象者を評価 → `broadcast_automation_sends`（rule × customer の送信記録。再送間隔の判定に使う）に無い人だけ送る。送信は 1 回配信と同じ `broadcast_recipients` を使う（`broadcasts` に `automation_id` を持つ行を日ごとに 1 件作る = 履歴にも並ぶ）
+- Edge Function `run-broadcast-automations`（pg_cron **毎日 10:00 JST** = `0 1 * * *` UTC）。店舗ごとに ON のルールを読み、対象者を評価 → `broadcast_automation_sends`（ルール × 顧客 × **marker** の送信記録）に同じ marker が無い人だけ送る。marker はきっかけの中身を表す文字列（`dormant:{最終来店日}` = 来店して再び休眠したらまた送る / `birthday:{年}` = 毎年 1 回 / `first_visit` / `visits:{回数}` / `tag:{タグ}`。`evaluateAutomationTrigger`）。送信は 1 回配信と同じ `broadcast_recipients` を使う（`broadcasts` に `automation_id` を持つ行を日ごとに 1 件作る = 履歴にも並ぶ）
 - フォローメッセージ・リマインダーとは独立（重なりは店舗の運用で避ける。「初回来店のお礼」テンプレートにはフォローメッセージ ON の店舗向けの注意書き）
 
 ### 7-3. 配信停止（Webhook）
@@ -243,13 +245,14 @@ broadcast_automations (
   resend_after_days INT NULL,     -- NULL = 1 人 1 回だけ
   created_at, updated_at
 )
-broadcast_automation_sends ( automation_id, customer_id, sent_at, PRIMARY KEY (automation_id, customer_id, sent_at) )
+broadcast_automation_sends ( automation_id, customer_id, marker, sent_at, PRIMARY KEY (automation_id, customer_id, marker) )
 broadcast_stickers ( id UUID PK, store_id TEXT NULL, label TEXT, url TEXT, preview_url TEXT, sort INT )  -- store_id NULL = 共通 10 種
-stores に追加: broadcast_monthly_limit INT NULL, broadcast_over_limit TEXT ('confirm' / 'block'), broadcast_opt_out_keywords TEXT[]
+stores に追加: broadcast_monthly_limit INT NULL, broadcast_over_limit TEXT ('confirm' / 'block'), broadcast_opt_out_keyword TEXT（既定 配信停止）, broadcast_opt_in_keyword TEXT（既定 配信再開）, broadcast_automation_time TEXT（HH:00。既定 10:00）
 customers に追加: line_opt_out_at TIMESTAMPTZ NULL
 ```
 
-- RLS は他の店舗設定と同じ 3 階層（`broadcast_recipients` は `broadcast_id` 経由で店舗を引く）。`broadcast_automation_sends` は service_role のみ
+- RLS は他の店舗設定と同じ 3 階層（`broadcast_recipients` にも `store_id` を持たせ、月間通数の集計と RLS に使う。`display_name` = `{name}` の差し込み用に確定時の名前を保存）。`broadcast_automation_sends` は service_role のみ。共通スタンプ（`store_id` NULL）はログイン済みなら読める
+- マイグレーション: `20261113000000_add_broadcasts.sql`（PR 1 で追加。計測の DB 関数 `broadcast_increment_tap` を含む。`broadcast_automations.last_run_date` = 1 日 1 回の実行管理）
 - local は `data/broadcasts.json` 等（送信はしない。見積り・履歴の確認用）
 - **cron の登録はマイグレーションに含めない**（既存ルール。`docs/フォローメッセージ_リリース手順.md` と同じ手順で Dashboard から）
 
@@ -338,6 +341,6 @@ customers に追加: line_opt_out_at TIMESTAMPTZ NULL
 
 | PR | 内容 | マイグレーション / Edge Function |
 | --- | --- | --- |
-| 1 | 型 `src/types/broadcast.ts`、純粋ロジック（`broadcast-audience` / `broadcast-items` / `broadcast-quota` / `broadcast-automation`）+ Vitest、マイグレーション（§8 のテーブル・列・RLS）、`broadcast-repository`（local JSON / Supabase） | マイグレーション 1 本 |
+| 1（実装済み） | 型 `src/types/broadcast.ts`、純粋ロジック（`broadcast-audience` / `broadcast-items` / `broadcast-quota` / `broadcast-automation`）+ Vitest、マイグレーション（§8 のテーブル・列・RLS）、`broadcast-repository`（local JSON = `data/broadcast_data.json` / Supabase）。画面・API・送信はまだ無い | マイグレーション 1 本（`20261113000000_add_broadcasts.sql`） |
 | 2 | 1 回配信: API（一覧 / 作成 / 見積り / 対象者 / 予約 / 取消 / テスト / 複製 / 宛先）、「配信」タブ（一覧・作成ダイアログ・プレビュー）、計測リンク `/go/b/`、配信停止 Webhook + 顧客詳細の切替、スタンプ 10 種（素材生成 + `broadcast_stickers` 共通行の投入） | Edge Function `send-broadcasts` 新規 + cron 登録（5 分おき） |
 | 3 | 自動配信: ルール API・UI（5 テンプレート）、設定タブ（上限 / 超過時 / キーワード / 実行時刻 / LINE quota 表示）、使い方ガイド、CLAUDE.md | Edge Function `run-broadcast-automations` 新規 + cron 登録（毎時 0 分） |
