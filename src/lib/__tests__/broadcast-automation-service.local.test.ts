@@ -173,7 +173,7 @@ describe('pickAutomationTargets', () => {
     const customers = [
       c({ id: 'a', tags: ['x'] }),
       c({ id: 'b', tags: ['x'], line_user_id: null }),
-      c({ id: 'c', tags: ['x'], line_friend_flag: false }),
+      c({ id: 'c', tags: ['x'], line_friend_flag: false, line_blocked_at: '2026-10-01T00:00:00Z' }),
       c({ id: 'd', tags: ['x'], line_user_id: 'Ua' }),
       c({ id: 'e', tags: ['x'] }),
       c({ id: 'f', tags: ['y'] }),

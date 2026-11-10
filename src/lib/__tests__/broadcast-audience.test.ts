@@ -200,22 +200,24 @@ describe('matchAudience', () => {
 });
 
 describe('selectAudience', () => {
-  it('LINE 未連携・配信停止・ブロック中を除外して数える。同じ LINE ユーザーは 1 人', () => {
+  it('LINE 未連携・配信停止・ブロックした人を除外して数える。友だちか未確認の人は含める。同じ LINE ユーザーは 1 人', () => {
     const customers = [
       customer({ id: 'a' }),
       customer({ id: 'b', line_user_id: null }),
       customer({ id: 'c', line_opt_out_at: '2026-11-01T00:00:00Z' }),
-      customer({ id: 'd', line_friend_flag: false }),
+      customer({ id: 'd', line_friend_flag: false, line_blocked_at: '2026-10-01T00:00:00Z' }),
+      customer({ id: 'h', line_friend_flag: false }),
       customer({ id: 'e', line_user_id: 'Ua' }),
       customer({ id: 'f', line_friend_flag: null }),
       customer({ id: 'g', tags: ['x'] }),
     ];
     const all = selectAudience(customers, new Map(), {}, NOW);
-    expect(all.recipients.map((c) => c.id)).toEqual(['a', 'f', 'g']);
-    expect(all).toMatchObject({ excluded_no_line: 1, excluded_opt_out: 1, excluded_blocked: 1 });
+    // d = 友だち解除の通知が来た人（外す）/ h・f = 友だち追加の記録が無いだけの人（含める。未確認として数える）
+    expect(all.recipients.map((c) => c.id)).toEqual(['a', 'h', 'f', 'g']);
+    expect(all).toMatchObject({ excluded_no_line: 1, excluded_opt_out: 1, excluded_blocked: 1, unverified: 2 });
     const tagged = selectAudience(customers, new Map(), normalizeAudience({ tags: { values: ['x'] } }), NOW);
     expect(tagged.recipients.map((c) => c.id)).toEqual(['g']);
-    expect(tagged).toMatchObject({ excluded_no_line: 0, excluded_opt_out: 0, excluded_blocked: 0 });
+    expect(tagged).toMatchObject({ excluded_no_line: 0, excluded_opt_out: 0, excluded_blocked: 0, unverified: 0 });
   });
 });
 

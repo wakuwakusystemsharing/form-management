@@ -38,6 +38,7 @@ interface Estimate {
   excluded_opt_out: number;
   excluded_blocked: number;
   excluded_no_line: number;
+  unverified?: number;
   sample: Array<{ id: string; name: string }>;
   quota: QuotaEvaluation;
   unfiltered: boolean;
@@ -346,10 +347,15 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
                           条件に合う人のうち、
                           {[
                             estimate.excluded_opt_out > 0 ? `配信停止 ${estimate.excluded_opt_out} 人` : '',
-                            estimate.excluded_blocked > 0 ? `友だちでない（未追加・ブロック）${estimate.excluded_blocked} 人` : '',
+                            estimate.excluded_blocked > 0 ? `ブロックされた ${estimate.excluded_blocked} 人` : '',
                             estimate.excluded_no_line > 0 ? `LINE 未連携 ${estimate.excluded_no_line} 人` : '',
                           ].filter(Boolean).join('・')}
                           は除いています
+                        </span>
+                      )}
+                      {(estimate.unverified ?? 0) > 0 && (
+                        <span className="block text-[11px] text-muted-foreground">
+                          うち {estimate.unverified} 人は友だち追加の記録がありません。送信するときに LINE へ確認し、友だちでない人は自動で外します
                         </span>
                       )}
                       {estimate.sample.length > 0 && (
