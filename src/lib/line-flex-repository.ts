@@ -8,6 +8,7 @@ import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import type { LineFlexMessage } from '@/types/line-flex';
+import { normalizeLineFlexItems } from '@/lib/line-flex-items';
 
 const FILE = 'line_flex_messages.json';
 
@@ -22,7 +23,7 @@ function readAll(): LineFlexMessage[] {
     const f = dataFile();
     if (!fs.existsSync(f)) return [];
     const parsed = JSON.parse(fs.readFileSync(f, 'utf-8'));
-    return Array.isArray(parsed) ? (parsed as LineFlexMessage[]) : [];
+    return Array.isArray(parsed) ? (parsed as Record<string, unknown>[]).map((r) => normalizeRow({ ...r, message_items: r.items })) : [];
   } catch {
     return [];
   }
@@ -64,7 +65,12 @@ function normalizeRow(row: Record<string, unknown>): LineFlexMessage {
     attach_follow: row.attach_follow === true,
     enabled: row.enabled !== false,
     track_taps: row.track_taps !== false,
+    items: normalizeLineFlexItems(parse<unknown>(row.message_items ?? row.items, [])),
     payload: parse<LineFlexMessage['payload']>(row.payload, null),
+    payloads: (() => {
+      const v = parse<unknown>(row.payloads, null);
+      return Array.isArray(v) ? (v.filter((x) => x && typeof x === 'object') as Record<string, unknown>[]) : null;
+    })(),
     links: parse<Record<string, string>>(row.links, {}),
     reply_count: typeof row.reply_count === 'number' ? row.reply_count : 0,
     tap_counts: parse<Record<string, number>>(row.tap_counts, {}),
@@ -153,6 +159,12 @@ export async function listEnabledLineFlexMessages(storeId: string): Promise<Line
   return rows.filter((r) => r.enabled && r.payload);
 }
 
+/** 送信する並び（payloads が無い旧データは Flex 本体 1 通） */
+export function lineFlexSendMessages(row: LineFlexMessage): Record<string, unknown>[] {
+  if (row.payloads && row.payloads.length > 0) return row.payloads;
+  return row.payload ? [row.payload] : [];
+}
+
 export async function incrementLineFlexReply(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   if (isLocal()) {
@@ -194,7 +206,9 @@ function toDbRow(row: LineFlexMessage): Record<string, unknown> {
     attach_follow: row.attach_follow,
     enabled: row.enabled,
     track_taps: row.track_taps,
+    message_items: row.items,
     payload: row.payload,
+    payloads: row.payloads,
     links: row.links,
     reply_count: row.reply_count,
     tap_counts: row.tap_counts,

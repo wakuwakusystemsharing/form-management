@@ -146,6 +146,18 @@ export type LineFlexTemplateData =
 /** Flex Message の contents（bubble / carousel）。構造は LINE の仕様どおりなので型は緩くしておく */
 export type FlexContainer = Record<string, unknown>;
 
+/**
+ * まとめて送るメッセージの並び（`src/lib/line-flex-items.ts`）。main = テンプレートで作った Flex 本体（ちょうど 1 つ）。
+ * テキスト / 画像 / 動画 / Flex（JSON）/ 保存済みの別の LINE メッセージ（ref）を合わせて最大 5 通
+ */
+export type LineFlexItem =
+  | { key: string; type: 'main' }
+  | { key: string; type: 'text'; text: string }
+  | { key: string; type: 'image'; url: string; preview_url?: string }
+  | { key: string; type: 'video'; url: string; preview_url: string }
+  | { key: string; type: 'flex'; alt_text: string; contents: FlexContainer | null }
+  | { key: string; type: 'ref'; message_id: string };
+
 export interface LineFlexMessage {
   id: string; // 12 文字 [a-z0-9]
   store_id: string;
@@ -160,7 +172,9 @@ export interface LineFlexMessage {
   attach_follow: boolean; // フォローメッセージに添える
   enabled: boolean;
   track_taps: boolean; // ボタンの URL を計測リンクにする
-  payload: Record<string, unknown> | null; // 送信用の LINE メッセージ（{ type: 'flex', altText, contents }）。保存時にサーバーで生成
+  items: LineFlexItem[]; // まとめて送るメッセージの並び（main を含む。旧データは [main] だけ）
+  payload: Record<string, unknown> | null; // Flex 本体の送信用メッセージ（{ type: 'flex', altText, contents }）。保存時にサーバーで生成
+  payloads: Record<string, unknown>[] | null; // items の順に並べた送信用メッセージ（最大 5 通）。Webhook / Edge Function はこれを送る（無ければ [payload]）
   links: Record<string, string>; // 計測キー → 本来の URL
   reply_count: number; // キーワード応答・差し込みで送った回数
   tap_counts: Record<string, number>; // 計測キー → タップ数
@@ -182,4 +196,5 @@ export interface LineFlexMessageInput {
   attach_follow?: boolean;
   enabled?: boolean;
   track_taps?: boolean;
+  items?: LineFlexItem[];
 }

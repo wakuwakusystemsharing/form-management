@@ -20,8 +20,17 @@
 | 自動メッセージへの差し込み | 【ご予約確認】（Webhook）/ リマインダー・フォロー（Edge Function）のあとに続けて送る |
 | テスト送信 | LINE 連携済みの顧客を選んで push（無料通数 1 通） |
 | タップ計測 | ボタンの URL を `/go/{id}/{key}` 経由にしてタップ数を数える |
+| 追加のメッセージ（まとめて送る） | Flex 本体に テキスト / 画像 / 動画 / Flex（JSON）/ 保存済みの別の LINE メッセージ を足し、自由な順番で 1 回に最大 5 通送る（キーワード応答・差し込み・テスト送信すべて） |
 
 一斉配信（セグメント / タグ）は第 2 弾。
+
+## 追加のメッセージ（まとめて送る）
+
+- 編集画面「送る内容の並び」に `items`（`LineFlexItem[]`。`main` = テンプレートで作った Flex 本体がちょうど 1 つ）。種類: `text`（5000 文字）/ `image`（アップロード or https URL。サムネイルは同じ URL）/ `video`（mp4 の https URL + サムネイル画像必須。LINE の仕様）/ `flex`（JSON 貼り付け。代替テキスト付き）/ `ref`（同じ店舗の保存済み LINE メッセージ。参照先の Flex 本体 1 通）
+- 保存時に `payloads`（送信用メッセージの配列。items の順）を作る（`buildLineFlexPayloads`）。追加 Flex のボタンも計測リンクにし、キーは main の続き番号。`ref` は参照先の `payload` を展開して保存するので、参照先を保存・削除すると参照元の payloads を作り直す（`rebuildDependents`）
+- 送る側は `lineFlexSendMessages(row)` = `payloads`（無い旧データは `[payload]`）。キーワード応答は全部（最大 5 通）、差し込み（予約確認 / リマインダー / フォロー）は本体 1 通と合わせて 5 通までなので追加分を含めて 4 通まで（超える設定は編集画面で警告し、先頭 4 通だけ送る）
+- プレビューは `FlexPreview` の `messages` で複数通をトーク画面に並べる（テキスト = 白い吹き出し、画像 = 角丸サムネイル、動画 = サムネイル + 再生ボタン）。カルーセルはマウスの左ドラッグで横スクロール
+- 列: `message_items JSONB` / `payloads JSONB`（`20261112000000_line_flex_multi_messages.sql`）。Edge Function は `payloads` を読むので**再デプロイが必要**
 
 ## データ
 
@@ -36,7 +45,8 @@
 | alt_text / keywords | 代替テキスト / 完全一致キーワード（最大 10。「予約確認」「キャンセル」は不可、同じ店舗で重複不可） |
 | attach_confirm / attach_reminder / attach_follow | 差し込み先 |
 | enabled / track_taps | 有効 / 計測 |
-| payload | **送信用メッセージ**（`{ type: 'flex', altText, contents }`。計測リンク入り）。保存時にサーバーで生成し、Webhook / Edge Function はこれをそのまま送る |
+| payload | **Flex 本体の送信用メッセージ**（`{ type: 'flex', altText, contents }`。計測リンク入り）。保存時にサーバーで生成 |
+| message_items / payloads | 追加のメッセージの並び（`items`）と、その順に組み立てた送信用メッセージの配列（最大 5 通）。Webhook / Edge Function は `payloads`（無ければ `[payload]`）をそのまま送る |
 | links / tap_counts / reply_count | 計測キー → URL / タップ数 / 送信回数 |
 
 RLS は他の店舗設定と同じ 3 階層。カウントは DB 関数 `line_flex_increment_tap` / `line_flex_increment_reply`。local は `data/line_flex_messages.json`。
@@ -44,7 +54,7 @@ RLS は他の店舗設定と同じ 3 階層。カウントは DB 関数 `line_fl
 ## コード
 
 - 型 `src/types/line-flex.ts`
-- 純粋ロジック `src/lib/line-flex-templates.ts`（`buildTemplateFlex` / `instrumentFlexLinks` / `validateFlexContents` / `normalizeKeywords` / `matchesKeyword` / `menuCarouselFromForm` / `storeCardFromStore`）。Vitest: `line-flex-templates.test.ts`
+- 純粋ロジック `src/lib/line-flex-templates.ts`（`buildTemplateFlex` / `instrumentFlexLinks` / `validateFlexContents` / `normalizeKeywords` / `matchesKeyword` / `menuCarouselFromForm` / `storeCardFromStore`）、`src/lib/line-flex-items.ts`（追加のメッセージ: `normalizeLineFlexItems` / `validateLineFlexItems` / `buildLineFlexPayloads` / `payloadsToPreview` / `itemsToPreview`）。Vitest: `line-flex-templates.test.ts` / `line-flex-items.test.ts`
 - サーバー `src/lib/line-flex-service.ts`（`prepareLineFlexMessage` = 検証 → payload 生成。`findLineFlexReplyForText` / `listLineFlexAttachments`）、`src/lib/line-flex-repository.ts`。Vitest: `line-flex-service.test.ts`
 - API `GET/POST /api/stores/{storeId}/line-messages`、`GET/PUT/DELETE .../line-messages/{id}`、`POST .../line-messages/{id}/test`（`authorizeStoreAccess`）。計測 `GET /go/{id}/{key}`（認証なし。302）
 - UI `src/components/line-flex/`（`LineFlexPanel` = 一覧 + 使い方、`LineFlexEditorDialog` = 編集、`FlexPreview` = HTML 近似プレビュー）

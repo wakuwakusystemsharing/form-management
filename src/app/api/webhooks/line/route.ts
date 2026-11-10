@@ -1029,7 +1029,7 @@ export async function POST(req: NextRequest) {
   // 店舗が登録した Flex Message のキーワード自動応答（完全一致。LINE メッセージタブ）
   const flexReply = await findLineFlexReplyForText(storeId, messageText);
   if (flexReply) {
-    await replyRawMessages(replyToken, accessToken, [flexReply]);
+    await replyRawMessages(replyToken, accessToken, flexReply);
     return NextResponse.json({ success: true });
   }
 
