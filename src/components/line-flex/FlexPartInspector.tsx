@@ -7,21 +7,11 @@
  * 操作はすべて onOp で親（LineFlexEditorDialog）に渡す。親がテンプレートの入力値に書き戻すか、自由編集に切り替える
  */
 import React, { useState } from 'react';
-import { ancestorPaths, describeFlexNode, getAt, isInlineEditableText, newFlexPart, parentInfo, type FlexNode } from '@/lib/flex-tree';
+import { ancestorPaths, describeFlexNode, getAt, isInlineEditableText, newFlexPart, parentInfo } from '@/lib/flex-tree';
 import type { FlexContainer } from '@/types/line-flex';
+import type { FlexEditOp } from '@/lib/flex-edit';
 
-export type FlexEditOp =
-  | { type: 'text'; path: string; text: string }
-  | { type: 'image'; path: string; url: string }
-  | { type: 'buttonLabel'; path: string; label: string }
-  | { type: 'buttonUrl'; path: string; url: string }
-  | { type: 'patch'; path: string; patch: Record<string, unknown> }
-  | { type: 'move'; path: string; dir: -1 | 1 }
-  | { type: 'moveTo'; path: string; index: number }
-  | { type: 'remove'; path: string }
-  | { type: 'duplicate'; path: string }
-  | { type: 'add'; node: FlexNode }
-  | { type: 'addBubble' };
+export type { FlexEditOp };
 
 interface Props {
   contents: FlexContainer | null;
