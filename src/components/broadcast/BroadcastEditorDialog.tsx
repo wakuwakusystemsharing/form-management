@@ -4,7 +4,7 @@
  * 配信の作成・編集ダイアログ（下書きのみ編集できる）
  * 左: 配信先の条件 → メッセージ → 送るタイミング / 右: スマホ枠のプレビュー。下: 下書き保存・テスト送信・予約 / 今すぐ送る
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +17,7 @@ import BroadcastItemsEditor, { type ItemJsonState } from './BroadcastItemsEditor
 import { describeAudience, normalizeAudience } from '@/lib/broadcast-audience';
 import { BROADCAST_NAME_MAX, broadcastItemsToPreview, validateBroadcastItems } from '@/lib/broadcast-items';
 import { buildSendSummary, type QuotaEvaluation } from '@/lib/broadcast-quota';
+import { composeLocalScheduleValue, defaultScheduleValue, parseLocalScheduleValue, SCHEDULE_HOUR_OPTIONS, SCHEDULE_MINUTE_OPTIONS, SCHEDULE_STEP_MINUTES, toLocalScheduleValue } from '@/lib/broadcast-schedule';
 import { payloadsToPreview } from '@/lib/line-flex-items';
 import { validateFlexContents } from '@/lib/line-flex-templates';
 import type { Broadcast, BroadcastAudience, BroadcastInput, BroadcastItem, BroadcastSticker } from '@/types/broadcast';
@@ -51,10 +52,6 @@ interface CustomerOption {
   line_display_name?: string | null;
 }
 
-function toLocalInput(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-}
 
 export default function BroadcastEditorDialog({ storeId, open, initial, options, messages, stickers, onClose, onSaved }: Props) {
   const { toast } = useToast();
@@ -76,6 +73,8 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
   const [confirmOver, setConfirmOver] = useState(false);
   const [confirmDouble, setConfirmDouble] = useState(false);
   const [sending, setSending] = useState(false);
+  // 「今すぐ送る / 予約する」を押してから確認画面が出るまで（自動保存 + 人数の取り直し）
+  const [preparing, setPreparing] = useState(false);
   // テスト送信
   const [testOpen, setTestOpen] = useState(false);
   const [customerQuery, setCustomerQuery] = useState('');
@@ -85,9 +84,14 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
   // 画像アップロードの置き場所（保存前でも決まるよう、ダイアログを開くたびに振る）
   const uploadId = useRef('');
 
-  // 開くたびに初期化
+  // 開いたときだけ初期化する。
+  // 開いている間に initial が変わっても（「今すぐ送る」の前の自動保存で、親が保存後の配信を渡し直す）初期化しない。
+  // ここで初期化すると、送信前の確認が閉じたり、選んだ「日時を指定」が「今すぐ送る」に戻ったりする
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (!open) return;
+    const opening = open && !wasOpen.current;
+    wasOpen.current = open;
+    if (!opening) return;
     setSavedId(initial?.id ?? null);
     setName(initial?.name ?? '');
     setAudience(initial?.audience ?? {});
@@ -97,7 +101,7 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
     for (const it of nextItems) if (it.type === 'flex') js[it.key] = { text: it.contents ? JSON.stringify(it.contents, null, 2) : '', error: null };
     setItemJson(js);
     setTiming('now');
-    setScheduledLocal(toLocalInput(new Date(Date.now() + 60 * 60 * 1000)));
+    setScheduledLocal(defaultScheduleValue(new Date()));
     setDirty(false);
     setEstimate(null);
     setConfirmOpen(false);
@@ -113,28 +117,45 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
 
   // 配信先の人数（条件が変わるたびに少し待ってから計算）
   const audienceJson = JSON.stringify(normalizeAudience(audience));
+  const fetchEstimate = useCallback(async (): Promise<Estimate | null> => {
+    try {
+      const res = await fetch(`/api/stores/${encodeURIComponent(storeId)}/broadcasts/estimate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ audience: JSON.parse(audienceJson) }) });
+      const json = await res.json().catch(() => null);
+      return res.ok && json ? (json as Estimate) : null;
+    } catch {
+      return null;
+    }
+  }, [storeId, audienceJson]);
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setEstimating(true);
     const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/stores/${encodeURIComponent(storeId)}/broadcasts/estimate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ audience: JSON.parse(audienceJson) }) });
-        const json = await res.json().catch(() => null);
-        if (!cancelled && res.ok && json) setEstimate(json as Estimate);
-      } catch {
-        /* 見積りは補助なので失敗しても続行 */
-      } finally {
-        if (!cancelled) setEstimating(false);
-      }
+      // 見積りは補助なので、失敗しても前の表示のまま続行
+      const next = await fetchEstimate();
+      if (cancelled) return;
+      if (next) setEstimate(next);
+      setEstimating(false);
     }, 500);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [open, storeId, audienceJson]);
+  }, [open, fetchEstimate]);
 
-  const touch = () => setDirty(true);
+  // 内容を変えたら、開いている送信前の確認は閉じる（確認した内容と違うものを送らないように）
+  const touch = () => {
+    setDirty(true);
+    setConfirmOpen(false);
+  };
+  const changeTiming = (next: 'now' | 'later') => {
+    setTiming(next);
+    setConfirmOpen(false);
+  };
+  const changeSchedule = (value: string) => {
+    setScheduledLocal(value);
+    setConfirmOpen(false);
+  };
   const itemsError = validateBroadcastItems(items, { requireContent: true });
   const jsonError = Object.entries(itemJson).find(([key, s]) => s.error && items.some((x) => x.key === key))?.[1].error ?? null;
 
@@ -236,10 +257,6 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
       toast({ title: itemsError, variant: 'destructive' });
       return;
     }
-    if (estimate && estimate.count === 0) {
-      toast({ title: '配信先が 0 人です。条件を見直してください', variant: 'destructive' });
-      return;
-    }
     if (timing === 'later') {
       const t = Date.parse(scheduledLocal);
       if (Number.isNaN(t) || t <= Date.now()) {
@@ -247,13 +264,29 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
         return;
       }
     }
-    if (!savedId || dirty) {
-      const saved = await saveDraft({ silent: true });
-      if (!saved) return;
+    setPreparing(true);
+    try {
+      if (!savedId || dirty) {
+        const saved = await saveDraft({ silent: true });
+        if (!saved) return;
+      }
+      // 確認画面には最新の人数を出す。人数の計算が終わる前に押されたとき（estimate がまだ無い）も、ここで取り直してから開く
+      const fresh = await fetchEstimate();
+      if (!fresh) {
+        toast({ title: '配信先の人数を確認できませんでした。少し待ってからもう一度お試しください', variant: 'destructive' });
+        return;
+      }
+      setEstimate(fresh);
+      if (fresh.count === 0) {
+        toast({ title: '配信先が 0 人です。条件を見直してください', variant: 'destructive' });
+        return;
+      }
+      setConfirmOver(false);
+      setConfirmDouble(false);
+      setConfirmOpen(true);
+    } finally {
+      setPreparing(false);
     }
-    setConfirmOver(false);
-    setConfirmDouble(false);
-    setConfirmOpen(true);
   };
 
   const send = async () => {
@@ -315,6 +348,8 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
   };
 
   const messageCount = previewMessages.length;
+  // 送信日時は 5 分刻み（日付 + 時 + 分）で選ぶ
+  const schedule = parseLocalScheduleValue(scheduledLocal);
   const summary = estimate ? buildSendSummary({ recipients: estimate.count, messages: Math.max(messageCount, 1), quota: estimate.quota }) : [];
   const canConfirm = !!estimate && !estimate.quota.blocked && (!estimate.quota.needs_confirm || confirmOver) && (!estimate.quota.double_confirm || confirmDouble);
 
@@ -379,11 +414,31 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
               <section className="space-y-2 rounded-lg border p-3">
                 <h4 className="text-sm font-medium">③ 送るタイミング</h4>
                 <div className="flex flex-wrap items-center gap-3 text-sm">
-                  <label className="flex items-center gap-1.5"><input type="radio" name="broadcast_timing" checked={timing === 'now'} onChange={() => setTiming('now')} />今すぐ送る</label>
-                  <label className="flex items-center gap-1.5"><input type="radio" name="broadcast_timing" checked={timing === 'later'} onChange={() => setTiming('later')} />日時を指定</label>
-                  {timing === 'later' && <Input type="datetime-local" value={scheduledLocal} min={toLocalInput(new Date())} onChange={(e) => setScheduledLocal(e.target.value)} className="h-8 w-56 text-xs" />}
+                  <label className="flex items-center gap-1.5"><input type="radio" name="broadcast_timing" checked={timing === 'now'} onChange={() => changeTiming('now')} />今すぐ送る</label>
+                  <label className="flex items-center gap-1.5"><input type="radio" name="broadcast_timing" checked={timing === 'later'} onChange={() => changeTiming('later')} />日時を指定</label>
+                  {timing === 'later' && schedule && (
+                    <span className="inline-flex flex-wrap items-center gap-1" data-slot="broadcast-schedule">
+                      <Input type="date" aria-label="送信日" value={schedule.date} min={toLocalScheduleValue(new Date()).slice(0, 10)} onChange={(e) => { if (e.target.value) changeSchedule(composeLocalScheduleValue(e.target.value, schedule.hour, schedule.minute)); }} className="h-8 w-40 text-xs" />
+                      <Select value={String(schedule.hour)} onValueChange={(v) => changeSchedule(composeLocalScheduleValue(schedule.date, Number(v), schedule.minute))}>
+                        <SelectTrigger className="h-8 w-20 text-xs" aria-label="時"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {SCHEDULE_HOUR_OPTIONS.map((h) => (
+                            <SelectItem key={h} value={String(h)} className="text-xs">{h} 時</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={String(schedule.minute)} onValueChange={(v) => changeSchedule(composeLocalScheduleValue(schedule.date, schedule.hour, Number(v)))}>
+                        <SelectTrigger className="h-8 w-20 text-xs" aria-label="分"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {SCHEDULE_MINUTE_OPTIONS.map((m) => (
+                            <SelectItem key={m} value={String(m)} className="text-xs">{String(m).padStart(2, '0')} 分</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </span>
+                  )}
                 </div>
-                <p className="text-[11px] text-muted-foreground">送信は 5 分おきの処理で行うため、指定した時刻から数分遅れることがあります。予約した配信は送信が始まる前なら取り消せます。</p>
+                <p className="text-[11px] text-muted-foreground">送信は {SCHEDULE_STEP_MINUTES} 分おきに行うため、時刻は {SCHEDULE_STEP_MINUTES} 分刻みで指定します（指定した時刻から 1〜2 分以内に送信を始めます）。予約した配信は送信が始まる前なら取り消せます。</p>
               </section>
             </div>
 
@@ -417,9 +472,9 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
           </div>
         )}
 
-        {!confirmOpen && (
+        {!(confirmOpen && estimate) && (
           <div className="flex flex-wrap items-center gap-2 border-t px-5 py-3">
-            <Button type="button" onClick={openConfirm} disabled={saving}>{timing === 'later' ? '予約する' : '今すぐ送る'}</Button>
+            <Button type="button" onClick={openConfirm} disabled={saving || preparing}>{preparing ? '確認中…' : timing === 'later' ? '予約する' : '今すぐ送る'}</Button>
             <Button type="button" variant="outline" onClick={() => saveDraft()} disabled={saving}>{saving ? '保存中…' : '下書き保存'}</Button>
             <Button type="button" variant="outline" onClick={() => { setTestOpen((v) => !v); if (customers.length === 0) searchCustomers(''); }}>テスト送信</Button>
             {dirty && savedId && <span className="text-[11px] text-amber-700">未保存の変更があります</span>}
@@ -427,7 +482,7 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
           </div>
         )}
 
-        {testOpen && !confirmOpen && (
+        {testOpen && !(confirmOpen && estimate) && (
           <div className="space-y-2 border-t bg-muted/30 px-5 py-3">
             <p className="text-xs">自分の LINE などに送って見た目を確認します（LINE 連携済みの顧客から選びます）。保存してから送ります。無料通数を 1 通使います。</p>
             <div className="flex flex-wrap items-center gap-2">
