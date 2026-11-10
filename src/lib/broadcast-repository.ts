@@ -424,7 +424,8 @@ export interface AudienceSource {
   surveys: FactSurvey[];
 }
 
-const CUSTOMER_COLUMNS = 'id,name,line_user_id,line_display_name,line_friend_flag,line_opt_out_at,tags,gender,birthday,total_visits,total_spent,first_visit_date,last_visit_date';
+const CUSTOMER_COLUMNS_BASE = 'id,name,line_user_id,line_display_name,line_friend_flag,line_opt_out_at,tags,gender,birthday,total_visits,total_spent,first_visit_date,last_visit_date';
+const CUSTOMER_COLUMNS = `${CUSTOMER_COLUMNS_BASE},line_blocked_at`;
 
 function toAudienceCustomer(row: Record<string, unknown>): AudienceCustomer {
   return {
@@ -433,6 +434,7 @@ function toAudienceCustomer(row: Record<string, unknown>): AudienceCustomer {
     line_user_id: strOrNull(row.line_user_id),
     line_display_name: strOrNull(row.line_display_name),
     line_friend_flag: typeof row.line_friend_flag === 'boolean' ? row.line_friend_flag : null,
+    line_blocked_at: strOrNull(row.line_blocked_at),
     line_opt_out_at: strOrNull(row.line_opt_out_at),
     tags: Array.isArray(row.tags) ? (row.tags.filter((t) => typeof t === 'string') as string[]) : [],
     gender: strOrNull(row.gender),
@@ -460,7 +462,11 @@ export async function loadAudienceSource(storeId: string, need: { reservations?:
     };
   }
   const c = client();
-  const customers = (await fetchAllRows<Record<string, unknown>>((from, to) => c.from('customers').select(CUSTOMER_COLUMNS).eq('store_id', storeId).order('id').range(from, to))).map(toAudienceCustomer);
+  // line_blocked_at 列が未適用の環境（マイグレーション前）では、列なしで取り直す
+  const customerRows = await fetchAllRows<Record<string, unknown>>((from, to) => c.from('customers').select(CUSTOMER_COLUMNS).eq('store_id', storeId).order('id').range(from, to)).catch(() =>
+    fetchAllRows<Record<string, unknown>>((from, to) => c.from('customers').select(CUSTOMER_COLUMNS_BASE).eq('store_id', storeId).order('id').range(from, to))
+  );
+  const customers = customerRows.map(toAudienceCustomer);
   const reservations = need.reservations
     ? await fetchAllRows<FactReservation>((from, to) => c.from('reservations').select('customer_id,line_user_id,form_id,reservation_date,status,selected_menus').eq('store_id', storeId).order('id').range(from, to))
     : [];
@@ -628,4 +634,24 @@ export async function countRecentAutomationSends(automationIds: string[], now: D
     out[id] = count ?? 0;
   }
   return out;
+}
+
+/**
+ * 友だち状態を記録する（送信前に LINE へ確認した結果）。
+ * friend = true … 友だち（line_friend_flag = true、ブロックの記録を消す）/ false … 友だちでない（line_blocked_at を入れる）
+ */
+export async function updateLineFriendStatus(storeId: string, customerIds: string[], friend: boolean, now: Date = new Date()): Promise<void> {
+  if (customerIds.length === 0) return;
+  const patch = friend ? { line_friend_flag: true, line_blocked_at: null } : { line_friend_flag: false, line_blocked_at: now.toISOString() };
+  if (isLocal()) {
+    const file = path.join(DATA_DIR, 'customers.json');
+    const rows = readJson<Array<Record<string, unknown>>>(file, []);
+    for (const r of rows) if (r.store_id === storeId && typeof r.id === 'string' && customerIds.includes(r.id)) Object.assign(r, patch);
+    fs.writeFileSync(file, JSON.stringify(rows, null, 2));
+    return;
+  }
+  for (let i = 0; i < customerIds.length; i += 200) {
+    const { error } = await client().from('customers').update(patch).eq('store_id', storeId).in('id', customerIds.slice(i, i + 200));
+    if (error) console.warn('[broadcast] 友だち状態の更新に失敗:', error.message);
+  }
 }

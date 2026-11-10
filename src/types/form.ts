@@ -850,6 +850,7 @@ export interface Database {
           line_friend_added_at: string | null;
           line_opt_out_at?: string | null; // 配信停止した日時（null / 無し = 配信する。配信タブ）
           line_friend_only?: boolean; // 予約なしの LINE 友だちとして自動登録した顧客（顧客一覧では既定で除外。予約すると false）
+          line_blocked_at?: string | null; // ブロック（友だち解除）された日時（null = ブロックされていない / 不明）
           line_language: string | null;
           line_os: 'ios' | 'android' | 'web' | null;
           // 顧客属性
@@ -889,6 +890,7 @@ export interface Database {
           line_friend_added_at?: string | null;
           line_opt_out_at?: string | null;
           line_friend_only?: boolean;
+          line_blocked_at?: string | null;
           line_language?: string | null;
           line_os?: 'ios' | 'android' | 'web' | null;
           // 顧客属性
@@ -928,6 +930,7 @@ export interface Database {
           line_friend_added_at?: string | null;
           line_opt_out_at?: string | null;
           line_friend_only?: boolean;
+          line_blocked_at?: string | null;
           line_language?: string | null;
           line_os?: 'ios' | 'android' | 'web' | null;
           // 顧客属性

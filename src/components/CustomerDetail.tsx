@@ -829,7 +829,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                     <dt className="text-xs text-muted-foreground">友だち追加</dt>
                     <dd>
                       <Badge variant="outline" className={customer.line_friend_flag ? 'bg-[rgb(209,241,209)] text-[rgb(55,114,58)] border-[rgb(55,114,58)]/20' : ''}>
-                        {customer.line_friend_flag ? '友だち' : '未追加'}
+                        {customer.line_friend_flag ? '友だち' : customer.line_blocked_at ? 'ブロック中' : '未確認'}
                       </Badge>
                     </dd>
                   </div>

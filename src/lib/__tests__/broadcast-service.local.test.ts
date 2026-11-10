@@ -28,12 +28,14 @@ beforeAll(async () => {
     { id: 'st0001', name: 'A店', line_channel_access_token: 'token-a' },
     { id: 'st0002', name: 'トークンなし' },
     { id: 'st0003', name: '大人数', line_channel_access_token: 'token-c' },
+    { id: 'st0005', name: '未確認の店', line_channel_access_token: 'token-e' },
   ]));
   const many = Array.from({ length: 101 }, (_, i) => ({ id: `m${i}`, store_id: 'st0003', name: `客${i}`, line_user_id: lineId(1000 + i), line_friend_flag: true }));
   fs.writeFileSync(dataFile('customers.json'), JSON.stringify([
     { id: 'c1', store_id: 'st0001', name: '山田 花子', line_user_id: lineId(1), line_friend_flag: true, tags: ['カラー'] },
     { id: 'c2', store_id: 'st0001', name: '未記入', line_display_name: 'さとう', line_user_id: lineId(2), line_friend_flag: true, tags: [] },
-    { id: 'c3', store_id: 'st0001', name: 'ブロック', line_user_id: lineId(3), line_friend_flag: false, tags: ['カラー'] },
+    { id: 'c3', store_id: 'st0001', name: 'ブロック', line_user_id: lineId(3), line_friend_flag: false, line_blocked_at: '2026-10-01T00:00:00Z', tags: ['カラー'] },
+    { id: 'c5', store_id: 'st0005', name: '友だち未確認', line_user_id: lineId(5), line_friend_flag: false, tags: [] },
     { id: 'c4', store_id: 'st0002', name: '他店', line_user_id: lineId(4), line_friend_flag: true },
     ...many,
   ]));
@@ -93,6 +95,17 @@ describe('見積り', () => {
     expect(tagged).toMatchObject({ count: 1, excluded_blocked: 1, unfiltered: false });
     const list = await service.listAudience('st0001', {}, 1, 10);
     expect(list).toEqual({ total: 2, customers: [{ id: 'c2', name: 'さとう' }] });
+  });
+});
+
+describe('友だち追加の記録が無い顧客', () => {
+  it('配信先に含め、未確認の人数として返す（友だち追加が予約より先だった人などが外れないように）', async () => {
+    const est = await service.estimateAudience('st0005', {});
+    expect(est).toMatchObject({ count: 1, excluded_blocked: 0, unverified: 1 });
+    const created = await service.createBroadcast('st0005', { name: '未確認へ', items: [{ key: 'a', type: 'text', text: 'hi' }] }, origin, null);
+    if (!created.ok) throw new Error('setup');
+    // local では LINE への確認は行わず、そのまま宛先に入る
+    expect(await service.scheduleBroadcast('st0005', created.value.id, {}, origin)).toMatchObject({ ok: true, value: { broadcast: { recipient_count: 1 } } });
   });
 });
 

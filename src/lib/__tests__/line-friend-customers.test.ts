@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildFriendCustomerRow, ensureFriendCustomer, fetchLineProfile, importLineFriends, promoteFriendOnlyPatch } from '@/lib/line-friend-customers';
+import { buildFriendCustomerRow, checkLineFriendship, ensureFriendCustomer, fetchLineProfile, importLineFriends, promoteFriendOnlyPatch, verifyLineFriends } from '@/lib/line-friend-customers';
 import { computeStoreRankings } from '@/lib/store-ranking';
 
 /** customers テーブルだけを持つ、最小限の偽 Supabase クライアント */
@@ -16,6 +16,12 @@ function fakeClient(initial: Array<Record<string, unknown>> = [], opts: { failIn
         order: () => q,
         limit: () => Promise.resolve({ data: rows.filter((r) => filters.every((f) => f(r))).slice(0, 1), error: null }),
         range: (from: number, to: number) => Promise.resolve({ data: rows.filter((r) => filters.every((f) => f(r))).slice(from, to + 1), error: null }),
+        update: (patch: Record<string, unknown>) => ({
+          eq: (k: string, v: unknown) => {
+            for (const r of rows) if (r[k] === v) Object.assign(r, patch);
+            return Promise.resolve({ error: null });
+          },
+        }),
         insert: (input: Record<string, unknown> | Array<Record<string, unknown>>) => {
           const list = Array.isArray(input) ? input : [input];
           const dup = (r: Record<string, unknown>) => rows.some((x) => x.store_id === r.store_id && x.line_user_id === r.line_user_id);
@@ -79,9 +85,39 @@ describe('ensureFriendCustomer（Webhook）', () => {
     expect(await ensureFriendCustomer(client, 'st1', 'Unew', 't', { fetchImpl: profileFetch })).toBe('exists');
     expect(client.rows).toHaveLength(3);
   });
+  it('すでにいる顧客が発言してきたら、友だちに直してブロックの記録を消す（友だち追加が予約より先だった人の救済）', async () => {
+    const client = fakeClient([
+      { id: 'c1', store_id: 'st1', line_user_id: 'U1', name: '未確認', line_friend_flag: false },
+      { id: 'c2', store_id: 'st1', line_user_id: 'U2', name: '再追加', line_friend_flag: false, line_blocked_at: '2026-10-01T00:00:00Z' },
+      { id: 'c3', store_id: 'st1', line_user_id: 'U3', name: '友だち', line_friend_flag: true },
+    ]);
+    for (const u of ['U1', 'U2', 'U3']) expect(await ensureFriendCustomer(client, 'st1', u, 't', { fetchImpl: profileFetch })).toBe('exists');
+    expect(client.rows.map((r) => [r.id, r.line_friend_flag, r.line_blocked_at ?? null])).toEqual([['c1', true, null], ['c2', true, null], ['c3', true, null]]);
+  });
+
   it('クライアントが失敗しても例外を投げない', async () => {
     const broken = { from: () => { throw new Error('boom'); } };
     expect(await ensureFriendCustomer(broken, 'st1', 'U1', 't', { fetchImpl: profileFetch })).toBe('failed');
+  });
+});
+
+describe('checkLineFriendship / verifyLineFriends（送信前の友だち確認）', () => {
+  const api = (async (url: string) => {
+    const id = decodeURIComponent(String(url).split('/profile/')[1] ?? '');
+    if (id.startsWith('Ufriend')) return res(200, { displayName: 'x' });
+    if (id.startsWith('Ugone')) return res(404, { message: 'Not found' });
+    return res(429, { message: 'rate limit' });
+  }) as unknown as typeof fetch;
+
+  it('プロフィールが取れれば友だち、404 は友だちでない、それ以外は不明', async () => {
+    expect(await checkLineFriendship('t', 'Ufriend1', api)).toBe('friend');
+    expect(await checkLineFriendship('t', 'Ugone1', api)).toBe('not_friend');
+    expect(await checkLineFriendship('t', 'Uother', api)).toBe('unknown');
+  });
+  it('まとめて確認し、友だち / 友だちでない に分ける。不明・時間切れの人はどちらにも入れない', async () => {
+    const targets = [{ id: 'a', line_user_id: 'Ufriend1' }, { id: 'b', line_user_id: 'Ugone1' }, { id: 'c', line_user_id: 'Uother' }];
+    expect(await verifyLineFriends('t', targets, Date.now() + 60_000, api)).toEqual({ friends: ['a'], notFriends: ['b'], unchecked: 0 });
+    expect(await verifyLineFriends('t', targets, Date.now() - 1, api)).toEqual({ friends: [], notFriends: [], unchecked: 3 });
   });
 });
 

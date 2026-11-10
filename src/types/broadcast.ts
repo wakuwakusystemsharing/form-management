@@ -37,6 +37,8 @@ export interface AudienceCustomer {
   line_user_id: string | null;
   line_display_name: string | null;
   line_friend_flag: boolean | null;
+  /** ブロック（友だち解除）された日時。null = ブロックされていない / 不明 */
+  line_blocked_at?: string | null;
   line_opt_out_at: string | null;
   tags: string[] | null;
   gender: string | null;

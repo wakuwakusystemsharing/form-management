@@ -43,6 +43,38 @@ export async function fetchLineProfile(token: string, userId: string, fetchImpl:
   return { displayName: s(r.json.displayName), pictureUrl: s(r.json.pictureUrl), statusMessage: s(r.json.statusMessage), language: s(r.json.language) };
 }
 
+/**
+ * その LINE ユーザーが公式 LINE の友だちかを LINE に確認する。
+ * プロフィール取得は「友だち追加していて、ブロックしていない」ユーザーだけ成功する（それ以外は 404）。
+ * friend = 友だち / not_friend = 友だちでない（未追加・ブロック）/ unknown = 確認できなかった（通信エラー・制限など）
+ */
+export async function checkLineFriendship(token: string, userId: string, fetchImpl: typeof fetch = fetch): Promise<'friend' | 'not_friend' | 'unknown'> {
+  const r = await lineGet(`/profile/${encodeURIComponent(userId)}`, token, fetchImpl);
+  if (r.ok) return 'friend';
+  return r.status === 404 ? 'not_friend' : 'unknown';
+}
+
+/**
+ * 友だちか未確認の宛先を LINE に確認する（10 件ずつ並列。`deadline` を過ぎたら残りは未確認のまま）。
+ * friends = 友だちと確認できた顧客 ID / notFriends = 友だちでないと確認できた顧客 ID
+ */
+export async function verifyLineFriends(token: string, targets: Array<{ id: string; line_user_id: string }>, deadline: number, fetchImpl: typeof fetch = fetch): Promise<{ friends: string[]; notFriends: string[]; unchecked: number }> {
+  const friends: string[] = [];
+  const notFriends: string[] = [];
+  let checked = 0;
+  for (let i = 0; i < targets.length; i += 10) {
+    if (Date.now() >= deadline) break;
+    const group = targets.slice(i, i + 10);
+    const results = await Promise.all(group.map((t) => checkLineFriendship(token, t.line_user_id, fetchImpl)));
+    results.forEach((r, k) => {
+      if (r === 'friend') friends.push(group[k].id);
+      else if (r === 'not_friend') notFriends.push(group[k].id);
+    });
+    checked += group.length;
+  }
+  return { friends, notFriends, unchecked: targets.length - checked };
+}
+
 /** 友だちだけの顧客として登録する行（純粋関数） */
 export function buildFriendCustomerRow(storeId: string, lineUserId: string, profile: LineProfile | null, opts: { friend?: boolean; addedAt?: string } = {}): Record<string, unknown> {
   const friend = opts.friend !== false;
@@ -91,9 +123,17 @@ export function promoteFriendOnlyPatch(
  */
 export async function ensureFriendCustomer(adminClient: any, storeId: string, lineUserId: string, token: string, opts: { timestampMs?: number; fetchImpl?: typeof fetch } = {}): Promise<'created' | 'exists' | 'failed'> {
   try {
-    const { data: existing, error: selError } = await adminClient.from('customers').select('id').eq('store_id', storeId).eq('line_user_id', lineUserId).limit(1);
+    const { data: existing, error: selError } = await adminClient.from('customers').select('id, line_friend_flag').eq('store_id', storeId).eq('line_user_id', lineUserId).limit(1);
     if (selError) return 'failed';
-    if (existing && existing.length > 0) return 'exists';
+    if (existing && existing.length > 0) {
+      // 公式 LINE に発言・操作できるのは友だちだけ。友だち追加が予約より先だった等で「未追加」のままの顧客を友だちに直す
+      if (existing[0].line_friend_flag !== true) {
+        const upd = await adminClient.from('customers').update({ line_friend_flag: true, line_blocked_at: null }).eq('id', existing[0].id);
+        // line_blocked_at 列が未適用の環境では、友だちフラグだけ直す
+        if (upd?.error) await adminClient.from('customers').update({ line_friend_flag: true }).eq('id', existing[0].id);
+      }
+      return 'exists';
+    }
     const profile = await fetchLineProfile(token, lineUserId, opts.fetchImpl ?? fetch);
     const row = buildFriendCustomerRow(storeId, lineUserId, profile, { friend: true, addedAt: opts.timestampMs ? new Date(opts.timestampMs).toISOString() : undefined });
     // プロフィール取得の間に予約などで作られていたら作らない（同じ LINE ユーザーの二重登録を避ける）
