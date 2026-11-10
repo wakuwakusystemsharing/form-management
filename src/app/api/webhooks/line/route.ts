@@ -26,7 +26,7 @@ type LineEvent = {
 /**
  * follow / unfollow イベントを反映:
  *   follow   → line_friend_flag=true, line_friend_added_at をセット（未設定時のみ）
- *   unfollow → line_friend_flag=false
+ *   unfollow → line_friend_flag=false, line_blocked_at をセット（follow で消す）
  *
  * 同一 LINE ユーザーが複数の予約で複数の customers レコードを持っている可能性は
  * unique_customers_store_line_user により低いが、安全のため update で複数件対応する。
@@ -61,7 +61,11 @@ async function applyFriendshipChange(
     if (isFollow && !row.line_friend_added_at) {
       perRowUpdate.line_friend_added_at = update.line_friend_added_at;
     }
-    await adminClient.from('customers').update(perRowUpdate).eq('id', row.id);
+    // ブロック（友だち解除）の記録。配信タブは「解除の通知が来た人」だけを配信先から外す（未追加のまま記録が無い人は外さない）
+    const blockedAt = isFollow ? null : timestampMs ? new Date(timestampMs).toISOString() : new Date().toISOString();
+    const res = await adminClient.from('customers').update({ ...perRowUpdate, line_blocked_at: blockedAt }).eq('id', row.id);
+    // line_blocked_at 列が未適用の環境では、従来どおり友だちフラグだけ更新する
+    if (res?.error) await adminClient.from('customers').update(perRowUpdate).eq('id', row.id);
   }
 }
 

@@ -27,12 +27,17 @@ import {
   newBroadcastId,
   replaceBroadcastRecipients,
   updateBroadcast,
+  updateLineFriendStatus,
 } from '@/lib/broadcast-repository';
+import { verifyLineFriends } from '@/lib/line-friend-customers';
 import { lineFlexSendMessages, listLineFlexMessages } from '@/lib/line-flex-repository';
 import { pushLineMessages } from '@/lib/line-push';
 import { getAppEnvironment } from '@/lib/env';
 
 export type ServiceResult<T> = { ok: true; value: T } | { ok: false; status: number; error: string; code?: string };
+
+/** 送信前の友だち確認に使える時間（これを過ぎたら残りは未確認のまま送る） */
+const FRIEND_VERIFY_BUDGET_MS = 10 * 1000;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const isBroadcastId = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
@@ -156,6 +161,8 @@ export interface AudienceEstimate {
   excluded_opt_out: number;
   excluded_blocked: number;
   excluded_no_line: number;
+  /** count のうち、友だちかどうか未確認の人数（送信時に LINE へ確認し、友だちでない人は外す） */
+  unverified: number;
   /** 先頭 20 人（確認用） */
   sample: Array<{ id: string; name: string }>;
   quota: QuotaEvaluation;
@@ -174,6 +181,7 @@ export async function estimateAudience(storeId: string, rawAudience: unknown, no
     excluded_opt_out: sel.excluded_opt_out,
     excluded_blocked: sel.excluded_blocked,
     excluded_no_line: sel.excluded_no_line,
+    unverified: sel.unverified,
     sample: sel.recipients.slice(0, 20).map((c) => ({ id: c.id, name: displayName(c) })),
     quota: evaluateQuota({ limit: settings.monthly_limit, used, recipients: sel.recipients.length, over_limit: settings.over_limit }),
     unfiltered: isAudienceUnfiltered(audience) && !audience.customer_ids,
@@ -216,7 +224,8 @@ export async function scheduleBroadcast(storeId: string, id: string, opts: Sched
     immediate = t <= now.getTime() + 60 * 1000;
   }
 
-  if (!(await getStoreLineToken(storeId))) return { ok: false, status: 400, error: 'この店舗の LINE チャネルアクセストークンが未設定です（店舗編集で登録してください）' };
+  const token = await getStoreLineToken(storeId);
+  if (!token) return { ok: false, status: 400, error: 'この店舗の LINE チャネルアクセストークンが未設定です（店舗編集で登録してください）' };
 
   // 送信用メッセージを作り直す（保存済み LINE メッセージ・スタンプが保存後に変わっていても最新で送る）
   const built = buildPayloads(existing.items, await loadBuildContext(storeId), origin, id, existing.track_taps, true);
@@ -224,6 +233,20 @@ export async function scheduleBroadcast(storeId: string, id: string, opts: Sched
 
   const [sel, settings, used] = await Promise.all([selectRecipients(storeId, existing.audience, now), getBroadcastSettings(storeId), countMonthlySent(storeId, now)]);
   if (sel.recipients.length === 0) return { ok: false, status: 400, error: '配信先が 0 人です。条件を見直してください' };
+
+  // 友だちかどうか未確認の人を LINE に確認する（友だち → 記録を直す / 友だちでない → 記録して配信先から外す）。
+  // 時間内に確認できなかった人はそのまま送る（友だちでなければ LINE 側で届かず、通数も消費しない）
+  const unverified = sel.recipients.filter((c) => c.line_friend_flag !== true).map((c) => ({ id: c.id, line_user_id: c.line_user_id as string }));
+  if (unverified.length > 0 && getAppEnvironment() !== 'local') {
+    const verified = await verifyLineFriends(token, unverified, Date.now() + FRIEND_VERIFY_BUDGET_MS);
+    await Promise.all([updateLineFriendStatus(storeId, verified.friends, true, now), updateLineFriendStatus(storeId, verified.notFriends, false, now)]);
+    if (verified.notFriends.length > 0) {
+      const drop = new Set(verified.notFriends);
+      sel.recipients = sel.recipients.filter((c) => !drop.has(c.id));
+      if (sel.recipients.length === 0) return { ok: false, status: 400, error: '配信先のお客様は、公式 LINE の友だちではありませんでした（友だち追加していないか、ブロックされています）' };
+    }
+  }
+
   const quota = evaluateQuota({ limit: settings.monthly_limit, used, recipients: sel.recipients.length, over_limit: settings.over_limit });
   const allowed = canSendBroadcast(quota, { confirmed: opts.confirmed, double_confirmed: opts.double_confirmed });
   if (!allowed.ok) return { ok: false, status: 409, error: allowed.error, code: allowed.code };

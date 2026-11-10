@@ -15,7 +15,7 @@
  * タグは付いた日が分からないため、ON にした時点でタグが付いている人にも送る。
  */
 import type { AudienceCustomer, AutomationTrigger, BroadcastAudience, CustomerFacts } from '@/types/broadcast';
-import { daysBetween, jstDateOf, matchAudience, toJstDate } from '@/lib/broadcast-audience';
+import { daysBetween, isLineBlocked, jstDateOf, matchAudience, toJstDate } from '@/lib/broadcast-audience';
 
 export const AUTOMATION_WINDOW_DAYS = 14;
 
@@ -149,7 +149,7 @@ export interface AutomationTarget {
 
 /**
  * ルールに該当し、いま送ってよい顧客を選ぶ。
- * きっかけに該当（marker あり）→ 追加の絞り込み（audience）に合う → LINE 連携済み・配信停止でない・ブロックしていない
+ * きっかけに該当（marker あり）→ 追加の絞り込み（audience）に合う → LINE 連携済み・配信停止でない・ブロックされていない（友だちか未確認の人は含める）
  * → 同じ marker を送っていない・再送間隔を過ぎている。同じ LINE ユーザーは 1 人にまとめる
  */
 export function pickAutomationTargets(input: {
@@ -171,7 +171,7 @@ export function pickAutomationTargets(input: {
   const out: AutomationTarget[] = [];
   const seen = new Set<string>();
   for (const c of input.customers) {
-    if (!c.line_user_id || c.line_opt_out_at || c.line_friend_flag === false) continue;
+    if (!c.line_user_id || c.line_opt_out_at || isLineBlocked(c)) continue;
     const marker = evaluateAutomationTrigger(input.trigger, c, input.now);
     if (!marker) continue;
     if (!matchAudience(c, input.facts.get(c.id), input.audience, input.now)) continue;

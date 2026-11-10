@@ -4,7 +4,9 @@
  *
  * - normalizeAudience … 保存データを条件の形に整える
  * - buildCustomerFacts … 予約・来店・アンケートから顧客ごとの事実を集める
- * - matchAudience / selectAudience … 条件に合う顧客を選ぶ（LINE 未連携・配信停止・ブロック中は除外して数える）
+ * - matchAudience / selectAudience … 条件に合う顧客を選ぶ（LINE 未連携・配信停止・ブロックした人は除外して数える）
+ * - 友だち状態: `line_friend_flag` が true = 友だち。false / null は「未確認」（友だち追加が予約より先だった・フォームで取得できなかった等で
+ *   記録が付いていないだけのことが多い）なので配信先に含める。`line_blocked_at` がある人（友だち解除の通知が来た人）だけ外す
  *
  * 日付はすべて JST の暦日で数える。
  */
@@ -344,11 +346,18 @@ export interface AudienceSelection {
   excluded_opt_out: number;
   excluded_blocked: number;
   excluded_no_line: number;
+  /** recipients のうち、友だちかどうか未確認の人数（送信時に LINE へ確認する） */
+  unverified: number;
 }
 
-/** 条件に合う顧客から、送れない人（LINE 未連携 / 配信停止 / ブロック中）を除いて返す。同じ LINE ユーザーは 1 人にまとめる */
+/** ブロック（友だち解除）されたと分かっている顧客か */
+export function isLineBlocked(c: Pick<AudienceCustomer, 'line_friend_flag' | 'line_blocked_at'>): boolean {
+  return c.line_friend_flag !== true && !!c.line_blocked_at;
+}
+
+/** 条件に合う顧客から、送れない人（LINE 未連携 / 配信停止 / ブロックした人）を除いて返す。同じ LINE ユーザーは 1 人にまとめる */
 export function selectAudience(customers: AudienceCustomer[], facts: Map<string, CustomerFacts>, audience: BroadcastAudience, now: Date): AudienceSelection {
-  const out: AudienceSelection = { recipients: [], excluded_opt_out: 0, excluded_blocked: 0, excluded_no_line: 0 };
+  const out: AudienceSelection = { recipients: [], excluded_opt_out: 0, excluded_blocked: 0, excluded_no_line: 0, unverified: 0 };
   const seen = new Set<string>();
   for (const c of customers) {
     if (!matchAudience(c, facts.get(c.id), audience, now)) continue;
@@ -360,13 +369,14 @@ export function selectAudience(customers: AudienceCustomer[], facts: Map<string,
       out.excluded_opt_out += 1;
       continue;
     }
-    if (c.line_friend_flag === false) {
+    if (isLineBlocked(c)) {
       out.excluded_blocked += 1;
       continue;
     }
     if (seen.has(c.line_user_id)) continue;
     seen.add(c.line_user_id);
     out.recipients.push(c);
+    if (c.line_friend_flag !== true) out.unverified += 1;
   }
   return out;
 }
