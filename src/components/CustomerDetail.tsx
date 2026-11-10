@@ -291,6 +291,28 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
     }
   };
 
+  // 配信タブからのお知らせ配信を止める / 再開する（予約の確認・リマインダーは止まらない）
+  const toggleLineOptOut = async (optOut: boolean) => {
+    if (!customerId) return;
+    try {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/customers/${customerId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ line_opt_out: optOut }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || '更新に失敗しました');
+      }
+      toast({ title: optOut ? 'お知らせの配信を停止しました' : 'お知らせの配信を再開しました' });
+      fetchCustomerDetail();
+      onUpdated?.();
+    } catch (e) {
+      toast({ title: e instanceof Error ? e.message : '更新に失敗しました', variant: 'destructive' });
+    }
+  };
+
   /** 来店記録の申し送りを更新し、取得済みデータへ反映する */
   const patchVisit = async (visitId: string, body: Record<string, unknown>): Promise<boolean> => {
     if (!customerId) return false;
@@ -811,6 +833,20 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                       </Badge>
                     </dd>
                   </div>
+                  {customer.line_user_id && (
+                    <div className="col-span-2" data-slot="line-opt-out">
+                      <dt className="text-xs text-muted-foreground">お知らせの配信（配信タブ）</dt>
+                      <dd className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className={customer.line_opt_out_at ? 'border-amber-300 bg-amber-50 text-amber-700' : ''}>
+                          {customer.line_opt_out_at ? '配信停止中' : '配信する'}
+                        </Badge>
+                        <button type="button" className="text-xs text-primary underline-offset-2 hover:underline" onClick={() => toggleLineOptOut(!customer.line_opt_out_at)}>
+                          {customer.line_opt_out_at ? '配信を再開する' : '配信を停止する'}
+                        </button>
+                        <span className="w-full text-[11px] text-muted-foreground">停止中でも、予約の確認・リマインダー・フォローメッセージは届きます</span>
+                      </dd>
+                    </div>
+                  )}
                   {customer.line_status_message && (
                     <div className="col-span-2">
                       <dt className="text-xs text-muted-foreground">ステータスメッセージ</dt>

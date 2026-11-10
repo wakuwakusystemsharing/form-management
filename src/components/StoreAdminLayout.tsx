@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Gift,
   StickyNote,
+  Send,
   Settings,
   Menu,
   LogOut,
@@ -43,6 +44,7 @@ const allMenuItems: { id: StoreAdminTabId; label: string; icon: typeof LayoutDas
   { id: 'surveys', label: 'アンケート管理', icon: ClipboardList },
   { id: 'lotteries', label: '抽選管理', icon: Gift },
   { id: 'walls', label: '寄せ書き', icon: StickyNote },
+  { id: 'broadcasts', label: '配信', icon: Send },
   { id: 'settings', label: '設定', icon: Settings },
 ];
 

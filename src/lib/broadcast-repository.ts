@@ -492,3 +492,63 @@ export async function setLineOptOut(storeId: string, lineUserId: string, optedOu
   if (error) throw new Error(`配信停止の更新に失敗しました: ${error.message}`);
   return Array.isArray(data) ? data.length : 0;
 }
+
+// ---------------------------------------------------------------------------
+// 計測リンク・集計・送信の補助
+// ---------------------------------------------------------------------------
+
+/** 計測リンク /go/b/{id}/{key} の本来の URL（店舗を問わず ID で引く） */
+export async function getBroadcastLinkTarget(id: string, key: string): Promise<string | null> {
+  if (isLocal()) return readLocal().broadcasts.find((b) => b.id === id)?.links?.[key] ?? null;
+  const { data, error } = await client().from('broadcasts').select('links').eq('id', id).maybeSingle();
+  if (error || !data) return null;
+  return parse<Record<string, string>>((data as Record<string, unknown>).links, {})[key] ?? null;
+}
+
+export async function incrementBroadcastTap(id: string, key: string): Promise<void> {
+  if (isLocal()) {
+    const data = readLocal();
+    const b = data.broadcasts.find((x) => x.id === id);
+    if (b) {
+      b.tap_counts = { ...(b.tap_counts ?? {}), [key]: ((b.tap_counts ?? {})[key] ?? 0) + 1 };
+      writeLocal(data);
+    }
+    return;
+  }
+  const { error } = await client().rpc('broadcast_increment_tap', { p_id: id, p_key: key });
+  if (error) console.warn('[broadcast] tap_counts 更新に失敗:', error.message);
+}
+
+/** 配信停止中の顧客数（LINE 連携済みのみ） */
+export async function countOptedOutCustomers(storeId: string): Promise<number> {
+  if (isLocal()) {
+    return readJson<Array<Record<string, unknown>>>(path.join(DATA_DIR, 'customers.json'), []).filter((c) => c.store_id === storeId && !!c.line_user_id && !!c.line_opt_out_at).length;
+  }
+  const { count, error } = await client().from('customers').select('id', { count: 'exact', head: true }).eq('store_id', storeId).not('line_user_id', 'is', null).not('line_opt_out_at', 'is', null);
+  if (error) throw new Error(`配信停止数の取得に失敗しました: ${error.message}`);
+  return count ?? 0;
+}
+
+/** 店舗の LINE チャネルアクセストークン（未設定は null） */
+export async function getStoreLineToken(storeId: string): Promise<string | null> {
+  if (isLocal()) {
+    const stores = readJson<Array<Record<string, unknown>>>(STORES_FILE, []);
+    const t = stores.find((s) => s.id === storeId)?.line_channel_access_token;
+    return typeof t === 'string' && t.trim() ? t : null;
+  }
+  const { data } = await client().from('stores').select('line_channel_access_token').eq('id', storeId).maybeSingle();
+  const t = (data as { line_channel_access_token?: string } | null)?.line_channel_access_token;
+  return typeof t === 'string' && t.trim() ? t : null;
+}
+
+/** 宛先をすべて消す（予約を取り消して下書きに戻すとき） */
+export async function clearBroadcastRecipients(broadcastId: string): Promise<void> {
+  if (isLocal()) {
+    const data = readLocal();
+    data.recipients = data.recipients.filter((r) => r.broadcast_id !== broadcastId);
+    writeLocal(data);
+    return;
+  }
+  const { error } = await client().from('broadcast_recipients').delete().eq('broadcast_id', broadcastId);
+  if (error) throw new Error(`宛先の削除に失敗しました: ${error.message}`);
+}

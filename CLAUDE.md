@@ -283,7 +283,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - 店舗に URL だけを渡しても解説なしで使えるようにするのが目的。項目を追加・改名したときはここも更新する
 
 **店舗管理者に表示するメニュー（タブ）の制御:**
-- `stores.admin_visible_tabs` JSONB（`null` = すべて表示）。値は `['dashboard','reservations','customers','surveys','lotteries','walls','settings']` の部分集合
+- `stores.admin_visible_tabs` JSONB（`null` = すべて表示）。値は `['dashboard','reservations','customers','surveys','lotteries','walls','broadcasts','settings']` の部分集合
 - テナント側 店舗ページ → 設定タブ → `StoreAdminMenuSettings.tsx` で ON/OFF（最低 1 つ必須。全選択時は `null` で保存）
 - 店舗管理者ページ: `StoreAdminLayout` の `visibleTabs` でサイドバー・下部ナビをフィルタし、非表示タブへの直接アクセスは先頭の表示タブへ `router.replace`。`admin/page.tsx` も非表示タブは描画しない
 - マスター管理者・システム管理者が開いた場合は常に全表示（`/api/auth/role` の判定を `isUpperAdminUser` に保持）。**同じブラウザにテナント管理者のセッションが残っていると店舗管理者ページは自動的にそのセッションで開く**ため、全表示になる。ページ上部に「〜として閲覧中」のバナーを出し、「店舗管理者の見え方で確認」（`previewAsStoreAdmin`、sessionStorage `store_admin_preview_{storeId}`）で店舗設定を適用した表示に切り替えられる
@@ -299,7 +299,12 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - Webhook は既存コマンドの後にキーワード応答、【ご予約確認】の reply に `attach_confirm` の payloads を続ける（`replyRawMessages`。1 回の reply は 5 通まで）。Edge Function `send-reminders` / `send-follow-messages` は `loadFlexAttachments()` で店舗ごとの `payloads`（無ければ `payload`）を読んで push に追加（**変更時は Edge Function の再デプロイが必要**）
 - 制限: Flex JSON 30KB / カルーセル 12 枚 / altText 400 文字 / 画像は https のみ（`/api/upload/menu-image`、`menuId = flex_{id}_{slot}`）。一斉配信は下の「配信機能」
 
-**公式 LINE 配信機能（セグメント配信 / 自動配信。仕様: `docs/LINE配信機能_仕様書.md`。実装は 3 つの PR に分ける。現在 PR 1 = 土台のみ。画面・API・送信は未実装）:**
+**公式 LINE 配信機能（セグメント配信 / 自動配信。仕様: `docs/LINE配信機能_仕様書.md`、リリース手順: `docs/LINE配信機能_リリース手順.md`。PR 1 = 土台、PR 2 = 1 回配信まで実装済み。自動配信と設定画面は PR 3 で未実装）:**
+- **「配信」タブ**（`StoreAdminTabId` = `broadcasts`。店舗管理者ページ `/{storeId}/admin?tab=broadcasts` とテナント側 店舗ページの「LINE メッセージ」の右）。`src/components/broadcast/`: `BroadcastPanel`（今月の通数・一覧・宛先と結果・スタンプ素材）/ `BroadcastEditorDialog`（① 配信先 ② メッセージ ③ 送るタイミング + スマホ枠プレビュー + 送信前の確認）/ `AudienceEditor`（「条件を追加」のチップ。条件を変えるたびに 0.5 秒待って人数を見積り）/ `BroadcastItemsEditor`。条件の選択肢は既存 API（`/customers/tags`・`/forms`・`/surveys`・`/line-messages`）から `src/lib/broadcast-options.ts`（`menuNamesFromForms` / `formOptionsFromForms` / `surveyChoicesFromForms`）で作る
+- **流れ**: 下書き（`draft`）を保存 → 「今すぐ送る / 予約する」で `scheduleBroadcast()` が **対象者（`broadcast_recipients`）と送信用メッセージを確定**し `scheduled` に → Edge Function `send-broadcasts` が送って `sent` / `failed`。編集できるのは下書きだけ。予約の取り消し = 下書きに戻す（`cancelBroadcast`。送信開始後は不可）。サーバーは `src/lib/broadcast-service.ts`（`prepareBroadcast` / `estimateAudience` / `scheduleBroadcast` / `cancelBroadcast` / `duplicateBroadcast` / `testSendBroadcast` / `getBroadcastOverview` / `triggerBroadcastSender` = 今すぐ送るとき Edge Function を直接起こす）
+- **API**（すべて `authorizeStoreAccess`）: `GET/POST /api/stores/{storeId}/broadcasts`（一覧 + overview）、`GET/PUT/DELETE .../broadcasts/{id}`、`POST .../broadcasts/estimate`（`{ audience, list? }`）、`POST .../broadcasts/{id}/schedule`（`{ scheduled_at?, confirmed?, double_confirmed? }`。409 + `code`: `over_limit` / `needs_confirm` / `needs_double_confirm`）、`.../cancel`、`.../duplicate`、`.../test`、`GET .../recipients`、`GET/POST/DELETE /api/stores/{storeId}/broadcast-stickers`、計測 `GET /go/b/{broadcastId}/{key}`
+- **Edge Function `supabase/functions/send-broadcasts`**（pg_cron `send_broadcasts` 5 分おき。**cron はマイグレーションに含めず Dashboard から登録**）: 配信を `claimed_at` で確保 → pending の宛先を 500 人ずつ。差し込み無し = multicast（`X-Line-Retry-Key` = バッチ先頭の宛先行 ID。409 は送信済み扱い）、`{name}` あり = 1 人ずつ push（10 並列）。401 / 403 は配信全体を failed、429 / 5xx は pending のまま次の回、6 時間で打ち切り。`{name}` の置き換えは `personalizePayloads` と同じ規則を Deno 側にも持つ（**直すときは両方**）
+- **配信停止**: LINE Webhook が既存コマンドより先に `handleBroadcastOptCommand()`（`src/lib/broadcast-opt-out.ts`。20 文字以内の発言だけ設定を読み、失敗時は素通し）で「配信停止」「配信再開」を処理し `customers.line_opt_out_at` を更新。顧客詳細の LINE タブに「お知らせの配信」の表示と切替（`PATCH /customers/{id}` に `line_opt_out: boolean`）。このキーワードは LINE メッセージのキーワード自動応答に登録できない（`reservedKeywordsFor`）。予約確認・リマインダー・フォローは止めない
 - 型 `src/types/broadcast.ts`（`BroadcastAudience` = 配信先の条件 / `BroadcastItem` = LINE メッセージの並びから `main` を除き `sticker` を足したもの / `Broadcast` / `BroadcastRecipient` / `AutomationTrigger` / `BroadcastSettings`）
 - 純粋ロジック（Vitest）:
   - `src/lib/broadcast-audience.ts`: `normalizeAudience` / `buildCustomerFacts`（予約 = customer_id → line_user_id で紐付け・キャンセル除く、来店、アンケート = line_user_id）/ `matchAudience`（種類の違う条件は AND。タグだけ any / all。メニューは「メニュー」「メニュー > サブメニュー」「カテゴリー > メニュー」の表示名で照合）/ `selectAudience`（LINE 未連携・配信停止 `line_opt_out_at`・ブロック中 `line_friend_flag = false` を除外して数える。同じ LINE ユーザーは 1 人）/ `segmentOf`（`determineCustomerSegment` と同じ規則の now 指定版）/ `describeAudience`。日付は JST の暦日（`jstDateOf` / `toJstDate` / `daysBetween`）
@@ -308,7 +313,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - `src/lib/broadcast-automation.ts`: `AUTOMATION_TEMPLATES`（休眠 / 誕生月 / 初回来店 N 日後 / 来店 N 回目 / タグ）/ `evaluateAutomationTrigger` → marker（`dormant:{最終来店日}` など。送信記録は ルール × 顧客 × marker で一意）/ 日数系は到達から `AUTOMATION_WINDOW_DAYS` = 14 日以内だけ（ON にした日の一斉送信を防ぐ）/ `isAutomationSendAllowed` / `isAutomationTimeReached`
 - サーバー `src/lib/broadcast-repository.ts`（local は `data/broadcast_data.json` + 既存の `data/*.json`）: 配信 / 宛先（`replaceBroadcastRecipients`）/ `countMonthlySent` / 自動配信 / スタンプ / 店舗設定（`stores.broadcast_*`）/ `loadAudienceSource`（顧客・予約・来店・アンケートを 1000 件ずつ全件）/ `setLineOptOut`
 - マイグレーション `20261113000000_add_broadcasts.sql`: `broadcasts` / `broadcast_recipients` / `broadcast_automations` / `broadcast_automation_sends` / `broadcast_stickers`、`stores.broadcast_monthly_limit` / `broadcast_over_limit` / `broadcast_opt_out_keyword` / `broadcast_opt_in_keyword` / `broadcast_automation_time`、`customers.line_opt_out_at`、DB 関数 `broadcast_increment_tap`。**staging / production へは Dashboard の SQL Editor で手動適用**
-- Vitest: `broadcast-audience.test.ts` / `broadcast-items.test.ts` / `broadcast-quota-automation.test.ts` / `broadcast-repository.local.test.ts`
+- Vitest: `broadcast-audience.test.ts` / `broadcast-items.test.ts` / `broadcast-quota-automation.test.ts` / `broadcast-repository.local.test.ts` / `broadcast-service.local.test.ts`
 
 **寄せ書きウォール（匿名の付箋ボード。LINE LIFF 専用）:**
 - 要件定義: `docs/寄せ書きウォール_要件定義書.md`。店舗管理者ページ / テナント側 店舗ページの「寄せ書き」タブ（`walls`。抽選と設定の間）。お客様画面は Next.js ページ `/wall/{storeId}`（`src/components/wall/WallApp.tsx`。静的 HTML ではない）を店舗ごとの LIFF（`wall_boards.liff_id`）で開く
