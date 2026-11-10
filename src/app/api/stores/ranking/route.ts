@@ -116,14 +116,25 @@ export async function GET(request: NextRequest) {
         if (period) q = q.gte('submitted_at', jstDayStartIso(period.date_from)).lt('submitted_at', jstDayStartIso(period.date_to, 1));
         return q;
       }),
+      // line_friend_only（予約なしの LINE 友だち）は友だち追加率から除く。列が未適用の環境では列なしで取り直す
       fetchAllRows<RankingCustomerInput>((from, to) =>
         db
           .from('customers')
-          .select('store_id, line_user_id, line_friend_flag')
+          .select('store_id, line_user_id, line_friend_flag, line_friend_only')
           .in('store_id', storeIds)
           .not('line_user_id', 'is', null)
           .order('id', { ascending: true })
           .range(from, to)
+      ).catch(() =>
+        fetchAllRows<RankingCustomerInput>((from, to) =>
+          db
+            .from('customers')
+            .select('store_id, line_user_id, line_friend_flag')
+            .in('store_id', storeIds)
+            .not('line_user_id', 'is', null)
+            .order('id', { ascending: true })
+            .range(from, to)
+        )
       ),
     ]);
 

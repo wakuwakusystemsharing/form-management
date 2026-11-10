@@ -172,6 +172,32 @@ Supabase の cron から API を呼べません（ログイン画面に転送さ
 配信タブ → 「設定」で、公式 LINE の今月の通数（LINE の API から取得）、月間上限、配信停止 / 再開のキーワード、自動配信を判定する時刻を変更できます。
 既定値は 上限なし /「配信停止」「配信再開」/ 10:00 です。
 
+## 友だち登録だけの人にも配信する（2026-11-10 追加）
+
+予約もアンケートもしていない LINE 友だちを、顧客管理へ「LINE 友だち（予約なし）」として自動登録する機能です。
+
+**リリース時の作業（環境ごと）**
+1. マイグレーション `supabase/migrations/20261114000000_add_customer_line_friend_only.sql` を適用（`customers.line_friend_only` 列を足すだけ。**コードより先に**）
+2. PR をマージ（Edge Function・cron・環境変数の変更なし）
+
+**確認:**
+```sql
+select column_name from information_schema.columns
+ where table_name = 'customers' and column_name = 'line_friend_only';   -- 1 行
+
+-- 自動登録された友だちの人数（店舗ごと）
+select store_id, count(*) from customers where line_friend_only group by 1 order by 2 desc;
+```
+
+**動作確認**
+1. まだ顧客管理に登録の無い LINE アカウントで、店舗の公式 LINE に何か送る（または友だち追加する）
+2. 顧客管理 → 「LINE 友だちのみも表示」にチェック → LINE の表示名で「LINE 友だち（予約なし）」として出る
+3. 配信タブ → 「新しい配信」の人数に含まれる。設定の「友だち登録だけのお客様」の人数が増える
+4. 認証済みアカウントの店舗は、配信タブ → 設定 → 「友だちを取り込む」で既存の友だちを一括登録できる（未認証アカウントは案内文が出る）
+5. その LINE アカウントで予約すると、通常の顧客に切り替わる（名前が予約時のものになり、「LINE 友だちのみも表示」を外しても一覧に出る）
+
+**注意**: 自動登録は Webhook（`/api/webhooks/line`）が受けたイベントで行います。公式 LINE の Webhook URL がこのシステムに向いていない店舗では登録されません。
+
 ## 店舗管理者ページのタブについて
 
 「配信」タブは他のタブと同じく、`stores.admin_visible_tabs` が未設定（すべて表示）の店舗では**店舗管理者にも最初から表示されます**。

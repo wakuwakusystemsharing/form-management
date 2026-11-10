@@ -99,6 +99,9 @@ export async function GET(
       }
     }
 
+    // 予約なしの LINE 友だち（友だち登録だけで自動登録した顧客）は顧客分析に含めない
+    customers = customers.filter((c) => c.line_friend_only !== true);
+
     // セグメント別集計
     const segmentCounts = {
       new: 0,
