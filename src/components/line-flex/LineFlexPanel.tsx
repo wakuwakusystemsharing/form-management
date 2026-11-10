@@ -11,9 +11,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/components/ui/use-toast';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import LineFlexEditorDialog, { type FlexFormOption, type FlexStoreInfo } from './LineFlexEditorDialog';
-import FlexPreview from './FlexPreview';
+import LineFlexQuickEdit from './LineFlexQuickEdit';
 import { describeFlexContents, formLiffUrl, LINE_FLEX_TEMPLATES, resolveFlexContents } from '@/lib/line-flex-templates';
-import { describeLineFlexItems, payloadsToPreview } from '@/lib/line-flex-items';
+import { describeLineFlexItems } from '@/lib/line-flex-items';
 import type { LineFlexMessage } from '@/types/line-flex';
 
 export default function LineFlexPanel({ storeId }: { storeId: string }) {
@@ -27,6 +27,13 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
   const [deleting, setDeleting] = useState<LineFlexMessage | null>(null);
   const [guideOpen, setGuideOpen] = useState(true);
   const [previewId, setPreviewId] = useState<string | null>(null);
+  // 「プレビュー編集」に未保存の変更があるか（閉じる・別のメッセージを開く前に確認する）
+  const [previewDirty, setPreviewDirty] = useState(false);
+  const togglePreview = (id: string) => {
+    if (previewDirty && !window.confirm('プレビュー編集に未保存の変更があります。閉じると変更は消えます。よろしいですか？')) return;
+    setPreviewDirty(false);
+    setPreviewId(previewId === id ? null : id);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -119,6 +126,7 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
                 <li>「送る内容の並び」で<span className="font-medium">テキスト・画像・動画・別の Flex</span> を追加すると、1 回の返信でまとめて送れます（最大 5 通。順番も変えられます）。</li>
                 <li>予約完了（【ご予約確認】）・リマインダー・フォローメッセージの<span className="font-medium">あとに添える</span>こともできます（次回予約の導線やクーポンに）。</li>
                 <li>保存したら「テスト送信」で自分の LINE に送って見た目を確認。ボタンのタップ数はこの一覧に表示されます。</li>
+                <li>一覧の<span className="font-medium">「プレビュー編集」</span>を押すと、その場でプレビューの文字や画像をクリックして直し、「更新」で保存できます（名前・キーワード・送り方は「編集」から）。</li>
               </ol>
               <p className="text-[11px] text-muted-foreground">
                 ※ 自動応答・差し込みは店舗の LINE チャネルアクセストークン（店舗編集で設定）を使います。公式 LINE 管理画面側の「応答メッセージ」で同じキーワードを設定していると両方届くので、どちらかに寄せてください。
@@ -143,7 +151,6 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
           {messages.map((m) => {
             const contents = m.payload && typeof m.payload.contents === 'object' ? (m.payload.contents as Record<string, unknown>) : resolveFlexContents(m);
             const taps = totalTaps(m);
-            const multi = m.payloads && m.payloads.length > 1 ? payloadsToPreview(m.payloads) : undefined;
             const itemsText = describeLineFlexItems(m.items ?? []);
             return (
               <Card key={m.id} data-slot="list-item" className={m.enabled ? '' : 'opacity-70'}>
@@ -177,14 +184,22 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <Button size="sm" variant="outline" onClick={() => setPreviewId(previewId === m.id ? null : m.id)}>{previewId === m.id ? 'プレビューを閉じる' : 'プレビュー'}</Button>
+                      <Button size="sm" variant="outline" onClick={() => togglePreview(m.id)}>{previewId === m.id ? 'プレビュー編集を閉じる' : 'プレビュー編集'}</Button>
                       <Button size="sm" onClick={() => { setEditing(m); setEditorOpen(true); }}>編集</Button>
                       <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleting(m)}>削除</Button>
                     </div>
                   </div>
                   {previewId === m.id && (
                     <div className="space-y-2">
-                      <FlexPreview contents={contents} altText={m.alt_text} messages={multi} />
+                      <LineFlexQuickEdit
+                        key={m.id}
+                        storeId={storeId}
+                        message={m}
+                        forms={forms}
+                        others={messages}
+                        onDirtyChange={setPreviewDirty}
+                        onSaved={(saved) => setMessages((prev) => prev.map((x) => (x.id === saved.id ? saved : x)))}
+                      />
                       {m.track_taps && Object.keys(m.links ?? {}).length > 0 && (
                         <div className="text-xs">
                           <p className="text-muted-foreground mb-1">ボタンごとのタップ数</p>
