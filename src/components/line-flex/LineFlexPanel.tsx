@@ -13,6 +13,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import LineFlexEditorDialog, { type FlexFormOption, type FlexStoreInfo } from './LineFlexEditorDialog';
 import FlexPreview from './FlexPreview';
 import { describeFlexContents, formLiffUrl, LINE_FLEX_TEMPLATES, resolveFlexContents } from '@/lib/line-flex-templates';
+import { describeLineFlexItems, payloadsToPreview } from '@/lib/line-flex-items';
 import type { LineFlexMessage } from '@/types/line-flex';
 
 export default function LineFlexPanel({ storeId }: { storeId: string }) {
@@ -115,6 +116,7 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
                 <li>「新規作成」でテンプレートを選び、項目を埋める（予約フォームのメニュー構成や店舗情報から下書きを作れます）。</li>
                 <li>「送り方」で<span className="font-medium">キーワード</span>を登録（例: メニュー）。お客様がその言葉を送ると自動で返信します（無料）。</li>
                 <li>公式 LINE 管理画面の<span className="font-medium">リッチメニュー</span>で、ボタンのアクションを「テキスト」にしてそのキーワードを設定すると、タップでこのメッセージが出ます。</li>
+                <li>「送る内容の並び」で<span className="font-medium">テキスト・画像・動画・別の Flex</span> を追加すると、1 回の返信でまとめて送れます（最大 5 通。順番も変えられます）。</li>
                 <li>予約完了（【ご予約確認】）・リマインダー・フォローメッセージの<span className="font-medium">あとに添える</span>こともできます（次回予約の導線やクーポンに）。</li>
                 <li>保存したら「テスト送信」で自分の LINE に送って見た目を確認。ボタンのタップ数はこの一覧に表示されます。</li>
               </ol>
@@ -141,6 +143,8 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
           {messages.map((m) => {
             const contents = m.payload && typeof m.payload.contents === 'object' ? (m.payload.contents as Record<string, unknown>) : resolveFlexContents(m);
             const taps = totalTaps(m);
+            const multi = m.payloads && m.payloads.length > 1 ? payloadsToPreview(m.payloads) : undefined;
+            const itemsText = describeLineFlexItems(m.items ?? []);
             return (
               <Card key={m.id} data-slot="list-item" className={m.enabled ? '' : 'opacity-70'}>
                 <CardContent className="p-4 space-y-3">
@@ -151,6 +155,7 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
                         <Badge variant="outline">{templateLabel(m.template)}</Badge>
                         {!m.enabled && <Badge variant="outline" className="text-muted-foreground">無効</Badge>}
                         <span className="text-xs text-muted-foreground">{describeFlexContents(contents)}</span>
+                        {itemsText && <Badge variant="outline" className="text-[10px]">{itemsText}</Badge>}
                       </div>
                       <div className="flex flex-wrap items-center gap-1 text-xs">
                         {m.keywords.length > 0 ? (
@@ -179,7 +184,7 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
                   </div>
                   {previewId === m.id && (
                     <div className="space-y-2">
-                      <FlexPreview contents={contents} altText={m.alt_text} />
+                      <FlexPreview contents={contents} altText={m.alt_text} messages={multi} />
                       {m.track_taps && Object.keys(m.links ?? {}).length > 0 && (
                         <div className="text-xs">
                           <p className="text-muted-foreground mb-1">ボタンごとのタップ数</p>
@@ -206,6 +211,7 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
         storeId={storeId}
         store={store}
         forms={forms}
+        others={messages}
         open={editorOpen}
         initial={editing}
         onClose={() => setEditorOpen(false)}

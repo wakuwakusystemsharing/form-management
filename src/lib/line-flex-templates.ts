@@ -422,13 +422,13 @@ export function trackingUrl(baseUrl: string, messageId: string, key: string): st
 
 /**
  * contents 内の uri アクション（https のみ。tel: は対象外）を計測リンクに置き換える。
- * 戻り値の links は「キー → 本来の URL」。既に計測リンクになっているものはそのまま
+ * 戻り値の links は「キー → 本来の URL」。既に計測リンクになっているものはそのまま。startKey = キーの開始番号（この次から）
  */
-export function instrumentFlexLinks(contents: FlexContainer, baseUrl: string, messageId: string): { contents: FlexContainer; links: Record<string, string> } {
+export function instrumentFlexLinks(contents: FlexContainer, baseUrl: string, messageId: string, startKey = 0): { contents: FlexContainer; links: Record<string, string> } {
   const cloned = JSON.parse(JSON.stringify(contents)) as FlexContainer;
   const links: Record<string, string> = {};
   const prefix = trackingUrl(baseUrl, messageId, '');
-  let n = 0;
+  let n = startKey; // 追加の Flex（JSON）は main の続き番号から（/go/{id}/{key} は数字のキーのみ）
   const walk = (node: unknown) => {
     if (Array.isArray(node)) {
       node.forEach(walk);

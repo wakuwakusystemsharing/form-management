@@ -196,14 +196,14 @@ function buildFlexMessage(template, ctx) {
 // ===== LINE push（タイムアウト付き。例外は投げず結果で返す） =====
 
 // ===== 店舗が作った Flex Message の差し込み（line_flex_messages。LINE メッセージタブ） =====
-// payload は保存時にサーバーで組み立て済みの LINE メッセージ。店舗ごとに最大 4 通（本体と合わせて 5 通）
+// payloads / payload は保存時にサーバーで組み立て済みの LINE メッセージ。店舗ごとに最大 4 通（本体と合わせて 5 通）
 async function loadFlexAttachments(storeIds: string[], column: "attach_reminder" | "attach_follow"): Promise<Map<string, { ids: string[]; messages: Record<string, unknown>[] }>> {
   const map = new Map<string, { ids: string[]; messages: Record<string, unknown>[] }>();
   if (storeIds.length === 0) return map;
   try {
     const { data, error } = await supabase
       .from("line_flex_messages")
-      .select("id,store_id,payload")
+      .select("id,store_id,payload,payloads")
       .eq("enabled", true)
       .eq(column, true)
       .in("store_id", storeIds)
@@ -212,12 +212,14 @@ async function loadFlexAttachments(storeIds: string[], column: "attach_reminder"
       console.warn("Flex 差し込みの取得に失敗:", error.message);
       return map;
     }
-    for (const row of (data || []) as Array<{ id: string; store_id: string; payload: Record<string, unknown> | null }>) {
-      if (!row.payload) continue;
+    for (const row of (data || []) as Array<{ id: string; store_id: string; payload: Record<string, unknown> | null; payloads: Record<string, unknown>[] | null }>) {
+      // payloads = 追加メッセージ（テキスト / 画像 / 動画 / Flex）を含む送信用の並び。無い旧データは Flex 本体 1 通
+      const msgs = Array.isArray(row.payloads) && row.payloads.length > 0 ? row.payloads : row.payload ? [row.payload] : [];
+      if (msgs.length === 0) continue;
       const entry = map.get(row.store_id) ?? { ids: [], messages: [] };
       if (entry.messages.length < 4) {
         entry.ids.push(row.id);
-        entry.messages.push(row.payload);
+        entry.messages.push(...msgs.slice(0, 4 - entry.messages.length));
       }
       map.set(row.store_id, entry);
     }

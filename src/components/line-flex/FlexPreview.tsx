@@ -14,6 +14,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import type { FlexContainer } from '@/types/line-flex';
+import type { PreviewMessage } from '@/lib/line-flex-items';
 
 type Node = Record<string, any>;
 type Layout = 'vertical' | 'horizontal' | 'baseline';
@@ -194,7 +195,7 @@ function Image({ node, parentLayout }: { node: Node; parentLayout: Layout }) {
   return (
     <div style={wrapStyle} title={typeof node.action?.uri === 'string' ? node.action.uri : undefined}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={typeof node.url === 'string' ? node.url : ''} alt="" style={imgStyle} />
+      <img src={typeof node.url === 'string' ? node.url : ''} alt="" style={imgStyle} draggable={false} />
     </div>
   );
 }
@@ -301,6 +302,100 @@ function Bubble({ node }: { node: Node }) {
   );
 }
 
+/**
+ * カルーセルの横スクロール。マウスの左ボタンを押したまま左右に動かすとスワイプのようにスクロールできる
+ * （スマホ画面は CSS zoom で縮小しているので、マウスの移動量は倍率で割って scrollLeft に足す）
+ */
+function DragScroll({ scale, enabled, children }: { scale: number; enabled: boolean; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const drag = useRef<{ x: number; left: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!enabled || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const el = ref.current;
+    if (!el) return;
+    drag.current = { x: e.clientX, left: el.scrollLeft };
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    setDragging(true);
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    const el = ref.current;
+    if (!d || !el) return;
+    el.scrollLeft = d.left - (e.clientX - d.x) / (scale || 1);
+  };
+  const end = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return;
+    drag.current = null;
+    setDragging(false);
+    try {
+      ref.current?.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  };
+  return (
+    <div
+      ref={ref}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={end}
+      onPointerCancel={end}
+      onPointerLeave={end}
+      style={{ cursor: enabled ? (dragging ? 'grabbing' : 'grab') : undefined, userSelect: 'none', touchAction: 'pan-y' }}
+      className="flex min-w-0 flex-1 items-stretch gap-[10px] overflow-x-auto pb-[2px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      title={enabled ? 'ドラッグで横にスクロール' : undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** トーク画面の 1 通（Flex = バブル列 / テキスト / 画像 / 動画） */
+function ChatMessage({ message, scale }: { message: PreviewMessage; scale: number }) {
+  if (message.type === 'flex') {
+    const node = message.contents as Node;
+    const bubbles: Node[] = node.type === 'carousel' && Array.isArray(node.contents) ? node.contents : [node];
+    return (
+      <div className="flex items-end gap-[6px]">
+        <DragScroll scale={scale} enabled={bubbles.length > 1}>
+          {bubbles.map((b, i) => (
+            <Bubble key={i} node={b} />
+          ))}
+        </DragScroll>
+      </div>
+    );
+  }
+  if (message.type === 'text') {
+    return (
+      <div style={{ maxWidth: 260, backgroundColor: '#ffffff', borderRadius: 17, padding: '9px 13px', fontSize: 16, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: DEFAULT_TEXT, fontFamily: FONT, width: 'fit-content' }} data-slot="chat-text">
+        {message.text}
+      </div>
+    );
+  }
+  if (message.type === 'image') {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={message.url} alt="" draggable={false} style={{ width: 240, maxWidth: '100%', borderRadius: 17, display: 'block', backgroundColor: '#e9e9e9', minHeight: 60 }} data-slot="chat-image" />
+    );
+  }
+  return (
+    <div style={{ position: 'relative', width: 240, borderRadius: 17, overflow: 'hidden', backgroundColor: '#222' }} data-slot="chat-video" title={message.url}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={message.previewUrl} alt="" draggable={false} style={{ width: '100%', display: 'block', aspectRatio: '16 / 9', objectFit: 'cover', opacity: 0.9 }} />
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 0, height: 0, borderTop: '9px solid transparent', borderBottom: '9px solid transparent', borderLeft: '15px solid #fff', marginLeft: 4 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Noto Sans JP（ヒラギノが無い Windows 用）を 1 回だけ読み込む */
 function useWebFont() {
   useEffect(() => {
@@ -335,28 +430,34 @@ function useFitScale(maxScale: number) {
 export default function FlexPreview({
   contents,
   altText,
+  messages,
   className,
   maxScale = 1,
 }: {
+  /** Flex 1 通だけのとき */
   contents: FlexContainer | null;
   altText?: string;
+  /** まとめて送る複数のメッセージ（指定があれば contents より優先。順番どおりにトーク画面に並べる） */
+  messages?: PreviewMessage[];
   className?: string;
   /** 欄が広いときの最大倍率（1 = 実寸） */
   maxScale?: number;
 }) {
   useWebFont();
   const { ref, scale } = useFitScale(maxScale);
-  if (!contents) {
+  const list: PreviewMessage[] = messages ?? (contents ? [{ type: 'flex', contents, altText }] : []);
+  if (list.length === 0) {
     return (
       <div className={`rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground ${className ?? ''}`}>
         見出しや本文を入力すると、ここにプレビューが表示されます
       </div>
     );
   }
-  const node = contents as Node;
   const now = new Date();
   const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const bubbles: Node[] = node.type === 'carousel' && Array.isArray(node.contents) ? node.contents : [node];
+  const firstFlex = list.find((m) => m.type === 'flex');
+  const notice = altText ?? (firstFlex && firstFlex.type === 'flex' ? firstFlex.altText : undefined);
+  const hasCarousel = list.some((m) => m.type === 'flex' && (m.contents as Node).type === 'carousel');
   return (
     <div className={className} data-slot="flex-preview" ref={ref}>
       <div style={{ zoom: scale, width: PHONE_WIDTH, fontFamily: FONT }} className="overflow-hidden rounded-[28px] border-[6px] border-[#1c1c1e] bg-black shadow-md">
@@ -367,24 +468,25 @@ export default function FlexPreview({
         </div>
         {/* トーク画面 */}
         <div style={{ backgroundColor: CHAT_BG, minHeight: 260 }} className="px-[10px] pb-4 pt-3">
-          {altText ? (
+          {notice ? (
             <div className="mb-2 flex justify-center">
-              <span className="max-w-[80%] truncate rounded-full bg-black/20 px-3 py-0.5 text-[11px] text-white" title="通知・トーク一覧に出る文">通知: {altText}</span>
+              <span className="max-w-[80%] truncate rounded-full bg-black/20 px-3 py-0.5 text-[11px] text-white" title="通知・トーク一覧に出る文">通知: {notice}</span>
             </div>
           ) : null}
           <div className="mb-[6px] h-[32px] w-[32px] rounded-full border border-white/40" style={{ backgroundImage: 'linear-gradient(135deg, #f1f1f1, #c9d1dd)' }} aria-hidden="true" />
-          <div className="flex items-end gap-[6px]">
-            <div className="flex min-w-0 flex-1 items-stretch gap-[10px] overflow-x-auto pb-[2px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {bubbles.map((b, i) => (
-                <Bubble key={i} node={b} />
-              ))}
+          {list.map((m, i) => (
+            <div key={i} className={i > 0 ? 'mt-[8px]' : undefined} data-slot="chat-message">
+              <ChatMessage message={m} scale={scale} />
+              <div className="mt-[4px] text-right text-[11px] text-white/95" style={{ paddingRight: 2 }}>{time}</div>
             </div>
-          </div>
-          <div className="mt-[4px] text-right text-[11px] text-white/95" style={{ paddingRight: 2 }}>{time}</div>
+          ))}
         </div>
       </div>
       <p className="mt-1 text-[11px] text-muted-foreground">
-        ※ iPhone の LINE（幅 390px）に合わせた近似表示です{scale < 1 ? `（${Math.round(scale * 100)}% に縮小）` : ''}。カルーセルは横にスクロールできます。最終確認は「テスト送信」でどうぞ
+        ※ iPhone の LINE（幅 390px）に合わせた近似表示です{scale < 1 ? `（${Math.round(scale * 100)}% に縮小）` : ''}。
+        {hasCarousel ? 'カルーセルはマウスで左右にドラッグするとスクロールできます。' : ''}
+        {list.length > 1 ? `${list.length} 通をこの順番で送ります。` : ''}
+        最終確認は「テスト送信」でどうぞ
       </p>
     </div>
   );
