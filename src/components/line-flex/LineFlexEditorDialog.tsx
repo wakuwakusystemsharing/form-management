@@ -14,8 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast';
 import FlexPreview, { type FlexPreviewEdit } from './FlexPreview';
 import FlexPartInspector, { type FlexEditOp } from './FlexPartInspector';
-import { addBubble, addPart, duplicateNode, getAt, moveNode, moveNodeTo, newFlexPart, patchNode, removeNode, walkFlex } from '@/lib/flex-tree';
-import { applyTemplateOp, buildTemplateFieldMap, findItemRootPath, type TemplateOp } from '@/lib/flex-template-map';
+import { getAt } from '@/lib/flex-tree';
+import { applyFlexEdit, isTemplateLinked } from '@/lib/flex-edit';
 import { describeLineFlexItems, itemsToPreview, LINE_FLEX_ATTACH_MAX, LINE_FLEX_ITEM_LABELS, LINE_FLEX_ITEMS_MAX, LINE_TEXT_MESSAGE_MAX, validateLineFlexItems } from '@/lib/line-flex-items';
 import type {
   BookingCardData,
@@ -583,124 +583,27 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
   };
 
   // ---- プレビューを直接さわって編集する ----
-  // テンプレートの入力項目と連動中のときだけ、パーツ → 入力項目の対応表を持つ（自由編集・JSON 直接入力では null）
-  const fieldMap = useMemo(() => (template === 'custom' || flexOverride ? null : buildTemplateFieldMap(template, data)), [template, data, flexOverride]);
   // 選択中のパーツが無くなったら（削除・テンプレート変更など）選択なしとして扱う
   const selected = selectedPath !== null && contents && !contentsError && getAt(contents, selectedPath) ? selectedPath : null;
 
   const applyEdit = (op: FlexEditOp) => {
     setEditError(null);
-    const typing = op.type === 'text' || op.type === 'buttonLabel' || op.type === 'buttonUrl' || op.type === 'patch' || op.type === 'image';
-
-    // 1) テンプレートの入力項目に書き戻せる操作は、入力項目を書き換える（左の欄にも反映される）
-    if (fieldMap && contents && op.type !== 'patch' && op.type !== 'add' && op.type !== 'addBubble') {
-      const r = applyTemplateOp(data, fieldMap, contents, op as TemplateOp);
-      if (r) {
-        pushHistory(!typing);
-        setData(r.data);
-        setDirty(true);
-        if (op.type === 'remove') setSelectedPath(null);
-        else if (r.selectItem) setSelectedPath(findItemRootPath(buildTemplateFieldMap(template, r.data), r.selectItem) ?? null);
-        return;
-      }
-      // 一覧の 1 件（メニューのカードなど）を端より先へ動かそうとした → 何もしない（自由編集にはしない）
-      if ((op.type === 'move' || op.type === 'moveTo') && fieldMap.itemRoots[op.path]) return;
-    }
-
-    // 2) それ以外は Flex そのものを書き換える（自由編集）
-    const usable = contents && !contentsError ? contents : null;
-    let next: FlexContainer | null = null;
-    let nextSelected: string | null | undefined;
-    if (!usable) {
-      // まだ何も無い（自由入力で空）ときは、追加でカードを 1 枚作るところから
-      if (op.type !== 'add' && op.type !== 'addBubble') return;
-      const fresh = newFlexPart('bubble') as FlexContainer;
-      const r = op.type === 'add' ? addPart(fresh, null, op.node) : { root: fresh, path: '' };
-      next = r?.root ?? null;
-      nextSelected = r?.path;
-    } else {
-      const node = 'path' in op ? getAt(usable, op.path) : undefined;
-      const action = node && typeof node.action === 'object' && node.action ? (node.action as Record<string, unknown>) : {};
-      switch (op.type) {
-        case 'text':
-          // 文字を空にした = そのパーツを消す（LINE は空の文字を受け付けない）
-          if (op.text.trim() === '') {
-            next = removeNode(usable, op.path);
-            nextSelected = null;
-          } else next = patchNode(usable, op.path, { text: op.text });
-          break;
-        case 'image':
-          next = patchNode(usable, op.path, { url: op.url });
-          break;
-        case 'buttonLabel':
-          next = patchNode(usable, op.path, { action: { ...action, type: action.type ?? 'uri', label: op.label } });
-          break;
-        case 'buttonUrl':
-          next = patchNode(usable, op.path, { action: { ...action, type: 'uri', uri: op.url } });
-          break;
-        case 'patch':
-          // カルーセルのカードは全部同じ大きさにする（LINE の仕様）
-          if (node?.type === 'bubble' && 'size' in op.patch && usable.type === 'carousel') {
-            let r: FlexContainer = usable;
-            walkFlex(usable, (n, p) => {
-              if (n.type === 'bubble') r = patchNode(r, p, { size: op.patch.size });
-            });
-            next = r;
-          } else next = patchNode(usable, op.path, op.patch);
-          break;
-        case 'move': {
-          const r = moveNode(usable, op.path, op.dir);
-          next = r?.root ?? null;
-          nextSelected = r?.path;
-          break;
-        }
-        case 'moveTo': {
-          const r = moveNodeTo(usable, op.path, op.index);
-          next = r?.root ?? null;
-          nextSelected = r?.path;
-          break;
-        }
-        case 'duplicate': {
-          const r = duplicateNode(usable, op.path);
-          if (!r) setEditError('これ以上は増やせません（カードは 12 枚まで）');
-          next = r?.root ?? null;
-          nextSelected = r?.path;
-          break;
-        }
-        case 'remove':
-          next = removeNode(usable, op.path);
-          if (!next) setEditError('このパーツは削除できません（カードには最低 1 つの中身が必要です）');
-          nextSelected = null;
-          break;
-        case 'add': {
-          const r = addPart(usable, selected, op.node);
-          next = r?.root ?? null;
-          nextSelected = r?.path;
-          break;
-        }
-        default: {
-          const r = addBubble(usable, selected);
-          if (!r) setEditError('カードは 12 枚までです');
-          next = r?.root ?? null;
-          nextSelected = r?.path;
-        }
-      }
-    }
-    if (!next || next === usable) return;
-    const err = validateFlexContents(next);
-    if (err) {
-      setEditError(err);
+    const r = applyFlexEdit({ template, data, flexOverride }, op, selected);
+    if (!r) return;
+    if (r.error) {
+      setEditError(r.error);
       return;
     }
-    pushHistory(!typing);
-    if (!flexOverride && template !== 'custom') {
-      toast({ title: '自由編集に切り替えました', description: '左の入力項目とは連動しなくなります。「テンプレートに戻す」か「元に戻す」で戻せます。' });
+    pushHistory(!r.typing);
+    if (r.data) setData(r.data);
+    if (r.flexOverride) {
+      if (r.becameFree) toast({ title: '自由編集に切り替えました', description: '左の入力項目とは連動しなくなります。「テンプレートに戻す」か「元に戻す」で戻せます。' });
+      setFlexOverride(r.flexOverride);
+      setJsonText(JSON.stringify(r.flexOverride, null, 2));
+      setJsonError(null);
     }
-    setFlexOverride(next);
-    setJsonText(JSON.stringify(next, null, 2));
-    setJsonError(null);
     setDirty(true);
-    if (nextSelected !== undefined) setSelectedPath(nextSelected);
+    if (r.selected !== undefined) setSelectedPath(r.selected);
   };
   // 画像のアップロード完了時など、あとから呼ばれる場面でも最新の状態に対して操作する
   const applyEditRef = useRef(applyEdit);
@@ -1215,7 +1118,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
                 selected={selected}
                 onSelect={setSelectedPath}
                 onOp={(op) => applyEditRef.current(op)}
-                templateLinked={!!fieldMap}
+                templateLinked={isTemplateLinked({ template, data, flexOverride })}
                 formUrls={forms.filter((f) => f.liffUrl).map((f) => ({ name: f.name, url: f.liffUrl }))}
                 uploading={uploading}
                 onUpload={(slot, file, apply) => uploadImage(slot, file, undefined, apply)}

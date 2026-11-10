@@ -57,7 +57,15 @@
 - `src/lib/flex-tree.ts`: Flex の木をパス（例 `contents/1/body/contents/0`）で読み書きする純粋関数（取り出す / 書き換える / 動かす / 消す / 複製 / 足す）。元のオブジェクトは変えない
 - `src/lib/flex-template-map.ts`: テンプレートの入力値の文字列を目印に差し替えて Flex を組み立て、できた Flex をたどって「パーツ → 入力項目」の対応表を作る（組み立て関数は変更不要。テンプレートを増やしても自動で対応）。`applyTemplateOp` が操作を入力値に書き戻す
 - `FlexPreview` の `edit` prop を渡したときだけ編集できる（配信の作成画面などは表示のみ）。選択枠と操作ボタンは `EditOverlay`、文字の直接編集は `EditableText`
-- 設定欄は `FlexPartInspector.tsx`、操作の入口は `LineFlexEditorDialog` の `applyEdit`
+- 設定欄は `FlexPartInspector.tsx`。操作を内容に反映する処理は `src/lib/flex-edit.ts` の `applyFlexEdit`（編集画面と、一覧の「プレビュー編集」が共通で使う）
+
+### 一覧の「プレビュー編集」
+
+LINE メッセージの一覧で、各メッセージの「プレビュー編集」を押すと、その場にプレビュー（左）と設定欄（右）が開く。編集画面のプレビューと同じ操作ができ、「更新」を押すとその LINE メッセージに保存される。
+
+- 変わるのは Flex の中身だけ。名前・キーワード・送り方（差し込み）・送る内容の並びは変わらない（それらは「編集」から）
+- 未保存の変更があるまま閉じようとすると確認が出る
+- 部品は `LineFlexQuickEdit.tsx`（保存は既存の `PUT /api/stores/{storeId}/line-messages/{id}`）
 
 ## データ
 
