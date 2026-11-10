@@ -8,7 +8,7 @@ import { cancelFollowMessageForReservation, restoreFollowMessageForUser } from '
 import { buildCancelDeadlineMessage, buildCancelNotificationEmail, isCancelAllowed, resolveCancelRules, type CancelRules } from '@/lib/cancel-rules';
 import { resolveStayCancelFee } from '@/lib/stay-reservation';
 import { sendEmail } from '@/lib/email-sender';
-import { findLineFlexReplyForText, listLineFlexAttachments } from '@/lib/line-flex-service';
+import { findLineFlexReplyForText, handleLineFlexPostback, listLineFlexAttachments } from '@/lib/line-flex-service';
 import { handleBroadcastOptCommand } from '@/lib/broadcast-opt-out';
 import { ensureFriendCustomer } from '@/lib/line-friend-customers';
 
@@ -20,6 +20,7 @@ type LineEvent = {
   type?: string;
   timestamp?: number;
   message?: { type?: string; text?: string };
+  postback?: { data?: string };
   source?: { userId?: string };
 };
 
@@ -521,6 +522,13 @@ export async function POST(req: NextRequest) {
   console.log(`[LINE Webhook] storeId=${storeId} eventCount=${events.length} type=${event.type || 'unknown'} userId=${userId ? 'yes' : 'no'} message=${messageText ? messageText.substring(0, 30) : '(empty)'}`);
 
   if (!replyToken || !userId) {
+    return NextResponse.json({ success: true });
+  }
+
+  // LINE メッセージの分岐ボタン（postback。data = `lf:{メッセージID}:{キー}`）: 回答を記録・タグ付けして、次のメッセージを返す
+  if (event.type === 'postback') {
+    const branchReply = await handleLineFlexPostback(storeId, userId, event.postback?.data ?? '');
+    if (branchReply) await replyRawMessages(replyToken, accessToken, branchReply.slice(0, 5));
     return NextResponse.json({ success: true });
   }
 

@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import LineFlexEditorDialog, { type FlexFormOption, type FlexStoreInfo } from './LineFlexEditorDialog';
 import LineFlexQuickEdit from './LineFlexQuickEdit';
+import LineFlexAnswerSummary from './LineFlexAnswerSummary';
 import { describeFlexContents, formLiffUrl, LINE_FLEX_TEMPLATES, resolveFlexContents } from '@/lib/line-flex-templates';
 import { describeLineFlexItems } from '@/lib/line-flex-items';
 import type { LineFlexMessage } from '@/types/line-flex';
@@ -126,6 +127,7 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
                 <li>「送る内容の並び」で<span className="font-medium">テキスト・画像・動画・別の Flex</span> を追加すると、1 回の返信でまとめて送れます（最大 5 通。順番も変えられます）。</li>
                 <li>予約完了（【ご予約確認】）・リマインダー・フォローメッセージの<span className="font-medium">あとに添える</span>こともできます（次回予約の導線やクーポンに）。</li>
                 <li>保存したら「テスト送信」で自分の LINE に送って見た目を確認。ボタンのタップ数はこの一覧に表示されます。</li>
+                <li><span className="font-medium">分岐</span>: テンプレート「分岐アンケート（かんたん）」なら、質問と選択肢を入れるだけで、ボタンを押すたびに次の質問や結果が届くメッセージを作れます。ほかのテンプレートでも、ボタンの動きを「押したら次のメッセージを送る」にすると別の LINE メッセージへつなげられます（選んだ内容の集計・タグ付けつき）。</li>
                 <li>一覧の<span className="font-medium">「プレビュー編集」</span>を押すと、その場でプレビューの文字や画像をクリックして直し、「更新」で保存できます（名前・キーワード・送り方は「編集」から）。</li>
               </ol>
               <p className="text-[11px] text-muted-foreground">
@@ -163,6 +165,7 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
                         {!m.enabled && <Badge variant="outline" className="text-muted-foreground">無効</Badge>}
                         <span className="text-xs text-muted-foreground">{describeFlexContents(contents)}</span>
                         {itemsText && <Badge variant="outline" className="text-[10px]">{itemsText}</Badge>}
+                        {Object.keys(m.branches ?? {}).length > 0 && <Badge variant="outline" className="border-blue-300 bg-blue-50 text-[10px] text-blue-700">分岐あり</Badge>}
                       </div>
                       <div className="flex flex-wrap items-center gap-1 text-xs">
                         {m.keywords.length > 0 ? (
@@ -200,6 +203,7 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
                         onDirtyChange={setPreviewDirty}
                         onSaved={(saved) => setMessages((prev) => prev.map((x) => (x.id === saved.id ? saved : x)))}
                       />
+                      {Object.keys(m.branches ?? {}).length > 0 && <LineFlexAnswerSummary storeId={storeId} messageId={m.id} version={m.updated_at} />}
                       {m.track_taps && Object.keys(m.links ?? {}).length > 0 && (
                         <div className="text-xs">
                           <p className="text-muted-foreground mb-1">ボタンごとのタップ数</p>

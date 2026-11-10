@@ -16,12 +16,13 @@ export type LineFlexTemplate =
   | 'notice_card'
   | 'menu_list'
   | 'staff_carousel'
-  | 'steps_card';
+  | 'steps_card'
+  | 'scenario';
 
 export interface FlexButtonInput {
   key: string; // 行の識別子（編集 UI 用）
   label: string;
-  url: string; // https:// または tel:
+  url: string; // https:// または tel:。分岐は `next:{メッセージID}?tags=…`（押したら別の LINE メッセージを返す。src/lib/line-flex-branch.ts）
 }
 
 export interface BookingCardData {
@@ -132,6 +133,48 @@ export interface StepsCardData {
   color?: string;
 }
 
+/**
+ * 分岐アンケート（かんたんモード。テンプレート `scenario`）: 質問 → 選択肢 → 選んだら（次の質問 / 結果 / 保存済みメッセージ）の木
+ * 純粋ロジックは src/lib/line-flex-scenario.ts
+ */
+export interface ScenarioResult {
+  key: string;
+  title: string;
+  text?: string;
+  image_url?: string;
+  button?: FlexButtonInput | null; // 予約フォームへのボタンなど
+}
+export type ScenarioNext =
+  | { type: 'none' } // 記録・タグ付けだけ（何も返さない）
+  | { type: 'question'; question: ScenarioQuestion }
+  | { type: 'result'; result: ScenarioResult }
+  | { type: 'message'; message_id: string }; // 保存済みの LINE メッセージを返す
+export interface ScenarioChoice {
+  key: string;
+  label: string; // ボタンの文言
+  tags?: string[]; // 選んだお客様に付ける顧客タグ
+  then: ScenarioNext;
+}
+export interface ScenarioQuestion {
+  key: string;
+  title: string;
+  text?: string;
+  image_url?: string;
+  choices: ScenarioChoice[]; // 最大 6
+}
+export interface ScenarioData {
+  root: ScenarioQuestion; // 最初の質問（= Flex 本体）
+  color?: string;
+}
+
+/** 分岐ボタンの対応（ボタンのキー → 何を選んだか・タグ・次に返すもの）。保存時にサーバーで作る */
+export interface LineFlexBranch {
+  label: string; // ボタンの文言
+  question: string; // 質問文（分岐アンケート）。くわしくモードのボタンは空
+  tags: string[];
+  next: { type: 'message'; id: string } | { type: 'node'; key: string } | { type: 'none' };
+}
+
 export type LineFlexTemplateData =
   | BookingCardData
   | MenuCarouselData
@@ -141,6 +184,7 @@ export type LineFlexTemplateData =
   | MenuListData
   | StaffCarouselData
   | StepsCardData
+  | ScenarioData
   | Record<string, never>;
 
 /** Flex Message の contents（bubble / carousel）。構造は LINE の仕様どおりなので型は緩くしておく */
@@ -178,6 +222,9 @@ export interface LineFlexMessage {
   links: Record<string, string>; // 計測キー → 本来の URL
   reply_count: number; // キーワード応答・差し込みで送った回数
   tap_counts: Record<string, number>; // 計測キー → タップ数
+  branches: Record<string, LineFlexBranch>; // 分岐ボタンのキー → 対応（保存時に生成。無ければ {}）
+  branch_payloads: Record<string, Record<string, unknown>>; // 分岐アンケートの 2 問目以降・結果: ノードのキー → 送信用メッセージ
+  show_choice_text: boolean; // 分岐ボタンを押したとき、お客様のトークに選んだ文言を表示する
   created_at: string;
   updated_at: string;
 }
@@ -197,4 +244,5 @@ export interface LineFlexMessageInput {
   enabled?: boolean;
   track_taps?: boolean;
   items?: LineFlexItem[];
+  show_choice_text?: boolean;
 }
