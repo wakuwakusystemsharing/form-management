@@ -2,9 +2,9 @@
 
 /**
  * 公式 LINE Flex Message の作成・編集ダイアログ
- * 左: テンプレートの項目入力（+ 上級者向け JSON 編集）/ 右: プレビュー。下: 保存・テスト送信
+ * 左: テンプレートの項目入力（+ 上級者向け JSON 編集）/ 右: プレビュー（直接さわって編集できる）+ 選んだパーツの設定。下: 保存・テスト送信
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import FlexPreview from './FlexPreview';
+import FlexPreview, { type FlexPreviewEdit } from './FlexPreview';
+import FlexPartInspector, { type FlexEditOp } from './FlexPartInspector';
+import { addBubble, addPart, duplicateNode, getAt, moveNode, moveNodeTo, newFlexPart, patchNode, removeNode, walkFlex } from '@/lib/flex-tree';
+import { applyTemplateOp, buildTemplateFieldMap, findItemRootPath, type TemplateOp } from '@/lib/flex-template-map';
 import { describeLineFlexItems, itemsToPreview, LINE_FLEX_ATTACH_MAX, LINE_FLEX_ITEM_LABELS, LINE_FLEX_ITEMS_MAX, LINE_TEXT_MESSAGE_MAX, validateLineFlexItems } from '@/lib/line-flex-items';
 import type {
   BookingCardData,
@@ -95,6 +98,18 @@ function randomId(): string {
 function rowKey(): string {
   return Math.random().toString(36).slice(2, 8);
 }
+
+/** 「元に戻す」用に覚えておく内容（Flex 本体を決める 3 つ） */
+interface EditSnapshot {
+  template: LineFlexTemplate;
+  data: LineFlexTemplateData;
+  flexOverride: FlexContainer | null;
+}
+const sameSnapshot = (a: EditSnapshot, b: EditSnapshot) => a.template === b.template && a.data === b.data && a.flexOverride === b.flexOverride;
+const HISTORY_MAX = 50;
+/** 続けて入力している間（この ms 以内の変更）は 1 回ぶんの「元に戻す」にまとめる */
+const HISTORY_COALESCE_MS = 800;
+const nowMs = (): number => Date.now();
 
 // ---------------------------------------------------------------------------
 // 小さな入力部品（render の外で定義。中で定義すると入力のたびにフォーカスが外れる）
@@ -385,6 +400,11 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
+  // プレビューを直接さわって編集する: 選択中のパーツ / 元に戻す・やり直す / 操作のエラー
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [history, setHistory] = useState<{ past: EditSnapshot[]; future: EditSnapshot[] }>({ past: [], future: [] });
+  const [editError, setEditError] = useState<string | null>(null);
+  const lastChangeAt = useRef(0);
   // テスト送信
   const [testOpen, setTestOpen] = useState(false);
   const [customerQuery, setCustomerQuery] = useState('');
@@ -418,6 +438,9 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
     for (const it of nextItems) if (it.type === 'flex') js[it.key] = { text: it.contents ? JSON.stringify(it.contents, null, 2) : '', error: null };
     setItemJson(js);
     setDirty(false);
+    setSelectedPath(null);
+    setHistory({ past: [], future: [] });
+    setEditError(null);
     setTestOpen(false);
     setTestTarget(null);
     setCustomerQuery('');
@@ -440,7 +463,62 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
     [items, contents, contentsError, altText, others, id]
   );
 
-  const touch = () => setDirty(true);
+  /**
+   * 変更の直前の状態を「元に戻す」用に覚える（イベントの中で、値を変える前後どちらで呼んでもよい = ここで見える値は変更前）。
+   * force = false は入力中の連続した変更を 1 回にまとめる
+   */
+  const pushHistory = (force: boolean) => {
+    const now = nowMs();
+    const skip = !force && now - lastChangeAt.current < HISTORY_COALESCE_MS;
+    lastChangeAt.current = now;
+    if (skip) return;
+    const snap: EditSnapshot = { template, data, flexOverride };
+    setHistory((h) => {
+      const top = h.past[h.past.length - 1];
+      if (top && sameSnapshot(top, snap)) return h;
+      return { past: [...h.past, snap].slice(-HISTORY_MAX), future: [] };
+    });
+  };
+  const touch = () => {
+    pushHistory(false);
+    setDirty(true);
+  };
+  const restoreSnapshot = (snap: EditSnapshot) => {
+    setTemplate(snap.template);
+    setData(snap.data);
+    setFlexOverride(snap.flexOverride);
+    setJsonText(snap.flexOverride ? JSON.stringify(snap.flexOverride, null, 2) : '');
+    setJsonError(null);
+    setEditError(null);
+    setDirty(true);
+    lastChangeAt.current = 0;
+  };
+  const undo = () => {
+    const current: EditSnapshot = { template, data, flexOverride };
+    const past = [...history.past];
+    let snap: EditSnapshot | undefined;
+    // 名前などだけを変えたときの「いまと同じ内容」の記録は飛ばす
+    while (past.length > 0) {
+      const s = past.pop() as EditSnapshot;
+      if (!sameSnapshot(s, current)) {
+        snap = s;
+        break;
+      }
+    }
+    if (!snap) {
+      setHistory({ past, future: history.future });
+      return;
+    }
+    setHistory({ past, future: [...history.future, current] });
+    restoreSnapshot(snap);
+  };
+  const redo = () => {
+    const future = [...history.future];
+    const snap = future.pop();
+    if (!snap) return;
+    setHistory({ past: [...history.past, { template, data, flexOverride }], future });
+    restoreSnapshot(snap);
+  };
   const changeItems = (next: LineFlexItem[]) => {
     setItems(next);
     touch();
@@ -502,6 +580,144 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
     setJsonText(generated ? JSON.stringify(generated, null, 2) : '');
     setJsonError(null);
     touch();
+  };
+
+  // ---- プレビューを直接さわって編集する ----
+  // テンプレートの入力項目と連動中のときだけ、パーツ → 入力項目の対応表を持つ（自由編集・JSON 直接入力では null）
+  const fieldMap = useMemo(() => (template === 'custom' || flexOverride ? null : buildTemplateFieldMap(template, data)), [template, data, flexOverride]);
+  // 選択中のパーツが無くなったら（削除・テンプレート変更など）選択なしとして扱う
+  const selected = selectedPath !== null && contents && !contentsError && getAt(contents, selectedPath) ? selectedPath : null;
+
+  const applyEdit = (op: FlexEditOp) => {
+    setEditError(null);
+    const typing = op.type === 'text' || op.type === 'buttonLabel' || op.type === 'buttonUrl' || op.type === 'patch' || op.type === 'image';
+
+    // 1) テンプレートの入力項目に書き戻せる操作は、入力項目を書き換える（左の欄にも反映される）
+    if (fieldMap && contents && op.type !== 'patch' && op.type !== 'add' && op.type !== 'addBubble') {
+      const r = applyTemplateOp(data, fieldMap, contents, op as TemplateOp);
+      if (r) {
+        pushHistory(!typing);
+        setData(r.data);
+        setDirty(true);
+        if (op.type === 'remove') setSelectedPath(null);
+        else if (r.selectItem) setSelectedPath(findItemRootPath(buildTemplateFieldMap(template, r.data), r.selectItem) ?? null);
+        return;
+      }
+      // 一覧の 1 件（メニューのカードなど）を端より先へ動かそうとした → 何もしない（自由編集にはしない）
+      if ((op.type === 'move' || op.type === 'moveTo') && fieldMap.itemRoots[op.path]) return;
+    }
+
+    // 2) それ以外は Flex そのものを書き換える（自由編集）
+    const usable = contents && !contentsError ? contents : null;
+    let next: FlexContainer | null = null;
+    let nextSelected: string | null | undefined;
+    if (!usable) {
+      // まだ何も無い（自由入力で空）ときは、追加でカードを 1 枚作るところから
+      if (op.type !== 'add' && op.type !== 'addBubble') return;
+      const fresh = newFlexPart('bubble') as FlexContainer;
+      const r = op.type === 'add' ? addPart(fresh, null, op.node) : { root: fresh, path: '' };
+      next = r?.root ?? null;
+      nextSelected = r?.path;
+    } else {
+      const node = 'path' in op ? getAt(usable, op.path) : undefined;
+      const action = node && typeof node.action === 'object' && node.action ? (node.action as Record<string, unknown>) : {};
+      switch (op.type) {
+        case 'text':
+          // 文字を空にした = そのパーツを消す（LINE は空の文字を受け付けない）
+          if (op.text.trim() === '') {
+            next = removeNode(usable, op.path);
+            nextSelected = null;
+          } else next = patchNode(usable, op.path, { text: op.text });
+          break;
+        case 'image':
+          next = patchNode(usable, op.path, { url: op.url });
+          break;
+        case 'buttonLabel':
+          next = patchNode(usable, op.path, { action: { ...action, type: action.type ?? 'uri', label: op.label } });
+          break;
+        case 'buttonUrl':
+          next = patchNode(usable, op.path, { action: { ...action, type: 'uri', uri: op.url } });
+          break;
+        case 'patch':
+          // カルーセルのカードは全部同じ大きさにする（LINE の仕様）
+          if (node?.type === 'bubble' && 'size' in op.patch && usable.type === 'carousel') {
+            let r: FlexContainer = usable;
+            walkFlex(usable, (n, p) => {
+              if (n.type === 'bubble') r = patchNode(r, p, { size: op.patch.size });
+            });
+            next = r;
+          } else next = patchNode(usable, op.path, op.patch);
+          break;
+        case 'move': {
+          const r = moveNode(usable, op.path, op.dir);
+          next = r?.root ?? null;
+          nextSelected = r?.path;
+          break;
+        }
+        case 'moveTo': {
+          const r = moveNodeTo(usable, op.path, op.index);
+          next = r?.root ?? null;
+          nextSelected = r?.path;
+          break;
+        }
+        case 'duplicate': {
+          const r = duplicateNode(usable, op.path);
+          if (!r) setEditError('これ以上は増やせません（カードは 12 枚まで）');
+          next = r?.root ?? null;
+          nextSelected = r?.path;
+          break;
+        }
+        case 'remove':
+          next = removeNode(usable, op.path);
+          if (!next) setEditError('このパーツは削除できません（カードには最低 1 つの中身が必要です）');
+          nextSelected = null;
+          break;
+        case 'add': {
+          const r = addPart(usable, selected, op.node);
+          next = r?.root ?? null;
+          nextSelected = r?.path;
+          break;
+        }
+        default: {
+          const r = addBubble(usable, selected);
+          if (!r) setEditError('カードは 12 枚までです');
+          next = r?.root ?? null;
+          nextSelected = r?.path;
+        }
+      }
+    }
+    if (!next || next === usable) return;
+    const err = validateFlexContents(next);
+    if (err) {
+      setEditError(err);
+      return;
+    }
+    pushHistory(!typing);
+    if (!flexOverride && template !== 'custom') {
+      toast({ title: '自由編集に切り替えました', description: '左の入力項目とは連動しなくなります。「テンプレートに戻す」か「元に戻す」で戻せます。' });
+    }
+    setFlexOverride(next);
+    setJsonText(JSON.stringify(next, null, 2));
+    setJsonError(null);
+    setDirty(true);
+    if (nextSelected !== undefined) setSelectedPath(nextSelected);
+  };
+  // 画像のアップロード完了時など、あとから呼ばれる場面でも最新の状態に対して操作する
+  const applyEditRef = useRef(applyEdit);
+  useEffect(() => {
+    applyEditRef.current = applyEdit;
+  });
+
+  const previewEdit: FlexPreviewEdit = {
+    selected,
+    onSelect: setSelectedPath,
+    onTextCommit: (path, text) => applyEdit({ type: 'text', path, text }),
+    onMoveTo: (path, index) => applyEdit({ type: 'moveTo', path, index }),
+    onAction: (action, path) => {
+      if (action === 'prev') applyEdit({ type: 'move', path, dir: -1 });
+      else if (action === 'next') applyEdit({ type: 'move', path, dir: 1 });
+      else applyEdit({ type: action, path });
+    },
   };
 
   const uploadImage = async (slot: string, file: File, current: string | undefined, apply: (url: string) => void) => {
@@ -873,7 +1089,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
       <DialogContent className="max-w-[calc(100%-1rem)] sm:max-w-6xl max-h-[92dvh] overflow-hidden flex flex-col p-0">
         <DialogHeader className="px-5 pt-5 pb-3 border-b">
           <DialogTitle>{initial ? 'LINE メッセージを編集' : 'LINE メッセージを作成'}</DialogTitle>
-          <DialogDescription>テンプレートに項目を入れるだけで、公式 LINE に送れる Flex Message ができます。右側で見た目を確認できます。</DialogDescription>
+          <DialogDescription>テンプレートに項目を入れるだけで、公式 LINE に送れる Flex Message ができます。右側のプレビューは、文字や画像をクリックして直接編集することもできます。</DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
@@ -902,9 +1118,12 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
               <section className="space-y-2 rounded-lg border p-3">
                 <h4 className="text-sm font-medium">内容</h4>
                 {flexOverride && template !== 'custom' && (
-                  <p className="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                    JSON を直接編集中のため、上の項目を変えても反映されません。「テンプレートに戻す」で項目入力に戻せます。
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                    <span className="min-w-0 flex-1">
+                      自由編集中（プレビューでの見た目の変更・パーツの追加、または JSON の直接編集）のため、下の項目を変えても反映されません。「テンプレートに戻す」で項目入力に戻せます（自由編集の内容は消えます）。
+                    </span>
+                    <Button type="button" size="sm" variant="outline" className="h-6 bg-white text-[11px]" onClick={resetToTemplate}>テンプレートに戻す</Button>
+                  </div>
                 )}
                 {renderTemplateFields()}
               </section>
@@ -987,10 +1206,25 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
             </div>
 
             {/* 右: プレビュー */}
-            <div className="lg:sticky lg:top-0 self-start space-y-3">
-              <h4 className="text-sm font-medium">プレビュー</h4>
-              <FlexPreview contents={contentsError ? null : contents} altText={altText} messages={previewMessages.length > 0 ? previewMessages : undefined} />
+            <div className="lg:sticky lg:top-0 self-start space-y-3 lg:max-h-[calc(92dvh-11rem)] lg:overflow-y-auto">
+              <h4 className="text-sm font-medium">プレビュー <span className="text-[11px] font-normal text-muted-foreground">クリックして直接編集できます</span></h4>
+              <FlexPreview contents={contentsError ? null : contents} altText={altText} messages={previewMessages.length > 0 ? previewMessages : undefined} edit={contents && !contentsError ? previewEdit : undefined} />
               {contentsError && contents && <p className="text-xs text-destructive">{contentsError}</p>}
+              <FlexPartInspector
+                contents={contentsError ? null : contents}
+                selected={selected}
+                onSelect={setSelectedPath}
+                onOp={(op) => applyEditRef.current(op)}
+                templateLinked={!!fieldMap}
+                formUrls={forms.filter((f) => f.liffUrl).map((f) => ({ name: f.name, url: f.liffUrl }))}
+                uploading={uploading}
+                onUpload={(slot, file, apply) => uploadImage(slot, file, undefined, apply)}
+                canUndo={history.past.length > 0}
+                canRedo={history.future.length > 0}
+                onUndo={undo}
+                onRedo={redo}
+                error={editError}
+              />
             </div>
           </div>
         </div>
