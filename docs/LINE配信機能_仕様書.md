@@ -198,7 +198,7 @@ interface BroadcastAudience {
 
 ### 7-2. 自動配信
 
-- Edge Function `run-broadcast-automations`（pg_cron **毎日 10:00 JST** = `0 1 * * *` UTC）。店舗ごとに ON のルールを読み、対象者を評価 → `broadcast_automation_sends`（ルール × 顧客 × **marker** の送信記録）に同じ marker が無い人だけ送る。marker はきっかけの中身を表す文字列（`dormant:{最終来店日}` = 来店して再び休眠したらまた送る / `birthday:{年}` = 毎年 1 回 / `first_visit` / `visits:{回数}` / `tag:{タグ}`。`evaluateAutomationTrigger`）。送信は 1 回配信と同じ `broadcast_recipients` を使う（`broadcasts` に `automation_id` を持つ行を日ごとに 1 件作る = 履歴にも並ぶ）
+- ~~Edge Function `run-broadcast-automations`~~ → 実装では Next.js の API `POST /api/cron/broadcast-automations`（pg_cron 毎時 2 分。§13「実装時に決めたこと（PR 3）」）。店舗ごとに ON のルールを読み、対象者を評価 → `broadcast_automation_sends`（ルール × 顧客 × **marker** の送信記録）に同じ marker が無い人だけ送る。marker はきっかけの中身を表す文字列（`dormant:{最終来店日}` = 来店して再び休眠したらまた送る / `birthday:{年}` = 毎年 1 回 / `first_visit` / `visits:{回数}` / `tag:{タグ}`。`evaluateAutomationTrigger`）。送信は 1 回配信と同じ `broadcast_recipients` を使う（`broadcasts` に `automation_id` を持つ行を日ごとに 1 件作る = 履歴にも並ぶ）
 - フォローメッセージ・リマインダーとは独立（重なりは店舗の運用で避ける。「初回来店のお礼」テンプレートにはフォローメッセージ ON の店舗向けの注意書き）
 
 ### 7-3. 配信停止（Webhook）
@@ -341,6 +341,15 @@ customers に追加: line_opt_out_at TIMESTAMPTZ NULL
 - テスト送信は配信の通数（今月の配信）には数えない（LINE の無料通数は 1 通使う）
 - 設定の変更画面（月間上限・キーワード）は PR 3。それまでは既定値（上限なし /「配信停止」「配信再開」）
 
+**実装時に決めたこと（PR 3）**
+- **自動配信の判定は Edge Function ではなく Next.js の API**（`POST /api/cron/broadcast-automations`）で行う。配信先の判定ロジック（TypeScript）をそのまま使い、Deno 側に同じロジックを二重に持たないため。pg_cron が毎時 2 分に呼び、認証は `Authorization: Bearer <service_role>`（Vercel の `SUPABASE_SERVICE_ROLE_KEY` と一致するときだけ実行）。送信は既存の `send-broadcasts`
+- **staging は Vercel のログイン保護で cron から呼べない**ため、cron は本番だけに登録する。staging（と本番の手動確認）は「今日の判定を今すぐ実行」ボタン（`POST /api/stores/{storeId}/broadcast-automations/run`。実行時刻を待たないだけで、1 日 1 回・二重送信防止は同じ）
+- **1 日 1 回の確保を先に行う**（`broadcast_automations.last_run_date` を条件付き UPDATE）。確保したあとで失敗しても、その日はもう実行しない（二重送信を避ける方を優先）。配信は 下書きで作成 → 宛先 → 送信記録 → 予約済み の順に作る
+- **月間上限を超える自動配信は送らない**（超過時の設定が「確認して送れる」でも、確認する人がいないため）。配信一覧に「見送り」として理由を残し、送信記録は残さないので、上限に余裕ができた日に送られる
+- **送信用メッセージは実行のたびに作る**（保存済み LINE メッセージの最新の内容で送る。計測リンクはその日の配信 ID）
+- 自動配信が作った配信は、配信一覧に「【自動】ルール名」+「自動配信」バッジで並び、今月の配信通数に数える
+- 設定の配信停止 / 再開キーワードは、予約確認・キャンセルなどシステムの言葉、LINE メッセージの自動応答キーワードと同じものにはできない
+
 **未決**: なし（実装中に出てきたものはここに追記する）
 
 ---
@@ -353,4 +362,4 @@ customers に追加: line_opt_out_at TIMESTAMPTZ NULL
 | --- | --- | --- |
 | 1（実装済み） | 型 `src/types/broadcast.ts`、純粋ロジック（`broadcast-audience` / `broadcast-items` / `broadcast-quota` / `broadcast-automation`）+ Vitest、マイグレーション（§8 のテーブル・列・RLS）、`broadcast-repository`（local JSON = `data/broadcast_data.json` / Supabase）。画面・API・送信はまだ無い | マイグレーション 1 本（`20261113000000_add_broadcasts.sql`） |
 | 2（実装済み） | 1 回配信: API（一覧 / 作成 / 見積り / 対象者 / 予約 / 取消 / テスト / 複製 / 宛先 / スタンプ）、「配信」タブ（一覧・作成ダイアログ・プレビュー・スタンプ素材）、計測リンク `/go/b/`、配信停止 Webhook + 顧客詳細の切替。共通スタンプ 10 種の画像は未投入（画像ができたら `broadcast_stickers` に登録。手順は `docs/LINE配信機能_リリース手順.md`） | Edge Function `send-broadcasts` 新規 + cron 登録（5 分おき） |
-| 3 | 自動配信: ルール API・UI（5 テンプレート）、設定タブ（上限 / 超過時 / キーワード / 実行時刻 / LINE quota 表示）、使い方ガイド、CLAUDE.md | Edge Function `run-broadcast-automations` 新規 + cron 登録（毎時 0 分） |
+| 3（実装済み） | 自動配信: ルール API・UI（5 テンプレート）、「今日の判定を今すぐ実行」、設定（上限 / 超過時 / キーワード / 実行時刻 / LINE の今月の通数）、使い方ガイド、CLAUDE.md | マイグレーション・Edge Function の追加なし。cron `run_broadcast_automations`（毎時 2 分）が Next.js の API `POST /api/cron/broadcast-automations` を呼ぶ（本番のみ登録） |

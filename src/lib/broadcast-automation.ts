@@ -14,8 +14,8 @@
  * 「到達してから AUTOMATION_WINDOW_DAYS 日以内」の人だけを対象にする（cron が数日止まっても拾える幅）。
  * タグは付いた日が分からないため、ON にした時点でタグが付いている人にも送る。
  */
-import type { AudienceCustomer, AutomationTrigger } from '@/types/broadcast';
-import { daysBetween, jstDateOf, toJstDate } from '@/lib/broadcast-audience';
+import type { AudienceCustomer, AutomationTrigger, BroadcastAudience, CustomerFacts } from '@/types/broadcast';
+import { daysBetween, jstDateOf, matchAudience, toJstDate } from '@/lib/broadcast-audience';
 
 export const AUTOMATION_WINDOW_DAYS = 14;
 
@@ -136,4 +136,49 @@ export function describeAutomationTrigger(t: AutomationTrigger): string {
     default:
       return '';
   }
+}
+
+// ---------------------------------------------------------------------------
+// 今日送る相手の抽出
+// ---------------------------------------------------------------------------
+
+export interface AutomationTarget {
+  customer: AudienceCustomer;
+  marker: string;
+}
+
+/**
+ * ルールに該当し、いま送ってよい顧客を選ぶ。
+ * きっかけに該当（marker あり）→ 追加の絞り込み（audience）に合う → LINE 連携済み・配信停止でない・ブロックしていない
+ * → 同じ marker を送っていない・再送間隔を過ぎている。同じ LINE ユーザーは 1 人にまとめる
+ */
+export function pickAutomationTargets(input: {
+  trigger: AutomationTrigger;
+  audience: BroadcastAudience;
+  resend_after_days: number | null;
+  customers: AudienceCustomer[];
+  facts: Map<string, CustomerFacts>;
+  /** このルールの送信記録（顧客ごと） */
+  sends: Array<{ customer_id: string; marker: string; sent_at: string }>;
+  now: Date;
+}): AutomationTarget[] {
+  const byCustomer = new Map<string, Array<{ marker: string; sent_at: string }>>();
+  for (const s of input.sends) {
+    const list = byCustomer.get(s.customer_id) ?? [];
+    list.push({ marker: s.marker, sent_at: s.sent_at });
+    byCustomer.set(s.customer_id, list);
+  }
+  const out: AutomationTarget[] = [];
+  const seen = new Set<string>();
+  for (const c of input.customers) {
+    if (!c.line_user_id || c.line_opt_out_at || c.line_friend_flag === false) continue;
+    const marker = evaluateAutomationTrigger(input.trigger, c, input.now);
+    if (!marker) continue;
+    if (!matchAudience(c, input.facts.get(c.id), input.audience, input.now)) continue;
+    if (!isAutomationSendAllowed(marker, byCustomer.get(c.id) ?? [], input.resend_after_days, input.now)) continue;
+    if (seen.has(c.line_user_id)) continue;
+    seen.add(c.line_user_id);
+    out.push({ customer: c, marker });
+  }
+  return out;
 }

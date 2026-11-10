@@ -125,6 +125,7 @@ export function normalizeAutomationRow(row: Record<string, unknown>): BroadcastA
     payloads: payloadList(row.payloads),
     has_personalization: row.has_personalization === true,
     resend_after_days: normalizeResendAfterDays(row.resend_after_days),
+    last_run_date: typeof row.last_run_date === 'string' && row.last_run_date ? row.last_run_date.slice(0, 10) : null,
     created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
     updated_at: typeof row.updated_at === 'string' ? row.updated_at : new Date().toISOString(),
   };
@@ -551,4 +552,80 @@ export async function clearBroadcastRecipients(broadcastId: string): Promise<voi
   }
   const { error } = await client().from('broadcast_recipients').delete().eq('broadcast_id', broadcastId);
   if (error) throw new Error(`宛先の削除に失敗しました: ${error.message}`);
+}
+
+// ---------------------------------------------------------------------------
+// 自動配信の実行（cron から）
+// ---------------------------------------------------------------------------
+
+/** 全店舗の ON の自動配信ルール */
+export async function listEnabledAutomationsAllStores(): Promise<BroadcastAutomation[]> {
+  if (isLocal()) return readLocal().automations.filter((a) => a.enabled);
+  const rows = await fetchAllRows<Record<string, unknown>>((from, to) => client().from('broadcast_automations').select('*').eq('enabled', true).order('id').range(from, to));
+  return rows.map(normalizeAutomationRow);
+}
+
+/**
+ * 今日（JST）の実行を確保する。まだ今日実行していなければ last_run_date を今日にして true。
+ * 同時に 2 つ動いても片方だけが true になる（条件付き UPDATE）
+ */
+export async function claimAutomationRun(id: string, today: string): Promise<boolean> {
+  if (isLocal()) {
+    const data = readLocal();
+    const a = data.automations.find((x) => x.id === id);
+    if (!a || (a.last_run_date && a.last_run_date >= today)) return false;
+    a.last_run_date = today;
+    writeLocal(data);
+    return true;
+  }
+  const { data, error } = await client().from('broadcast_automations').update({ last_run_date: today }).eq('id', id).or(`last_run_date.is.null,last_run_date.lt.${today}`).select('id');
+  if (error) throw new Error(`自動配信の実行確保に失敗しました: ${error.message}`);
+  return Array.isArray(data) && data.length > 0;
+}
+
+export interface AutomationSend {
+  customer_id: string;
+  marker: string;
+  sent_at: string;
+}
+
+export async function listAutomationSends(automationId: string): Promise<AutomationSend[]> {
+  if (isLocal()) return readLocal().automation_sends.filter((s) => s.automation_id === automationId).map((s) => ({ customer_id: s.customer_id, marker: s.marker, sent_at: s.sent_at }));
+  return fetchAllRows<AutomationSend>((from, to) => client().from('broadcast_automation_sends').select('customer_id,marker,sent_at').eq('automation_id', automationId).order('customer_id').order('marker').range(from, to));
+}
+
+/** 送信記録を追加（同じ ルール × 顧客 × marker は無視） */
+export async function insertAutomationSends(automationId: string, rows: Array<{ customer_id: string; marker: string }>, now: Date = new Date()): Promise<void> {
+  if (rows.length === 0) return;
+  const sentAt = now.toISOString();
+  if (isLocal()) {
+    const data = readLocal();
+    for (const r of rows) {
+      if (data.automation_sends.some((s) => s.automation_id === automationId && s.customer_id === r.customer_id && s.marker === r.marker)) continue;
+      data.automation_sends.push({ automation_id: automationId, customer_id: r.customer_id, marker: r.marker, sent_at: sentAt });
+    }
+    writeLocal(data);
+    return;
+  }
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500).map((r) => ({ automation_id: automationId, customer_id: r.customer_id, marker: r.marker, sent_at: sentAt }));
+    const { error } = await client().from('broadcast_automation_sends').upsert(chunk, { onConflict: 'automation_id,customer_id,marker', ignoreDuplicates: true });
+    if (error) throw new Error(`自動配信の送信記録に失敗しました: ${error.message}`);
+  }
+}
+
+/** ルールごとの直近 30 日の送信数（一覧に出す） */
+export async function countRecentAutomationSends(automationIds: string[], now: Date = new Date()): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  if (automationIds.length === 0) return out;
+  const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  if (isLocal()) {
+    for (const s of readLocal().automation_sends) if (automationIds.includes(s.automation_id) && s.sent_at >= since) out[s.automation_id] = (out[s.automation_id] ?? 0) + 1;
+    return out;
+  }
+  for (const id of automationIds) {
+    const { count } = await client().from('broadcast_automation_sends').select('customer_id', { count: 'exact', head: true }).eq('automation_id', id).gte('sent_at', since);
+    out[id] = count ?? 0;
+  }
+  return out;
 }

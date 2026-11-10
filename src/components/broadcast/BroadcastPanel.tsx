@@ -13,6 +13,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/components/ui/use-toast';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import BroadcastEditorDialog from './BroadcastEditorDialog';
+import BroadcastAutomationPanel from './BroadcastAutomationPanel';
+import BroadcastSettingsCard from './BroadcastSettingsCard';
 import type { AudienceOptions } from './AudienceEditor';
 import { describeAudience } from '@/lib/broadcast-audience';
 import { describeBroadcastItems } from '@/lib/broadcast-items';
@@ -40,7 +42,7 @@ const STATUS_LABEL: Record<BroadcastStatus, { label: string; className: string }
   scheduled: { label: '予約済み', className: 'border-blue-300 bg-blue-50 text-blue-700' },
   sending: { label: '送信中', className: 'border-amber-300 bg-amber-50 text-amber-700' },
   sent: { label: '送信済み', className: 'border-green-300 bg-green-50 text-green-700' },
-  cancelled: { label: '取り消し', className: 'text-muted-foreground' },
+  cancelled: { label: '見送り', className: 'text-muted-foreground' },
   failed: { label: '失敗', className: 'border-red-300 bg-red-50 text-red-700' },
 };
 
@@ -49,7 +51,7 @@ const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('ja-JP',
 export default function BroadcastPanel({ storeId, showGuide = true }: { storeId: string; showGuide?: boolean }) {
   const { toast } = useToast();
   const base = `/api/stores/${encodeURIComponent(storeId)}`;
-  const [view, setView] = useState<'list' | 'stickers'>('list');
+  const [view, setView] = useState<'list' | 'automations' | 'stickers' | 'settings'>('list');
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -252,8 +254,10 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
           {overview && overview.opt_out_count > 0 && <span className="ml-3 text-muted-foreground">配信停止 {overview.opt_out_count} 人</span>}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" variant={view === 'list' ? 'default' : 'outline'} onClick={() => setView('list')}>配信一覧</Button>
+          <Button size="sm" variant={view === 'list' ? 'default' : 'outline'} onClick={() => { setView('list'); load(); }}>配信一覧</Button>
+          <Button size="sm" variant={view === 'automations' ? 'default' : 'outline'} onClick={() => setView('automations')}>自動配信</Button>
           <Button size="sm" variant={view === 'stickers' ? 'default' : 'outline'} onClick={() => setView('stickers')}>スタンプ・素材</Button>
+          <Button size="sm" variant={view === 'settings' ? 'default' : 'outline'} onClick={() => setView('settings')}>設定</Button>
           <Button onClick={() => { setEditing(null); setEditorOpen(true); }}>＋ 新しい配信</Button>
         </div>
       </div>
@@ -275,7 +279,9 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="truncate font-medium">{b.name}</span>
                           <Badge variant="outline" className={st.className} data-slot="status-chip">{st.label}</Badge>
+                          {b.automation_id && <Badge variant="outline" className="text-[10px]">自動配信</Badge>}
                           {b.status === 'scheduled' && <span className="text-xs text-muted-foreground">{fmt(b.scheduled_at)} に送信</span>}
+                          {b.status === 'cancelled' && <span className="text-xs text-muted-foreground">{fmt(b.created_at)} 見送り</span>}
                           {(b.status === 'sent' || b.status === 'failed') && <span className="text-xs text-muted-foreground">{fmt(b.finished_at ?? b.started_at)}</span>}
                         </div>
                         <p className="text-xs text-muted-foreground">配信先: {describeAudience(b.audience, { formName })}</p>
@@ -292,7 +298,7 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
                       <div className="flex shrink-0 flex-wrap items-center gap-1">
                         {b.status === 'draft' && <Button size="sm" onClick={() => { setEditing(b); setEditorOpen(true); }}>編集</Button>}
                         {b.status === 'scheduled' && <Button size="sm" variant="outline" onClick={() => setCancelling(b)}>予約を取り消す</Button>}
-                        {b.status !== 'draft' && <Button size="sm" variant="outline" onClick={() => toggleDetail(b)}>{detailId === b.id ? '閉じる' : '宛先と結果'}</Button>}
+                        {b.status !== 'draft' && b.status !== 'cancelled' && <Button size="sm" variant="outline" onClick={() => toggleDetail(b)}>{detailId === b.id ? '閉じる' : '宛先と結果'}</Button>}
                         <Button size="sm" variant="outline" onClick={() => post(`${base}/broadcasts/${b.id}/duplicate`, '複製しました（下書き）', '複製に失敗しました')}>複製</Button>
                         {b.status !== 'scheduled' && b.status !== 'sending' && <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setDeleting(b)}>削除</Button>}
                       </div>
@@ -340,6 +346,14 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
             })}
           </div>
         ))}
+
+      {view === 'automations' && (
+        <BroadcastAutomationPanel storeId={storeId} options={options} messages={messages} stickers={stickers} automationTime={overview?.settings.automation_time ?? '10:00'} />
+      )}
+
+      {view === 'settings' && (
+        <BroadcastSettingsCard storeId={storeId} used={overview?.used ?? 0} onSaved={(settings) => setOverview((o) => (o ? { ...o, settings } : o))} />
+      )}
 
       {view === 'stickers' && (
         <Card>

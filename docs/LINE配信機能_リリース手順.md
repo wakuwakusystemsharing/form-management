@@ -11,6 +11,7 @@
 | 2 | Edge Function `send-broadcasts` をデプロイ | PR 2 で追加（新規） |
 | 3 | pg_cron ジョブ `send_broadcasts`（5 分おき）を登録 | **Dashboard から手動**（マイグレーションには含めない） |
 | 4 | PR をマージ → 管理画面で動作確認 | |
+| 5 | （PR 3）自動配信の cron `run_broadcast_automations` を登録 | **本番のみ**。下の「自動配信の cron 登録」 |
 
 マイグレーションより先にコードをマージしても、配信タブを開いたときにエラーが出るだけで他の機能には影響しません。
 ただし LINE Webhook が「配信停止」の判定で `stores.broadcast_*` を読むため（失敗時は素通しする作りです）、**マイグレーションを先に**適用してください。
@@ -104,6 +105,72 @@ select id, name, status, recipient_count, sent_count, failed_count, error, sched
 select status, count(*) from broadcast_recipients
  where broadcast_id = '<配信 ID>' group by 1;
 ```
+
+## 自動配信（ステップ配信）の cron 登録（PR 3）
+
+自動配信は、毎時 1 回「実行時刻を過ぎた店舗の ON のルール」を判定して配信を作ります。判定は Next.js の API
+（`POST /api/cron/broadcast-automations`）で行い、送信は既存の `send-broadcasts` が行います。
+マイグレーションと Edge Function の追加はありません（PR 1 のテーブルをそのまま使います）。
+
+### 本番（production）
+
+PR 3 を main にマージしたあと、**本番の** Supabase Dashboard → SQL Editor で登録します。
+`<SERVICE_ROLE_KEY>` は本番の service_role キー（`eyJ` で始まる。`send_broadcasts` の登録で使ったものと同じ）です。
+API 側は、このキーが Vercel の環境変数 `SUPABASE_SERVICE_ROLE_KEY` と一致するときだけ実行します。
+
+```sql
+select cron.unschedule('run_broadcast_automations');  -- 既に登録済みなら削除（無ければエラーになるが無視してよい）
+
+select cron.schedule(
+  'run_broadcast_automations',
+  '2 * * * *',
+  $$
+    select net.http_post(
+      url := 'https://nas-rsv.com/api/cron/broadcast-automations',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer <SERVICE_ROLE_KEY>'
+      ),
+      timeout_milliseconds := 30000
+    );
+  $$
+);
+```
+
+**確認:**
+```sql
+select jobname, schedule, active,
+       substring(command from 'https://[^/ ]+') as target_origin,
+       position('<SERVICE_ROLE_KEY>' in command) > 0 as placeholder_key
+  from cron.job where jobname = 'run_broadcast_automations';
+-- schedule = 2 * * * *  target_origin = https://nas-rsv.com  placeholder_key = false
+
+-- 1 時間ほど待ってから、呼び出しが成功しているか（status_code = 200）
+select id, status_code, left(content, 200) as content, created
+  from net._http_response order by created desc limit 5;
+```
+
+`status_code` が 401 のときはキーが違います（本番の service_role を使っているか確認）。404 のときは PR 3 がまだ本番に反映されていません。
+
+### staging
+
+staging の Vercel（`form-management-staging.vercel.app`）は Vercel のログイン保護（Deployment Protection）がかかっていて、
+Supabase の cron から API を呼べません（ログイン画面に転送されます）。そのため **staging では cron を登録しません**。
+動作確認は、配信タブ → 「自動配信」→ **「今日の判定を今すぐ実行」** ボタンで行います（実行時刻を待たずに同じ処理を動かします）。
+
+### 動作確認（staging / 本番共通）
+
+1. 配信タブ → 「自動配信」→ テンプレート「タグが付いたとき」を選ぶ
+2. テスト用のタグ（自分だけに付けたもの）を選ぶ → 「いま ON にすると、次の判定で 1 人に送られます」と出ることを確認
+3. メッセージを追加 → 「このルールを ON にする」にチェック → 保存
+4. 「今日の判定を今すぐ実行」→ 数十秒〜数分で届く。配信一覧に「【自動】…」「自動配信」のバッジで並ぶ
+5. もう一度「今日の判定を今すぐ実行」を押しても、同じ人には送られない（「今日の判定はすでに済んでいます」）
+6. 確認が終わったらルールを OFF にするか削除する
+
+## 配信の設定（PR 3）
+
+配信タブ → 「設定」で、公式 LINE の今月の通数（LINE の API から取得）、月間上限、配信停止 / 再開のキーワード、自動配信を判定する時刻を変更できます。
+既定値は 上限なし /「配信停止」「配信再開」/ 10:00 です。
 
 ## 店舗管理者ページのタブについて
 

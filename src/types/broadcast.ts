@@ -124,6 +124,8 @@ export interface BroadcastAutomation {
   has_personalization: boolean;
   /** 同じ人に次に送るまでの最短日数（null = 同じきっかけでは 1 回だけ） */
   resend_after_days: number | null;
+  /** 最後に判定した日（JST の YYYY-MM-DD。1 日 1 回の実行管理） */
+  last_run_date?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -148,6 +150,25 @@ export interface BroadcastSettings {
   opt_in_keyword: string;
   /** 自動配信の実行時刻（HH:00。JST） */
   automation_time: string;
+}
+
+export interface BroadcastAutomationInput {
+  name: string;
+  enabled?: boolean;
+  trigger: AutomationTrigger;
+  audience?: BroadcastAudience;
+  items?: BroadcastItem[];
+  resend_after_days?: number | null;
+}
+
+/** LINE 公式アカウントの今月の通数（Messaging API の quota / consumption） */
+export interface LineQuotaInfo {
+  /** limited = 上限あり / none = 上限なし */
+  type: 'limited' | 'none';
+  /** 月の上限（type = limited のとき） */
+  limit: number | null;
+  /** 今月すでに送った通数（配信・リマインダー・フォローなどすべて） */
+  usage: number;
 }
 
 export interface BroadcastInput {
