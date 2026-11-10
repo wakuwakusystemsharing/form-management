@@ -88,7 +88,7 @@ describe('prepareLineFlexMessage（追加のメッセージ = items → payloads
     id: 'otherotherot', store_id: 'st0001', name: '他', template: 'custom' as const, data: {}, flex_override: null, alt_text: 'o', keywords: [],
     attach_confirm: false, attach_reminder: false, attach_follow: false, enabled: true, track_taps: true, items: [{ key: 'main', type: 'main' as const }],
     payload: { type: 'flex', altText: 'o', contents: { type: 'bubble', body: { type: 'box', layout: 'vertical', contents: [{ type: 'text', text: 'o' }] } } },
-    payloads: null, links: {}, reply_count: 0, tap_counts: {}, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
+    payloads: null, links: {}, reply_count: 0, tap_counts: {}, branches: {}, branch_payloads: {}, show_choice_text: true, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
   };
 
   it('items が無ければ main だけ。payloads は payload 1 通', () => {

@@ -15,9 +15,9 @@ import {
 const asObj = (v: unknown) => v as Record<string, any>;
 
 describe('テンプレート一覧', () => {
-  it('JSON から作成が一番上。全 9 種が既定値から生成でき、検証を通る', () => {
+  it('JSON から作成が一番上。全 10 種が既定値から生成でき、検証を通る', () => {
     expect(LINE_FLEX_TEMPLATES[0].id).toBe('custom');
-    expect(LINE_FLEX_TEMPLATES).toHaveLength(9);
+    expect(LINE_FLEX_TEMPLATES).toHaveLength(10);
     for (const t of LINE_FLEX_TEMPLATES) {
       if (t.id === 'custom') continue;
       const data = defaultTemplateData(t.id, '#ff6600');

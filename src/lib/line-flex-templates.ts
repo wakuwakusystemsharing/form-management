@@ -25,6 +25,10 @@ import type {
   StoreCardData,
 } from '@/types/line-flex';
 
+import { isBranchLink } from '@/lib/line-flex-branch';
+import { buildScenarioFlex, defaultScenarioData } from '@/lib/line-flex-scenario';
+import type { ScenarioData } from '@/types/line-flex';
+
 export const LINE_FLEX_TEMPLATES: Array<{ id: LineFlexTemplate; label: string; description: string }> = [
   { id: 'custom', label: 'JSON から作成（上級者向け）', description: 'LINE の Flex Message Simulator などで作った JSON を貼り付ける' },
   { id: 'booking_card', label: '予約導線カード', description: '画像 + 見出し + 説明 + ボタン（予約フォーム / 電話 / 地図など最大 3 つ）。いちばん使われる形' },
@@ -35,6 +39,7 @@ export const LINE_FLEX_TEMPLATES: Array<{ id: LineFlexTemplate; label: string; d
   { id: 'notice_card', label: 'お知らせ・営業案内', description: '色付きの見出し帯 + 日付 + 本文（臨時休業・新メニュー・イベント告知など）' },
   { id: 'staff_carousel', label: 'スタッフ紹介カルーセル', description: '写真・名前・得意分野・ひとことを横に並べる。指名予約のボタン付き' },
   { id: 'steps_card', label: 'ご利用の流れ', description: '番号付きのステップで予約〜来店までの流れを案内。初めてのお客様向け' },
+  { id: 'scenario', label: '分岐アンケート（かんたん）', description: '質問 → 選択肢 → 選んだら次の質問や結果を出す。ボタンを押すたびに次のカードが届く（タグ付け・集計つき）' },
 ];
 export const LINE_FLEX_MENU_LIST_MAX = 15;
 export const LINE_FLEX_STEPS_MAX = 8;
@@ -58,8 +63,9 @@ function isHex(v: unknown): v is string {
 function color(v: unknown): string {
   return isHex(v) ? v : LINE_FLEX_DEFAULT_COLOR;
 }
+/** ボタンのリンク先として使える値（https / tel / 分岐 = `next:{メッセージID}`） */
 export function isFlexActionUrl(url: unknown): url is string {
-  return typeof url === 'string' && (/^https:\/\/\S+$/i.test(url.trim()) || /^tel:[0-9+\-()]+$/i.test(url.trim()));
+  return typeof url === 'string' && (/^https:\/\/\S+$/i.test(url.trim()) || /^tel:[0-9+\-()]+$/i.test(url.trim()) || isBranchLink(url.trim()));
 }
 function isHttpsImage(url: unknown): url is string {
   return typeof url === 'string' && /^https:\/\/\S+$/i.test(url.trim());
@@ -401,6 +407,8 @@ export function buildTemplateFlex(template: LineFlexTemplate, data: LineFlexTemp
       return buildStaffCarouselFlex(data as StaffCarouselData);
     case 'steps_card':
       return buildStepsCardFlex(data as StepsCardData);
+    case 'scenario':
+      return buildScenarioFlex(data as ScenarioData);
     default:
       return null;
   }
@@ -527,6 +535,8 @@ export function defaultTemplateData(template: LineFlexTemplate, accent?: string)
         button: { key: 'b1', label: '予約する', url: '' },
         color: c,
       } as StepsCardData;
+    case 'scenario':
+      return defaultScenarioData(c);
     default:
       return {} as Record<string, never>;
   }

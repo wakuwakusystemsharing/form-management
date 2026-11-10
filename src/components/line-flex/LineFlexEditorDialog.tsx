@@ -14,6 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast';
 import FlexPreview, { type FlexPreviewEdit } from './FlexPreview';
 import FlexPartInspector, { type FlexEditOp } from './FlexPartInspector';
+import FlexLinkField, { type FlexLinkTarget } from './FlexLinkField';
+import ScenarioEditor from './ScenarioEditor';
+import { buildScenarioNodeFlex } from '@/lib/line-flex-scenario';
 import { getAt } from '@/lib/flex-tree';
 import { applyFlexEdit, isTemplateLinked } from '@/lib/flex-edit';
 import { describeLineFlexItems, itemsToPreview, LINE_FLEX_ATTACH_MAX, LINE_FLEX_ITEM_LABELS, LINE_FLEX_ITEMS_MAX, LINE_TEXT_MESSAGE_MAX, validateLineFlexItems } from '@/lib/line-flex-items';
@@ -31,6 +34,7 @@ import type {
   MenuCarouselItem,
   MenuListData,
   NoticeCardData,
+  ScenarioData,
   StaffCarouselData,
   StepsCardData,
   StoreCardData,
@@ -163,14 +167,16 @@ function UrlPicker({ forms, onPick }: { forms: FlexFormOption[]; onPick: (url: s
   );
 }
 
-function ButtonsEditor({ buttons, forms, onChange, max }: { buttons: FlexButtonInput[]; forms: FlexFormOption[]; onChange: (b: FlexButtonInput[]) => void; max: number }) {
+function ButtonsEditor({ buttons, forms, targets, storeId, onChange, max }: { buttons: FlexButtonInput[]; forms: FlexFormOption[]; targets: FlexLinkTarget[]; storeId: string; onChange: (b: FlexButtonInput[]) => void; max: number }) {
+  const formUrls = forms.filter((f) => f.liffUrl).map((f) => ({ name: f.name, url: f.liffUrl }));
   return (
     <div className="space-y-2">
       {buttons.map((b, i) => (
-        <div key={b.key} className="flex flex-wrap items-center gap-2 rounded border p-2">
+        <div key={b.key} className="flex flex-wrap items-start gap-2 rounded border p-2">
           <Input value={b.label} maxLength={40} onChange={(e) => onChange(buttons.map((x) => (x.key === b.key ? { ...x, label: e.target.value } : x)))} placeholder="ボタンの文言" className="h-8 w-32 text-xs" />
-          <Input value={b.url} onChange={(e) => onChange(buttons.map((x) => (x.key === b.key ? { ...x, url: e.target.value } : x)))} placeholder="https://… または tel:0312345678" className="h-8 flex-1 min-w-[12rem] text-xs" />
-          <UrlPicker forms={forms} onPick={(url) => onChange(buttons.map((x) => (x.key === b.key ? { ...x, url } : x)))} />
+          <div className="min-w-[14rem] flex-1">
+            <FlexLinkField value={b.url} onChange={(url) => onChange(buttons.map((x) => (x.key === b.key ? { ...x, url } : x)))} formUrls={formUrls} targets={targets} storeId={storeId} />
+          </div>
           <button type="button" className="text-xs text-destructive hover:underline" onClick={() => onChange(buttons.filter((x) => x.key !== b.key))}>削除</button>
           {i === 0 && <span className="text-[10px] text-muted-foreground">1 つ目が強調色</span>}
         </div>
@@ -184,13 +190,15 @@ function ButtonsEditor({ buttons, forms, onChange, max }: { buttons: FlexButtonI
   );
 }
 
-function SingleButtonField({ value, forms, onChange, placeholder = '予約する' }: { value: FlexButtonInput | null | undefined; forms: FlexFormOption[]; onChange: (b: FlexButtonInput | null) => void; placeholder?: string }) {
+function SingleButtonField({ value, forms, targets, storeId, onChange, placeholder = '予約する' }: { value: FlexButtonInput | null | undefined; forms: FlexFormOption[]; targets: FlexLinkTarget[]; storeId: string; onChange: (b: FlexButtonInput | null) => void; placeholder?: string }) {
   const btn = value ?? { key: 'b1', label: '', url: '' };
+  const formUrls = forms.filter((f) => f.liffUrl).map((f) => ({ name: f.name, url: f.liffUrl }));
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-start gap-2">
       <Input value={btn.label} maxLength={40} onChange={(e) => onChange({ ...btn, label: e.target.value })} placeholder={`ボタンの文言（例: ${placeholder}）`} className="h-8 w-40 text-xs" />
-      <Input value={btn.url} onChange={(e) => onChange({ ...btn, url: e.target.value })} placeholder="https://… または tel:0312345678" className="h-8 flex-1 min-w-[12rem] text-xs" />
-      <UrlPicker forms={forms} onPick={(url) => onChange({ ...btn, url })} />
+      <div className="min-w-[14rem] flex-1">
+        <FlexLinkField value={btn.url} onChange={(url) => onChange({ ...btn, url })} formUrls={formUrls} targets={targets} storeId={storeId} />
+      </div>
       {(btn.label || btn.url) && (
         <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => onChange(null)}>ボタンなし</button>
       )}
@@ -390,6 +398,10 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
   const [attachFollow, setAttachFollow] = useState(initial?.attach_follow ?? false);
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
   const [trackTaps, setTrackTaps] = useState(initial?.track_taps ?? true);
+  // 分岐ボタンを押したとき、お客様のトークに選んだ文言を表示するか
+  const [showChoiceText, setShowChoiceText] = useState(initial?.show_choice_text ?? true);
+  // 分岐アンケート: プレビューに出している質問・結果（null = 最初の質問 = Flex 本体）
+  const [scenarioPreviewKey, setScenarioPreviewKey] = useState<string | null>(null);
   const [flexOverride, setFlexOverride] = useState<FlexContainer | null>(initial?.flex_override ?? null);
   const [jsonOpen, setJsonOpen] = useState(initial?.template === 'custom' || !!initial?.flex_override);
   const [jsonText, setJsonText] = useState('');
@@ -428,6 +440,8 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
     setAttachFollow(next?.attach_follow ?? false);
     setEnabled(next?.enabled ?? true);
     setTrackTaps(next?.track_taps ?? true);
+    setShowChoiceText(next?.show_choice_text ?? true);
+    setScenarioPreviewKey(null);
     setFlexOverride(next?.flex_override ?? null);
     setJsonOpen(next?.template === 'custom' || !!next?.flex_override);
     setJsonText(next?.flex_override ? JSON.stringify(next.flex_override, null, 2) : '');
@@ -479,6 +493,13 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
       return { past: [...h.past, snap].slice(-HISTORY_MAX), future: [] };
     });
   };
+  // 「押したら次のメッセージを送る」で選べる保存済みの LINE メッセージ（自分自身は除く）
+  const linkTargets: FlexLinkTarget[] = useMemo(() => others.filter((o) => o.id !== id).map((o) => ({ id: o.id, name: o.name })), [others, id]);
+  // 分岐アンケートで、2 問目以降・結果をプレビューしているときのカード（編集はできない。表示のみ）
+  const scenarioNodeContents = useMemo(
+    () => (template === 'scenario' && scenarioPreviewKey ? buildScenarioNodeFlex(data as ScenarioData, scenarioPreviewKey) : null),
+    [template, data, scenarioPreviewKey]
+  );
   const touch = () => {
     pushHistory(false);
     setDirty(true);
@@ -542,6 +563,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
     }
   };
   const changeTemplate = (next: LineFlexTemplate) => {
+    setScenarioPreviewKey(null);
     setTemplate(next);
     setData(defaultTemplateData(next, store?.theme_color ?? undefined));
     setFlexOverride(null);
@@ -677,6 +699,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
         enabled,
         track_taps: trackTaps,
         items,
+        show_choice_text: showChoiceText,
       };
       const url = savedId ? `/api/stores/${storeId}/line-messages/${savedId}` : `/api/stores/${storeId}/line-messages`;
       const res = await fetch(url, { method: savedId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body) });
@@ -750,6 +773,20 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
 
   const renderTemplateFields = () => {
     switch (template) {
+      case 'scenario':
+        return (
+          <ScenarioEditor
+            storeId={storeId}
+            data={data as ScenarioData}
+            onChange={(next) => { setData(next); touch(); }}
+            formUrls={forms.filter((f) => f.liffUrl).map((f) => ({ name: f.name, url: f.liffUrl }))}
+            targets={linkTargets}
+            uploading={uploading}
+            onUpload={uploadImage}
+            previewKey={scenarioPreviewKey}
+            onPreview={setScenarioPreviewKey}
+          />
+        );
       case 'booking_card':
         return (
           <div className="space-y-3">
@@ -767,7 +804,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
             </div>
             <div className="space-y-1">
               <Label className="text-xs">ボタン（最大 {LINE_FLEX_BUTTONS_MAX} つ）</Label>
-              <ButtonsEditor buttons={bc.buttons ?? []} forms={forms} onChange={(buttons) => setBc({ buttons })} max={LINE_FLEX_BUTTONS_MAX} />
+              <ButtonsEditor buttons={bc.buttons ?? []} forms={forms} targets={linkTargets} storeId={storeId} onChange={(buttons) => setBc({ buttons })} max={LINE_FLEX_BUTTONS_MAX} />
             </div>
             <ColorField value={bc.color} onChange={(v) => setBc({ color: v })} />
           </div>
@@ -866,7 +903,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
               <div className="space-y-1"><Label className="text-xs">利用条件</Label><Input value={cc.conditions ?? ''} maxLength={60} onChange={(e) => setCc({ conditions: e.target.value })} placeholder="例: 他クーポン併用不可" /></div>
               <div className="space-y-1"><Label className="text-xs">提示コード（任意）</Label><Input value={cc.code ?? ''} maxLength={20} onChange={(e) => setCc({ code: e.target.value })} placeholder="例: LINE10" /></div>
             </div>
-            <div className="space-y-1"><Label className="text-xs">ボタン（任意）</Label><SingleButtonField value={cc.button} forms={forms} onChange={(button) => setCc({ button })} /></div>
+            <div className="space-y-1"><Label className="text-xs">ボタン（任意）</Label><SingleButtonField value={cc.button} forms={forms} targets={linkTargets} storeId={storeId} onChange={(button) => setCc({ button })} /></div>
             <ColorField value={cc.color} onChange={(v) => setCc({ color: v })} />
           </div>
         );
@@ -880,7 +917,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
             <div className="space-y-1"><Label className="text-xs">日付（任意）</Label><Input value={nc.date ?? ''} maxLength={40} onChange={(e) => setNc({ date: e.target.value })} placeholder="例: 2026年12月28日" /></div>
             <div className="space-y-1"><Label className="text-xs">本文</Label><Textarea value={nc.body} maxLength={800} rows={4} onChange={(e) => setNc({ body: e.target.value })} placeholder="例: 12月31日〜1月3日は休業いたします。" /></div>
             <div className="space-y-1"><Label className="text-xs">画像（任意）</Label><ImageField slot="hero" value={nc.image_url} uploading={uploading} onUpload={(slot, f, cur) => uploadImage(slot, f, cur, (url) => setNc({ image_url: url }))} onChange={(url) => setNc({ image_url: url })} /></div>
-            <div className="space-y-1"><Label className="text-xs">ボタン（任意）</Label><SingleButtonField value={nc.button} forms={forms} onChange={(button) => setNc({ button })} placeholder="詳しく見る" /></div>
+            <div className="space-y-1"><Label className="text-xs">ボタン（任意）</Label><SingleButtonField value={nc.button} forms={forms} targets={linkTargets} storeId={storeId} onChange={(button) => setNc({ button })} placeholder="詳しく見る" /></div>
             <ColorField value={nc.color} onChange={(v) => setNc({ color: v })} />
           </div>
         );
@@ -915,7 +952,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
               )}
             </div>
             <div className="space-y-1"><Label className="text-xs">注記（任意）</Label><Input value={ml.footnote ?? ''} maxLength={80} onChange={(e) => setMl({ footnote: e.target.value })} placeholder="例: ※ 価格は税込です" /></div>
-            <div className="space-y-1"><Label className="text-xs">ボタン（任意）</Label><SingleButtonField value={ml.button} forms={forms} onChange={(button) => setMl({ button })} /></div>
+            <div className="space-y-1"><Label className="text-xs">ボタン（任意）</Label><SingleButtonField value={ml.button} forms={forms} targets={linkTargets} storeId={storeId} onChange={(button) => setMl({ button })} /></div>
             <ColorField value={ml.color} onChange={(v) => setMl({ color: v })} />
           </div>
         );
@@ -974,7 +1011,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
                 <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSp({ steps: [...(sp.steps ?? []), { key: rowKey(), title: '', text: '' }] })}>＋ ステップを追加</Button>
               )}
             </div>
-            <div className="space-y-1"><Label className="text-xs">ボタン（任意）</Label><SingleButtonField value={sp.button} forms={forms} onChange={(button) => setSp({ button })} /></div>
+            <div className="space-y-1"><Label className="text-xs">ボタン（任意）</Label><SingleButtonField value={sp.button} forms={forms} targets={linkTargets} storeId={storeId} onChange={(button) => setSp({ button })} /></div>
             <ColorField value={sp.color} onChange={(v) => setSp({ color: v })} />
           </div>
         );
@@ -1104,6 +1141,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
                   <Input id="flex_alt" value={altText} maxLength={LINE_FLEX_ALT_TEXT_MAX} onChange={(e) => { setAltText(e.target.value); touch(); }} placeholder="例: メニューのご案内" />
                 </div>
                 <Check checked={trackTaps} onChange={(v) => { setTrackTaps(v); touch(); }} label="ボタンのタップ数を計測する" hint="ボタンの URL を計測リンク経由にします（リンク先は変わりません）。OFF にすると直接リンクになります" />
+                <Check checked={showChoiceText} onChange={(v) => { setShowChoiceText(v); touch(); }} label="分岐ボタンを押したとき、選んだ内容をお客様のトークに表示する" hint="「押したら次のメッセージを送る」ボタン・分岐アンケートの選択肢が対象です。ON = ボタンの文言がお客様の発言として残ります / OFF = 何も表示せず次のメッセージだけ届きます" />
                 <Check checked={enabled} onChange={(v) => { setEnabled(v); touch(); }} label="有効" hint="OFF にするとキーワード応答・差し込みを止めます（内容は残ります）" />
               </section>
             </div>
@@ -1111,9 +1149,22 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
             {/* 右: プレビュー */}
             <div className="lg:sticky lg:top-0 self-start space-y-3 lg:max-h-[calc(92dvh-11rem)] lg:overflow-y-auto">
               <h4 className="text-sm font-medium">プレビュー <span className="text-[11px] font-normal text-muted-foreground">クリックして直接編集できます</span></h4>
-              <FlexPreview contents={contentsError ? null : contents} altText={altText} messages={previewMessages.length > 0 ? previewMessages : undefined} edit={contents && !contentsError ? previewEdit : undefined} />
+              {template === 'scenario' && scenarioPreviewKey ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-2 rounded bg-blue-50 px-2 py-1 text-[11px] text-blue-800">
+                    <span className="min-w-0 flex-1">2 問目以降・結果のカードを表示しています（ここでは見るだけ。内容は左で直します）。</span>
+                    <Button type="button" size="sm" variant="outline" className="h-6 bg-white text-[11px]" onClick={() => setScenarioPreviewKey(null)}>最初の質問に戻る</Button>
+                  </div>
+                  <FlexPreview contents={scenarioNodeContents} altText="" />
+                </>
+              ) : (
+                <FlexPreview contents={contentsError ? null : contents} altText={altText} messages={previewMessages.length > 0 ? previewMessages : undefined} edit={contents && !contentsError ? previewEdit : undefined} />
+              )}
               {contentsError && contents && <p className="text-xs text-destructive">{contentsError}</p>}
+              {!(template === 'scenario' && scenarioPreviewKey) && (
               <FlexPartInspector
+                targets={linkTargets}
+                storeId={storeId}
                 contents={contentsError ? null : contents}
                 selected={selected}
                 onSelect={setSelectedPath}
@@ -1128,6 +1179,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
                 onRedo={redo}
                 error={editError}
               />
+              )}
             </div>
           </div>
         </div>
