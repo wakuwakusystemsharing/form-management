@@ -210,7 +210,7 @@ export function lineFlexItemsReference(items: LineFlexItem[], messageId: string)
 // ---------------------------------------------------------------------------
 
 export type PreviewMessage =
-  | { type: 'flex'; contents: FlexContainer; altText?: string }
+  | { type: 'flex'; contents: FlexContainer; altText?: string; /** この LINE メッセージの Flex 本体（プレビューで直接編集できる 1 通） */ main?: boolean }
   | { type: 'text'; text: string }
   | { type: 'image'; url: string }
   | { type: 'video'; previewUrl: string; url?: string };
@@ -236,7 +236,7 @@ export function itemsToPreview(items: LineFlexItem[], mainContents: FlexContaine
   for (const item of items) {
     switch (item.type) {
       case 'main':
-        if (mainContents) out.push({ type: 'flex', contents: mainContents, altText: mainAltText || undefined });
+        if (mainContents) out.push({ type: 'flex', contents: mainContents, altText: mainAltText || undefined, main: true });
         break;
       case 'text':
         if (item.text.trim()) out.push({ type: 'text', text: item.text });

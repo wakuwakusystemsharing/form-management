@@ -162,6 +162,9 @@ describe('プレビュー変換・補助', () => {
     );
     expect(r.map((x) => x.type)).toEqual(['flex', 'flex']);
     expect(r[1]).toMatchObject({ altText: 'ref' });
+    // Flex 本体にだけ main の印が付く（プレビューで直接編集できる 1 通）
+    expect(r[0]).toMatchObject({ main: true });
+    expect((r[1] as { main?: boolean }).main).toBeUndefined();
   });
   it('lineFlexItemsReference / describeLineFlexItems', () => {
     const items: LineFlexItem[] = [{ key: 'm', type: 'main' }, { key: 'r', type: 'ref', message_id: 'o' }, { key: 't', type: 'text', text: 'a' }];
