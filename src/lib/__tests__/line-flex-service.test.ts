@@ -36,7 +36,7 @@ describe('prepareLineFlexMessage（保存時の検証と送信用 payload の生
   it('計測 OFF なら URL をそのまま。既存行があれば id・統計・作成日時を引き継ぐ', () => {
     const existing = {
       id: 'zzzzzzzzzzzz', store_id: 'st0001', name: 'old', template: 'booking_card', data: {}, flex_override: null, alt_text: 'a', keywords: [],
-      attach_confirm: false, attach_reminder: false, attach_follow: false, enabled: true, track_taps: true, payload: null, links: {},
+      attach_confirm: false, attach_reminder: false, attach_follow: false, enabled: true, track_taps: true, items: [{ key: 'main', type: 'main' as const }], payload: null, payloads: null, links: {},
       reply_count: 7, tap_counts: { '1': 3 }, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-02T00:00:00.000Z',
     } as const;
     const r = prepareLineFlexMessage(
@@ -73,5 +73,58 @@ describe('prepareLineFlexMessage（保存時の検証と送信用 payload の生
     const big = prepareLineFlexMessage('s', { name: 'n', template: 'custom', alt_text: 'a', data: {}, flex_override: { type: 'bubble', body: { type: 'box', layout: 'vertical', contents: [{ type: 'text', text: 'x'.repeat(31 * 1024) }] } } }, origin, null);
     expect(big).toMatchObject({ ok: false, status: 400 });
     if (!big.ok) expect(big.error).toContain('30KB');
+  });
+});
+
+describe('prepareLineFlexMessage（追加のメッセージ = items → payloads）', () => {
+  const base = {
+    id: 'abcdefghij12',
+    name: 'n',
+    template: 'booking_card' as const,
+    alt_text: 'alt',
+    data: { title: 't', text: 'b', buttons: [{ key: '1', label: '予約', url: 'https://liff.line.me/1-a' }] },
+  };
+  const otherRow = {
+    id: 'otherotherot', store_id: 'st0001', name: '他', template: 'custom' as const, data: {}, flex_override: null, alt_text: 'o', keywords: [],
+    attach_confirm: false, attach_reminder: false, attach_follow: false, enabled: true, track_taps: true, items: [{ key: 'main', type: 'main' as const }],
+    payload: { type: 'flex', altText: 'o', contents: { type: 'bubble', body: { type: 'box', layout: 'vertical', contents: [{ type: 'text', text: 'o' }] } } },
+    payloads: null, links: {}, reply_count: 0, tap_counts: {}, created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
+  };
+
+  it('items が無ければ main だけ。payloads は payload 1 通', () => {
+    const r = prepareLineFlexMessage('st0001', base, origin, null, []);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.items).toEqual([{ key: 'main', type: 'main' }]);
+    expect(r.value.payloads).toEqual([r.value.payload]);
+  });
+
+  it('テキスト → Flex 本体 → 保存済みメッセージ の順で payloads を作る。追加 Flex の計測キーは続き番号', () => {
+    const r = prepareLineFlexMessage(
+      'st0001',
+      {
+        ...base,
+        items: [
+          { key: 't', type: 'text', text: 'こんにちは' },
+          { key: 'm', type: 'main' },
+          { key: 'r', type: 'ref', message_id: 'otherotherot' },
+          { key: 'f', type: 'flex', alt_text: '', contents: { type: 'bubble', footer: { type: 'box', layout: 'vertical', contents: [{ type: 'button', action: { type: 'uri', label: 'x', uri: 'https://example.com/x' } }] } } },
+        ],
+      },
+      origin,
+      null,
+      [otherRow]
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.payloads?.map((p) => p.type)).toEqual(['text', 'flex', 'flex', 'flex']);
+    expect(r.value.payloads?.[2]).toEqual(otherRow.payload);
+    expect(r.value.links).toEqual({ '1': 'https://liff.line.me/1-a', '2': 'https://example.com/x' });
+  });
+
+  it('参照先が無い・自分自身・空のテキストは 400', () => {
+    expect(prepareLineFlexMessage('st0001', { ...base, items: [{ key: 'm', type: 'main' }, { key: 'r', type: 'ref', message_id: 'nothere00000' }] }, origin, null, [otherRow])).toMatchObject({ ok: false, status: 400 });
+    expect(prepareLineFlexMessage('st0001', { ...base, items: [{ key: 'm', type: 'main' }, { key: 'r', type: 'ref', message_id: 'abcdefghij12' }] }, origin, null, [otherRow])).toMatchObject({ ok: false, status: 400 });
+    expect(prepareLineFlexMessage('st0001', { ...base, items: [{ key: 'm', type: 'main' }, { key: 't', type: 'text', text: ' ' }] }, origin, null, [])).toMatchObject({ ok: false, status: 400 });
   });
 });

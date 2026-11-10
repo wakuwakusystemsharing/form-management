@@ -13,11 +13,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import FlexPreview from './FlexPreview';
+import { describeLineFlexItems, itemsToPreview, LINE_FLEX_ATTACH_MAX, LINE_FLEX_ITEM_LABELS, LINE_FLEX_ITEMS_MAX, LINE_TEXT_MESSAGE_MAX, validateLineFlexItems } from '@/lib/line-flex-items';
 import type {
   BookingCardData,
   CouponCardData,
   FlexButtonInput,
   FlexContainer,
+  LineFlexItem,
   LineFlexMessage,
   LineFlexMessageInput,
   LineFlexTemplate,
@@ -69,6 +71,8 @@ interface Props {
   storeId: string;
   store: FlexStoreInfo | null;
   forms: FlexFormOption[];
+  /** 同じ店舗の LINE メッセージ一覧（「保存済みの LINE メッセージ」を追加メッセージとして選ぶ用。自分自身は除外して使う） */
+  others?: LineFlexMessage[];
   open: boolean;
   initial: LineFlexMessage | null; // null = 新規
   onClose: () => void;
@@ -220,8 +224,144 @@ function Check({ checked, onChange, label, hint }: { checked: boolean; onChange:
 }
 
 // ---------------------------------------------------------------------------
+// 追加のメッセージ（まとめて送る並び）
+// ---------------------------------------------------------------------------
 
-export default function LineFlexEditorDialog({ storeId, store, forms, open, initial, onClose, onSaved }: Props) {
+type ItemJsonState = Record<string, { text: string; error: string | null }>;
+
+const ITEM_ADD_BUTTONS: Array<{ type: Exclude<LineFlexItem['type'], 'main'>; label: string }> = [
+  { type: 'text', label: '＋ テキスト' },
+  { type: 'image', label: '＋ 画像' },
+  { type: 'video', label: '＋ 動画' },
+  { type: 'flex', label: '＋ Flex（JSON）' },
+  { type: 'ref', label: '＋ 保存済みの LINE メッセージ' },
+];
+
+function newItem(type: Exclude<LineFlexItem['type'], 'main'>): LineFlexItem {
+  const key = rowKey();
+  switch (type) {
+    case 'text':
+      return { key, type, text: '' };
+    case 'image':
+      return { key, type, url: '' };
+    case 'video':
+      return { key, type, url: '', preview_url: '' };
+    case 'flex':
+      return { key, type, alt_text: '', contents: null };
+    default:
+      return { key, type: 'ref', message_id: '' };
+  }
+}
+
+function ItemsEditor({
+  items,
+  onChange,
+  others,
+  selfId,
+  uploading,
+  onUpload,
+  jsonState,
+  onJsonChange,
+  attachChecked,
+}: {
+  items: LineFlexItem[];
+  onChange: (items: LineFlexItem[]) => void;
+  others: LineFlexMessage[];
+  selfId: string;
+  uploading: string | null;
+  onUpload: (slot: string, file: File, current: string | undefined, apply: (url: string) => void) => void;
+  jsonState: ItemJsonState;
+  onJsonChange: (key: string, text: string) => void;
+  attachChecked: boolean;
+}) {
+  const update = (key: string, patch: Partial<LineFlexItem>) => onChange(items.map((x) => (x.key === key ? ({ ...x, ...patch } as LineFlexItem) : x)));
+  const candidates = others.filter((o) => o.id !== selfId);
+  return (
+    <div className="space-y-2">
+      <div className="space-y-2">
+        {items.map((item, i) => (
+          <div key={item.key} className="space-y-2 rounded border p-2" data-slot="flex-item">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[11px] font-bold">{i + 1}</span>
+              <span className="text-xs font-medium">{LINE_FLEX_ITEM_LABELS[item.type]}</span>
+              <div className="ml-auto flex items-center gap-1">
+                <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" disabled={i === 0} onClick={() => onChange(moveItem(items, i, -1))}>↑</Button>
+                <Button type="button" size="sm" variant="ghost" className="h-7 w-7 p-0" disabled={i === items.length - 1} onClick={() => onChange(moveItem(items, i, 1))}>↓</Button>
+                {item.type !== 'main' && (
+                  <button type="button" className="text-xs text-destructive hover:underline" onClick={() => onChange(items.filter((x) => x.key !== item.key))}>削除</button>
+                )}
+              </div>
+            </div>
+            {item.type === 'text' && (
+              <Textarea value={item.text} maxLength={LINE_TEXT_MESSAGE_MAX} rows={3} onChange={(e) => update(item.key, { text: e.target.value })} placeholder="例: ご予約はこちらからどうぞ！" className="text-xs" />
+            )}
+            {item.type === 'image' && (
+              <div className="space-y-1">
+                <ImageField slot={`item_${item.key}`} value={item.url} uploading={uploading} onUpload={(slot, f, cur) => onUpload(slot, f, cur, (url) => update(item.key, { url }))} onChange={(url) => update(item.key, { url })} />
+                <p className="text-[11px] text-muted-foreground">JPEG / PNG（5MB まで）。トークでは画像として表示され、タップで拡大できます</p>
+              </div>
+            )}
+            {item.type === 'video' && (
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">動画の URL（https:// の mp4 ファイル。YouTube などのページ URL は不可）</Label>
+                  <Input value={item.url} onChange={(e) => update(item.key, { url: e.target.value })} placeholder="https://…/movie.mp4" className="h-8 text-xs" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">サムネイル画像（必須。再生前に表示されます）</Label>
+                  <ImageField slot={`thumb_${item.key}`} value={item.preview_url} uploading={uploading} onUpload={(slot, f, cur) => onUpload(slot, f, cur, (url) => update(item.key, { preview_url: url }))} onChange={(url) => update(item.key, { preview_url: url })} />
+                </div>
+                <p className="text-[11px] text-muted-foreground">動画は 200MB まで・1 分以内が目安（LINE の仕様）。動画ファイルはお持ちのサーバーやストレージに置いて URL を貼ってください</p>
+              </div>
+            )}
+            {item.type === 'flex' && (
+              <div className="space-y-1">
+                <Input value={item.alt_text} maxLength={400} onChange={(e) => update(item.key, { alt_text: e.target.value })} placeholder="通知に出る文（代替テキスト。空なら「メッセージが届いています」）" className="h-8 text-xs" />
+                <Textarea value={jsonState[item.key]?.text ?? ''} onChange={(e) => onJsonChange(item.key, e.target.value)} rows={6} spellCheck={false} className="font-mono text-[11px]" placeholder='{"type":"bubble", ...}' />
+                {jsonState[item.key]?.error ? <p className="text-xs text-destructive">{jsonState[item.key].error}</p> : <p className="text-[11px] text-muted-foreground">Flex Message Simulator などで作った JSON（bubble / carousel）を貼り付け</p>}
+              </div>
+            )}
+            {item.type === 'ref' && (
+              <div className="space-y-1">
+                {candidates.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">この店舗に他の保存済み LINE メッセージがありません</p>
+                ) : (
+                  <Select value={item.message_id} onValueChange={(v) => update(item.key, { message_id: v })}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="LINE メッセージを選ぶ" /></SelectTrigger>
+                    <SelectContent>
+                      {candidates.map((o) => (
+                        <SelectItem key={o.id} value={o.id} className="text-xs">{o.name}{o.enabled ? '' : '（無効）'}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <p className="text-[11px] text-muted-foreground">参照先の Flex 本体 1 通が入ります（参照先を編集すると、こちらの送信内容も自動で更新）。タップ数は参照先で数えます</p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {items.length < LINE_FLEX_ITEMS_MAX ? (
+        <div className="flex flex-wrap items-center gap-1">
+          {ITEM_ADD_BUTTONS.map((b) => (
+            <Button key={b.type} type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => onChange([...items, newItem(b.type)])}>{b.label}</Button>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">1 回に送れるのは {LINE_FLEX_ITEMS_MAX} 通までです（LINE の仕様）</p>
+      )}
+      {attachChecked && items.length > LINE_FLEX_ATTACH_MAX && (
+        <p className="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+          予約確認・リマインダー・フォローに添えるときは本体と合わせて 5 通までなので、このメッセージは先頭 {LINE_FLEX_ATTACH_MAX} 通までが送られます。
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+export default function LineFlexEditorDialog({ storeId, store, forms, others = [], open, initial, onClose, onSaved }: Props) {
   const { toast } = useToast();
   const [id, setId] = useState<string>(initial?.id ?? randomId());
   const [savedId, setSavedId] = useState<string | null>(initial?.id ?? null);
@@ -239,6 +379,9 @@ export default function LineFlexEditorDialog({ storeId, store, forms, open, init
   const [jsonOpen, setJsonOpen] = useState(initial?.template === 'custom' || !!initial?.flex_override);
   const [jsonText, setJsonText] = useState('');
   const [jsonError, setJsonError] = useState<string | null>(null);
+  // まとめて送る並び（main = 上の「内容」の Flex）
+  const [items, setItems] = useState<LineFlexItem[]>(initial?.items ?? [{ key: 'main', type: 'main' }]);
+  const [itemJson, setItemJson] = useState<ItemJsonState>({});
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -269,6 +412,11 @@ export default function LineFlexEditorDialog({ storeId, store, forms, open, init
     setJsonOpen(next?.template === 'custom' || !!next?.flex_override);
     setJsonText(next?.flex_override ? JSON.stringify(next.flex_override, null, 2) : '');
     setJsonError(null);
+    const nextItems = next?.items && next.items.length > 0 ? next.items : [{ key: 'main', type: 'main' } as LineFlexItem];
+    setItems(nextItems);
+    const js: ItemJsonState = {};
+    for (const it of nextItems) if (it.type === 'flex') js[it.key] = { text: it.contents ? JSON.stringify(it.contents, null, 2) : '', error: null };
+    setItemJson(js);
     setDirty(false);
     setTestOpen(false);
     setTestTarget(null);
@@ -280,8 +428,41 @@ export default function LineFlexEditorDialog({ storeId, store, forms, open, init
   const generated = useMemo(() => (template === 'custom' ? null : resolveFlexContents({ template, data, flex_override: null })), [template, data]);
   const contentsError = validateFlexContents(contents);
   const keywords = normalizeKeywords(keywordsText);
+  const itemsError = validateLineFlexItems(items, { selfId: id });
+  const previewMessages = useMemo(
+    () =>
+      itemsToPreview(items, contentsError ? null : contents, altText, (refId) => {
+        const o = others.find((x) => x.id === refId && x.id !== id);
+        if (!o) return null;
+        const c = o.payload && typeof o.payload.contents === 'object' ? (o.payload.contents as FlexContainer) : resolveFlexContents(o);
+        return { contents: c, altText: o.alt_text };
+      }),
+    [items, contents, contentsError, altText, others, id]
+  );
 
   const touch = () => setDirty(true);
+  const changeItems = (next: LineFlexItem[]) => {
+    setItems(next);
+    touch();
+  };
+  const changeItemJson = (key: string, text: string) => {
+    touch();
+    if (!text.trim()) {
+      setItemJson((s) => ({ ...s, [key]: { text, error: 'Flex の JSON を入力してください' } }));
+      setItems((list) => list.map((x) => (x.key === key && x.type === 'flex' ? { ...x, contents: null } : x)));
+      return;
+    }
+    try {
+      let parsed = JSON.parse(text) as Record<string, unknown>;
+      if (parsed && parsed.type === 'flex' && parsed.contents && typeof parsed.contents === 'object') parsed = parsed.contents as Record<string, unknown>;
+      const err = validateFlexContents(parsed);
+      setItemJson((s) => ({ ...s, [key]: { text, error: err } }));
+      setItems((list) => list.map((x) => (x.key === key && x.type === 'flex' ? { ...x, contents: err ? null : parsed } : x)));
+    } catch {
+      setItemJson((s) => ({ ...s, [key]: { text, error: 'JSON として読み取れません（カンマや括弧の抜けを確認してください）' } }));
+      setItems((list) => list.map((x) => (x.key === key && x.type === 'flex' ? { ...x, contents: null } : x)));
+    }
+  };
   const changeTemplate = (next: LineFlexTemplate) => {
     setTemplate(next);
     setData(defaultTemplateData(next, store?.theme_color ?? undefined));
@@ -352,6 +533,15 @@ export default function LineFlexEditorDialog({ storeId, store, forms, open, init
       toast({ title: jsonError, variant: 'destructive' });
       return;
     }
+    const itemJsonError = Object.values(itemJson).find((s) => s.error)?.error;
+    if (itemJsonError) {
+      toast({ title: `追加のメッセージ: ${itemJsonError}`, variant: 'destructive' });
+      return;
+    }
+    if (itemsError) {
+      toast({ title: itemsError, variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       const body: LineFlexMessageInput = {
@@ -367,6 +557,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, open, init
         attach_follow: attachFollow,
         enabled,
         track_taps: trackTaps,
+        items,
       };
       const url = savedId ? `/api/stores/${storeId}/line-messages/${savedId}` : `/api/stores/${storeId}/line-messages`;
       const res = await fetch(url, { method: savedId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body) });
@@ -738,6 +929,27 @@ export default function LineFlexEditorDialog({ storeId, store, forms, open, init
                 )}
               </section>
 
+              <section className="space-y-2 rounded-lg border p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="text-sm font-medium">送る内容の並び <span className="text-xs font-normal text-muted-foreground">{items.length} / {LINE_FLEX_ITEMS_MAX} 通{describeLineFlexItems(items) ? `（${describeLineFlexItems(items)}）` : ''}</span></h4>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  上の「内容」で作った Flex に続けて、テキスト・画像・動画・別の Flex を一度に送れます（LINE の上限は 1 回 5 通）。↑↓ で順番を変えられ、右のプレビューにこの順番で並びます。
+                </p>
+                <ItemsEditor
+                  items={items}
+                  onChange={changeItems}
+                  others={others}
+                  selfId={id}
+                  uploading={uploading}
+                  onUpload={uploadImage}
+                  jsonState={itemJson}
+                  onJsonChange={changeItemJson}
+                  attachChecked={attachConfirm || attachReminder || attachFollow}
+                />
+                {itemsError && items.length > 1 && <p className="text-xs text-destructive">{itemsError}</p>}
+              </section>
+
               <section className="space-y-3 rounded-lg border p-3">
                 <h4 className="text-sm font-medium">送り方</h4>
                 <div className="space-y-1">
@@ -777,7 +989,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, open, init
             {/* 右: プレビュー */}
             <div className="lg:sticky lg:top-0 self-start space-y-3">
               <h4 className="text-sm font-medium">プレビュー</h4>
-              <FlexPreview contents={contentsError ? null : contents} altText={altText} />
+              <FlexPreview contents={contentsError ? null : contents} altText={altText} messages={previewMessages.length > 0 ? previewMessages : undefined} />
               {contentsError && contents && <p className="text-xs text-destructive">{contentsError}</p>}
             </div>
           </div>

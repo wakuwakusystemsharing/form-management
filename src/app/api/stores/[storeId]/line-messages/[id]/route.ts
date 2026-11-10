@@ -45,7 +45,7 @@ export async function DELETE(request: Request, { params }: Params) {
     const { storeId, id } = await params;
     const auth = await authorizeStoreAccess(request, storeId);
     if (auth.response) return auth.response;
-    const result = await removeLineFlexMessage(storeId, id);
+    const result = await removeLineFlexMessage(storeId, id, new URL(request.url).origin);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json({ success: true }, noStore);
   } catch (error) {
