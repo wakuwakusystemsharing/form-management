@@ -1032,7 +1032,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
           <DialogDescription>テンプレートに項目を入れるだけで、公式 LINE に送れる Flex Message ができます。右側のプレビューは、文字や画像をクリックして直接編集することもできます。</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex-1 overflow-y-auto px-5 py-4 [scrollbar-gutter:stable]">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
             {/* 左: 入力 */}
             <div className="space-y-5 min-w-0">
@@ -1147,7 +1147,8 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
             </div>
 
             {/* 右: プレビュー */}
-            <div className="lg:sticky lg:top-0 self-start space-y-3 lg:max-h-[calc(92dvh-11rem)] lg:overflow-y-auto">
+            {/* scrollbar-gutter: スクロールバーの幅を常に確保する。出たり消えたりするとプレビューの幅 → 倍率 → 高さが変わり、また出たり消えたりして揺れ続ける */}
+            <div className="lg:sticky lg:top-0 self-start space-y-3 lg:max-h-[calc(92dvh-11rem)] lg:overflow-y-auto [scrollbar-gutter:stable]">
               <h4 className="text-sm font-medium">プレビュー <span className="text-[11px] font-normal text-muted-foreground">クリックして直接編集できます</span></h4>
               {template === 'scenario' && scenarioPreviewKey ? (
                 <>
