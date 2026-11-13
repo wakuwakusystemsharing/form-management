@@ -12,6 +12,8 @@ import OptionExtraMessageEditor, { optionSettingsButtonLabel } from '../OptionEx
 import TagInput from '@/components/customers/TagInput';
 import StaffScheduleEditor from './StaffScheduleEditor';
 import CategoryContentBlocksEditor from './CategoryContentBlocksEditor';
+import SubOptionsEditor from './SubOptionsEditor';
+import { subOptionsFieldsToSave, toSubOptionsEditorValue, type SubOptionsEditorValue } from '@/lib/sub-options';
 import type { CategoryContentBlock } from '@/lib/category-content-blocks';
 import { countStaffScheduleOverrides } from '@/lib/staff-schedule';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
@@ -170,6 +172,8 @@ interface MenuItemModalProps {
   genderEnabled: boolean;  // 性別機能が有効かどうか
   theme?: 'light' | 'dark';
   form: Form; // Form object for store_id
+  /** カテゴリー共通オプションの編集として使う（「オプションのオプション」の欄を出す） */
+  asCategoryOption?: boolean;
 }
 
 interface MenuOptionModalProps {
@@ -780,8 +784,11 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
   const [timeWindowEnd, setTimeWindowEnd] = useState('18:00');
   const [additionalQuestions, setAdditionalQuestions] = useState<AdditionalQuestion[]>([]);
   const [extraMessage, setExtraMessage] = useState<OptionExtraMessage | undefined>(undefined);
+  // オプションのオプション（このオプションを選んだときに、さらに選べる項目）
+  const [subOptions, setSubOptions] = useState<SubOptionsEditorValue>(toSubOptionsEditorValue(null));
 
   React.useEffect(() => {
+    setSubOptions(toSubOptionsEditorValue(option));
     if (option) {
       setName(option.name);
       setPrice(formatPrice(option.price.toString()));
@@ -825,7 +832,8 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       time_window_start: timeWindowEnabled ? timeWindowStart : undefined,
       time_window_end: timeWindowEnabled ? timeWindowEnd : undefined,
       additional_questions: additionalQuestions.length > 0 ? additionalQuestions : undefined,
-      extra_message: extraMessage
+      extra_message: extraMessage,
+      ...subOptionsFieldsToSave(subOptions)
     };
     onSave(newOption);
     onClose();
@@ -1000,6 +1008,9 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
               )}
             </div>
 
+            {/* オプションのオプション（このオプションを選んだときに、さらに選べる項目） */}
+            <SubOptionsEditor value={subOptions} onChange={setSubOptions} theme={theme} />
+
             {/* 追加質問（このオプション選択時に表示される質問） */}
             <AdditionalQuestionsEditor
               questions={additionalQuestions}
@@ -1036,9 +1047,12 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   categoryId,
   genderEnabled,
   theme = 'dark',
-  form
+  form,
+  asCategoryOption = false
 }) => {
   const [name, setName] = useState('');
+  // オプションのオプション（カテゴリー共通オプションとして編集しているときだけ使う）
+  const [subOptions, setSubOptions] = useState<SubOptionsEditorValue>(toSubOptionsEditorValue(null));
   const [price, setPrice] = useState('');
   const [duration, setDuration] = useState('');
   const [description, setDescription] = useState('');
@@ -1081,7 +1095,9 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setTimeWindowEnd(menuItem.time_window_end || '18:00');
         setAdditionalQuestions(menuItem.additional_questions || []);
         setExtraMessage(menuItem.extra_message);
+        setSubOptions(toSubOptionsEditorValue(menuItem));
       } else {
+        setSubOptions(toSubOptionsEditorValue(null));
         setName('');
         setPrice('');
         setDuration('');
@@ -1121,7 +1137,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       time_window_start: timeWindowEnabled ? timeWindowStart : undefined,
       time_window_end: timeWindowEnabled ? timeWindowEnd : undefined,
       additional_questions: additionalQuestions.length > 0 ? additionalQuestions : undefined,
-      extra_message: extraMessage
+      extra_message: extraMessage,
+      ...(asCategoryOption ? subOptionsFieldsToSave(subOptions) : {})
     };
     onSave(newMenuItem);
     onClose();
@@ -1626,6 +1643,9 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                 )}
               </div>
               )}
+
+              {/* オプションのオプション（カテゴリー共通オプションを選んだときに、さらに選べる項目） */}
+              {asCategoryOption && <SubOptionsEditor value={subOptions} onChange={setSubOptions} theme={theme} />}
 
               {/* 追加質問（このメニュー選択時に表示される質問） */}
               <AdditionalQuestionsEditor
@@ -5065,6 +5085,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
         genderEnabled={false}
         theme={theme}
         form={form}
+        asCategoryOption
       />
 
       {/* カスタムフィールドの選択肢ごとの追加質問 */}

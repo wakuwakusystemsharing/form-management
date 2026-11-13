@@ -1,5 +1,6 @@
 'use client';
 
+import { flattenSubOptions } from '@/lib/sub-options';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,7 +62,7 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
           key: m.id, categoryId: cat.id, categoryName: cat.display_name || cat.name,
           menuId: m.id, menuName: m.name, price: m.price || 0, duration: m.duration || 0,
           subMenus: (m.sub_menu_items || []).map((s) => ({ id: s.id, name: s.name, price: s.price || 0, duration: s.duration || 0 })),
-          options: (m.options || []).map((o) => ({ id: o.id, name: o.name, price: o.price || 0, duration: o.duration || 0 })),
+          options: flattenSubOptions(m.options || []).map((o) => ({ id: o.id, name: o.name, price: o.price || 0, duration: o.duration || 0 })),
         });
       });
     });
@@ -69,7 +70,7 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
       out.push({
         key: m.id, categoryId: '', categoryName: '', menuId: m.id, menuName: m.name, price: m.price || 0, duration: m.duration || 0,
         subMenus: (m.sub_menu_items || []).map((s) => ({ id: s.id, name: s.name, price: s.price || 0, duration: s.duration || 0 })),
-        options: (m.options || []).map((o) => ({ id: o.id, name: o.name, price: o.price || 0, duration: o.duration || 0 })),
+        options: flattenSubOptions(m.options || []).map((o) => ({ id: o.id, name: o.name, price: o.price || 0, duration: o.duration || 0 })),
       });
     });
     return out;
@@ -77,7 +78,8 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
   const categoryOptions = useMemo(() => {
     const out: Array<{ categoryId: string; categoryName: string; id: string; name: string; price: number; duration: number }> = [];
     (formConfig?.menu_structure?.categories || []).forEach((cat) => {
-      (cat.options || []).forEach((o) => out.push({ categoryId: cat.id, categoryName: cat.display_name || cat.name, id: o.id, name: o.name, price: o.price || 0, duration: o.duration || 0 }));
+      // オプションのオプションも、通常のオプションと同じ並びで選べるようにする（予約データには「親（追加）」の名前で入っている）
+      flattenSubOptions(cat.options || []).forEach((o) => out.push({ categoryId: cat.id, categoryName: cat.display_name || cat.name, id: o.id, name: o.name, price: o.price || 0, duration: o.duration || 0 }));
     });
     return out;
   }, [formConfig]);

@@ -38,6 +38,17 @@ export interface AdditionalQuestion {
 }
 
 // メニューオプションの型定義
+/** オプションのオプション（追加のオプション）1 件。料金・所要時間は合計に上乗せされる */
+export interface MenuSubOption {
+  id: string;
+  name: string;
+  price: number;
+  duration: number;          // 分単位
+  description?: string;
+  hide_price?: boolean;
+  hide_duration?: boolean;
+}
+
 export interface MenuOption {
   id: string;
   name: string;
@@ -53,6 +64,11 @@ export interface MenuOption {
   time_window_end?: string;     // "15:00"
   additional_questions?: AdditionalQuestion[];  // 選択時に表示される追加質問
   extra_message?: OptionExtraMessage;  // 選択した状態で送信されたときに LINE トークへ追加で送るメッセージ
+  // オプションのオプション（このオプションを選んだときに、さらに選べる追加のオプション。src/lib/sub-options.ts）
+  sub_options?: MenuSubOption[];
+  sub_options_mode?: 'multiple' | 'single';  // multiple = 複数選べる（既定）/ single = 1 つだけ
+  sub_options_required?: boolean;             // true = 親を選んだら 1 つ以上選ぶ必要がある
+  sub_options_label?: string;                 // 追加のオプション欄の見出し（空 = 追加オプション）
 }
 
 // サブメニューの型定義
@@ -92,6 +108,12 @@ export interface MenuItem {
   time_window_end?: string;     // "15:00"
   additional_questions?: AdditionalQuestion[];  // 選択時に表示される追加質問
   extra_message?: OptionExtraMessage;  // 選択した状態で送信されたときに LINE トークへ追加で送るメッセージ
+  // ↓ カテゴリー共通オプション（MenuCategory.options）として使うときだけ意味を持つ
+  // オプションのオプション（このオプションを選んだときに、さらに選べる追加のオプション。src/lib/sub-options.ts）
+  sub_options?: MenuSubOption[];
+  sub_options_mode?: 'multiple' | 'single';  // multiple = 複数選べる（既定）/ single = 1 つだけ
+  sub_options_required?: boolean;             // true = 親を選んだら 1 つ以上選ぶ必要がある
+  sub_options_label?: string;                 // 追加のオプション欄の見出し（空 = 追加オプション）
 }
 
 export interface MenuCategory {
