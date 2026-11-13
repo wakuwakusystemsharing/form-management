@@ -698,6 +698,12 @@ export async function GET(req, { params }) {
 - **画像 URL はアップロードごとに変える**（`/api/upload/menu-image` が `{menuId}_{stamp}.{ext}`）。Storage の画像は 1 年キャッシュ（`cacheControl: 31536000`）のため、同じファイル名で上書きすると古い形の画像が表示され続ける。古い画像は `oldImageUrl` で削除
 - **画像の拡大表示**: ボタン左のサムネイルと詳細モーダルの画像をタップするとライトボックス（`#image-lightbox`。`openImageLightbox` / `closeImageLightbox`、閉じるボタン・背景タップ・Esc で閉じる）で画面サイズに合わせて表示。サムネイルのタップはメニュー選択を起こさない（`stopPropagation`）
 
+**オプションのオプション（追加のオプション。`MenuOption.sub_options` / カテゴリー共通オプションにも。純粋ロジック `src/lib/sub-options.ts`）:**
+- メニュー編集 → メニューオプション → オプション編集、またはカテゴリー共通オプションの編集で、「追加質問」の上の「オプションのオプション」（`SubOptionsEditor.tsx`）。そのオプションを選んだお客様に、さらに選んでもらう項目（名前・料金・所要時間・料金 / 時間の非表示。20 件まで）。設定: `sub_options_mode`（`multiple` = 複数選べる（既定）/ `single` = 1 つだけ）、`sub_options_required`（必須）、`sub_options_label`（見出し。空 = 「追加オプション」）。カテゴリー共通オプションは `MenuItemModal` を流用しているので `asCategoryOption` のときだけ欄を出す
+- **生成 HTML では、追加のオプションを「親のすぐ後ろに並ぶ通常のオプション」として展開する**（`flattenConfigSubOptions(safeConfig)`。展開した行は `parent_option_id` / `sub_label` を持ち、`name` = 「親の名前（追加の名前）」。保存される設定は入れ子のまま）。ボタンは通常のオプションと同じクラス（`.menu-option-item` / `.category-option-item`）で親の直下の `.sub-options-container`（親を選ぶまで非表示）に出すので、**選択の保存・合計金額・合計時間・カレンダーの空き判定・LINE メッセージ・予約データ（`selected_options` に「親（追加）」の名前で入る）・復元・メール・管理画面・分析は既存のオプションの処理のまま動く**（サーバー側の変更なし）
+- フォーム側で足したのは `BookingForm.syncSubOptions(clickedId)`（オプションのクリック時と `updateSummary()` の先頭で呼ぶ）= `soSync`（親を外したら子も外す / 1 つだけのときは他を外す）+ 入れ子の表示切替、送信時の `soMissingRequired`（必須なのに未選択なら「「◯◯」の追加オプションを選択してください」）。埋め込み JS は `SUB_OPTIONS_RUNTIME_JS`（TS 版 `syncSubOptionSelection` / `findMissingRequiredSubOptions` と同じ実装。**直すときは両方**）
+- 管理画面の予約編集（`ReservationEditForm`）も `flattenSubOptions` で候補に含める。追加のオプションには 追加質問 / 送信時の追加メッセージ / 対応時間設定 は付けられない。「更新して他のフォームにも反映」ではメニュー構成に含まれる。Vitest: `sub-options.test.ts`
+
 **メニュー / オプションの見出し文言 (`config.menu_structure.display_options.menu_heading` / `options_heading`):**
 - 予約フォームの「メニューをお選びください」（メニュー欄の見出し）と「オプション」（メニュー直下のオプション欄・カテゴリー共通オプション欄の両方）を店舗が変更できる。空 / 未設定 = 既定文言。40 文字まで。純粋ロジックは `src/lib/menu-headings.ts`（`resolveMenuHeadings(config)` / `DEFAULT_MENU_HEADING` / `DEFAULT_OPTIONS_HEADING`）
 - 編集 UI はメニュー構成 → 「カテゴリー・メニュー」見出しの右の「見出しの文言を変更」ボタン（`MenuStructureEditor` の `headingsOpen` パネル。2 つの入力 + フォーム上の表示プレビュー）。「更新して他のフォームにも反映」ではメニュー構成セクションに含まれる。Vitest: `menu-headings.test.ts`
