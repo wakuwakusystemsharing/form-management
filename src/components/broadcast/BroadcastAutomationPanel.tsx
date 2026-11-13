@@ -398,7 +398,7 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
             <DialogTitle>{editingId ? '自動配信を編集' : '自動配信を作成'}</DialogTitle>
             <DialogDescription>きっかけに当てはまったお客様へ、1 日 1 回の判定で自動的に送ります。</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="flex-1 overflow-y-auto px-5 py-4 [scrollbar-gutter:stable]">
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
               <div className="min-w-0 space-y-5">
                 <div className="space-y-1">

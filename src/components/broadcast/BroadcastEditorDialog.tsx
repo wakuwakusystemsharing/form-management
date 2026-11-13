@@ -361,7 +361,7 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
           <DialogDescription>送る相手を選び、メッセージを組み立てて、今すぐ または 日時を指定して送ります。</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="flex-1 overflow-y-auto px-5 py-4 [scrollbar-gutter:stable]">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
             <div className="min-w-0 space-y-5">
               <div className="space-y-1">
