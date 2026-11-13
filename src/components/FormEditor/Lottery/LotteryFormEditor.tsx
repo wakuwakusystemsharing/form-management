@@ -202,6 +202,7 @@ export default function LotteryFormEditor({ form, onUpdate, userRole = 'service_
               onUpdate({ ...form, config: next });
             }}
             locked={prizesLocked}
+            storeId={form.store_id}
             stockStatus={stockStatus}
             advanced={config.advanced}
             onAdvancedChange={(advanced) => setConfig({ advanced })}
