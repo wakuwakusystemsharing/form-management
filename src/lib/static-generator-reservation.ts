@@ -16,6 +16,8 @@ import { ADVANCE_RULES_RUNTIME_JS } from './advance-rules';
 import { STAY_CSS, STAY_RUNTIME_JS, renderStayFieldHtml } from './stay-runtime-js';
 import { buildCancelPolicyText } from './cancel-rules';
 import { EXTRA_MESSAGE_RUNTIME_JS } from './extra-messages';
+import { flattenConfigSubOptions, normalizeSubOptions, resolveSubOptionsLabel, resolveSubOptionsMode, SUB_OPTIONS_RUNTIME_JS } from './sub-options';
+import type { FlatMenuOption, SubOptionHost } from './sub-options';
 
 export class StaticReservationGenerator {
   /**
@@ -156,6 +158,9 @@ export class StaticReservationGenerator {
       }
     }
 
+    // オプションのオプションを、親のすぐ後ろに並ぶ通常のオプションとして展開する（選択・合計・メッセージを既存の処理に乗せる）
+    flattenConfigSubOptions(safeConfig);
+
     return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -287,6 +292,7 @@ ${STAFF_SCHEDULE_RUNTIME_JS}
 ${ADVANCE_RULES_RUNTIME_JS}
 ${STAY_RUNTIME_JS}
 ${EXTRA_MESSAGE_RUNTIME_JS}
+${SUB_OPTIONS_RUNTIME_JS}
 function formatDateTimeForDisplay(value) {
     // "2026-04-30T15:08[:00]" → "2026年04月30日 15:08"
     // "2026-04-30"            → "2026年04月30日"
@@ -1305,6 +1311,8 @@ class BookingForm {
                     item.style.backgroundColor = 'var(--primary-color)';
                     item.style.color = '#ffffff';
                 }
+                // オプションのオプション: 親を外したら子も外す / 1 つだけのときは他を外す / 入れ子の表示を切り替える
+                this.syncSubOptions(optionId);
 
                 // 選択したオプションの詳細ポップアップ
                 const popupCat = this.config.menu_structure.categories.find(c => (c.menus || []).some(m => m.id === menuId));
@@ -1341,6 +1349,7 @@ class BookingForm {
                     item.style.backgroundColor = 'var(--primary-color)';
                     item.style.color = '#ffffff';
                 }
+                this.syncSubOptions(optionId);
                 // 選択したオプションの詳細ポップアップ
                 const popupCat = this.config.menu_structure.categories.find(c => c.id === categoryId);
                 const popupOpt = popupCat && popupCat.options ? popupCat.options.find(o => o.id === optionId) : null;
@@ -2435,7 +2444,33 @@ class BookingForm {
         return (typeof v === 'string' && v.trim()) ? v.trim() : 'メッセージ';
     }
 
+    // オプションのオプション（src/lib/sub-options.ts）: 選択を整えて（親が外れた子・1 つだけのときの他の子を外す）、見た目を合わせる
+    syncSubOptions(clickedId) {
+        const removed = soSync(this.config, this.state, clickedId || null);
+        removed.forEach(r => {
+            const selector = r.scope === 'menu'
+                ? '.menu-option-item[data-menu-id="' + r.owner + '"][data-option-id="' + r.id + '"]'
+                : '.category-option-item[data-category-id="' + r.owner + '"][data-option-id="' + r.id + '"]';
+            document.querySelectorAll(selector).forEach(el => {
+                el.style.borderColor = '#d1d5db';
+                el.style.backgroundColor = 'white';
+                el.style.color = '#1b2a4e';
+                el.classList.remove('selected');
+            });
+        });
+        // 親が選ばれているときだけ、追加のオプション欄を出す
+        document.querySelectorAll('.sub-options-container').forEach(box => {
+            const owner = box.dataset.ownerId;
+            const list = box.dataset.scope === 'menu'
+                ? (this.state.selectedOptions || {})[owner]
+                : (this.state.selectedCategoryOptions || {})[owner];
+            box.style.display = (list || []).indexOf(box.dataset.parentOptionId) !== -1 ? 'block' : 'none';
+        });
+        return removed.length;
+    }
+
     updateSummary() {
+        this.syncSubOptions();
         // メニュー/オプションの選択状態に応じて追加質問の表示を同期
         // （updateSummary は選択変更のたびに呼ばれるためここでまとめて処理する）
         this.updateAdditionalQuestionsVisibility();
@@ -2620,6 +2655,15 @@ class BookingForm {
                 resetSubmitState();
                 return;
             }
+        }
+        // オプションのオプション: 必須なのに選ばれていないものがあれば案内する
+        const missingSubOptions = soMissingRequired(this.config, this.state);
+        if (missingSubOptions.length > 0) {
+            alert('「' + missingSubOptions[0] + '」の追加オプションを選択してください');
+            const subBox = Array.from(document.querySelectorAll('.sub-options-container')).find(b => b.style.display !== 'none');
+            if (subBox) subBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            resetSubmitState();
+            return;
         }
         // スタッフ選択の必須チェック（スタッフボタンが表示されている場合のみ）
         const staffCfg = this.config.staff_selection;
@@ -4215,7 +4259,7 @@ if (document.readyState === 'loading') {
                                         <div id="options-${menu.id}" class="menu-options-container" style="display:none;margin-left:1.5rem;padding-left:1rem;border-left:2px solid #bbf7d0;margin-top:0.75rem;margin-bottom:0.75rem;">
                                             <div style="font-size:0.875rem;font-weight:500;color:#374151;margin-bottom:0.75rem;">${optionsHeadingHtml}</div>
                                             ${optionsHeadingContentHtml}
-                                            ${menu.options.map((option, optionIndex) => `
+                                            ${menu.options.filter((option) => !(option as FlatMenuOption).parent_option_id).map((option, optionIndex) => `
                                                 <button type="button" class="menu-option-item" data-menu-id="${menu.id}" data-option-id="${option.id || `option-${optionIndex}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
                                                     <div style="display:flex;align-items:center;">
                                                         <div>
@@ -4231,6 +4275,7 @@ if (document.readyState === 'loading') {
                                                         ${option.duration > 0 && !option.hide_duration ? `<div style="font-size:0.75rem;opacity:0.7;">+${option.duration}分</div>` : ''}
                                                     </div>
                                                 </button>
+                                                ${renderSubOptions('menu', menu.id, option)}
                                             `).join('')}
                                         </div>
                                     ` : ''}
@@ -4241,6 +4286,32 @@ if (document.readyState === 'loading') {
     const renderMenuButtonWithBlocks = (menu: import('@/types/form').MenuItem, category: import('@/types/form').MenuCategory) =>
       renderMenuButton(menu, category.id) + renderCategoryBlocksAt(category, 'menus', 'after', menu.id);
 
+    // オプションのオプション（追加のオプション）: 親のオプションのすぐ下に入れ子で出す。親を選ぶまで隠す（src/lib/sub-options.ts）
+    // ボタンは通常のオプションと同じクラス・属性なので、選択・合計・LINE メッセージ・予約データは既存の処理のまま動く
+    const renderSubOptions = (scope: 'menu' | 'category', ownerId: string, parent: SubOptionHost): string => {
+      const subs = normalizeSubOptions(parent.sub_options);
+      if (subs.length === 0) return '';
+      const single = resolveSubOptionsMode(parent.sub_options_mode) === 'single';
+      const itemClass = scope === 'menu' ? 'menu-option-item' : 'category-option-item';
+      const ownerAttr = scope === 'menu' ? `data-menu-id="${ownerId}"` : `data-category-id="${ownerId}"`;
+      const showDesc = config.menu_structure?.display_options?.show_description !== false;
+      return `
+                                                <div class="sub-options-container" data-scope="${scope}" data-owner-id="${ownerId}" data-parent-option-id="${parent.id}" style="display:none;margin:0 0 0.75rem 1rem;padding-left:0.75rem;border-left:2px solid #e5e7eb;">
+                                                    <div style="font-size:0.75rem;font-weight:500;color:#6b7280;margin-bottom:0.375rem;">${this.escapeHtml(resolveSubOptionsLabel(parent.sub_options_label))}${parent.sub_options_required === true ? '<span style="color:#dc2626;margin-left:0.25rem;">（必須）</span>' : ''}<span style="margin-left:0.25rem;font-weight:400;">${single ? '1つ選べます' : '複数選べます'}</span></div>
+                                                    ${subs.map((sub) => `
+                                                    <button type="button" class="${itemClass} sub-option-item" ${ownerAttr} data-option-id="${sub.id}" data-parent-option-id="${parent.id}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0.5rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.375rem;transition:all 0.15s;text-align:left;">
+                                                        <div>
+                                                            <div style="text-align:left;font-size:0.8125rem;font-weight:500;">${this.escapeHtmlWithBreaks(sub.name)}</div>
+                                                            ${sub.description && showDesc ? `<div class="menu-item-desc" style="text-align:left;">${this.escapeHtmlWithBreaks(sub.description)}</div>` : ''}
+                                                        </div>
+                                                        <div style="text-align:right;margin-left:0.5rem;">
+                                                            ${sub.price > 0 && !sub.hide_price ? `<div style="font-weight:500;font-size:0.8125rem;">+¥${sub.price.toLocaleString()}</div>` : ''}
+                                                            ${sub.duration > 0 && !sub.hide_duration ? `<div style="font-size:0.75rem;opacity:0.7;">+${sub.duration}分</div>` : ''}
+                                                        </div>
+                                                    </button>`).join('')}
+                                                </div>`;
+    };
+
     const renderCategoryOptions = (category: import('@/types/form').MenuCategory) => {
       if (!category.options || category.options.length === 0) return '';
       return `
@@ -4249,7 +4320,7 @@ if (document.readyState === 'loading') {
                                 ${optionsHeadingContentHtml}
                                 ${renderCategoryBlocksAt(category, 'options', 'top')}
                                 <div class="category-options-list">
-                                    ${category.options.map((opt, idx) => `
+                                    ${category.options.filter((opt) => !(opt as FlatMenuOption).parent_option_id).map((opt, idx) => `
                                         <button type="button" class="category-option-item" data-category-id="${category.id}" data-option-id="${opt.id || `catopt-${idx}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0.75rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
                                             <div>
                                                 <div style="font-size:0.875rem;font-weight:500;">${this.escapeHtmlWithBreaks(opt.name)}</div>
@@ -4260,6 +4331,7 @@ if (document.readyState === 'loading') {
                                                 ${(opt.duration || 0) > 0 && !opt.hide_duration ? `<div style="font-size:0.75rem;opacity:0.7;">+${opt.duration}分</div>` : ''}
                                             </div>
                                         </button>
+                                        ${renderSubOptions('category', category.id, opt)}
                                         ${renderCategoryBlocksAt(category, 'options', 'after', opt.id)}
                                     `).join('')}
                                 </div>
