@@ -15,6 +15,10 @@ import { computeAccentColor } from './color-utils';
 import { renderColoredTextHtml } from './colored-text';
 import { getLoseProbability } from './lottery-engine';
 
+/** ガチャ演出の画像（public/lottery-assets/。フォームは公開プロキシ経由でアプリと同じオリジンから配信されるので、絶対パスで読める） */
+export const GACHA_MACHINE_IMAGE = '/lottery-assets/gacha-machine.webp';
+export const GACHA_HANDLE_IMAGE = '/lottery-assets/gacha-handle.webp';
+
 export type LotteryGenerateMode = 'production' | 'preview';
 
 const OTHER_OPTION_VALUE = '__other__';
@@ -220,9 +224,18 @@ export class StaticLotteryGenerator {
       case 'gacha':
         return `
                     <div class="gacha" id="gacha">
-                        <div class="gacha-dome"><span class="gacha-ball b1"></span><span class="gacha-ball b2"></span><span class="gacha-ball b3"></span><span class="gacha-ball b4"></span><span class="gacha-ball b5"></span></div>
-                        <div class="gacha-body"><div class="gacha-lever" id="gachaLever"></div><div class="gacha-slot"></div></div>
-                        <div class="gacha-capsule hidden" id="gachaCapsule"><div class="cap-top"></div><div class="cap-bottom"></div></div>
+                        <div class="gacha-rays" aria-hidden="true"></div>
+                        <div class="gacha-machine">
+                            <img class="gacha-img" src="${GACHA_MACHINE_IMAGE}" alt="" draggable="false" onerror="this.closest('.gacha').classList.add('no-image')">
+                            <span class="gacha-handle" id="gachaLever"><img src="${GACHA_HANDLE_IMAGE}" alt="" draggable="false"></span>
+                            <!-- 画像を読み込めなかったときの簡易表示 -->
+                            <div class="gacha-fallback" aria-hidden="true">
+                                <div class="gacha-dome"><span class="gacha-ball b1"></span><span class="gacha-ball b2"></span><span class="gacha-ball b3"></span><span class="gacha-ball b4"></span><span class="gacha-ball b5"></span></div>
+                                <div class="gacha-body"><div class="gacha-lever"></div><div class="gacha-slot"></div></div>
+                            </div>
+                        </div>
+                        <div class="gacha-capsule hidden" id="gachaCapsule"><div class="cap-top"></div><div class="cap-bottom"></div><div class="cap-band"></div></div>
+                        <div class="gacha-sparks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
                     </div>
                     <p class="stage-hint" id="stageHint">${this.escapeHtml(hint)}</p>`;
       case 'simple':
@@ -736,6 +749,10 @@ export class StaticLotteryGenerator {
         }
 
         // ---- スクラッチ ----
+        // スクラッチ: 全体の 4 割が削れたら開く（横に大きく 1 回こするとおよそ 4 割）。削る太さ（半径）は枠の高さの 22%（最低 26px）
+        var SCRATCH_REVEAL_RATIO = 0.4;
+        var SCRATCH_BRUSH_RATIO = 0.22;
+        var SCRATCH_BRUSH_MIN = 26;
         function startScratch() {
             var under = $('scratchUnder');
             var canvas = $('scratchCanvas');
@@ -772,7 +789,12 @@ export class StaticLotteryGenerator {
             cover.classList.add('hidden');
             canvas.classList.remove('hidden');
             ctx.globalCompositeOperation = 'destination-out';
-            var scratching = false, moves = 0;
+            // 削る太さは枠の高さに合わせる（指 2〜3 往復で開く）。速くこすっても点々にならないよう、前の位置から線でつなぐ
+            var BRUSH = Math.max(SCRATCH_BRUSH_MIN, rect.height * SCRATCH_BRUSH_RATIO);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = BRUSH * 2;
+            var scratching = false, moves = 0, last = null, finished = false;
             function pos(ev) {
                 var r = canvas.getBoundingClientRect();
                 var t = ev.touches ? ev.touches[0] : ev;
@@ -780,10 +802,17 @@ export class StaticLotteryGenerator {
             }
             function scratchAt(p) {
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
-                ctx.fill();
+                if (last) {
+                    ctx.moveTo(last.x, last.y);
+                    ctx.lineTo(p.x, p.y);
+                    ctx.stroke();
+                } else {
+                    ctx.arc(p.x, p.y, BRUSH, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                last = p;
                 moves++;
-                if (moves % 6 === 0 && clearedRatio() >= 0.55) finishScratch();
+                if (moves % 3 === 0 && clearedRatio() >= SCRATCH_REVEAL_RATIO) finishScratch();
             }
             function clearedRatio() {
                 try {
@@ -794,47 +823,66 @@ export class StaticLotteryGenerator {
                 } catch (e) { return 1; }
             }
             function finishScratch() {
+                if (finished) return;
+                finished = true;
                 canvas.style.transition = 'opacity .4s';
                 canvas.style.opacity = '0';
                 setTimeout(revealNow, 350);
             }
-            function down(ev) { scratching = true; scratchAt(pos(ev)); ev.preventDefault(); }
+            function down(ev) { scratching = true; last = null; scratchAt(pos(ev)); ev.preventDefault(); }
             function move(ev) { if (!scratching) return; scratchAt(pos(ev)); ev.preventDefault(); }
-            function up() { scratching = false; }
+            // 指を離したときにも判定する（こすり終わりで開く）
+            function up() { if (!scratching) return; scratching = false; last = null; if (clearedRatio() >= SCRATCH_REVEAL_RATIO) finishScratch(); }
             canvas.addEventListener('touchstart', down, { passive: false });
             canvas.addEventListener('touchmove', move, { passive: false });
             canvas.addEventListener('touchend', up);
             canvas.addEventListener('mousedown', down);
             canvas.addEventListener('mousemove', move);
             window.addEventListener('mouseup', up);
-            // 削らずに 20 秒経ったら自動で開ける（操作に迷った人向け）
-            setTimeout(function () { if (!state.revealed) finishScratch(); }, 20000);
+            // 削らずに 12 秒経ったら自動で開ける（操作に迷った人向け）
+            setTimeout(function () { if (!state.revealed) finishScratch(); }, 12000);
         }
 
         // ---- ガチャ ----
+        // ハンドルを回す → 本体が揺れる → カプセルが取り出し口から転がり出る → タップで手前に来て震え、光と一緒に開く
         function startGacha() {
             var gacha = $('gacha'), lever = $('gachaLever'), capsule = $('gachaCapsule'), hint = $('stageHint');
             if (!gacha || !capsule) { revealNow(); return; }
-            if (hint) hint.textContent = 'レバーをタップ！';
-            var pulled = false;
+            if (hint) hint.textContent = 'ハンドルをタップして回そう！';
+            gacha.classList.add('armed');
+            var pulled = false, opened = false;
+            function open() {
+                if (opened) return;
+                opened = true;
+                if (hint) hint.textContent = '';
+                capsule.classList.remove('ready');
+                capsule.classList.add('rattle');
+                setTimeout(function () {
+                    capsule.classList.remove('rattle');
+                    capsule.classList.add('open');
+                    gacha.classList.add('burst');
+                    setTimeout(revealNow, REDUCED_MOTION ? 200 : 750);
+                }, REDUCED_MOTION ? 0 : 650);
+            }
             function pull() {
                 if (pulled) return;
                 pulled = true;
-                gacha.classList.add('shaking');
-                if (hint) hint.textContent = '';
+                gacha.classList.remove('armed');
+                gacha.classList.add('turning');
+                if (hint) hint.textContent = 'ガチャガチャ…';
                 setTimeout(function () {
-                    gacha.classList.remove('shaking');
+                    gacha.classList.remove('turning');
                     capsule.style.setProperty('--cap', state.result.prize ? rankColor(state.result.prize) : '#9ca3af');
                     capsule.classList.remove('hidden');
                     capsule.classList.add('drop');
-                    if (hint) hint.textContent = 'カプセルをタップして開けよう';
-                    capsule.addEventListener('click', function open() {
-                        capsule.removeEventListener('click', open);
-                        capsule.classList.add('open');
-                        setTimeout(revealNow, 500);
-                    });
-                    setTimeout(function () { if (!state.revealed) { capsule.classList.add('open'); setTimeout(revealNow, 500); } }, 8000);
-                }, 1200);
+                    setTimeout(function () {
+                        if (opened) return;
+                        capsule.classList.add('ready');
+                        if (hint) hint.textContent = 'カプセルをタップして開けよう';
+                    }, REDUCED_MOTION ? 0 : 900);
+                    capsule.addEventListener('click', function (ev) { ev.stopPropagation(); open(); });
+                    setTimeout(open, 8000);
+                }, REDUCED_MOTION ? 200 : 1500);
             }
             if (lever) lever.addEventListener('click', pull);
             gacha.addEventListener('click', pull);
@@ -1331,27 +1379,91 @@ export class StaticLotteryGenerator {
         .scratch.gold .scratch-cover { background: linear-gradient(135deg, #f6e27a, #d4af37 50%, #b8860b); }
         .scratch-cover span { font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 22px; letter-spacing: 3px; color: rgba(0,0,0,0.35); }
 
-        /* ガチャ */
-        .gacha { position: relative; width: 160px; margin: 0 auto; }
-        .gacha.shaking { animation: shake .25s linear infinite; }
-        @keyframes shake { 0% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } 100% { transform: rotate(-2deg); } }
+        /* ガチャ（本体とハンドルは画像 public/lottery-assets/。カプセルはランク色で描く） */
+        .gacha { position: relative; width: 200px; margin: 0 auto; padding-bottom: 34px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        .gacha-machine { position: relative; width: 100%; filter: drop-shadow(0 12px 18px rgba(0,0,0,0.35)); transform-origin: 50% 100%; }
+        .gacha-img { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
+        /* ハンドルの位置と大きさは、本体画像の銀色の丸い台座に合わせた値 */
+        .gacha-handle { position: absolute; left: 49.4%; top: 68.8%; width: 31%; transform: translate(-50%, -50%); filter: drop-shadow(0 3px 4px rgba(0,0,0,0.35)); }
+        .gacha-handle img { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
+        .gacha.armed .gacha-handle img { animation: gacha-nudge 1.6s ease-in-out infinite; }
+        .gacha.turning .gacha-handle img { animation: gacha-turn 1.5s cubic-bezier(.45,.05,.3,1) forwards; }
+        .gacha.turning .gacha-machine { animation: gacha-shake .18s linear infinite; }
+        @keyframes gacha-nudge { 0%, 70%, 100% { transform: rotate(0); } 80% { transform: rotate(-14deg); } 90% { transform: rotate(10deg); } }
+        @keyframes gacha-turn { 0% { transform: rotate(0); } 100% { transform: rotate(720deg); } }
+        @keyframes gacha-shake { 0% { transform: rotate(-1.4deg) translateY(0); } 50% { transform: rotate(1.4deg) translateY(1px); } 100% { transform: rotate(-1.4deg) translateY(0); } }
+        .gacha-fallback { display: none; }
+        .gacha.no-image .gacha-img, .gacha.no-image .gacha-handle { display: none; }
+        .gacha.no-image .gacha-fallback { display: block; width: 160px; margin: 0 auto; }
         .gacha-dome { position: relative; width: 150px; height: 120px; margin: 0 auto; border-radius: 75px 75px 10px 10px; background: rgba(255,255,255,0.22); border: 3px solid rgba(255,255,255,0.7); overflow: hidden; }
         .gacha-ball { position: absolute; width: 34px; height: 34px; border-radius: 50%; bottom: 8px; }
         .gacha-ball.b1 { left: 10px; background: #f94144; } .gacha-ball.b2 { left: 45px; bottom: 30px; background: #f9c74f; }
         .gacha-ball.b3 { left: 80px; background: #43aa8b; } .gacha-ball.b4 { left: 105px; bottom: 34px; background: #577590; }
         .gacha-ball.b5 { left: 60px; bottom: 60px; background: #f3722c; }
-        .gacha-body { position: relative; width: 160px; height: 86px; margin: -4px auto 0; background: var(--accent-color); border-radius: 10px 10px 14px 14px; box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
-        .gacha-lever { position: absolute; left: 50%; top: 16px; width: 44px; height: 44px; margin-left: -22px; border-radius: 50%; background: var(--white); border: 6px solid rgba(0,0,0,0.25); box-shadow: 0 3px 0 rgba(0,0,0,0.2); }
-        .gacha-lever::after { content: ''; position: absolute; left: 50%; top: 50%; width: 6px; height: 22px; margin: -11px 0 0 -3px; background: rgba(0,0,0,0.35); border-radius: 3px; }
+        .gacha-body { position: relative; width: 160px; height: 86px; margin: -4px auto 0; background: var(--accent-color); border-radius: 10px 10px 14px 14px; }
+        .gacha-lever { position: absolute; left: 50%; top: 16px; width: 44px; height: 44px; margin-left: -22px; border-radius: 50%; background: var(--white); border: 6px solid rgba(0,0,0,0.25); }
         .gacha-slot { position: absolute; left: 50%; bottom: 8px; width: 60px; height: 18px; margin-left: -30px; background: rgba(0,0,0,0.35); border-radius: 6px; }
-        .gacha-capsule { position: absolute; left: 50%; top: 150px; width: 64px; height: 64px; margin-left: -32px; z-index: 2; cursor: pointer; }
-        .gacha-capsule.drop { animation: drop .7s cubic-bezier(.3,1.4,.6,1) forwards; }
-        @keyframes drop { 0% { transform: translateY(-60px) scale(.6); opacity: 0; } 100% { transform: translateY(40px) scale(1); opacity: 1; } }
-        .cap-top, .cap-bottom { position: absolute; left: 0; width: 64px; height: 32px; transition: transform .45s ease; }
-        .cap-top { top: 0; border-radius: 32px 32px 0 0; background: var(--cap, #ccc); }
-        .cap-bottom { bottom: 0; border-radius: 0 0 32px 32px; background: rgba(255,255,255,0.9); }
-        .gacha-capsule.open .cap-top { transform: translateY(-28px) rotate(-20deg); }
-        .gacha-capsule.open .cap-bottom { transform: translateY(10px); }
+
+        /* カプセル: 上半分がランク色、下半分が半透明の白。光沢つき */
+        .gacha-capsule { position: absolute; left: 50%; bottom: 0; width: 68px; height: 68px; margin-left: -34px; z-index: 3; cursor: pointer; transform-origin: 50% 60%; filter: drop-shadow(0 6px 8px rgba(0,0,0,0.35)); }
+        .gacha-capsule.drop { animation: gacha-drop .9s cubic-bezier(.3,.7,.4,1) both; }
+        .gacha-capsule.ready { animation: gacha-ready 1.1s ease-in-out infinite; }
+        .gacha-capsule.rattle { animation: gacha-rattle .65s ease-in-out both; }
+        .gacha-capsule.open { animation: gacha-pop .75s ease-out both; }
+        @keyframes gacha-drop {
+            0% { transform: translateY(-62px) scale(.55) rotate(-200deg); opacity: 0; }
+            20% { opacity: 1; }
+            55% { transform: translateY(0) scale(1) rotate(-20deg); }
+            70% { transform: translateY(-16px) scale(1) rotate(8deg); }
+            85% { transform: translateY(0) scale(1) rotate(-3deg); }
+            93% { transform: translateY(-5px) scale(1) rotate(0); }
+            100% { transform: translateY(0) scale(1) rotate(0); opacity: 1; }
+        }
+        @keyframes gacha-ready { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-6px) scale(1.06); } }
+        @keyframes gacha-rattle {
+            0% { transform: translateY(0) scale(1); }
+            25% { transform: translateY(-74px) scale(1.5) rotate(-9deg); }
+            40% { transform: translateY(-74px) scale(1.5) rotate(9deg); }
+            55% { transform: translateY(-74px) scale(1.5) rotate(-7deg); }
+            70% { transform: translateY(-74px) scale(1.5) rotate(7deg); }
+            85% { transform: translateY(-74px) scale(1.5) rotate(-4deg); }
+            100% { transform: translateY(-74px) scale(1.55) rotate(0); }
+        }
+        @keyframes gacha-pop { 0% { transform: translateY(-74px) scale(1.55); opacity: 1; } 60% { opacity: 1; } 100% { transform: translateY(-74px) scale(2); opacity: 0; } }
+        .cap-top, .cap-bottom { position: absolute; left: 0; width: 68px; height: 34px; transition: transform .5s cubic-bezier(.2,.8,.3,1.2); }
+        .cap-top {
+            top: 0; border-radius: 34px 34px 0 0;
+            background:
+                radial-gradient(circle at 30% 30%, rgba(255,255,255,.95) 0 7%, rgba(255,255,255,0) 8%),
+                radial-gradient(ellipse at 34% 34%, rgba(255,255,255,.5), rgba(255,255,255,0) 46%),
+                linear-gradient(180deg, var(--cap, #ccc), color-mix(in srgb, var(--cap, #ccc) 72%, #000));
+            background-color: var(--cap, #ccc);
+            box-shadow: inset 0 -3px 0 rgba(0,0,0,.14), inset 0 0 0 1px rgba(255,255,255,.25);
+        }
+        .cap-bottom {
+            bottom: 0; border-radius: 0 0 34px 34px;
+            background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(226,232,240,.9));
+            box-shadow: inset 0 -6px 10px rgba(0,0,0,.12), inset 0 0 0 1px rgba(255,255,255,.6);
+        }
+        .cap-band { position: absolute; left: 0; top: 32px; width: 68px; height: 4px; background: rgba(0,0,0,.18); transition: opacity .2s; }
+        .gacha-capsule.open .cap-top { transform: translateY(-26px) rotate(-24deg); }
+        .gacha-capsule.open .cap-bottom { transform: translateY(14px) rotate(8deg); }
+        .gacha-capsule.open .cap-band { opacity: 0; }
+
+        /* 開く瞬間の光と星 */
+        .gacha-rays { position: absolute; left: 50%; bottom: 74px; width: 360px; height: 360px; margin: 0 0 -180px -180px; border-radius: 50%; opacity: 0; pointer-events: none; z-index: 2;
+            background: repeating-conic-gradient(from 0deg, rgba(255,255,255,.55) 0deg 9deg, rgba(255,255,255,0) 9deg 22deg);
+            -webkit-mask-image: radial-gradient(circle, #000 12%, rgba(0,0,0,.5) 36%, transparent 66%); mask-image: radial-gradient(circle, #000 12%, rgba(0,0,0,.5) 36%, transparent 66%); }
+        .gacha.burst .gacha-rays { animation: gacha-rays .9s ease-out both; }
+        @keyframes gacha-rays { 0% { opacity: 0; transform: scale(.3) rotate(0); } 30% { opacity: 1; } 100% { opacity: 0; transform: scale(1.25) rotate(60deg); } }
+        .gacha-sparks { position: absolute; left: 50%; bottom: 108px; width: 0; height: 0; z-index: 4; pointer-events: none; }
+        .gacha-sparks i { position: absolute; left: -5px; top: -5px; width: 10px; height: 10px; opacity: 0; background: #fff8c9; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); }
+        .gacha.burst .gacha-sparks i { animation: gacha-spark .8s ease-out both; }
+        .gacha-sparks i:nth-child(1) { --sx: -92px; --sy: -70px; } .gacha-sparks i:nth-child(2) { --sx: 92px; --sy: -70px; animation-delay: .04s; }
+        .gacha-sparks i:nth-child(3) { --sx: -120px; --sy: 6px; animation-delay: .08s; } .gacha-sparks i:nth-child(4) { --sx: 120px; --sy: 6px; animation-delay: .02s; }
+        .gacha-sparks i:nth-child(5) { --sx: -60px; --sy: -112px; animation-delay: .06s; } .gacha-sparks i:nth-child(6) { --sx: 60px; --sy: -112px; animation-delay: .1s; }
+        .gacha-sparks i:nth-child(7) { --sx: -70px; --sy: 60px; animation-delay: .05s; } .gacha-sparks i:nth-child(8) { --sx: 70px; --sy: 60px; animation-delay: .09s; }
+        @keyframes gacha-spark { 0% { opacity: 0; transform: translate(0, 0) scale(.4) rotate(0); } 25% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(1.5) rotate(120deg); } }
 
         /* ドラムロール */
         .drum { width: 100%; max-width: 320px; height: 120px; margin: 0 auto; border-radius: 12px; background: rgba(255,255,255,0.12); border: 2px solid rgba(255,255,255,0.5); display: flex; align-items: center; justify-content: center; }
@@ -1487,7 +1599,8 @@ export class StaticLotteryGenerator {
         body.line-only-blocked { overflow: hidden; }
 
         @media (prefers-reduced-motion: reduce) {
-            .stage-deco span, .gacha.shaking, .gacha-capsule.drop { animation: none !important; }
+            .stage-deco span, .gacha-handle img, .gacha-machine, .gacha-capsule, .gacha-rays, .gacha-sparks i { animation: none !important; }
+            .gacha-capsule.open { opacity: 0; }
         }
         @media (max-width: 600px) {
             .form-container { padding: 0 0 120px; }

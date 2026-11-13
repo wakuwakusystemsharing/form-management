@@ -111,6 +111,32 @@ describe('StaticLotteryGenerator', () => {
     expect(simple).not.toContain('id="scratchCanvas"');
   });
 
+  it('ガチャ: 本体とハンドルは画像（public/lottery-assets）。読み込めないときの簡易表示と、カプセル・光の部品を持つ', () => {
+    const html = gen.generateHTML(makeForm({ presentation: { animation: 'gacha' } }), 'production');
+    expect(html).toContain('src="/lottery-assets/gacha-machine.webp"');
+    expect(html).toContain('src="/lottery-assets/gacha-handle.webp"');
+    // 画像が読み込めなかったら no-image を付けて、CSS で描いた簡易版に切り替える
+    expect(html).toContain("classList.add('no-image')");
+    expect(html).toContain('class="gacha-fallback"');
+    expect(html).toContain('id="gachaCapsule"');
+    expect(html).toContain('class="gacha-rays"');
+    // ハンドルを回す → カプセルが出る → 震えて開く
+    expect(html).toContain("gacha.classList.add('turning')");
+    expect(html).toContain("capsule.classList.add('rattle')");
+    expect(html).toContain("gacha.classList.add('burst')");
+  });
+
+  it('スクラッチ: 4 割削れたら開く。前の位置から線でつないで削り、指を離したときにも判定する', () => {
+    const html = gen.generateHTML(makeForm({ presentation: { animation: 'scratch' } }), 'production');
+    expect(html).toContain('var SCRATCH_REVEAL_RATIO = 0.4;');
+    expect(html).not.toContain('clearedRatio() >= 0.55');
+    expect(html).toContain('ctx.lineTo(p.x, p.y);');
+    expect(html).toContain('rect.height * SCRATCH_BRUSH_RATIO');
+    expect(html).toMatch(/function up\(\) \{[^}]*clearedRatio\(\) >= SCRATCH_REVEAL_RATIO/);
+    // 迷った人向けの自動オープンは 12 秒
+    expect(html).toContain('}, 12000);');
+  });
+
   it('確率・在庫の表示は設定で ON/OFF', () => {
     const off = gen.generateHTML(makeForm(), 'production');
     expect(off).not.toContain('data-prize-stock');

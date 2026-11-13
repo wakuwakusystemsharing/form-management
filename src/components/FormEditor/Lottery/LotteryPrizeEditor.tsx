@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import type { LotteryConfig, LotteryPrize, LotteryPrizeStockStatus, LotteryType } from '@/types/lottery';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ImagePlus, Plus, Trash2 } from 'lucide-react';
 import { computeEffectiveOdds, generateLotteryId, getLoseProbability, validatePrizes } from '@/lib/lottery-engine';
 
 interface LotteryPrizeEditorProps {
@@ -24,6 +24,93 @@ interface LotteryPrizeEditorProps {
   /** 詳細設定（はずれ 0% / 在庫切れ時の確率変動）。onAdvancedChange が無ければ表示しない */
   advanced?: LotteryConfig['advanced'];
   onAdvancedChange?: (advanced: NonNullable<LotteryConfig['advanced']>) => void;
+  /** 賞品画像のアップロード先の店舗。省略時はアップロードできず URL の入力だけ */
+  storeId?: string;
+}
+
+/**
+ * 賞品の画像: 枠（または「画像を選ぶ」）を押すと、パソコン・スマートフォンの中の画像を選んでアップロードできる。
+ * URL を直接入れることもできる（「URL で指定する」を開く）
+ */
+function PrizeImageField({ prizeId, value, storeId, onChange }: { prizeId: string; value: string | undefined; storeId?: string; onChange: (url: string | undefined) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [urlOpen, setUrlOpen] = useState(false);
+  const inputId = `prize_image_${prizeId}`;
+  const upload = async (file: File) => {
+    if (!storeId) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      fd.append('storeId', storeId);
+      fd.append('menuId', `lottery_prize_${prizeId}`);
+      // 同じ場所にアップロード済みの画像は差し替える（外部の URL を入れていた場合は消さない）
+      if (value && value.includes(`lottery_prize_${prizeId}_`)) fd.append('oldImageUrl', value);
+      const res = await fetch('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.url) throw new Error(json.error || '画像のアップロードに失敗しました');
+      onChange(json.url as string);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '画像のアップロードに失敗しました');
+    } finally {
+      setUploading(false);
+    }
+  };
+  return (
+    <div className="space-y-1.5" data-slot="prize-image-field">
+      <Label htmlFor={storeId ? inputId : undefined}>画像</Label>
+      <div className="flex flex-wrap items-center gap-3">
+        <label
+          htmlFor={storeId ? inputId : undefined}
+          className={`flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted/40 ${storeId ? 'cursor-pointer hover:border-primary' : ''}`}
+          title={storeId ? 'クリックして画像を選ぶ' : undefined}
+        >
+          {value ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={value} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <ImagePlus className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
+          )}
+        </label>
+        <div className="min-w-0 space-y-1">
+          {storeId && (
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor={inputId} className={`inline-flex cursor-pointer items-center rounded-md border px-3 py-1.5 text-sm hover:bg-muted ${uploading ? 'pointer-events-none opacity-60' : ''}`}>
+                {uploading ? 'アップロード中…' : value ? '画像を変更' : '画像を選ぶ'}
+              </label>
+              {value && (
+                <button type="button" className="text-sm text-destructive hover:underline" onClick={() => onChange(undefined)}>
+                  削除
+                </button>
+              )}
+              <input
+                id={inputId}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                className="hidden"
+                disabled={uploading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) upload(f);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">パソコン・スマートフォンの中の画像を選べます（JPEG / PNG / GIF / WebP、5MB まで）</p>
+          {storeId && (
+            <button type="button" className="text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => setUrlOpen((v) => !v)}>
+              {urlOpen ? 'URL の入力を閉じる' : 'URL で指定する'}
+            </button>
+          )}
+        </div>
+      </div>
+      {(urlOpen || !storeId) && <Input value={value || ''} onChange={(e) => onChange(e.target.value || undefined)} placeholder="https://..." />}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
 }
 
 const RANK_PRESETS = [
@@ -56,6 +143,7 @@ export default function LotteryPrizeEditor({
   stockStatus,
   advanced,
   onAdvancedChange,
+  storeId,
 }: LotteryPrizeEditorProps) {
   const isInstant = lotteryType === 'instant';
   const adv = { no_lose: advanced?.no_lose === true, redistribute_on_sold_out: advanced?.redistribute_on_sold_out === true };
@@ -178,10 +266,7 @@ export default function LotteryPrizeEditor({
         <Label>有効期限（固定日付。日数より優先）</Label>
         <Input type="date" value={prize.expires_at || ''} onChange={(e) => patch({ expires_at: e.target.value || undefined })} />
       </div>
-      <div className="space-y-1.5">
-        <Label>画像 URL</Label>
-        <Input value={prize.image_url || ''} onChange={(e) => patch({ image_url: e.target.value || undefined })} placeholder="https://..." />
-      </div>
+      <PrizeImageField prizeId={prize.id} value={prize.image_url} storeId={storeId} onChange={(url) => patch({ image_url: url })} />
       <div className="space-y-1.5">
         <Label>ランク色</Label>
         <div className="flex items-center gap-2 flex-wrap">
