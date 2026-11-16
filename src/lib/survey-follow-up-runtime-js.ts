@@ -4,7 +4,7 @@
  *
  * - DOM の id 規則（path = [選択肢 index, 追加質問 index, 選択肢 index, 追加質問 index, ...]）:
  *   - ブロック:        `followup-{questionId}-{path を - で連結}`
- *   - 入力欄:          `fu-{questionId}-{path}`（text / textarea / select / birthday の hidden）
+ *   - 入力欄:          `fu-{questionId}-{path}`（text / textarea / select / birthday・address の hidden）
  *   - ボタンの入れ物:  `fu-container-{questionId}-{path}`（radio / checkbox）
  *   - その他の理由欄:  `fu-other-block-{questionId}-{path}` / `fu-other-{questionId}-{path}`（`allow_other` のとき）
  * - 追加質問の上下のテキスト / 画像ブロック（`content_blocks`）は追加質問ブロックの中に描画する
@@ -15,6 +15,7 @@
  */
 import type { SurveyContentBlock, SurveyFollowUpQuestion, SurveyQuestionOption } from '@/types/survey';
 import { renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
+import { renderAddressFieldHtml } from './address-field-runtime-js';
 import { renderColoredTextHtml } from './colored-text';
 import { FOLLOW_UP_OTHER_VALUE, followUpTitle, getOptionFollowUps, isChoiceFollowUpType } from './survey-follow-ups';
 import { choiceGroupClass } from './choice-style';
@@ -116,6 +117,8 @@ function renderFollowUpFieldHtml(qid: string, fid: string, fu: SurveyFollowUpQue
       return `<textarea id="${fieldId}" class="input" rows="3" placeholder="入力してください"></textarea>`;
     case 'birthday':
       return renderBirthdayFieldHtml(fieldId);
+    case 'address':
+      return renderAddressFieldHtml(fieldId);
     case 'text':
     default:
       return render.textAs === 'input'
@@ -346,6 +349,7 @@ export const FOLLOW_UP_RUNTIME_JS = `
                             if (el && typeof data.v === 'string') {
                                 el.value = data.v;
                                 if (fu.type === 'birthday' && typeof bdSyncFromHidden === 'function') bdSyncFromHidden(el);
+                                if (fu.type === 'address' && typeof adSyncFromHidden === 'function') adSyncFromHidden(el);
                             }
                         }
                         var otherEl = document.getElementById('fu-other-' + fid);

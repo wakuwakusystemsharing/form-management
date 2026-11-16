@@ -4,6 +4,7 @@
  */
 
 import { computeAccentColor, hexToRgb } from './color-utils';
+import { ADDRESS_CSS, ADDRESS_RUNTIME_JS, renderAddressFieldHtml } from './address-field-runtime-js';
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MD_TIME_SELECT_DISABLED_CSS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { SEARCHABLE_SELECT_CSS, SEARCHABLE_SELECT_RUNTIME_JS, renderSearchableSelectHtml } from './searchable-select-runtime-js';
 import { CHOICE_CHECK_CSS, choiceGroupClass } from './choice-style';
@@ -287,6 +288,7 @@ const PREVIEW_MODE = ${previewMode ? 'true' : 'false'};
 ${HOLIDAY_RUNTIME_JS}
 ${MULTIPLE_DATES_RUNTIME_JS}
 ${BIRTHDAY_RUNTIME_JS}
+${ADDRESS_RUNTIME_JS}
 ${SEARCHABLE_SELECT_RUNTIME_JS}
 ${STAFF_SCHEDULE_RUNTIME_JS}
 ${ADVANCE_RULES_RUNTIME_JS}
@@ -806,6 +808,8 @@ class BookingForm {
                     el.value = val;
                     // 誕生日選択は hidden の値をプルダウンに反映する（選択肢に無い値は空に戻る）
                     if (field.type === 'birthday') bdSyncFromHidden(el);
+                    // 住所入力は hidden の値を 4 欄（郵便番号 / 町名まで / 番地 / 建物名）に分けて反映する
+                    if (field.type === 'address') adSyncFromHidden(el);
                     // 検索・絞り込み機能つきのドロップダウンは <select> の値を「選択中」の表示に反映する
                     if (field.type === 'select') ssSyncFromSelect(el);
                     // select や date は値が選択肢/形式に合わないと反映されないため、反映確認後に state 更新
@@ -991,9 +995,10 @@ class BookingForm {
     // 非表示になった追加質問の入力欄をリセットする
     clearAdditionalQuestionInputs(field) {
         const el = document.getElementById('custom-field-' + field.id);
-        if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime' || field.type === 'select' || field.type === 'birthday')) {
+        if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime' || field.type === 'select' || field.type === 'birthday' || field.type === 'address')) {
             el.value = '';
             if (field.type === 'birthday') bdSyncFromHidden(el);
+            if (field.type === 'address') adSyncFromHidden(el);
             if (field.type === 'select') ssSyncFromSelect(el);
         }
         if (field.type === 'radio') {
@@ -1118,12 +1123,13 @@ class BookingForm {
         // カスタムフィールド（メニュー/オプションの追加質問も同じ仕組みで値を保持する）
         const listenerFields = (this.config.custom_fields || []).concat(this.getAdditionalQuestionEntries().map(function(e) { return e.field; }));
         bdInitAll();
+        adInitAll();
         ssInitAll();
         if (listenerFields.length > 0) {
             const self = this;
             listenerFields.forEach(function(field) {
                 const el = document.getElementById('custom-field-' + field.id);
-                if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime' || field.type === 'birthday')) {
+                if (el && (field.type === 'text' || field.type === 'textarea' || field.type === 'date' || field.type === 'datetime' || field.type === 'birthday' || field.type === 'address')) {
                     el.addEventListener('input', function() {
                         self.state.customFields[field.id] = el.value;
                         self.persistCustomField(field, el.value);
@@ -4086,6 +4092,14 @@ if (document.readyState === 'loading') {
                 ${renderBirthdayFieldHtml(id, `data-field-id="${field.id}"`)}
             </div>`;
       }
+      if (field.type === 'address') {
+        // 郵便番号 → 町名までを自動入力する 4 欄。値は hidden（id = custom-field-{id}）に 1 つの文字列で入る
+        return `
+            <div class="field" id="custom-field-wrap-${field.id}">
+                <label class="field-label">${label}</label>
+                ${renderAddressFieldHtml(id, `data-field-id="${field.id}"`)}
+            </div>`;
+      }
       if (field.type === 'select' && field.options?.length) {
         // 検索・絞り込み機能（select_search.enabled）が ON なら名前検索 + 五十音ボタン + 独立した「不明」ボタンを描画（OFF は従来の <select>）
         const selectHtml = renderSearchableSelectHtml({
@@ -4996,6 +5010,7 @@ if (document.readyState === 'loading') {
             box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
         }
         ${BIRTHDAY_CSS}
+        ${ADDRESS_CSS}
         ${STAY_CSS}
         ${SEARCHABLE_SELECT_CSS}
         /* キャンセル規定（送信ボタンの上） */

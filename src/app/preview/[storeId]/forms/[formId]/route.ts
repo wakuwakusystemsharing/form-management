@@ -64,7 +64,7 @@ export async function GET(
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'X-Content-Type-Options': 'nosniff',
-        'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline' 'unsafe-eval' https://static.line-scdn.net https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.line.me https://liff.line.me https://liffsdk.line-scdn.net https://script.google.com https://script.googleusercontent.com;",
+        'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline' 'unsafe-eval' https://static.line-scdn.net https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.line.me https://liff.line.me https://liffsdk.line-scdn.net https://script.google.com https://script.googleusercontent.com https://zipcloud.ibsnet.co.jp;",
       },
     });
   } catch (error) {
