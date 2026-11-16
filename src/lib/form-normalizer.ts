@@ -7,6 +7,7 @@ import { Form, SpecialBusinessDay } from '@/types/form';
 import { resolveCancelRules } from './cancel-rules';
 import { normalizeStaffSchedule } from './staff-schedule';
 import { sanitizeConditionalAdvanceRules } from './advance-rules';
+import { sanitizeFewLeftMark } from './slot-mark';
 import { sanitizeStaySettings } from './stay-pricing';
 
 /**
@@ -474,6 +475,16 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
             ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.max_concurrent_events;
           const n = typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : 1;
           return n >= 1 ? n : 1;
+        })(),
+        // 予約が一定数で△で表示する（未設定ならキーを持たない。件数は「同時刻に埋まるイベント数 − 1」まで）
+        ...(() => {
+          const raw = existingConfig?.calendar_settings?.few_left_mark
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.few_left_mark;
+          const v = existingConfig?.calendar_settings?.max_concurrent_events
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.max_concurrent_events;
+          const max = typeof v === 'number' && Number.isFinite(v) && v >= 1 ? Math.floor(v) : 1;
+          const mark = sanitizeFewLeftMark(raw, max);
+          return mark ? { few_left_mark: mark } : {};
         })(),
         max_concurrent_reservations_per_user: (() => {
           const v = existingConfig?.calendar_settings?.max_concurrent_reservations_per_user
