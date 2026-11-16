@@ -14,6 +14,7 @@ import { renderCategoryBlocksAt } from './category-content-blocks';
 import { FormConfig } from '@/types/form';
 import { STAFF_SCHEDULE_RUNTIME_JS } from './staff-schedule';
 import { ADVANCE_RULES_RUNTIME_JS } from './advance-rules';
+import { SLOT_MARK_RUNTIME_JS, resolveFewLeftMark, usesStaffCalendars } from './slot-mark';
 import { STAY_CSS, STAY_RUNTIME_JS, renderStayFieldHtml } from './stay-runtime-js';
 import { buildCancelPolicyText } from './cancel-rules';
 import { EXTRA_MESSAGE_RUNTIME_JS } from './extra-messages';
@@ -292,6 +293,7 @@ ${ADDRESS_RUNTIME_JS}
 ${SEARCHABLE_SELECT_RUNTIME_JS}
 ${STAFF_SCHEDULE_RUNTIME_JS}
 ${ADVANCE_RULES_RUNTIME_JS}
+${SLOT_MARK_RUNTIME_JS}
 ${STAY_RUNTIME_JS}
 ${EXTRA_MESSAGE_RUNTIME_JS}
 ${SUB_OPTIONS_RUNTIME_JS}
@@ -2003,6 +2005,8 @@ class BookingForm {
 
         // 空き状況の判定
         let isAvailable = false;
+        // その時間に重なる予定の数（△ の判定に使う。空き状況を取得できていないときは 0）
+        let slotEventCount = 0;
 
         if (!rulesOk) {
             isAvailable = false;
@@ -2042,6 +2046,7 @@ class BookingForm {
                 }
                 return acc;
             }, 0);
+            slotEventCount = count;
 
             // 同時刻に何件イベントがあれば予約不可にするかの閾値（1以上、デフォルト1）
             const rawMax = this.config?.calendar_settings?.max_concurrent_events;
@@ -2104,6 +2109,8 @@ class BookingForm {
                     selectionWasReset = true;
                 }
                 const showSelected = isSelected && isAvailable && !isPast;
+                // 〇 / △ / ✕（△ = 予定が一定数に達したが、まだ予約できる時間帯。スタッフ選択を使うフォームでは出さない）
+                const slotMark = slotMarkOf(isAvailable && !isPast, slotEventCount, this.isStaffCalendarMode() ? null : this.getFewLeftMark());
                 const bgColor = showSelected ? 'var(--primary-color)' : (isAvailable && !isPast ? '#fff' : '#a0a0a0');
                 const textColor = showSelected ? '#fff' : (isAvailable && !isPast ? 'var(--primary-color)' : '#ffffff');
                 const cursor = isAvailable && !isPast ? 'pointer' : 'not-allowed';
@@ -2112,11 +2119,12 @@ class BookingForm {
                 bodyHTML += \`<td
                     data-date="\${dateStr}"
                     data-time="\${time}"
-                    class="calendar-cell\${showSelected ? ' selected' : ''}\${isAvailable && !isPast ? '' : ' unavailable'}"
+                    class="calendar-cell\${showSelected ? ' selected' : ''}\${isAvailable && !isPast ? '' : ' unavailable'}\${slotMark === 'few' ? ' few' : ''}"
+                    data-mark="\${slotMark}"
                     style="text-align:center;padding:0.25rem;border:1px solid #696969;font-size:0.9rem;font-weight:bold;cursor:\${cursor};background:\${bgColor};color:\${textColor};"
                     \${hoverStyle}
                     onclick="window.bookingForm.handleDateTimeSelect('\${dateStr}', '\${time}', \${isAvailable && !isPast})"
-                >\${isAvailable && !isPast ? '○' : '×'}</td>\`;
+                >\${slotMark === 'few' ? '△' : (slotMark === 'ok' ? '○' : '×')}</td>\`;
             });
             
             bodyHTML += '</tr>';
@@ -2132,6 +2140,12 @@ class BookingForm {
 
         // カレンダーが内部スクロールになる高さならスクロールヒントを表示
         this.updateCalendarScrollHint();
+    }
+
+    // 「予約が一定数で△で表示する」の設定（正規化済み。何度も使うので 1 回だけ計算）
+    getFewLeftMark() {
+        if (!this._fewLeftMark) this._fewLeftMark = resolveFewLeftMark(this.config.calendar_settings);
+        return this._fewLeftMark;
     }
 
     // カレンダー内部がスクロール可能なときだけ「下にスクロールできます」ヒントを出す
@@ -4397,7 +4411,7 @@ if (document.readyState === 'loading') {
     if (bookingMode === 'multiple_dates') {
       return this.renderMultipleDatesField(config, initiallyHidden);
     } else {
-      return this.renderDateTimeField(initiallyHidden);
+      return this.renderDateTimeField(initiallyHidden, config);
     }
   }
 
@@ -4416,11 +4430,17 @@ if (document.readyState === 'loading') {
     return vc.length > 0 ? [...new Set(vc)].sort() : [1, 2, 3];
   }
 
-  private renderDateTimeField(initiallyHidden: boolean): string {
-    return `${this.renderCalendarField(initiallyHidden)}`;
+  private renderDateTimeField(initiallyHidden: boolean, config?: FormConfig): string {
+    return `${this.renderCalendarField(initiallyHidden, config)}`;
   }
 
-  private renderCalendarField(initiallyHidden: boolean): string {
+  private renderCalendarField(initiallyHidden: boolean, config?: FormConfig): string {
+    // 「予約が一定数で△で表示する」が ON のフォームだけ、凡例に △ の説明を足す（スタッフ選択を使うフォームでは △ を出さない）
+    const fewMark = resolveFewLeftMark(config?.calendar_settings);
+    const fewLegend = fewMark.enabled && !usesStaffCalendars(config)
+      ? `
+                        <div class="legend-item legend-item-few"><span class="legend-marker marker-few">△</span><span>${this.escapeHtml(fewMark.label)}</span></div>`
+      : '';
     // 現在は常にカレンダーモードで生成（プレビューと同じ）
     // 静的HTML生成時はプレビューと完全一致させる
     return `
@@ -4448,7 +4468,7 @@ if (document.readyState === 'loading') {
 
                     <!-- 凡例（〇✕の説明） -->
                     <div class="calendar-legend">
-                        <div class="legend-item"><span class="legend-marker marker-ok"></span><span>予約可</span></div>
+                        <div class="legend-item"><span class="legend-marker marker-ok"></span><span>予約可</span></div>${fewLegend}
                         <div class="legend-item"><span class="legend-marker marker-ng">✕</span><span>満席</span></div>
                     </div>
 
@@ -5282,6 +5302,9 @@ if (document.readyState === 'loading') {
             color: var(--accent-color);
             line-height: 1;
         }
+        .marker-few { background-color: #fff; border: 1px solid #ea580c; color: #ea580c; text-align: center; line-height: 12px; font-size: 10px; font-weight: bold; }
+        /* △（残りわずか）のセル: 白地にオレンジ。選択中はテーマカラー地に白文字のまま */
+        #calendar-table td.calendar-cell.few:not(.selected) { color: #ea580c !important; }
         .marker-ng { background-color: #a0a0a0; color: #fff; text-align: center; line-height: 14px; font-size: 10px; }
         .calendar-table-wrapper {
             border: 1px solid #696969 !important;

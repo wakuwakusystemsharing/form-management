@@ -7,6 +7,7 @@ import { Form, BusinessHours, SpecialBusinessDay } from '@/types/form';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
 import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 import { CANCEL_DEADLINE_OPTIONS, resolveCancelRules, type CancelRules } from '@/lib/cancel-rules';
+import { DEFAULT_FEW_LEFT_LABEL, FEW_LEFT_LABEL_MAX, maxFewLeftCount, resolveFewLeftMark, usesStaffCalendars } from '@/lib/slot-mark';
 import MultipleDatesSettingsEditor, { ExtraMinutesPicker, InfoTooltip } from './MultipleDatesSettingsEditor';
 import type { MultipleDatesSettings } from '@/types/form';
 import { HOLIDAY_TYPES } from '@/lib/holiday-types';
@@ -342,11 +343,48 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         ...form.config,
         calendar_settings: {
           ...form.config?.calendar_settings,
-          max_concurrent_events: safeValue
+          max_concurrent_events: safeValue,
+          // △ にする件数は「同時刻に埋まるイベント数 − 1」まで
+          ...(form.config?.calendar_settings?.few_left_mark
+            ? {
+                few_left_mark: {
+                  ...form.config.calendar_settings.few_left_mark,
+                  count: Math.min(form.config.calendar_settings.few_left_mark.count || 1, maxFewLeftCount(safeValue)),
+                },
+              }
+            : {}),
         }
       }
     };
     onUpdate(updatedForm);
+  };
+
+  // 予約が一定数で△で表示する（カレンダー表示モード・同時刻に埋まるイベント数が 2 以上のとき）
+  const fewLeftMark = resolveFewLeftMark(form.config?.calendar_settings);
+  const fewLeftRaw = form.config?.calendar_settings?.few_left_mark;
+  const handleFewLeftMarkChange = (patch: { enabled?: boolean; count?: number; label?: string }) => {
+    const next = {
+      enabled: fewLeftRaw?.enabled === true,
+      count: fewLeftMark.count,
+      label: fewLeftRaw?.label,
+      ...patch,
+    };
+    const count = Number.isFinite(next.count) && next.count >= 1 ? Math.floor(next.count) : 1;
+    const label = (next.label || '').slice(0, FEW_LEFT_LABEL_MAX);
+    onUpdate({
+      ...form,
+      config: {
+        ...form.config,
+        calendar_settings: {
+          ...form.config?.calendar_settings,
+          few_left_mark: {
+            enabled: next.enabled,
+            count: Math.min(count, maxFewLeftCount(maxConcurrentEvents)),
+            ...(label ? { label } : {}),
+          },
+        },
+      },
+    });
   };
 
   const handleMaxConcurrentReservationsPerUserChange = (value: number) => {
@@ -1292,6 +1330,75 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                 onChange={(e) => handleMaxConcurrentEventsChange(parseInt(e.target.value) || 1)}
                 className={themeClasses.input}
               />
+            </div>
+            )}
+
+            {/* 予約が一定数で△で表示する（カレンダー表示モード・同時刻に埋まるイベント数が 2 以上のときだけ） */}
+            {bookingMode === 'calendar' && maxConcurrentEvents >= 2 && (
+            <div className="max-w-md space-y-3">
+              <div className="flex items-center gap-1.5">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    checked={fewLeftRaw?.enabled === true}
+                    onChange={(e) => handleFewLeftMarkChange({ enabled: e.target.checked })}
+                    className={`rounded ${accentClasses} ${
+                      theme === 'light'
+                        ? 'border-gray-300 bg-gray-100'
+                        : 'border-gray-600 bg-gray-700'
+                    }`}
+                  />
+                  <span className={`text-sm font-medium ${themeClasses.text.secondary}`}>予約が一定数で△で表示する</span>
+                </label>
+                <InfoTooltip
+                  theme={theme}
+                  text={'その時間に重なる予約・Googleカレンダーのイベントがこの件数以上になると、カレンダーのセルを △ で表示します（△ の時間帯も予約できます）。\n\n例: 同時刻に埋まるイベント数「2」・△「1」→ 予定 0 件 = 〇、1 件 = △、2 件 = ✕。'}
+                />
+              </div>
+
+              {fewLeftRaw?.enabled === true && (
+                <div className="space-y-3 pl-6">
+                  <div>
+                    <label className={`block text-sm ${themeClasses.text.secondary} mb-1`}>
+                      △ にするイベント数（1 〜 {maxFewLeftCount(maxConcurrentEvents)}）
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        max={maxFewLeftCount(maxConcurrentEvents)}
+                        value={fewLeftMark.count}
+                        onChange={(e) => handleFewLeftMarkChange({ count: parseInt(e.target.value) || 1 })}
+                        className={`${themeClasses.input} max-w-[6rem]`}
+                      />
+                      <span className={`text-sm ${themeClasses.text.secondary}`}>件以上で △</span>
+                    </div>
+                    <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                      {fewLeftMark.count > 1 ? `予定 0〜${fewLeftMark.count - 1} 件 = 〇、` : '予定 0 件 = 〇、'}
+                      {fewLeftMark.count === maxConcurrentEvents - 1 ? `${fewLeftMark.count} 件 = △、` : `${fewLeftMark.count}〜${maxConcurrentEvents - 1} 件 = △、`}
+                      {maxConcurrentEvents} 件以上 = ✕
+                    </p>
+                  </div>
+                  <div>
+                    <label className={`block text-sm ${themeClasses.text.secondary} mb-1`}>
+                      △ の説明（カレンダーの上の凡例に表示）
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={FEW_LEFT_LABEL_MAX}
+                      value={fewLeftRaw?.label || ''}
+                      placeholder={DEFAULT_FEW_LEFT_LABEL}
+                      onChange={(e) => handleFewLeftMarkChange({ label: e.target.value })}
+                      className={themeClasses.input}
+                    />
+                  </div>
+                  {usesStaffCalendars(form.config) && (
+                    <p className="text-xs text-amber-600">
+                      スタッフ選択（スタッフごとのカレンダー）を使っているフォームでは、スタッフ 1 人につき予定 1 件で ✕ になるため △ は表示されません。
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
             )}
 
