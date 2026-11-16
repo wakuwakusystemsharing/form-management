@@ -489,6 +489,9 @@ export interface FormConfig {
     allow_exceed_business_hours?: boolean;  // 営業時間超過の予約を許可
     // 同時刻に何件のイベントがあれば予約不可にするか（1以上）。デフォルト1（1件で埋まる）
     max_concurrent_events?: number;
+    // 予約が一定数で△で表示する（カレンダー表示モード・同時刻に埋まるイベント数が 2 以上のとき）。
+    // 重なる予定が count 件以上・max_concurrent_events 件未満の時間帯を △（予約はできる）で表示。src/lib/slot-mark.ts
+    few_left_mark?: { enabled: boolean; count: number; label?: string };
     // 同一ユーザーが同時に持てる未来予約の最大数（0以下/未設定 = 制限なし）
     max_concurrent_reservations_per_user?: number;
     // 「お名前」フィールドの表示（未設定 = true）。false の場合: LIFF 表示名 or「未記入」を自動セット
