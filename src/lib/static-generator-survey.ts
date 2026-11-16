@@ -1,6 +1,7 @@
 import { SurveyConfig, SurveyQuestion } from '@/types/survey';
 import { computeAccentColor } from './color-utils';
 import { renderColoredTextHtml } from './colored-text';
+import { ADDRESS_CSS, ADDRESS_RUNTIME_JS, renderAddressFieldHtml } from './address-field-runtime-js';
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MD_TIME_SELECT_DISABLED_CSS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { SEARCHABLE_SELECT_CSS, SEARCHABLE_SELECT_RUNTIME_JS, renderSearchableSelectHtml, type SearchableSelectOption } from './searchable-select-runtime-js';
 import { FOLLOW_UP_NESTED_CSS, FOLLOW_UP_RUNTIME_JS, renderFollowUpBlocksHtml } from './survey-follow-up-runtime-js';
@@ -107,10 +108,11 @@ export class StaticSurveyGenerator {
         ${HOLIDAY_RUNTIME_JS}
         ${MULTIPLE_DATES_RUNTIME_JS}
         ${BIRTHDAY_RUNTIME_JS}
+        ${ADDRESS_RUNTIME_JS}
         ${SEARCHABLE_SELECT_RUNTIME_JS}
         ${FOLLOW_UP_RUNTIME_JS}
         ${EXTRA_MESSAGE_RUNTIME_JS}
-        document.addEventListener('DOMContentLoaded', function () { bdInitAll(); ssInitAll(); });
+        document.addEventListener('DOMContentLoaded', function () { bdInitAll(); adInitAll(); ssInitAll(); });
 
         // ---- 質問型「第三希望日時選択」（予約フォームの日時選択モードと同じ設定・同じ選択 UI） ----
         var MD_CHOICE_LABELS = { 1: '第一希望', 2: '第二希望', 3: '第三希望' };
@@ -294,6 +296,7 @@ export class StaticSurveyGenerator {
                     if (data && typeof data.v === 'string' && data.v !== '') {
                         el.value = data.v;
                         if (q.type === 'birthday') bdSyncFromHidden(el);
+                        if (q.type === 'address') adSyncFromHidden(el);
                     }
                     // 入力の保存
                     el.addEventListener('input', function () {
@@ -585,7 +588,7 @@ export class StaticSurveyGenerator {
                 if (svHidden.indexOf(q.id) !== -1) continue;
                 let value = '';
 
-                if (q.type === 'text' || q.type === 'textarea' || q.type === 'date' || q.type === 'datetime' || q.type === 'birthday') {
+                if (q.type === 'text' || q.type === 'textarea' || q.type === 'date' || q.type === 'datetime' || q.type === 'birthday' || q.type === 'address') {
                     const input = document.getElementById(q.id);
                     if (input) value = input.value;
                 } else if (q.type === 'multiple_dates') {
@@ -779,6 +782,9 @@ export class StaticSurveyGenerator {
         break;
       case 'birthday':
         fieldHtml = renderBirthdayFieldHtml(q.id);
+        break;
+      case 'address':
+        fieldHtml = renderAddressFieldHtml(q.id);
         break;
       case 'select': {
         // 検索・絞り込み機能（select_search.enabled）が ON なら名前検索 + 五十音ボタン + 独立した「不明」ボタンを描画（OFF は従来の <select>）。
@@ -1022,6 +1028,7 @@ export class StaticSurveyGenerator {
             color: var(--white);
         }
         ${BIRTHDAY_CSS}
+        ${ADDRESS_CSS}
         ${SEARCHABLE_SELECT_CSS}
         ${CHOICE_CHECK_CSS}
         /* 日付・日時入力: スマホで横幅をページに収める + 未選択時ヒント */

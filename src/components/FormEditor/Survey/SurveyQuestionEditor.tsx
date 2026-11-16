@@ -273,6 +273,7 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                         <SelectItem value="date">日付選択</SelectItem>
                         <SelectItem value="datetime">日時選択</SelectItem>
                         <SelectItem value="birthday">誕生日選択</SelectItem>
+                        <SelectItem value="address">住所入力</SelectItem>
                         {allowMultipleDates && <SelectItem value="multiple_dates">第三希望日時選択</SelectItem>}
                         <SelectItem value="select">ドロップダウン選択</SelectItem>
                         {CHOICE_TYPE_SELECT_OPTIONS.filter((o) => allowChoiceStyle || o.style === 'button').map((o) => (
