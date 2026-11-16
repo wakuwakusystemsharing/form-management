@@ -1,7 +1,7 @@
 // メニュー / オプションが選択されたときにフォーム上へ表示される追加質問
 // （詳細設定のカスタムフィールドと同じ回答タイプをサポート）
-// 回答タイプ（カスタムフィールド / 追加質問 共通）。birthday = 誕生日選択（年 / 月 / 日を別々のプルダウンで選択。値は "YYYY-MM-DD"）
-export type CustomFieldType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'birthday' | 'select';
+// 回答タイプ（カスタムフィールド / 追加質問 共通）。address = 住所入力（郵便番号から町名までを自動入力。値は 1 つの文字列。src/lib/address-field.ts）。birthday = 誕生日選択（年 / 月 / 日を別々のプルダウンで選択。値は "YYYY-MM-DD"）
+export type CustomFieldType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'date' | 'datetime' | 'birthday' | 'address' | 'select';
 
 // ドロップダウン選択（select）の検索・絞り込み機能（純粋ロジック: src/lib/searchable-select.ts）
 import type { SelectSearchSettings } from '@/lib/searchable-select';

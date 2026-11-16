@@ -8,6 +8,7 @@
  * 設計書: docs/抽選フォーム_実装設計.md（4. 画面デザイン案 / 8. 静的 HTML）
  */
 import type { LotteryConfig, LotteryForm } from '@/types/lottery';
+import { ADDRESS_CSS, ADDRESS_RUNTIME_JS, renderAddressFieldHtml } from './address-field-runtime-js';
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { FOLLOW_UP_NESTED_CSS, FOLLOW_UP_RUNTIME_JS, renderFollowUpBlocksHtml } from './survey-follow-up-runtime-js';
 import type { SurveyQuestion } from '@/types/survey';
@@ -168,6 +169,7 @@ export class StaticLotteryGenerator {
         };
 
         ${BIRTHDAY_RUNTIME_JS}
+        ${ADDRESS_RUNTIME_JS}
         ${FOLLOW_UP_RUNTIME_JS}
         ${this.generateHelpersJS()}
         ${this.generateQuestionsJS()}
@@ -180,6 +182,7 @@ export class StaticLotteryGenerator {
         document.addEventListener('DOMContentLoaded', function () {
             initQuestions();
             bdInitAll();
+            adInitAll();
             refreshStock();
             if (IS_PREVIEW) {
                 var banner = document.querySelector('.preview-banner');
@@ -315,6 +318,9 @@ export class StaticLotteryGenerator {
         break;
       case 'birthday':
         field = renderBirthdayFieldHtml(`q-${id}`);
+        break;
+      case 'address':
+        field = renderAddressFieldHtml(`q-${id}`);
         break;
       case 'select': {
         const opts = (q.options || []).map((o) => `<option value="${this.escapeAttr(o.value)}">${this.escapeHtml(o.label)}</option>`).join('');
@@ -1496,6 +1502,7 @@ export class StaticLotteryGenerator {
         .question-desc { font-size: 13px; color: #666; margin: -6px 0 10px; }
         .input { width: 100%; padding: 14px; border: 1px solid #ccc; border-radius: 2px; font-size: 16px; background: #fafafa; font-family: inherit; }
         ${BIRTHDAY_CSS}
+        ${ADDRESS_CSS}
         .input:focus { outline: none; border-color: var(--primary-color); background: var(--white); box-shadow: 0 0 0 1px var(--primary-color); }
         .other-input, .follow-up { margin-top: 10px; }
         .follow-up { padding: 10px; background: #f7f8fa; border-radius: 6px; }

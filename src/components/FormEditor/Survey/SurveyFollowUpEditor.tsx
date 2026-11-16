@@ -30,6 +30,7 @@ const FOLLOW_UP_TYPE_OPTIONS: Array<{ value: string; label: string; checkStyle?:
   { value: 'text', label: 'テキスト入力 (1行)' },
   { value: 'textarea', label: 'テキスト入力 (複数行)' },
   { value: 'birthday', label: '誕生日選択' },
+  { value: 'address', label: '住所入力' },
   { value: 'select', label: 'ドロップダウン選択' },
   ...CHOICE_TYPE_SELECT_OPTIONS.map((o) => ({ value: o.key, label: o.label, checkStyle: o.style === 'checkbox' })),
 ];

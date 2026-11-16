@@ -338,6 +338,7 @@ const AdditionalQuestionsEditor: React.FC<{
                     <option value="date">日付選択</option>
                     <option value="datetime">日時選択</option>
                     <option value="birthday">誕生日選択</option>
+                    <option value="address">住所入力</option>
                     <option value="select">ドロップダウン選択</option>
                     {CHOICE_TYPE_SELECT_OPTIONS.map((o) => (
                       <option key={o.key} value={o.key}>{o.label}</option>
@@ -4182,6 +4183,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                     <option value="date">日付選択</option>
                     <option value="datetime">日時選択</option>
                     <option value="birthday">誕生日選択</option>
+                    <option value="address">住所入力</option>
                     <option value="select">ドロップダウン選択</option>
                     {CHOICE_TYPE_SELECT_OPTIONS.map((o) => (
                       <option key={o.key} value={o.key}>{o.label}</option>
