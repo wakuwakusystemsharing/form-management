@@ -9,6 +9,7 @@ import { getAppEnvironment } from '@/lib/env';
 import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
 import { getCurrentUserId } from '@/lib/auth-helper';
+import { RESERVATION_FORM_FEATURES } from '@/lib/form-deploy-features';
 
 // テンプレート型定義
 type FormTemplate = {
@@ -360,7 +361,8 @@ export async function POST(
         deployed_at: new Date().toISOString(),
         deploy_url: deployResult.url,
         storage_url: deployResult.storage_url,
-        status: 'deployed'
+        status: 'deployed',
+        features: [...RESERVATION_FORM_FEATURES]
       };
       
       // 更新を保存
@@ -525,7 +527,8 @@ export async function POST(
         deployed_at: new Date().toISOString(),
         deploy_url: deployResult.url,
         storage_url: deployResult.storage_url,
-        status: 'deployed' as const
+        status: 'deployed' as const,
+        features: [...RESERVATION_FORM_FEATURES]
       };
 
        

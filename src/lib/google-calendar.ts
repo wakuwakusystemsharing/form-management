@@ -304,9 +304,7 @@ export async function getBusyCalendarsByEvents(
   calendarIds: string[],
   slotStart: Date,
   slotEnd: Date,
-  storeId?: string,
-  /** この ID の予定は数えない（予約の変更で、変更元の予約の予定を除く） */
-  excludeEventId?: string | null
+  storeId?: string
 ): Promise<Set<string>> {
   if (calendarIds.length === 0) return new Set();
   const calendar = await getCalendarClient(storeId);
@@ -326,7 +324,7 @@ export async function getBusyCalendarsByEvents(
           orderBy: 'startTime',
           maxResults: 250,
         });
-        eventsByCalendar[id] = (response.data.items || []).filter((ev) => !excludeEventId || ev.id !== excludeEventId) as CalendarEventLike[];
+        eventsByCalendar[id] = (response.data.items || []) as CalendarEventLike[];
       } catch (e) {
         console.error(`[GoogleCalendar] events.list failed (calendar=${id}):`, e instanceof Error ? e.message : e);
         eventsByCalendar[id] = null;
@@ -344,9 +342,7 @@ export async function countStoreCalendarEventsInSlot(
   calendarId: string,
   slotStart: Date,
   slotEnd: Date,
-  storeId?: string,
-  /** この ID の予定は数えない（予約の変更で、変更元の予約の予定を除く） */
-  excludeEventId?: string | null
+  storeId?: string
 ): Promise<number> {
   const calendar = await getCalendarClient(storeId);
   if (!calendar) {
@@ -360,7 +356,7 @@ export async function countStoreCalendarEventsInSlot(
     orderBy: 'startTime',
     maxResults: 250,
   });
-  return countEventsOverlappingSlot((response.data.items || []).filter((ev) => !excludeEventId || ev.id !== excludeEventId) as CalendarEventLike[], slotStart, slotEnd);
+  return countEventsOverlappingSlot((response.data.items || []) as CalendarEventLike[], slotStart, slotEnd);
 }
 
 export interface ReservationEventParams {

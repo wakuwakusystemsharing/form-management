@@ -101,12 +101,6 @@ function asArray(v: unknown): Record<string, unknown>[] {
   return Array.isArray(v) ? v.map(asRecord) : [];
 }
 
-/** 予約の変更（フォームから選び直し）で置き換えられた元の予約。キャンセルではないので集計に入れない */
-export function isReplacedReservation(r: { customer_info?: unknown } | null | undefined): boolean {
-  const info = r?.customer_info;
-  return !!info && typeof info === 'object' && !!(info as { replaced_by_reservation_id?: unknown }).replaced_by_reservation_id;
-}
-
 export function isCancelledReservation(r: AnalyticsReservation): boolean {
   return r.status === 'cancelled';
 }
@@ -168,8 +162,7 @@ export function computeReservationAnalytics(
   forms: AnalyticsFormInfo[] = [],
   formId?: string | null
 ): ReservationAnalyticsResult {
-  // 予約の変更で置き換えられた元の予約は、予約数にもキャンセル数にも数えない
-  const all = reservations.filter((r) => r && typeof r === 'object' && !isReplacedReservation(r));
+  const all = reservations.filter((r) => r && typeof r === 'object');
   const target = formId ? all.filter((r) => r.form_id === formId) : all;
   const active = target.filter((r) => !isCancelledReservation(r));
 
