@@ -7,6 +7,7 @@ import { createAdminClient } from '@/lib/supabase';
 import { createReservationEvent, getBusyCalendarsByEvents, countStoreCalendarEventsInSlot } from '@/lib/google-calendar';
 import { resolveMaxConcurrentEvents, resolveReservationSlotWindow } from '@/lib/staff-availability';
 import { filterNoPreferenceStaffByRules } from '@/lib/staff-slot-rules';
+import { retireReplacedReservation, validateReservationReplacement } from '@/lib/reservation-change-service';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { sendReservationEmails } from '@/lib/reservation-email';
 import { scheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
@@ -508,6 +509,23 @@ export async function POST(request: Request) {
       }
     };
 
+    // 予約の変更（LINE の「予約を変更」→「メニューを変更」で予約フォームを変更用に開いた送信）:
+    // 元の予約が本人のもので変更できる期限内かを確認する。新しい予約ができたら元の予約を置き換え済みにする。
+    // 空きの確認では元の予約のカレンダー予定を数えない（同じ時間のままメニューだけ変えられるように）
+    let changeSource: { reservation: any; config: any } | null = null;
+    if (typeof body.change_reservation_id === 'string' && body.change_reservation_id) {
+      const check = await validateReservationReplacement({
+        reservationId: body.change_reservation_id,
+        storeId: body.store_id,
+        lineUserId: body.line_user_id || null,
+      });
+      if (!check.ok) {
+        return NextResponse.json({ error: check.error, code: 'change_not_allowed' }, { status: 409 });
+      }
+      changeSource = { reservation: check.reservation, config: check.config };
+    }
+    const changeExcludeEventId: string | null = changeSource?.reservation?.google_calendar_event_id || null;
+
     // 同一ユーザーの同時予約数制限チェック（form 設定で >0 の場合のみ）
     try {
       const v = formCalendarSettings?.max_concurrent_reservations_per_user;
@@ -518,7 +536,8 @@ export async function POST(request: Request) {
           body.line_user_id || null,
           crmLookupPhone
         );
-        if (activeCount >= limit) {
+        // 予約の変更では、置き換えられる元の予約を数えない
+        if (activeCount - (changeSource ? 1 : 0) >= limit) {
           return NextResponse.json(
             {
               error: '既に予約があります。予約が過ぎるまで新しい予約はできません。',
@@ -731,6 +750,9 @@ export async function POST(request: Request) {
         console.error('[API] reservation email orchestration error:', emailError);
       }
 
+      // 予約の変更: 元の予約を置き換え済みにする
+      if (changeSource) await retireReplacedReservation(changeSource.reservation, newReservation, changeSource.config);
+
       return NextResponse.json(newReservation, { status: 201 });
     }
 
@@ -868,7 +890,7 @@ export async function POST(request: Request) {
                 ? member.event_color_id : null;
               // 直前の空き再チェック（失敗時は従来どおり続行）
               try {
-                const busy = await getBusyCalendarsByEvents([member.calendar_id], slotStart, slotEnd, body.store_id);
+                const busy = await getBusyCalendarsByEvents([member.calendar_id], slotStart, slotEnd, body.store_id, changeExcludeEventId);
                 if (busy.has(member.calendar_id)) {
                   return NextResponse.json(
                     { error: '申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。', code: 'slot_taken' },
@@ -932,7 +954,8 @@ export async function POST(request: Request) {
                 capableStaff.map((m: any) => m.calendar_id),
                 slotStart,
                 slotEnd,
-                body.store_id
+                body.store_id,
+                changeExcludeEventId
               );
               candidates = capableStaff.filter((m: any) => !busy.has(m.calendar_id));
             } catch (fbError) {
@@ -989,7 +1012,7 @@ export async function POST(request: Request) {
           const maxConcurrent = resolveMaxConcurrentEvents(formCalendarSettings);
           let count: number;
           try {
-            count = await countStoreCalendarEventsInSlot(storeCalendarId, window.slotStart, window.slotEnd, body.store_id);
+            count = await countStoreCalendarEventsInSlot(storeCalendarId, window.slotStart, window.slotEnd, body.store_id, changeExcludeEventId);
           } catch (checkError) {
             console.error('[API] store calendar availability check error:', checkError);
             return NextResponse.json(
@@ -1261,6 +1284,9 @@ export async function POST(request: Request) {
     } catch (emailError) {
       console.error('[API] reservation email orchestration error:', emailError);
     }
+
+    // 予約の変更: 元の予約を置き換え済みにする（カレンダーの予定の削除・来店履歴・フォローメッセージの予定・店舗への通知）
+    if (changeSource) await retireReplacedReservation(changeSource.reservation, reservation, changeSource.config);
 
     return NextResponse.json(reservation, { status: 201 });
   } catch (error) {

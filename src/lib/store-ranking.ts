@@ -3,7 +3,7 @@
  * - 予約数（キャンセル除く）/ 売上（メニュー + オプション + 宿泊料金）/ アンケート回答数 / LINE 友だち追加率 / キャンセル率
  * - 期間は予約 = 予約日（YYYY-MM-DD）、アンケート = 回答日時を JST の日付にして判定。友だち追加率は現在の状態（期間に依らない）
  */
-import { isCancelledReservation, reservationAmount, type AnalyticsReservation } from '@/lib/reservation-analytics';
+import { isCancelledReservation, isReplacedReservation, reservationAmount, type AnalyticsReservation } from '@/lib/reservation-analytics';
 
 export interface RankingStoreInput {
   id: string;
@@ -114,6 +114,7 @@ export function computeStoreRankings(
     if (!row) continue;
     const date = typeof r.reservation_date === 'string' ? r.reservation_date.slice(0, 10) : null;
     if (!inPeriod(date, period)) continue;
+    if (isReplacedReservation(r)) continue;
     if (isCancelledReservation(r)) {
       row.cancelled += 1;
       continue;

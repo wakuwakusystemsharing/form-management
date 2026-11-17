@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase';
 import { listCalendarEvents } from '@/lib/google-calendar';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { normalizeEventTimeForClient } from '@/lib/staff-availability';
+import { getChangeExcludeEventId } from '@/lib/reservation-change-service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -87,13 +88,16 @@ export async function GET(
     return NextResponse.json([]);
   }
 
+  // 予約の変更用に開いたフォーム: 変更元の予約の予定は返さない（いまの予約の時間も〇で選べるようにする）
+  const excludeEventId = await getChangeExcludeEventId(storeId, url.searchParams.get('exclude_reservation'));
+
   try {
     // 複数カレンダーを並列取得し、各イベントにスタッフIDをタグ付けして返す
     const results = await Promise.all(
       targets.map(async (t) => {
         try {
           const events = await listCalendarEvents(t.calendarId, start, end, storeId);
-          return events.map(event => {
+          return events.filter(event => !excludeEventId || event.id !== excludeEventId).map(event => {
             // 終日予定は JST 0:00 の ISO にして返す（日付だけだとブラウザが UTC 0:00 = JST 9:00 と解釈し、
             // 当日 9:00 より前が空き・翌日 9:00 までが埋まりになる）
             const startTime = normalizeEventTimeForClient(event.start);

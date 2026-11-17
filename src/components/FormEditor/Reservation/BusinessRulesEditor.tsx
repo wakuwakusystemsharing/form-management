@@ -1877,7 +1877,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
         {expandedSections.cancelRules && (
           <div className={`p-4 border-t ${themeClasses.divider} space-y-5`}>
             <p className={`text-xs ${themeClasses.text.secondary}`}>
-              お客様が公式 LINE の「予約をキャンセル」で行うキャンセルのルールです。店舗管理画面からのキャンセルには制限はかかりません。
+              お客様が公式 LINE の「予約をキャンセル」「予約を変更」で行うキャンセル・変更のルールです。店舗管理画面からのキャンセルには制限はかかりません。
             </p>
 
             {/* キャンセル期限 */}
@@ -1907,6 +1907,36 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
                       return `${jst.getUTCMonth() + 1}/${jst.getUTCDate()}（${dow}）${String(jst.getUTCHours()).padStart(2, '0')}:${String(jst.getUTCMinutes()).padStart(2, '0')}`;
                     })()} まで LINE からキャンセルできます`
                   : 'お客様はいつでも LINE からキャンセルできます'}
+              </p>
+            </div>
+
+            {/* LINE からの予約変更 */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>LINE からの予約変更を受け付ける</label>
+                  <InfoTooltip
+                    theme={theme}
+                    text={'ONにすると、お客様が公式 LINE で「予約を変更」と送ったときに、日時・時間・メニューを自分で変更できます。\n・変更できる期限は、上のキャンセル期限と同じです。\n・変更先に選べる日付は、今日から「事前予約可能日数」までです。\n・空いている時間だけ選べます（予約フォームのカレンダーと同じ 〇 ✕）。\n・「メニューを変更」は予約フォームが開き、選び直して送信すると元の予約と置き換わります。\nOFF にすると「店舗へご連絡ください」と案内します。宿泊の予約は対象外です。'}
+                  />
+                </div>
+                <button
+                  type="button"
+                  data-testid="cancel-rules-allow-change"
+                  onClick={() => handleCancelRulesChange({ allow_change: !cancelRules.allow_change })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    cancelRules.allow_change ? themeClasses.toggle.enabled : themeClasses.toggle.disabled
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    cancelRules.allow_change ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+              <p className={`text-xs ${themeClasses.text.tertiary}`}>
+                {cancelRules.allow_change
+                  ? `お客様は公式 LINE で「予約を変更」と送ると、${cancelRules.deadline_hours > 0 ? `予約の ${cancelRules.deadline_hours} 時間前まで` : '予約の時刻まで'}日時・メニューを変更できます。リッチメニューに「予約を変更」と送るボタンを置くと便利です。`
+                  : 'お客様は LINE から予約を変更できません（「店舗へご連絡ください」と案内します）。'}
               </p>
             </div>
 
@@ -1951,10 +1981,10 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
             {/* キャンセル時の店舗通知 */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>お客様がキャンセルしたら店舗にメールで通知</label>
+                <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>お客様がキャンセル・変更したら店舗にメールで通知</label>
                 <InfoTooltip
                   theme={theme}
-                  text={'ONにすると、お客様が LINE の「予約をキャンセル」でキャンセルしたとき、店舗側通知メールの宛先（未設定ならオーナーのメール）へ「【予約キャンセル】」のメールを送ります。\n空き枠にすぐ気づけるので、キャンセル待ちのお客様への連絡に役立ちます。'}
+                  text={'ONにすると、お客様が LINE の「予約をキャンセル」でキャンセルしたとき、店舗側通知メールの宛先（未設定ならオーナーのメール）へ「【予約キャンセル】」のメールを送ります。「予約を変更」で変更したときは「【予約変更】」のメールを送ります。\n空き枠にすぐ気づけるので、キャンセル待ちのお客様への連絡に役立ちます。'}
                 />
               </div>
               <button

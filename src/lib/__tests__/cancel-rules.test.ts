@@ -15,8 +15,10 @@ import { StaticReservationGenerator } from '@/lib/static-generator-reservation';
 
 describe('cancel-rules（キャンセルルール設定）', () => {
   it('resolveCancelRules: 欠損・不正値は既定（制限なし / 表示なし / 通知なし）', () => {
-    const base = { deadline_hours: 0, policy_text: '', show_policy_on_form: false, notify_store_on_cancel: false, fee_tiers: [], fee_base: 'stay', self_cancel_with_fee: 'confirm' };
+    const base = { deadline_hours: 0, policy_text: '', show_policy_on_form: false, notify_store_on_cancel: false, allow_change: true, fee_tiers: [], fee_base: 'stay', self_cancel_with_fee: 'confirm' };
     expect(resolveCancelRules(undefined)).toEqual(base);
+    // LINE からの予約変更は、明示的に OFF にしたときだけ受け付けない
+    expect(resolveCancelRules({ cancel_rules: { allow_change: false } }).allow_change).toBe(false);
     expect(resolveCancelRules({ cancel_rules: { deadline_hours: -5, policy_text: 3 as unknown as string, show_policy_on_form: 'yes' as unknown as boolean } })).toEqual(base);
     expect(resolveCancelRules({ cancel_rules: { deadline_hours: 24.9, policy_text: '当日キャンセル不可', show_policy_on_form: true, notify_store_on_cancel: true } })).toEqual({
       ...base, deadline_hours: 24, policy_text: '当日キャンセル不可', show_policy_on_form: true, notify_store_on_cancel: true,

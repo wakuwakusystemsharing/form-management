@@ -399,6 +399,11 @@ class BookingForm {
             if (!MANUAL_MODE) {
                 await this.initializeLIFF();
             }
+            // LINE の「予約を変更」→「メニューを変更」から開かれたとき（URL に ?change=予約ID）
+            let changeSourcePromise = null;
+            if (!MANUAL_MODE && !PREVIEW_MODE) {
+                changeSourcePromise = this.loadChangeSource();
+            }
 
             // localStorageから名前・電話番号・メールアドレスを復元
             // （手動モードはスタッフ端末に残った情報を復元しない）
@@ -438,6 +443,11 @@ class BookingForm {
                 }
             } catch (e) {}
 
+            // 予約の変更: いまの予約の内容（名前・電話番号・メニュー）を入れた状態にする
+            if (changeSourcePromise) {
+                try { await changeSourcePromise; this.applyChangeSource(); } catch (e) {}
+            }
+
             // カレンダーは初期表示しない（メニュー選択後に表示）
             // this.renderCalendar();
         } catch (error) {
@@ -456,6 +466,121 @@ class BookingForm {
         }
     }
     
+    // 予約の変更: URL の ?change=予約ID（LIFF の liff.state 経由も含む）
+    getChangeReservationId() {
+        try {
+            const pick = (search) => {
+                const v = new URLSearchParams(search || '').get('change');
+                return v && /^[A-Za-z0-9_-]{1,64}$/.test(v) ? v : '';
+            };
+            const direct = pick(window.location.search);
+            if (direct) return direct;
+            const st = new URLSearchParams(window.location.search || '').get('liff.state');
+            if (st) {
+                const q = st.indexOf('?');
+                return pick(q >= 0 ? st.slice(q) : st);
+            }
+        } catch (e) {}
+        return '';
+    }
+
+    // 予約の変更: 変更元の予約を取得して、画面の上に案内を出す。取得できなければ通常の予約フォームとして使えないよう送信を止める
+    async loadChangeSource() {
+        const id = this.getChangeReservationId();
+        if (!id) return;
+        this.state.changeRequested = true;
+        let message = '';
+        try {
+            if (!this.state.lineUserId) {
+                message = 'LINE の情報を取得できませんでした。公式LINEで「予約を変更」と送って、もう一度お試しください。';
+            } else {
+                const url = window.location.origin + '/api/reservations/change-source?reservation_id=' + encodeURIComponent(id) +
+                    '&store_id=' + encodeURIComponent(STORE_ID) + '&line_user_id=' + encodeURIComponent(this.state.lineUserId);
+                const res = await fetch(url);
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data && data.reservation) {
+                    this.state.changeSource = data.reservation;
+                    // 空き状況はいまの予約の予定を除いて取り直す
+                    this.availabilityCache = {};
+                } else {
+                    message = (data && data.error) || '変更するご予約を確認できませんでした。';
+                }
+            }
+        } catch (e) {
+            message = '変更するご予約を確認できませんでした。通信状況をご確認のうえ、もう一度お試しください。';
+        }
+        this.renderChangeBanner(message);
+    }
+
+    renderChangeBanner(errorMessage) {
+        const formContent = document.querySelector('.form-content');
+        if (!formContent) return;
+        const old = document.getElementById('change-mode-banner');
+        if (old) old.remove();
+        const banner = document.createElement('div');
+        banner.id = 'change-mode-banner';
+        const src = this.state.changeSource;
+        const ok = !!src && !errorMessage;
+        banner.style.cssText = 'border-radius:0.5rem;padding:0.875rem 1rem;margin-bottom:1rem;font-size:0.875rem;line-height:1.7;' +
+            (ok ? 'background:#eff6ff;border:1px solid #93c5fd;color:#1e3a8a;' : 'background:#fee;border:1px solid #f99;color:#c00;');
+        const add = (text, bold) => {
+            const p = document.createElement('div');
+            p.textContent = text;
+            if (bold) p.style.fontWeight = 'bold';
+            banner.appendChild(p);
+        };
+        if (ok) {
+            add('ご予約の変更', true);
+            add('現在のご予約：' + src.date_text + (src.menu_text ? '　' + src.menu_text : '') + (src.staff_name ? '　担当: ' + src.staff_name : ''));
+            add('メニューと日時を選び直して送信すると、このご予約が新しい内容に置き換わります。');
+        } else {
+            add('ご予約を変更できません', true);
+            add(errorMessage || '変更するご予約を確認できませんでした。');
+        }
+        formContent.insertBefore(banner, formContent.firstChild);
+        const submitBtn = document.getElementById('submit-button');
+        if (submitBtn) {
+            if (ok) submitBtn.textContent = '予約を変更する';
+            submitBtn.disabled = !ok;
+        }
+    }
+
+    // 予約の変更: いまの予約の名前・電話番号・メニュー・オプションを選んだ状態にする
+    applyChangeSource() {
+        const src = this.state.changeSource;
+        if (!src) return;
+        if (src.customer_name && src.customer_name !== '未記入') {
+            this.state.name = src.customer_name;
+            const nameEl = document.getElementById('customer-name');
+            if (nameEl) nameEl.value = src.customer_name;
+        }
+        if (src.customer_phone && src.customer_phone !== '未記入') {
+            this.state.phone = src.customer_phone;
+            const phoneEl = document.getElementById('customer-phone');
+            if (phoneEl) phoneEl.value = src.customer_phone;
+        }
+        const cats = (this.config.menu_structure && this.config.menu_structure.categories) || [];
+        const sel = { selectedMenus: {}, selectedSubMenus: {}, selectedMenuOptions: {}, selectedCategoryOptions: {},
+            gender: src.gender || '', visitCount: src.visit_count || '', couponUsage: src.coupon || '' };
+        (src.selected_menus || []).forEach(m => {
+            if (!m || !m.menu_id) return;
+            const has = c => (c.menus || []).some(x => x.id === m.menu_id);
+            const cat = cats.find(c => has(c) && (c.display_name || c.name) === m.category_name) || cats.find(has);
+            if (!cat) return;
+            if (!sel.selectedMenus[cat.id]) sel.selectedMenus[cat.id] = [];
+            if (sel.selectedMenus[cat.id].indexOf(m.menu_id) === -1) sel.selectedMenus[cat.id].push(m.menu_id);
+            if (m.submenu_id) sel.selectedSubMenus[m.menu_id] = m.submenu_id;
+        });
+        (src.selected_options || []).forEach(o => {
+            if (!o || !o.option_id || !o.menu_id) return;
+            if (!sel.selectedMenuOptions[o.menu_id]) sel.selectedMenuOptions[o.menu_id] = [];
+            sel.selectedMenuOptions[o.menu_id].push(o.option_id);
+        });
+        if (Object.keys(sel.selectedMenus).length > 0) {
+            try { this.handleRepeatBooking(sel); } catch (e) {}
+        }
+    }
+
     // LINE アプリ内で開かれているかを判定（liff.isInClient() は liff.init() 前でも利用可能）。
     // SDK が読み込めない等で判定できない場合は制限しない（正規の利用者を誤って弾かないため）
     isOutsideLineClient() {
@@ -1808,7 +1933,7 @@ class BookingForm {
                 ? this.state.selectedStaffId
                 : 'all')
             : '';
-        const cacheKey = startTime.toISOString() + endTime.toISOString() + ':' + staffParam;
+        const cacheKey = startTime.toISOString() + endTime.toISOString() + ':' + staffParam + (this.state.changeSource ? ':change' : '');
         
         // キャッシュを確認
         if (this.availabilityCache[cacheKey]) {
@@ -1820,7 +1945,8 @@ class BookingForm {
         
         const url = \`\${window.location.origin}/api/stores/\${STORE_ID}/calendar/availability\` +
             \`?start=\${startTime.toISOString()}&end=\${endTime.toISOString()}\` +
-            (staffParam ? \`&staff_id=\${encodeURIComponent(staffParam)}&form_id=\${encodeURIComponent(FORM_ID || '')}\` : '');
+            (staffParam ? \`&staff_id=\${encodeURIComponent(staffParam)}&form_id=\${encodeURIComponent(FORM_ID || '')}\` : '') +
+            (this.state.changeSource ? '&exclude_reservation=' + encodeURIComponent(this.state.changeSource.id) : '');
         
         try {
             const response = await fetch(url);
@@ -2260,9 +2386,12 @@ class BookingForm {
     }
     
     // 前回と同じメニューで予約する
-    handleRepeatBooking() {
+    // override = 予約の変更で開いたときの、変更元の予約の選択内容（端末の保存内容は使わず、案内のダイアログも出さない）
+    handleRepeatBooking(override) {
+        const silent = !!(override && override.selectedMenus);
+        const alert = silent ? function() {} : function(m) { window.alert(m); };
         const formId = this.config.basic_info?.form_name || this.config.id || 'default';
-        const savedData = localStorage.getItem(\`booking_\${formId}\`);
+        const savedData = silent ? JSON.stringify(override) : localStorage.getItem(\`booking_\${formId}\`);
         
         if (!savedData) {
             alert('前回のメニューが見つかりません💦');
@@ -2274,7 +2403,7 @@ class BookingForm {
             
             // データが1週間以内のもののみ復元
             const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-            if (selectionData.timestamp < oneWeekAgo) {
+            if (!silent && selectionData.timestamp < oneWeekAgo) {
                 alert('前回のメニューデータが古いため復元できません');
                 return;
             }
@@ -2586,6 +2715,11 @@ class BookingForm {
     }
     
     async handleSubmit() {
+        // 予約の変更で開いたのに変更元の予約を確認できていないときは送信しない（新しい予約が別に増えるのを防ぐ）
+        if (this.state.changeRequested && !this.state.changeSource) {
+            alert('ご予約を変更できません。公式LINEで「予約を変更」と送って、もう一度お試しください。');
+            return;
+        }
         // LINE アプリ外からのアクセスは送信しない（案内画面で操作できないが念のため）
         if (this.state.lineOnlyBlocked || this.isOutsideLineClient()) {
             this.showLineOnlyGate();
@@ -2936,7 +3070,9 @@ class BookingForm {
                 staff_id: (this.state.selectedStaffId && this.state.selectedStaffId !== 'none') ? this.state.selectedStaffId : null,
                 staff_no_preference: this.state.selectedStaffId === 'none',
                 // 店舗側手動予約フォームからの登録（サーバー側で CRM 照合・流入経路の扱いが変わる）
-                manual_entry: MANUAL_MODE
+                manual_entry: MANUAL_MODE,
+                // 予約の変更: 元の予約の ID（新しい予約ができたら、サーバーが元の予約を置き換え済みにする）
+                change_reservation_id: this.state.changeSource ? this.state.changeSource.id : null
             };
             
             // /api/reservationsにPOSTリクエストを送信
@@ -2972,6 +3108,10 @@ class BookingForm {
                         blockReason = errorData.error || '既に予約があります。予約が過ぎるまで新しい予約はできません。';
                     }
                     // スタッフ選択: 送信直前の再チェックで枠が埋まっていた場合（ダブルブッキング防止）
+                    // 予約の変更: 元の予約が変更できない状態（期限切れ・キャンセル済みなど）
+                    if (response.status === 409 && errorData && errorData.code === 'change_not_allowed') {
+                        blockReason = errorData.error || 'このご予約は変更できません。';
+                    }
                     if (response.status === 409 && errorData && errorData.code === 'slot_taken') {
                         blockReason = errorData.error || '申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。';
                     }
@@ -3002,6 +3142,13 @@ class BookingForm {
             // （通常フォームは LINE メッセージ送信を優先する既存挙動のまま）
             if (MANUAL_MODE && !apiSuccess) {
                 alert('予約の登録に失敗しました。時間をおいてもう一度お試しください。');
+                resetSubmitState();
+                return;
+            }
+
+            // 予約の変更: 保存できなかったときは完了にしない（元の予約はそのまま残っている）
+            if (this.state.changeSource && !apiSuccess) {
+                alert('予約を変更できませんでした。時間をおいてもう一度お試しください。');
                 resetSubmitState();
                 return;
             }

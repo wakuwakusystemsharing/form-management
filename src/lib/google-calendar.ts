@@ -1,4 +1,4 @@
-import { google } from 'googleapis';
+import { google, type calendar_v3 } from 'googleapis';
 import { busyCalendarIdsFromEvents, countEventsOverlappingSlot, type CalendarEventLike } from './staff-availability';
 import { createAdminClient } from './supabase';
 import { decryptRefreshToken } from './google-calendar-token';
@@ -192,6 +192,39 @@ export async function listCalendarEvents(
 }
 
 /**
+ * 期間内の予定をすべて取得する（ページをたどる）。listCalendarEvents は 1 ページ（最大 250 件）しか返さないため、
+ * 数週間ぶんの空きをまとめて見るとき（LINE の「予約を変更」）はこちらを使う
+ */
+export async function listCalendarEventsAll(
+  calendarId: string,
+  startIso: string,
+  endIso: string,
+  storeId?: string
+) {
+  const calendar = await getCalendarClient(storeId);
+  if (!calendar) {
+    throw new Error('Google Calendar APIの認証情報が設定されていません');
+  }
+  const items: calendar_v3.Schema$Event[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < 20; page++) {
+    const response = await calendar.events.list({
+      calendarId,
+      timeMin: startIso,
+      timeMax: endIso,
+      singleEvents: true,
+      orderBy: 'startTime',
+      maxResults: 2500,
+      pageToken,
+    });
+    items.push(...(response.data.items || []));
+    pageToken = response.data.nextPageToken || undefined;
+    if (!pageToken) break;
+  }
+  return items;
+}
+
+/**
  * 汎用のカレンダーイベント作成（外部予約メール連携用）。
  * createReservationEvent はフォーム予約専用の説明文を組み立てるため、
  * タイトル・説明・開始/終了を呼び出し側で自由に指定したい用途はこちらを使う。
@@ -271,7 +304,9 @@ export async function getBusyCalendarsByEvents(
   calendarIds: string[],
   slotStart: Date,
   slotEnd: Date,
-  storeId?: string
+  storeId?: string,
+  /** この ID の予定は数えない（予約の変更で、変更元の予約の予定を除く） */
+  excludeEventId?: string | null
 ): Promise<Set<string>> {
   if (calendarIds.length === 0) return new Set();
   const calendar = await getCalendarClient(storeId);
@@ -291,7 +326,7 @@ export async function getBusyCalendarsByEvents(
           orderBy: 'startTime',
           maxResults: 250,
         });
-        eventsByCalendar[id] = (response.data.items || []) as CalendarEventLike[];
+        eventsByCalendar[id] = (response.data.items || []).filter((ev) => !excludeEventId || ev.id !== excludeEventId) as CalendarEventLike[];
       } catch (e) {
         console.error(`[GoogleCalendar] events.list failed (calendar=${id}):`, e instanceof Error ? e.message : e);
         eventsByCalendar[id] = null;
@@ -309,7 +344,9 @@ export async function countStoreCalendarEventsInSlot(
   calendarId: string,
   slotStart: Date,
   slotEnd: Date,
-  storeId?: string
+  storeId?: string,
+  /** この ID の予定は数えない（予約の変更で、変更元の予約の予定を除く） */
+  excludeEventId?: string | null
 ): Promise<number> {
   const calendar = await getCalendarClient(storeId);
   if (!calendar) {
@@ -323,7 +360,7 @@ export async function countStoreCalendarEventsInSlot(
     orderBy: 'startTime',
     maxResults: 250,
   });
-  return countEventsOverlappingSlot((response.data.items || []) as CalendarEventLike[], slotStart, slotEnd);
+  return countEventsOverlappingSlot((response.data.items || []).filter((ev) => !excludeEventId || ev.id !== excludeEventId) as CalendarEventLike[], slotStart, slotEnd);
 }
 
 export interface ReservationEventParams {

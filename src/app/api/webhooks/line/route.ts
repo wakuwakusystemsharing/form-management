@@ -11,6 +11,8 @@ import { sendEmail } from '@/lib/email-sender';
 import { findLineFlexReplyForText, handleLineFlexPostback, listLineFlexAttachments, listLineFlexGreetingMessages } from '@/lib/line-flex-service';
 import { handleBroadcastOptCommand } from '@/lib/broadcast-opt-out';
 import { ensureFriendCustomer } from '@/lib/line-friend-customers';
+import { CHANGE_KEYWORD, isChangePostback } from '@/lib/reservation-change';
+import { buildChangeMenuReply, handleChangePostback } from '@/lib/reservation-change-service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -534,6 +536,17 @@ export async function POST(req: NextRequest) {
 
   // LINE メッセージの分岐ボタン（postback。data = `lf:{メッセージID}:{キー}`）: 回答を記録・タグ付けして、次のメッセージを返す
   if (event.type === 'postback') {
+    // 「予約を変更」のボタン（data = rc:...）: 日付 → 時間 → 確認 → 変更
+    if (isChangePostback(event.postback?.data)) {
+      try {
+        const changeReply = await handleChangePostback(adminClient, store, userId, event.postback?.data ?? '');
+        if (changeReply) await replyRawMessages(replyToken, accessToken, changeReply);
+      } catch (e) {
+        console.error('[LINE Webhook] 予約変更エラー:', e);
+        await replyRawMessages(replyToken, accessToken, [{ type: 'text', text: '予約を変更できませんでした。お手数ですが、時間をおいてもう一度お試しください。' }]);
+      }
+      return NextResponse.json({ success: true });
+    }
     const branchReply = await handleLineFlexPostback(storeId, userId, event.postback?.data ?? '');
     if (branchReply) await replyRawMessages(replyToken, accessToken, branchReply.slice(0, 5));
     return NextResponse.json({ success: true });
@@ -603,6 +616,17 @@ export async function POST(req: NextRequest) {
       };
     });
     await replyFlexMessage(replyToken, accessToken, 'ご予約一覧', bubbles);
+    return NextResponse.json({ success: true });
+  }
+
+  // 予約を変更: これからの予約ごとに「日時を変更 / 時間を変更 / メニューを変更」のカードを返す
+  if (messageText === CHANGE_KEYWORD) {
+    try {
+      await replyRawMessages(replyToken, accessToken, await buildChangeMenuReply(adminClient, store, userId));
+    } catch (e) {
+      console.error('[LINE Webhook] 予約変更の一覧エラー:', e);
+      await replyRawMessages(replyToken, accessToken, [{ type: 'text', text: '予約を確認できませんでした。お手数ですが、時間をおいてもう一度お試しください。' }]);
+    }
     return NextResponse.json({ success: true });
   }
 

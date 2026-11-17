@@ -14,6 +14,8 @@ export interface CancelRules {
   policy_text: string;
   show_policy_on_form: boolean;
   notify_store_on_cancel: boolean;
+  /** お客様が LINE の「予約を変更」で日時・メニューを変更できるか（未設定 = できる。期限はキャンセル期限と同じ） */
+  allow_change: boolean;
   /** 段階式キャンセル料（days_before の大きい順。空 = キャンセル料なし） */
   fee_tiers: CancelFeeTier[];
   /** キャンセル料の基準（宿泊料金のみ / オプション込みの合計） */
@@ -41,6 +43,7 @@ export const DEFAULT_CANCEL_RULES: CancelRules = {
   policy_text: '',
   show_policy_on_form: false,
   notify_store_on_cancel: false,
+  allow_change: true,
   fee_tiers: [],
   fee_base: 'stay',
   self_cancel_with_fee: 'confirm',
@@ -107,6 +110,7 @@ export function resolveCancelRules(config: Partial<Pick<Form['config'], 'cancel_
     policy_text: typeof raw.policy_text === 'string' ? raw.policy_text : '',
     show_policy_on_form: raw.show_policy_on_form === true,
     notify_store_on_cancel: raw.notify_store_on_cancel === true,
+    allow_change: raw.allow_change !== false,
     fee_tiers: sanitizeFeeTiers(raw.fee_tiers),
     fee_base: raw.fee_base === 'total' ? 'total' : 'stay',
     self_cancel_with_fee: raw.self_cancel_with_fee === 'deny' ? 'deny' : 'confirm',
