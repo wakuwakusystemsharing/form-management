@@ -106,7 +106,7 @@ export interface ChangeMenuItem {
   /** 変更できないときの案内文 */
   blockText?: string;
   mode: 'calendar' | 'form_only';
-  /** 予約フォームを変更用に開く URL（LIFF）。無ければ「メニューを変更」を出さない */
+  /** メニュー変更フォームの URL（LIFF）。無ければ「メニューを変更」を出さない */
   formUrl?: string | null;
   /** 変更の期限の表示（例: 11/19（木）14:00）。期限なしは null */
   deadlineText?: string | null;
@@ -134,8 +134,8 @@ export function buildChangeMenuMessage(storeName: string | null | undefined, ite
       if (item.deadlineText) contents.push({ type: 'text', text: `変更できるのは ${item.deadlineText} までです。`, size: 'xxs', color: NOTE, wrap: true, margin: 'md' });
     } else if (item.formUrl) {
       contents.push(
-        { type: 'text', text: '予約フォームを開いて、内容を選び直してください。送信すると、このご予約が新しい内容に置き換わります。', size: 'xs', color: NOTE, margin: 'lg', wrap: true },
-        button('予約内容を変更', { type: 'uri', uri: item.formUrl })
+        { type: 'text', text: 'メニューを変更できます。日時の変更は店舗まで直接ご連絡ください。', size: 'xs', color: NOTE, margin: 'lg', wrap: true },
+        button('メニューを変更', { type: 'uri', uri: item.formUrl })
       );
     } else {
       contents.push({ type: 'text', text: 'このご予約は LINE から変更できません。店舗まで直接ご連絡ください。', size: 'xs', wrap: true, color: WARN, margin: 'lg' });
@@ -302,6 +302,63 @@ export function buildChangeDoneMessage(
       { type: 'separator', margin: 'lg' },
       { type: 'box', layout: 'vertical', margin: 'lg', spacing: 'sm', contents: reservationLines(r, '📅 新しい日時') },
       { type: 'text', text: `変更前：${formatDateTimeShortJa(before.reservation_date, before.reservation_time)}`, size: 'xs', color: MUTED, margin: 'lg', wrap: true },
+      { type: 'separator', margin: 'lg' },
+      { type: 'text', text: 'ご来店心よりお待ちしております。', size: 'sm', align: 'center', margin: 'lg', color: NOTE, wrap: true },
+    ]),
+  ]);
+}
+
+export interface MenuChangeDoneReservation extends ChangeCardReservation {
+  selected_menus?: unknown;
+  selected_options?: unknown;
+}
+
+/** メニュー変更フォームの送信後に返す完了のカード（変更後の予約内容。メニューとオプションをすべて並べる） */
+export function buildMenuChangeDoneMessage(storeName: string | null | undefined, r: MenuChangeDoneReservation): Obj {
+  const menus = Array.isArray(r.selected_menus) ? (r.selected_menus as Array<{ menu_id?: string; menu_name?: string; submenu_name?: string }>) : [];
+  const options = Array.isArray(r.selected_options) ? (r.selected_options as Array<{ menu_id?: string; option_name?: string }>) : [];
+  const menuLines: Obj[] = [];
+  if (menus.length > 0) {
+    const used = new Set<number>();
+    menus.forEach((m) => {
+      const name = m?.submenu_name ? `${m.menu_name || ''} > ${m.submenu_name}` : m?.menu_name || '';
+      if (!name) return;
+      menuLines.push({ type: 'text', text: `・${name}`, size: 'sm', wrap: true });
+      options.forEach((o, i) => {
+        if (o?.option_name && o.menu_id && o.menu_id === m.menu_id) {
+          used.add(i);
+          menuLines.push({ type: 'text', text: `　└ ${o.option_name}`, size: 'sm', wrap: true });
+        }
+      });
+    });
+    options.forEach((o, i) => {
+      if (!used.has(i) && o?.option_name) menuLines.push({ type: 'text', text: `　└ ${o.option_name}`, size: 'sm', wrap: true });
+    });
+  } else if (menuText(r)) {
+    menuLines.push({ type: 'text', text: `・${menuText(r)}`, size: 'sm', wrap: true });
+  }
+  return flexMessage('メニューを変更しました', [
+    bubble('【メニュー変更完了】', storeName, [
+      { type: 'text', text: 'メニューを変更しました', weight: 'bold', size: 'md', align: 'center', margin: 'lg' },
+      { type: 'separator', margin: 'lg' },
+      {
+        type: 'box',
+        layout: 'vertical',
+        margin: 'lg',
+        spacing: 'sm',
+        contents: [
+          { type: 'text', text: '📋 変更後のメニュー', size: 'sm', color: CHANGE_THEME_COLOR, weight: 'bold' },
+          ...menuLines,
+          { type: 'text', text: '📅 日時', size: 'sm', color: CHANGE_THEME_COLOR, weight: 'bold', margin: 'md' },
+          { type: 'text', text: formatDateTimeShortJa(r.reservation_date, r.reservation_time), size: 'sm', wrap: true },
+          ...(r.staff_name
+            ? [
+                { type: 'text', text: '👤 担当', size: 'sm', color: CHANGE_THEME_COLOR, weight: 'bold', margin: 'md' },
+                { type: 'text', text: `${r.staff_name}${r.staff_no_preference ? '（指名なし）' : ''}`, size: 'sm', wrap: true },
+              ]
+            : []),
+        ],
+      },
       { type: 'separator', margin: 'lg' },
       { type: 'text', text: 'ご来店心よりお待ちしております。', size: 'sm', align: 'center', margin: 'lg', color: NOTE, wrap: true },
     ]),

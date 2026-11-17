@@ -2,24 +2,27 @@
  * LINE の「予約を変更」のサーバー側処理（Supabase / Google カレンダー / メールに依存）。
  * 判定とカードの組み立ては純粋ロジック（reservation-change.ts / reservation-change-flex.ts）。
  *
- * - トーク内の変更（日時・時間）: 予約の行をそのまま書き換える（`applyDateTimeChange`）
- * - 予約フォームを開いて変更（メニューを変更）: 新しい予約を作り、元の予約を「置き換え済み」として取り消す
- *   （`validateReservationReplacement` → POST /api/reservations → `retireReplacedReservation`）
+ * - トーク内の変更（日時・時間）: `handleChangePostback` → 予約の行の日時を書き換える
+ * - メニュー変更フォーム（「メニューを変更」で開く予約フォーム）: `changeReservationMenu` →
+ *   予約の行のメニュー（と、いまの時間に入らず選び直したときだけ日時）を書き換える
+ * どちらも新しい予約は作らない。書き換えたあとの処理（カレンダー・来店履歴・フォロー・店舗への通知）は共通
  */
 import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { normalizeForm } from '@/lib/form-normalizer';
-import { deleteCalendarEvent, listCalendarEventsAll, updateReservationEvent } from '@/lib/google-calendar';
+import { listCalendarEventsAll, updateReservationEvent } from '@/lib/google-calendar';
 import { buildEventParamsFromReservation } from '@/lib/reservation-event-params';
 import { calculateTotalAmount, createCustomerVisit, deleteCustomerVisitByReservation, recalculateCustomerStats } from '@/lib/customer-utils';
-import { cancelFollowMessageForReservation, rescheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
+import { rescheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
 import { sendEmail } from '@/lib/email-sender';
 import { formatDeadlineJst } from '@/lib/cancel-rules';
+import { hasDeployedFeature } from '@/lib/form-deploy-features';
 import { mergeStaffSchedule } from '@/lib/staff-schedule';
+import { dayBusinessHours, isSlotBookableForSettings } from '@/lib/staff-slot-rules';
 import { resolveMaxConcurrentEvents, type CalendarEventLike } from '@/lib/staff-availability';
-import type { FormConfig } from '@/types/form';
+import type { FormConfig, StaticDeploy } from '@/types/form';
 import {
   CHANGE_DATES_PAGE_DAYS,
   addDays,
@@ -27,6 +30,7 @@ import {
   evaluateChangeDays,
   evaluateDaySlots,
   formatDateTimeShortJa,
+  isSlotFreeByEvents,
   jstToday,
   listChangeWindowDates,
   parseChangePostback,
@@ -42,8 +46,10 @@ import {
   buildChangeMenuMessage,
   buildChangeSimpleMessage,
   buildChangeTimesMessage,
+  buildMenuChangeDoneMessage,
   type ChangeMenuItem,
 } from '@/lib/reservation-change-flex';
+
 
 export interface ChangeStore {
   id: string;
@@ -54,28 +60,39 @@ export interface ChangeStore {
 }
 
 type Message = Record<string, unknown>;
+interface LoadedForm {
+  config: FormConfig;
+  staticDeploy: StaticDeploy | null;
+}
 
 const LIST_HINT = '「予約を変更」と送ると、変更できるご予約を確認できます。';
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-async function loadFormConfig(adminClient: any, storeId: string, formId: string | null | undefined): Promise<FormConfig | null> {
+async function loadForm(adminClient: any, storeId: string, formId: string | null | undefined): Promise<LoadedForm | null> {
   if (!formId) return null;
   try {
     const { data } = await adminClient
       .from('reservation_forms')
-      .select('id, store_id, config, draft_config')
+      .select('id, store_id, config, draft_config, static_deploy')
       .eq('store_id', storeId)
       .eq('id', formId)
       .maybeSingle();
-    return data ? (normalizeForm(data).config as FormConfig) : null;
+    if (!data) return null;
+    return { config: normalizeForm(data).config as FormConfig, staticDeploy: (data.static_deploy as StaticDeploy | null) || null };
   } catch (e) {
     console.error('[reservation-change] form load error:', e);
     return null;
   }
 }
 
-/** 予約フォームを変更用に開く URL（LINE フォームで LIFF ID があるときだけ） */
-export function buildChangeFormUrl(config: FormConfig | null | undefined, reservationId: string): string | null {
+/**
+ * メニュー変更フォームの URL（LINE フォームで LIFF ID があり、デプロイ済みの HTML が対応しているときだけ）。
+ * 対応前の HTML（保存＆デプロイしていないフォーム）は通常の予約フォームとして開いてしまうので出さない
+ */
+export function buildChangeFormUrl(config: FormConfig | null | undefined, staticDeploy: StaticDeploy | null | undefined, reservationId: string): string | null {
   if (!config || (config as { form_type?: string }).form_type === 'web') return null;
+  if (!hasDeployedFeature(staticDeploy, 'menu_change')) return null;
   const liffId = (config.basic_info?.liff_id || '').trim();
   if (liffId.length < 10) return null;
   return `https://liff.line.me/${liffId}?change=${encodeURIComponent(reservationId)}`;
@@ -97,19 +114,19 @@ export async function buildChangeMenuReply(adminClient: any, store: ChangeStore,
   if (rows.length === 0) {
     return [buildChangeSimpleMessage('予約の変更', '現在変更できるご予約はありません。', store.name)];
   }
-  const configCache = new Map<string, FormConfig | null>();
+  const formCache = new Map<string, LoadedForm | null>();
   const items: ChangeMenuItem[] = [];
   for (const r of rows) {
     const key = r.form_id || '';
-    if (!configCache.has(key)) configCache.set(key, await loadFormConfig(adminClient, store.id, r.form_id));
-    const config = configCache.get(key) || null;
-    const e = resolveChangeEligibility(r, config, now);
+    if (!formCache.has(key)) formCache.set(key, await loadForm(adminClient, store.id, r.form_id));
+    const form = formCache.get(key) || null;
+    const e = resolveChangeEligibility(r, form?.config, now);
     items.push({
       reservation: r,
       allowed: e.allowed,
       blockText: e.allowed ? undefined : describeChangeBlock(e, store.phone),
       mode: e.mode,
-      formUrl: e.allowed ? buildChangeFormUrl(config, r.id) : null,
+      formUrl: e.allowed ? buildChangeFormUrl(form?.config, form?.staticDeploy, r.id) : null,
       deadlineText: e.deadline ? formatDeadlineJst(e.deadline) : null,
     });
   }
@@ -158,32 +175,38 @@ async function buildSlotContext(store: ChangeStore, reservation: any, config: Fo
   return { cs: formCs, durationMinutes, events, staffMode: false, capacity: resolveMaxConcurrentEvents(formCs) };
 }
 
+const menuNamesOf = (r: { menu_name?: string | null; submenu_name?: string | null; selected_menus?: unknown }): string => {
+  const list = Array.isArray(r.selected_menus) ? (r.selected_menus as Array<{ menu_name?: string; submenu_name?: string }>) : [];
+  if (list.length > 0) {
+    return list.map((m) => (m?.submenu_name ? `${m.menu_name || ''} > ${m.submenu_name}` : m?.menu_name || '')).filter(Boolean).join('、');
+  }
+  const menu = r.submenu_name ? `${r.menu_name || ''} > ${r.submenu_name}` : r.menu_name || '';
+  return menu && menu !== '未選択' ? menu : '';
+};
+
 /** お客様が LINE で予約を変更したときに店舗へ送るメール */
 export function buildChangeNotificationEmail(args: {
   storeName: string;
-  before: { reservation_date: string; reservation_time?: string | null; menu_name?: string | null; submenu_name?: string | null };
-  after: { customer_name?: string | null; customer_phone?: string | null; reservation_date: string; reservation_time?: string | null; menu_name?: string | null; submenu_name?: string | null; staff_name?: string | null };
+  before: { reservation_date: string; reservation_time?: string | null; menu_name?: string | null; submenu_name?: string | null; selected_menus?: unknown };
+  after: { customer_name?: string | null; customer_phone?: string | null; reservation_date: string; reservation_time?: string | null; menu_name?: string | null; submenu_name?: string | null; selected_menus?: unknown; staff_name?: string | null };
   changedAt?: Date;
 }): { subject: string; body: string } {
-  const menuOf = (r: { menu_name?: string | null; submenu_name?: string | null }) => {
-    const menu = r.submenu_name ? `${r.menu_name || ''} > ${r.submenu_name}` : r.menu_name || '';
-    return menu && menu !== '未選択' ? menu : '';
-  };
   const a = args.after;
-  const beforeMenu = menuOf(args.before);
-  const afterMenu = menuOf(a);
+  const beforeMenu = menuNamesOf(args.before);
+  const afterMenu = menuNamesOf(a);
+  const menuChanged = beforeMenu !== afterMenu;
   const lines = [
     '管理者各位',
     '',
     `「${args.storeName}」のご予約がお客様により変更されました（LINE から操作）。`,
     '',
     '──────────────────────',
-    `■ 変更前　：${formatDateTimeShortJa(args.before.reservation_date, args.before.reservation_time)}${beforeMenu && beforeMenu !== afterMenu ? `　${beforeMenu}` : ''}`,
-    `■ 変更後　：${formatDateTimeShortJa(a.reservation_date, a.reservation_time)}${afterMenu && beforeMenu !== afterMenu ? `　${afterMenu}` : ''}`,
+    `■ 変更前　：${formatDateTimeShortJa(args.before.reservation_date, args.before.reservation_time)}${menuChanged && beforeMenu ? `　${beforeMenu}` : ''}`,
+    `■ 変更後　：${formatDateTimeShortJa(a.reservation_date, a.reservation_time)}${menuChanged && afterMenu ? `　${afterMenu}` : ''}`,
     `■ お名前　：${a.customer_name || '-'}`,
     `■ 電話　　：${a.customer_phone || '-'}`,
   ];
-  if (afterMenu && beforeMenu === afterMenu) lines.push(`■ メニュー：${afterMenu}`);
+  if (afterMenu && !menuChanged) lines.push(`■ メニュー：${afterMenu}`);
   if (a.staff_name) lines.push(`■ 担当　　：${a.staff_name}`);
   if (args.changedAt) lines.push(`■ 操作日時：${formatDeadlineJst(args.changedAt)}`);
   lines.push('──────────────────────');
@@ -206,11 +229,14 @@ async function notifyStoreOfChange(store: ChangeStore, config: FormConfig | null
   }
 }
 
-/** 予約の日時を書き換え、カレンダーの予定・来店履歴・フォローメッセージの予定・店舗への通知を合わせる */
-async function applyDateTimeChange(adminClient: any, store: ChangeStore, reservation: any, config: FormConfig, date: string, time: string): Promise<any | null> {
+/**
+ * 予約の行を書き換え、カレンダーの予定・来店履歴・フォローメッセージの予定・店舗への通知を合わせる。
+ * patch = 書き換える列（日時 / メニューなど）
+ */
+async function applyReservationChange(adminClient: any, store: ChangeStore, reservation: any, config: FormConfig, patch: Record<string, unknown>): Promise<any | null> {
   const { data: updated, error } = await adminClient
     .from('reservations')
-    .update({ reservation_date: date, reservation_time: time, updated_at: new Date().toISOString() })
+    .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', reservation.id)
     .eq('store_id', store.id)
     .neq('status', 'cancelled')
@@ -231,7 +257,7 @@ async function applyDateTimeChange(adminClient: any, store: ChangeStore, reserva
     }
   }
 
-  // 来店履歴を新しい日時で作り直す
+  // 来店履歴を新しい内容で作り直す
   if (updated.customer_id) {
     try {
       await deleteCustomerVisitByReservation(updated.id);
@@ -291,11 +317,12 @@ export async function handleChangePostback(adminClient: any, store: ChangeStore,
     .maybeSingle();
   if (!reservation) return simple('予約の変更', `ご予約が見つかりませんでした。\n\n${LIST_HINT}`);
 
-  const config = await loadFormConfig(adminClient, store.id, reservation.form_id);
+  const form = await loadForm(adminClient, store.id, reservation.form_id);
+  const config = form?.config || null;
   const eligibility = resolveChangeEligibility(reservation, config, now);
   if (!eligibility.allowed || !config) return simple('予約の変更', describeChangeBlock(eligibility, store.phone));
   if (eligibility.mode !== 'calendar') {
-    return simple('予約の変更', `このご予約は、予約フォームを開いて変更してください。\n\n${LIST_HINT}`);
+    return simple('予約の変更', `このご予約の日時は LINE から変更できません。${store.phone ? `店舗（TEL: ${store.phone}）` : '店舗'}まで直接ご連絡ください。`);
   }
 
   const cs = config.calendar_settings;
@@ -337,12 +364,30 @@ export async function handleChangePostback(adminClient: any, store: ChangeStore,
     return [buildChangeConfirmMessage(store.name, reservation, action.date, action.time)];
   }
 
-  const updated = await applyDateTimeChange(adminClient, store, reservation, config, action.date, action.time);
+  const updated = await applyReservationChange(adminClient, store, reservation, config, { reservation_date: action.date, reservation_time: action.time });
   if (!updated) return simple('予約の変更', '予約を変更できませんでした。お手数ですが、時間をおいてもう一度お試しください。');
   return [buildChangeDoneMessage(store.name, reservation, updated)];
 }
 
-// ---- 予約フォームを開いて変更する（メニューを変更） ----
+/**
+ * メニュー変更フォームの送信後、フォームが LINE に送る「【メニュー変更】…」への返信（変更後の予約内容のカード）。
+ * いちばん最近更新された、これからの予約を出す
+ */
+export async function buildMenuChangeDoneReply(adminClient: any, store: ChangeStore, userId: string, now: Date = new Date()): Promise<Message[] | null> {
+  const { data } = await adminClient
+    .from('reservations')
+    .select('id,reservation_date,reservation_time,menu_name,submenu_name,selected_menus,selected_options,staff_name,staff_no_preference,updated_at')
+    .eq('store_id', store.id)
+    .eq('line_user_id', userId)
+    .neq('status', 'cancelled')
+    .gte('reservation_date', jstToday(now))
+    .order('updated_at', { ascending: false })
+    .limit(1);
+  const r = Array.isArray(data) ? data[0] : null;
+  return r ? [buildMenuChangeDoneMessage(store.name, r)] : null;
+}
+
+// ---- メニュー変更フォーム（「メニューを変更」で開く予約フォーム） ----
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
@@ -369,27 +414,27 @@ function loadLocalFormConfig(formId: string | null | undefined): FormConfig | nu
   return null;
 }
 
-export type ReplacementCheck =
-  | { ok: true; reservation: any; config: FormConfig | null }
+export type ChangeTargetCheck =
+  | { ok: true; reservation: any; config: FormConfig | null; store: ChangeStore | null }
   | { ok: false; error: string };
 
 /**
- * 予約フォームからの変更（元の予約を置き換える）を受け付けてよいか。
- * 元の予約が同じ店舗・同じ LINE ユーザーのもので、変更できる期限内であること
+ * フォームからの変更を受け付けてよいか。
+ * 予約が同じ店舗・同じ LINE ユーザーのもので、変更できる期限内であること（本人確認: 予約 ID + LINE ユーザー ID）
  */
-export async function validateReservationReplacement(args: {
+export async function validateChangeTarget(args: {
   reservationId: string;
   storeId: string;
   lineUserId: string | null | undefined;
   now?: Date;
-}): Promise<ReplacementCheck> {
+}): Promise<ChangeTargetCheck> {
   const now = args.now ?? new Date();
   const notFound = { ok: false as const, error: '変更するご予約が見つかりませんでした。公式LINEで「予約を変更」と送って、もう一度お試しください。' };
   if (!args.reservationId || !args.storeId || !args.lineUserId) return notFound;
 
   let reservation: any = null;
   let config: FormConfig | null = null;
-  let phone: string | null = null;
+  let store: ChangeStore | null = null;
   if (getAppEnvironment() === 'local') {
     reservation = readLocalReservations().find((r) => r && r.id === args.reservationId && r.store_id === args.storeId && r.line_user_id === args.lineUserId) || null;
     if (reservation) config = loadLocalFormConfig(reservation.form_id);
@@ -405,83 +450,59 @@ export async function validateReservationReplacement(args: {
       .maybeSingle();
     reservation = data || null;
     if (reservation) {
-      config = await loadFormConfig(adminClient, args.storeId, reservation.form_id);
-      const { data: store } = await (adminClient as any).from('stores').select('phone').eq('id', args.storeId).maybeSingle();
-      phone = store?.phone || null;
+      config = (await loadForm(adminClient, args.storeId, reservation.form_id))?.config || null;
+      const { data: storeRow } = await (adminClient as any)
+        .from('stores')
+        .select('id, name, phone, owner_email, google_calendar_id')
+        .eq('id', args.storeId)
+        .maybeSingle();
+      store = storeRow || null;
     }
   }
   if (!reservation) return notFound;
   const e = resolveChangeEligibility(reservation, config, now);
-  if (!e.allowed) return { ok: false, error: describeChangeBlock(e, phone) };
-  return { ok: true, reservation, config };
+  if (!e.allowed) return { ok: false, error: describeChangeBlock(e, store?.phone) };
+  return { ok: true, reservation, config, store };
 }
 
-/**
- * 予約フォームからの変更で新しい予約ができたあと、元の予約を「置き換え済み」として取り消す。
- * キャンセルとは区別できるよう customer_info.replaced_by_reservation_id を残す（分析のキャンセル数には数えない）。
- * 失敗しても新しい予約は成功扱い
- */
-export async function retireReplacedReservation(old: any, replacement: any, config: FormConfig | null): Promise<void> {
-  const info = { ...(old.customer_info && typeof old.customer_info === 'object' ? old.customer_info : {}), replaced_by_reservation_id: replacement?.id || null };
-  const nowIso = new Date().toISOString();
-  try {
-    if (getAppEnvironment() === 'local') {
-      const all = readLocalReservations();
-      const i = all.findIndex((r) => r && r.id === old.id);
-      if (i >= 0) {
-        all[i] = { ...all[i], status: 'cancelled', cancelled_at: nowIso, updated_at: nowIso, customer_info: info };
-        fs.writeFileSync(RESERVATIONS_FILE, JSON.stringify(all, null, 2));
-      }
-    } else {
-      const adminClient = createAdminClient();
-      if (!adminClient) return;
-      const { error } = await (adminClient as any)
-        .from('reservations')
-        .update({ status: 'cancelled', cancelled_at: nowIso, updated_at: nowIso, customer_info: info })
-        .eq('id', old.id);
-      if (error) console.error('[reservation-change] retire update error:', error);
-
-      const { data: store } = await (adminClient as any)
-        .from('stores')
-        .select('id, name, phone, owner_email, google_calendar_id')
-        .eq('id', old.store_id)
-        .maybeSingle();
-      const calendarId: string | null = old.staff_calendar_id || store?.google_calendar_id || null;
-      if (calendarId && old.google_calendar_event_id) {
-        try {
-          await deleteCalendarEvent(calendarId, old.google_calendar_event_id, old.store_id);
-        } catch (e) {
-          console.error('[reservation-change] retire calendar delete error:', e);
-        }
-      }
-      if (store) await notifyStoreOfChange(store, config, old, replacement);
-    }
-    if (old.customer_id) {
-      await deleteCustomerVisitByReservation(old.id);
-      await recalculateCustomerStats(old.customer_id);
-    }
-    await cancelFollowMessageForReservation(old.id);
-  } catch (e) {
-    console.error('[reservation-change] retire error:', e);
-  }
+export interface ChangeSourceForForm {
+  id: string;
+  date: string;
+  time: string;
+  date_text: string;
+  menu_text: string;
+  staff_id: string | null;
+  staff_name: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  selected_menus: unknown;
+  selected_options: unknown;
+  gender: string | null;
+  visit_count: string | null;
+  coupon: string | null;
+  /** いまの予約の所要時間（分）。これより長くなるときだけ、いまの時間に入るかを確認する */
+  duration: number;
+  /** カレンダー表示モードか（それ以外は空きを確認しない） */
+  calendar_mode: boolean;
 }
 
-/** 予約フォームを変更用に開いたときに見せる、いまの予約の内容（本人確認: 予約 ID + LINE ユーザー ID） */
+/** メニュー変更フォームに見せる、いまの予約の内容 */
 export async function getChangeSourceForForm(args: { reservationId: string; storeId: string; lineUserId: string | null | undefined }): Promise<
-  | { ok: true; reservation: { id: string; date_text: string; menu_text: string; staff_name: string | null; customer_name: string | null; customer_phone: string | null; selected_menus: unknown; selected_options: unknown; gender: string | null; visit_count: string | null; coupon: string | null } }
-  | { ok: false; error: string }
+  { ok: true; reservation: ChangeSourceForForm } | { ok: false; error: string }
 > {
-  const check = await validateReservationReplacement(args);
+  const check = await validateChangeTarget(args);
   if (!check.ok) return check;
   const r = check.reservation;
-  const menu = r.submenu_name ? `${r.menu_name || ''} > ${r.submenu_name}` : r.menu_name || '';
   const info = r.customer_info && typeof r.customer_info === 'object' ? r.customer_info : {};
   return {
     ok: true,
     reservation: {
       id: r.id,
+      date: String(r.reservation_date),
+      time: String(r.reservation_time || '').slice(0, 5),
       date_text: formatDateTimeShortJa(String(r.reservation_date), r.reservation_time),
-      menu_text: menu && menu !== '未選択' ? menu : '',
+      menu_text: menuNamesOf(r),
+      staff_id: r.staff_id || null,
       staff_name: r.staff_name || null,
       customer_name: r.customer_name || null,
       customer_phone: r.customer_phone || null,
@@ -490,8 +511,136 @@ export async function getChangeSourceForForm(args: { reservationId: string; stor
       gender: r.gender || info.gender || null,
       visit_count: r.visit_count || info.visit_count || null,
       coupon: r.coupon || info.coupon || null,
+      duration: reservationDurationMinutes(r),
+      calendar_mode: (check.config?.calendar_settings?.booking_mode || 'calendar') === 'calendar',
     },
   };
+}
+
+export interface MenuChangeInput {
+  reservationId: string;
+  storeId: string;
+  lineUserId: string | null | undefined;
+  /** true = いまの時間に入るかだけを返す（書き換えない） */
+  checkOnly?: boolean;
+  selectedMenus?: unknown;
+  selectedOptions?: unknown;
+  totalDuration?: unknown;
+  totalPrice?: unknown;
+  /** 選び直した日時（省略 = いまの予約の日時のまま） */
+  date?: unknown;
+  time?: unknown;
+  message?: unknown;
+  customFields?: unknown;
+  customFieldsLabeled?: unknown;
+  now?: Date;
+}
+
+export type MenuChangeResult =
+  | { ok: true; fits: boolean; reservation?: any }
+  | { ok: false; status: number; error: string; code?: string };
+
+const sumOf = (list: Array<Record<string, unknown>>, key: string) => list.reduce((s, x) => s + (Number(x?.[key]) || 0), 0);
+const asObjects = (v: unknown): Array<Record<string, unknown>> =>
+  Array.isArray(v) ? v.filter((x) => x && typeof x === 'object' && !Array.isArray(x)) : [];
+const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+
+/**
+ * メニュー変更フォームの送信（と、送信前の「いまの時間に入るか」の確認）。
+ * - 日時がそのまま: 所要時間が延びたときだけ、カレンダーの空き（自分の予定は除く）と営業時間の終わりを確認
+ * - 日時を選び直した: フォームの規則（受付期間・営業時間など）とカレンダーの空きを確認
+ * 入らなければ 409 slot_taken（フォームが日時の選び直しを出す）
+ */
+export async function changeReservationMenu(input: MenuChangeInput): Promise<MenuChangeResult> {
+  const now = input.now ?? new Date();
+  const check = await validateChangeTarget({ reservationId: input.reservationId, storeId: input.storeId, lineUserId: input.lineUserId, now });
+  if (!check.ok) return { ok: false, status: 409, error: check.error, code: 'change_not_allowed' };
+  const { reservation, config, store } = check;
+
+  const menus = asObjects(input.selectedMenus);
+  const options = asObjects(input.selectedOptions);
+  if (!input.checkOnly && menus.length === 0) return { ok: false, status: 400, error: 'メニューを選択してください' };
+
+  const requested = Number(input.totalDuration);
+  const duration = Number.isFinite(requested) && requested > 0 ? Math.floor(requested) : sumOf(menus, 'duration') + sumOf(options, 'duration');
+  const oldDuration = reservationDurationMinutes(reservation);
+  const currentDate = String(reservation.reservation_date);
+  const currentTime = String(reservation.reservation_time || '').slice(0, 5);
+  const calendarMode = (config?.calendar_settings?.booking_mode || 'calendar') === 'calendar';
+
+  let date = currentDate;
+  let time = currentTime;
+  if (calendarMode && !input.checkOnly && typeof input.date === 'string' && typeof input.time === 'string') {
+    if (!DATE_RE.test(input.date) || !TIME_RE.test(input.time)) return { ok: false, status: 400, error: '日時の形式が正しくありません' };
+    date = input.date;
+    time = input.time;
+  }
+  const slotChanged = date !== currentDate || time !== currentTime;
+
+  let fits = true;
+  if (calendarMode && config && store && getAppEnvironment() !== 'local' && (slotChanged || duration > oldDuration)) {
+    const withNewDuration = { ...reservation, customer_info: { ...asRecord(reservation.customer_info), total_duration: duration } };
+    const ctx = await buildSlotContext(store, withNewDuration, config, date, date);
+    const free = isSlotFreeByEvents(ctx, date, time);
+    if (slotChanged) {
+      fits = free && listChangeWindowDates(config.calendar_settings, now).includes(date) && isSlotBookableForSettings(ctx.cs, { date, time, durationMinutes: duration, now });
+    } else {
+      // 日時はそのまま: 受付期間などは見直さず、延びたぶんが営業時間と次の予定に収まるかだけを見る
+      const [y, m, d] = date.split('-').map(Number);
+      const { hours } = dayBusinessHours(ctx.cs, date, new Date(Date.UTC(y, m - 1, d)).getUTCDay());
+      const startMin = Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+      const closeMatch = /^(\d{1,2}):(\d{2})/.exec(String(hours?.close || ''));
+      const closeMin = closeMatch ? Number(closeMatch[1]) * 60 + Number(closeMatch[2]) : null;
+      const exceedsClose = closeMin !== null && !(ctx.cs?.allow_exceed_business_hours || false) && startMin + duration > closeMin;
+      fits = free && !exceedsClose && startMin + duration < 24 * 60;
+    }
+  }
+  if (input.checkOnly) return { ok: true, fits };
+  if (!fits) {
+    return {
+      ok: false,
+      status: 409,
+      code: 'slot_taken',
+      error: slotChanged
+        ? '申し訳ありません。選択された日時はご予約いただけません。別の日時をお選びください。'
+        : '選んだメニューは、現在のお時間ではご予約いただけません。日時をお選びください。',
+    };
+  }
+
+  const first = menus[0] || {};
+  const oldInfo = asRecord(reservation.customer_info);
+  const customerInfo = {
+    ...oldInfo,
+    total_duration: duration,
+    total_price: Number.isFinite(Number(input.totalPrice)) ? Number(input.totalPrice) : sumOf(menus, 'price') + sumOf(options, 'price'),
+    custom_fields: { ...asRecord(oldInfo.custom_fields), ...asRecord(input.customFields) },
+    custom_fields_labeled: { ...asRecord(oldInfo.custom_fields_labeled), ...asRecord(input.customFieldsLabeled) },
+  };
+  const message = typeof input.message === 'string' && input.message.trim() ? input.message.trim().slice(0, 2000) : null;
+  const patch: Record<string, unknown> = {
+    selected_menus: menus,
+    selected_options: options,
+    menu_name: String(first.menu_name || first.name || '未選択'),
+    submenu_name: first.submenu_name ? String(first.submenu_name) : null,
+    customer_info: customerInfo,
+    ...(message ? { message } : {}),
+    ...(slotChanged ? { reservation_date: date, reservation_time: time } : {}),
+  };
+
+  if (getAppEnvironment() === 'local') {
+    const all = readLocalReservations();
+    const i = all.findIndex((r) => r && r.id === reservation.id);
+    if (i < 0) return { ok: false, status: 404, error: '予約が見つかりません' };
+    all[i] = { ...all[i], ...patch, updated_at: new Date().toISOString() };
+    fs.writeFileSync(RESERVATIONS_FILE, JSON.stringify(all, null, 2));
+    return { ok: true, fits: true, reservation: all[i] };
+  }
+
+  const adminClient = createAdminClient();
+  if (!adminClient || !store || !config) return { ok: false, status: 500, error: 'メニューを変更できませんでした。時間をおいてもう一度お試しください。' };
+  const updated = await applyReservationChange(adminClient, store, reservation, config, patch);
+  if (!updated) return { ok: false, status: 500, error: 'メニューを変更できませんでした。時間をおいてもう一度お試しください。' };
+  return { ok: true, fits: true, reservation: updated };
 }
 
 /** 空き状況 API 用: 変更元の予約のカレンダー予定 ID（その予定を除いて空きを見せる）。無ければ null */

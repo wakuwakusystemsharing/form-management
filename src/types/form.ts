@@ -636,6 +636,8 @@ export interface StaticDeploy {
   blob_url?: string;     // 旧Vercel Blob URL（後方互換性のため）
   status: 'deployed' | 'failed' | 'pending';
   environment?: AppEnvironment;
+  /** デプロイした HTML が持っている機能の印（src/lib/form-deploy-features.ts）。古いデプロイには無い */
+  features?: string[];
 }
 
 /** 第三希望日時選択の設定（予約フォームの calendar_settings.multiple_dates_settings と、アンケートの質問型で共用） */

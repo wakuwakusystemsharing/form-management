@@ -399,7 +399,7 @@ class BookingForm {
             if (!MANUAL_MODE) {
                 await this.initializeLIFF();
             }
-            // LINE の「予約を変更」→「メニューを変更」から開かれたとき（URL に ?change=予約ID）
+            // LINE の「予約を変更」→「メニューを変更」から開かれたとき（URL に ?change=予約ID）= メニュー変更フォーム
             let changeSourcePromise = null;
             if (!MANUAL_MODE && !PREVIEW_MODE) {
                 changeSourcePromise = this.loadChangeSource();
@@ -443,7 +443,7 @@ class BookingForm {
                 }
             } catch (e) {}
 
-            // 予約の変更: いまの予約の内容（名前・電話番号・メニュー）を入れた状態にする
+            // メニュー変更フォーム: いまの予約のメニューを選んだ状態にする
             if (changeSourcePromise) {
                 try { await changeSourcePromise; this.applyChangeSource(); } catch (e) {}
             }
@@ -466,7 +466,11 @@ class BookingForm {
         }
     }
     
-    // 予約の変更: URL の ?change=予約ID（LIFF の liff.state 経由も含む）
+    // ---- メニュー変更フォーム（LINE の「予約を変更」→「メニューを変更」。URL に ?change=予約ID） ----
+    // いまの予約の日時・お名前などはそのままに、メニューだけを選び直してもらう。
+    // 新しいメニューがいまの時間に入らないときだけ、日時の選び直しを出す
+
+    // URL の ?change=予約ID（LIFF の liff.state 経由も含む）
     getChangeReservationId() {
         try {
             const pick = (search) => {
@@ -484,7 +488,7 @@ class BookingForm {
         return '';
     }
 
-    // 予約の変更: 変更元の予約を取得して、画面の上に案内を出す。取得できなければ通常の予約フォームとして使えないよう送信を止める
+    // 変更元の予約を取得する。取得できなければ案内を出して送信できないようにする（別の予約が増えるのを防ぐ）
     async loadChangeSource() {
         const id = this.getChangeReservationId();
         if (!id) return;
@@ -509,9 +513,16 @@ class BookingForm {
         } catch (e) {
             message = '変更するご予約を確認できませんでした。通信状況をご確認のうえ、もう一度お試しください。';
         }
-        this.renderChangeBanner(message);
+        if (this.state.changeSource) {
+            this.enterMenuChangeMode();
+        } else {
+            this.renderChangeBanner(message);
+            const submitBtn = document.getElementById('submit-button');
+            if (submitBtn) submitBtn.disabled = true;
+        }
     }
 
+    // 画面いちばん上の案内（変更できないときは理由だけ）
     renderChangeBanner(errorMessage) {
         const formContent = document.querySelector('.form-content');
         if (!formContent) return;
@@ -521,47 +532,70 @@ class BookingForm {
         banner.id = 'change-mode-banner';
         const src = this.state.changeSource;
         const ok = !!src && !errorMessage;
-        banner.style.cssText = 'border-radius:0.5rem;padding:0.875rem 1rem;margin-bottom:1rem;font-size:0.875rem;line-height:1.7;' +
-            (ok ? 'background:#eff6ff;border:1px solid #93c5fd;color:#1e3a8a;' : 'background:#fee;border:1px solid #f99;color:#c00;');
-        const add = (text, bold) => {
+        banner.className = ok ? 'change-banner' : 'change-banner change-banner--error';
+        const add = (text, cls, parent) => {
             const p = document.createElement('div');
             p.textContent = text;
-            if (bold) p.style.fontWeight = 'bold';
-            banner.appendChild(p);
+            if (cls) p.className = cls;
+            (parent || banner).appendChild(p);
+            return p;
         };
         if (ok) {
-            add('ご予約の変更', true);
-            add('現在のご予約：' + src.date_text + (src.menu_text ? '　' + src.menu_text : '') + (src.staff_name ? '　担当: ' + src.staff_name : ''));
-            add('メニューと日時を選び直して送信すると、このご予約が新しい内容に置き換わります。');
+            add('ご予約のメニューを変更します', 'change-banner-title');
+            const box = add('', 'change-banner-current');
+            add('現在のご予約', 'change-banner-label', box);
+            add('日時：' + src.date_text, '', box);
+            if (src.menu_text) add('メニュー：' + src.menu_text, '', box);
+            if (src.staff_name) add('担当：' + src.staff_name, '', box);
+            add('① 下から新しいメニューを選んでください。', 'change-banner-step');
+            add('② 「変更内容」を確認して「メニューを変更する」を押すと変更完了です。', 'change-banner-step');
+            add('※ ご予約の日時はそのままです。選んだメニューが現在のお時間に入らないときだけ、日時を選び直していただきます。', 'change-banner-note');
         } else {
-            add('ご予約を変更できません', true);
+            add('ご予約を変更できません', 'change-banner-title');
             add(errorMessage || '変更するご予約を確認できませんでした。');
         }
         formContent.insertBefore(banner, formContent.firstChild);
-        const submitBtn = document.getElementById('submit-button');
-        if (submitBtn) {
-            if (ok) submitBtn.textContent = '予約を変更する';
-            submitBtn.disabled = !ok;
-        }
     }
 
-    // 予約の変更: いまの予約の名前・電話番号・メニュー・オプションを選んだ状態にする
+    // メニュー変更フォームに切り替える: 見出し・案内・ボタンの文言を変え、メニューとメッセージ以外の項目を隠す。
+    // お名前・電話番号・担当スタッフ・日時などは、いまの予約の内容をそのまま使う
+    enterMenuChangeMode() {
+        const src = this.state.changeSource;
+        if (!src) return;
+        this.state.menuChangeMode = true;
+        this.state.menuChangePickDatetime = false;
+        document.body.classList.add('menu-change-mode');
+        const title = document.querySelector('.form-header h1');
+        if (title) title.textContent = 'メニュー変更フォーム';
+        document.title = 'メニュー変更フォーム';
+        this.renderChangeBanner('');
+        const summaryTitle = document.querySelector('.summary-title');
+        if (summaryTitle) summaryTitle.textContent = '変更内容';
+        const submitBtn = document.getElementById('submit-button');
+        if (submitBtn) { submitBtn.textContent = 'メニューを変更する'; submitBtn.disabled = false; }
+
+        this.state.name = src.customer_name || this.state.name || '';
+        this.state.phone = src.customer_phone || this.state.phone || '';
+        if (src.gender) this.state.gender = src.gender;
+        if (src.visit_count) this.state.visitCount = src.visit_count;
+        if (src.coupon) this.state.coupon = src.coupon;
+        // 担当スタッフはそのまま（スタッフごとのメニュー表示・空き状況をそのスタッフで見る）
+        const staffList = (this.config.staff_selection && this.config.staff_selection.enabled === true && this.config.staff_selection.staff) || [];
+        if (src.staff_id && staffList.some(m => m.id === src.staff_id)) this.state.selectedStaffId = src.staff_id;
+        else if (staffList.length > 0 && !this.state.selectedStaffId) this.state.selectedStaffId = 'none';
+        this.state.selectedDate = src.date;
+        this.state.selectedTime = src.time;
+        // ご来店回数を選ぶまでメニューを隠す設定でも、メニュー欄は最初から出す
+        const menuField = document.getElementById('menu-field');
+        if (menuField) menuField.style.display = '';
+    }
+
+    // いまの予約のメニュー・オプションを選んだ状態にする
     applyChangeSource() {
         const src = this.state.changeSource;
         if (!src) return;
-        if (src.customer_name && src.customer_name !== '未記入') {
-            this.state.name = src.customer_name;
-            const nameEl = document.getElementById('customer-name');
-            if (nameEl) nameEl.value = src.customer_name;
-        }
-        if (src.customer_phone && src.customer_phone !== '未記入') {
-            this.state.phone = src.customer_phone;
-            const phoneEl = document.getElementById('customer-phone');
-            if (phoneEl) phoneEl.value = src.customer_phone;
-        }
         const cats = (this.config.menu_structure && this.config.menu_structure.categories) || [];
-        const sel = { selectedMenus: {}, selectedSubMenus: {}, selectedMenuOptions: {}, selectedCategoryOptions: {},
-            gender: src.gender || '', visitCount: src.visit_count || '', couponUsage: src.coupon || '' };
+        const sel = { selectedMenus: {}, selectedSubMenus: {}, selectedMenuOptions: {}, selectedCategoryOptions: {} };
         (src.selected_menus || []).forEach(m => {
             if (!m || !m.menu_id) return;
             const has = c => (c.menus || []).some(x => x.id === m.menu_id);
@@ -578,6 +612,213 @@ class BookingForm {
         });
         if (Object.keys(sel.selectedMenus).length > 0) {
             try { this.handleRepeatBooking(sel); } catch (e) {}
+        }
+        // 復元で日時が消えないよう、いまの予約の日時に戻す
+        this.state.selectedDate = src.date;
+        this.state.selectedTime = src.time;
+        this.updateSummary();
+    }
+
+    // メニュー変更フォームの「変更内容」（変更前 → 変更後のメニューと日時だけを出す）
+    renderMenuChangeSummary() {
+        const src = this.state.changeSource;
+        const container = document.getElementById('summary-content');
+        if (!src || !container) return;
+        const payload = this.buildSelectionPayload();
+        const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const row = (label, html) => '<div class="summary-item" style="align-items:flex-start;"><div><strong>' + label + '</strong><div style="margin-top:0.25rem;">' + html + '</div></div></div>';
+        const items = [];
+        items.push(row('変更前のメニュー', '<span style="color:#6b7280;">' + esc(src.menu_text || '（なし）') + '</span>'));
+        items.push(row('変更後のメニュー', payload.selectedMenus.length > 0 ? payload.summaryHtml : '<span style="color:#dc2626;">メニューを選んでください</span>'));
+        if (payload.selectedMenus.length > 0) {
+            const parts = [];
+            if (this.config.reservation_summary?.show_total_price === true && payload.totalPrice > 0) parts.push('合計金額: ¥' + payload.totalPrice.toLocaleString());
+            if (this.config.reservation_summary?.show_total_duration === true && payload.totalDuration > 0) parts.push('合計時間: ' + payload.totalDuration + '分');
+            if (parts.length > 0) items.push('<div class="summary-item"><span>' + parts.join('　') + '</span></div>');
+        }
+        let dateHtml;
+        if (this.state.menuChangePickDatetime) {
+            dateHtml = (this.state.selectedDate && this.state.selectedTime)
+                ? esc(this.formatDateTimeJa(this.state.selectedDate, this.state.selectedTime)) + '<div style="font-size:0.8rem;color:#6b7280;">変更前：' + esc(src.date_text) + '</div>'
+                : '<span style="color:#dc2626;">日時を選んでください</span>';
+        } else {
+            dateHtml = esc(src.date_text) + '<span style="font-size:0.8rem;color:#6b7280;">（変更なし）</span>';
+        }
+        items.push(row('日時', dateHtml));
+        if (this.state.message) items.push(row(esc(this.getMessageLabel()), '<span style="font-size:0.875rem;color:#6b7280;">' + esc(this.state.message) + '</span>'));
+        container.innerHTML = items.join('');
+    }
+
+    // 選んだメニューがいまの予約の時間に入るかを確認する（所要時間が延びたときだけサーバーに聞く）
+    scheduleMenuChangeFitCheck() {
+        const src = this.state.changeSource;
+        if (!src) return;
+        const payload = this.buildSelectionPayload();
+        if (payload.selectedMenus.length === 0) return;
+        const duration = payload.totalDuration;
+        if (this.state.menuChangeCheckedDuration === duration) return;
+        this.state.menuChangeCheckedDuration = duration;
+        if (this.menuChangeFitTimer) clearTimeout(this.menuChangeFitTimer);
+        if (duration <= (src.duration || 0) || src.calendar_mode !== true) {
+            this.setMenuChangeFit(true);
+            return;
+        }
+        this.menuChangeFitTimer = setTimeout(async () => {
+            let fits = true;
+            try {
+                const res = await fetch(window.location.origin + '/api/reservations/change-menu', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ check_only: true, reservation_id: src.id, store_id: STORE_ID, line_user_id: this.state.lineUserId, total_duration: duration })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data && data.fits === false) fits = false;
+            } catch (e) {
+                // 確認できないときは止めない（送信時にサーバーがもう一度確認する）
+            }
+            if (this.state.menuChangeCheckedDuration === duration) this.setMenuChangeFit(fits);
+        }, 250);
+    }
+
+    // fits = true: いまの日時のまま（日時の欄は出さない）/ false: 日時を選び直してもらう
+    setMenuChangeFit(fits) {
+        const src = this.state.changeSource;
+        if (!src) return;
+        const field = document.getElementById('datetime-field');
+        if (fits) {
+            if (!this.state.menuChangePickDatetime && this.state.selectedDate === src.date && this.state.selectedTime === src.time) return;
+            this.state.menuChangePickDatetime = false;
+            document.body.classList.remove('menu-change-pick-datetime');
+            if (field) field.style.display = 'none';
+            this.state.selectedDate = src.date;
+            this.state.selectedTime = src.time;
+            this.updateSummary();
+            return;
+        }
+        if (this.state.menuChangePickDatetime) return;
+        this.state.menuChangePickDatetime = true;
+        document.body.classList.add('menu-change-pick-datetime');
+        this.state.selectedDate = '';
+        this.state.selectedTime = '';
+        if (field) {
+            let note = document.getElementById('menu-change-datetime-note');
+            if (!note) {
+                note = document.createElement('div');
+                note.id = 'menu-change-datetime-note';
+                note.className = 'change-datetime-note';
+                field.insertBefore(note, field.firstChild);
+            }
+            note.textContent = '選んだメニューは、現在のお時間（' + src.date_text + '）ではご予約いただけません。お手数ですが、下のカレンダーから日時をお選びください。';
+            field.style.display = 'block';
+        }
+        const parts = String(src.date).split('-').map(n => parseInt(n, 10));
+        const base = new Date(parts[0], parts[1] - 1, parts[2]);
+        if (!isNaN(base.getTime())) this.state.currentWeekStart = this.getWeekStart(base);
+        this.updateSummary();
+        this.fetchAvailability(this.state.currentWeekStart).then(() => {
+            if (field) field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }).catch(() => {});
+    }
+
+    // メニュー変更フォームの送信: 予約は作らず、いまの予約のメニュー（と、選び直したときだけ日時）を書き換える
+    async handleMenuChangeSubmit() {
+        const src = this.state.changeSource;
+        if (!src || this.state.isSubmitting) return;
+        const LABEL = 'メニューを変更する';
+        this.state.isSubmitting = true;
+        const submitBtn = document.getElementById('submit-button');
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '送信中...'; submitBtn.style.opacity = '0.6'; }
+        const reset = () => {
+            this.state.isSubmitting = false;
+            const btn = document.getElementById('submit-button');
+            if (btn) { btn.disabled = false; btn.textContent = LABEL; btn.style.opacity = '1'; }
+        };
+        const stop = (message, fieldId) => {
+            alert(message);
+            const el = fieldId ? document.getElementById(fieldId) : null;
+            try { if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+            reset();
+        };
+        try {
+            const payload = this.buildSelectionPayload();
+            if (payload.selectedMenus.length === 0) return stop('メニューを選択してください', 'menu-field');
+            const missingSubOptions = soMissingRequired(this.config, this.state);
+            if (missingSubOptions.length > 0) return stop('「' + missingSubOptions[0] + '」の追加オプションを選択してください', 'menu-field');
+            // メニュー / オプションの追加質問（表示中のものだけ）
+            const aqEntries = this.getAdditionalQuestionEntries();
+            const aqSel = this.getSelectedOwnerIds();
+            const answers = {};
+            const answersLabeled = {};
+            for (let i = 0; i < aqEntries.length; i++) {
+                const entry = aqEntries[i];
+                if (!this.isAdditionalQuestionVisible(entry, aqSel)) continue;
+                const val = this.state.customFields[entry.field.id];
+                const empty = val === undefined || val === null || (typeof val === 'string' && val.trim() === '') || (Array.isArray(val) && val.length === 0);
+                if (empty) {
+                    if (entry.field.required) return stop(entry.field.title + 'を入力・選択してください', 'aq-wrap-' + entry.field.id);
+                    continue;
+                }
+                answers[entry.field.id] = val;
+                answersLabeled[oneLine(entry.field.title)] = (entry.field.type === 'date' || entry.field.type === 'datetime' || entry.field.type === 'birthday') ? formatDateTimeForDisplay(val) : val;
+            }
+            if (!this.state.selectedDate || !this.state.selectedTime) return stop('日時を選択してください', 'datetime-field');
+            if (this.state.menuChangePickDatetime) {
+                const stillOpen = await this.recheckSelectedSlot();
+                if (!stillOpen) return stop('申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。', 'datetime-field');
+            }
+            const date = this.state.selectedDate;
+            const time = this.state.selectedTime;
+            const message = (this.state.message || '').trim();
+            const res = await fetch(window.location.origin + '/api/reservations/change-menu', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reservation_id: src.id,
+                    store_id: STORE_ID,
+                    line_user_id: this.state.lineUserId,
+                    selected_menus: payload.selectedMenus,
+                    selected_options: payload.selectedOptions,
+                    total_price: payload.totalPrice,
+                    total_duration: payload.totalDuration,
+                    reservation_date: date,
+                    reservation_time: time,
+                    message: message || null,
+                    custom_fields: answers,
+                    custom_fields_labeled: answersLabeled
+                })
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                if (res.status === 409 && err && err.code === 'slot_taken') {
+                    this.state.menuChangeCheckedDuration = payload.totalDuration;
+                    this.setMenuChangeFit(false);
+                }
+                return stop((err && err.error) || 'メニューを変更できませんでした。時間をおいてもう一度お試しください。');
+            }
+
+            const NL = String.fromCharCode(10);
+            const dp = date.split('-');
+            const lines = ['【メニュー変更】', '《変更後のメニュー》', payload.menuMessageText || payload.selectedMenus.map(m => '・' + m.menu_name).join(NL),
+                '《日時》', dp[0] + '年' + dp[1] + '月' + dp[2] + '日 ' + time];
+            if (message) { lines.push('《' + this.getMessageLabel() + '》'); lines.push(message); }
+            const formContent = document.querySelector('.form-content');
+            if (formContent) formContent.innerHTML = '<div class="success"><h3>メニューを変更しました</h3><p>ご予約の内容を変更しました。</p></div>';
+            try {
+                if (this.state.lineUserId && typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
+                    liff.sendMessages([{ type: 'text', text: lines.join(NL) }]).then(() => {
+                        alert('メニューを変更しました。');
+                        liff.closeWindow();
+                    }).catch((err) => {
+                        console.error('メッセージの送信に失敗しました', err);
+                    });
+                }
+            } catch (liffError) {
+                console.warn('LIFF message send skipped:', liffError);
+            }
+        } catch (error) {
+            console.error('Menu change error:', error);
+            alert('メニューを変更できませんでした。もう一度お試しください。');
+            reset();
         }
     }
 
@@ -2229,7 +2470,8 @@ class BookingForm {
 
         const isSelected = this.state.selectedDate === dateStr && this.state.selectedTime === time;
                 // 選択中の日時がメニュー選択等で予約不可になった場合は選択をリセット
-                if (isSelected && (!isAvailable || isPast)) {
+                // （メニュー変更フォームでいまの予約の日時をそのまま使うときは消さない。入るかどうかはサーバーが確認する）
+                if (isSelected && (!isAvailable || isPast) && !(this.state.menuChangeMode && !this.state.menuChangePickDatetime)) {
                     this.state.selectedDate = '';
                     this.state.selectedTime = '';
                     selectionWasReset = true;
@@ -2556,7 +2798,7 @@ class BookingForm {
                         // カレンダーセクションにスクロール
                         setTimeout(() => {
                             const calendarField = document.getElementById('datetime-field');
-                            if (calendarField) {
+                            if (calendarField && !(this.state.menuChangeMode && !this.state.menuChangePickDatetime)) {
                                 calendarField.style.display = 'block';
                                 calendarField.scrollIntoView({ behavior: 'smooth', block: 'center' });
                                 if (this.state.currentWeekStart) {
@@ -2625,6 +2867,12 @@ class BookingForm {
         this.updateAdditionalQuestionsVisibility();
         // 表示トリガー付きカスタムフィールドの表示も同期（メニュー/スタッフ/性別/クーポン等の変更で成立が変わる）
         this.applyCustomFieldVisibility();
+        // メニュー変更フォーム: 変更前 → 変更後だけを出し、選んだメニューがいまの時間に入るかを確認する
+        if (this.state.menuChangeMode) {
+            this.renderMenuChangeSummary();
+            this.scheduleMenuChangeFitCheck();
+            return;
+        }
         const items = [];
 
         const summaryShowName = this.config.calendar_settings?.show_customer_name !== false;
@@ -2715,10 +2963,14 @@ class BookingForm {
     }
     
     async handleSubmit() {
-        // 予約の変更で開いたのに変更元の予約を確認できていないときは送信しない（新しい予約が別に増えるのを防ぐ）
+        // メニュー変更フォームで開いたのに変更元の予約を確認できていないときは送信しない（新しい予約が別に増えるのを防ぐ）
         if (this.state.changeRequested && !this.state.changeSource) {
             alert('ご予約を変更できません。公式LINEで「予約を変更」と送って、もう一度お試しください。');
             return;
+        }
+        // メニュー変更フォーム: 予約は作らず、いまの予約のメニューを書き換える
+        if (this.state.menuChangeMode) {
+            return this.handleMenuChangeSubmit();
         }
         // LINE アプリ外からのアクセスは送信しない（案内画面で操作できないが念のため）
         if (this.state.lineOnlyBlocked || this.isOutsideLineClient()) {
@@ -3070,9 +3322,7 @@ class BookingForm {
                 staff_id: (this.state.selectedStaffId && this.state.selectedStaffId !== 'none') ? this.state.selectedStaffId : null,
                 staff_no_preference: this.state.selectedStaffId === 'none',
                 // 店舗側手動予約フォームからの登録（サーバー側で CRM 照合・流入経路の扱いが変わる）
-                manual_entry: MANUAL_MODE,
-                // 予約の変更: 元の予約の ID（新しい予約ができたら、サーバーが元の予約を置き換え済みにする）
-                change_reservation_id: this.state.changeSource ? this.state.changeSource.id : null
+                manual_entry: MANUAL_MODE
             };
             
             // /api/reservationsにPOSTリクエストを送信
@@ -3108,10 +3358,6 @@ class BookingForm {
                         blockReason = errorData.error || '既に予約があります。予約が過ぎるまで新しい予約はできません。';
                     }
                     // スタッフ選択: 送信直前の再チェックで枠が埋まっていた場合（ダブルブッキング防止）
-                    // 予約の変更: 元の予約が変更できない状態（期限切れ・キャンセル済みなど）
-                    if (response.status === 409 && errorData && errorData.code === 'change_not_allowed') {
-                        blockReason = errorData.error || 'このご予約は変更できません。';
-                    }
                     if (response.status === 409 && errorData && errorData.code === 'slot_taken') {
                         blockReason = errorData.error || '申し訳ありません。選択された日時はただいま埋まってしまいました。別の日時をお選びください。';
                     }
@@ -3146,12 +3392,6 @@ class BookingForm {
                 return;
             }
 
-            // 予約の変更: 保存できなかったときは完了にしない（元の予約はそのまま残っている）
-            if (this.state.changeSource && !apiSuccess) {
-                alert('予約を変更できませんでした。時間をおいてもう一度お試しください。');
-                resetSubmitState();
-                return;
-            }
             
             // 日時を日本語形式に変換（LINEメッセージ用）。日付は文字列分割で組み立て TZ 非依存にする。
             const formattedDate = \`\${selYear}年\${selMonth}月\${selDay}日 \${this.state.selectedTime}\`;
@@ -4055,7 +4295,9 @@ class BookingForm {
         const hasAnyMenus = (this.config.menu_structure?.categories || []).some(c => (c.menus || []).length > 0)
             || ((this.config.menu_structure?.menus || []).length > 0);
         const isMultiDatesNoMenus = (bookingMode === 'multiple_dates' || bookingMode === 'stay') && !hasAnyMenus;
-        const show = !hideUntilMenu || isMultiDatesNoMenus || (hasMenuSelection && staffSelected);
+        // メニュー変更フォームでは、いまの時間に入らず日時を選び直すときだけ出す
+        const hiddenForMenuChange = !!this.state.menuChangeMode && !this.state.menuChangePickDatetime;
+        const show = !hiddenForMenuChange && (!hideUntilMenu || isMultiDatesNoMenus || (hasMenuSelection && staffSelected));
 
         const fieldIds = bookingMode === 'multiple_dates'
             ? ['datetime-field-1', 'datetime-field-2', 'datetime-field-3']
@@ -5033,6 +5275,31 @@ if (document.readyState === 'loading') {
         }
         /* 第三希望日時: 日付を選ぶまで「時間を選択」はグレーアウト */
         ${MD_TIME_SELECT_DISABLED_CSS}
+        /* メニュー変更フォーム（LINE の「予約を変更」→「メニューを変更」）: メニュー・メッセージ・変更内容だけを出す */
+        body.menu-change-mode #name-field,
+        body.menu-change-mode #phone-field,
+        body.menu-change-mode #email-field,
+        body.menu-change-mode #email-confirm-field,
+        body.menu-change-mode #staff-field,
+        body.menu-change-mode #gender-field,
+        body.menu-change-mode #visit-count-field,
+        body.menu-change-mode #coupon-field,
+        body.menu-change-mode [id^="custom-field-wrap-"],
+        body.menu-change-mode .aq-followup,
+        body.menu-change-mode [id^="datetime-field-"],
+        body.menu-change-mode #agreement-field,
+        body.menu-change-mode #cancel-policy,
+        body.menu-change-mode .notice-banner,
+        body.menu-change-mode .form-content > .content-block,
+        body.menu-change-mode #repeat-booking-button { display: none !important; }
+        body.menu-change-mode:not(.menu-change-pick-datetime) #datetime-field { display: none !important; }
+        .change-banner { border-radius: 0.5rem; padding: 0.875rem 1rem; margin-bottom: 1rem; font-size: 0.875rem; line-height: 1.7; background: #eff6ff; border: 1px solid #93c5fd; color: #1e3a8a; }
+        .change-banner--error { background: #fee; border-color: #f99; color: #c00; }
+        .change-banner-title { font-weight: bold; font-size: 1rem; margin-bottom: 0.5rem; }
+        .change-banner-current { background: #fff; border: 1px solid #bfdbfe; border-radius: 0.375rem; padding: 0.5rem 0.75rem; margin-bottom: 0.625rem; color: #1f2937; }
+        .change-banner-label { font-size: 0.75rem; font-weight: bold; color: #1e3a8a; }
+        .change-banner-note { font-size: 0.75rem; margin-top: 0.375rem; color: #475569; }
+        .change-datetime-note { background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; border-radius: 0.5rem; padding: 0.625rem 0.75rem; margin-bottom: 0.75rem; font-size: 0.875rem; line-height: 1.6; }
         /* 見出しの下のテキスト / 画像（メニュー欄・オプション欄） */
         .heading-content { margin: 0 0 12px; }
         .heading-content-text {

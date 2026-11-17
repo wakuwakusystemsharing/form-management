@@ -11,8 +11,8 @@ import { sendEmail } from '@/lib/email-sender';
 import { findLineFlexReplyForText, handleLineFlexPostback, listLineFlexAttachments, listLineFlexGreetingMessages } from '@/lib/line-flex-service';
 import { handleBroadcastOptCommand } from '@/lib/broadcast-opt-out';
 import { ensureFriendCustomer } from '@/lib/line-friend-customers';
-import { CHANGE_KEYWORD, isChangePostback } from '@/lib/reservation-change';
-import { buildChangeMenuReply, handleChangePostback } from '@/lib/reservation-change-service';
+import { CHANGE_KEYWORD, MENU_CHANGE_MESSAGE_HEAD, isChangePostback } from '@/lib/reservation-change';
+import { buildChangeMenuReply, buildMenuChangeDoneReply, handleChangePostback } from '@/lib/reservation-change-service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -626,6 +626,17 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       console.error('[LINE Webhook] 予約変更の一覧エラー:', e);
       await replyRawMessages(replyToken, accessToken, [{ type: 'text', text: '予約を確認できませんでした。お手数ですが、時間をおいてもう一度お試しください。' }]);
+    }
+    return NextResponse.json({ success: true });
+  }
+
+  // メニュー変更フォームの送信後にフォームが送ってくるメッセージ: 変更後の予約内容のカードを返す（変更は API で済んでいる）
+  if (messageText.startsWith(MENU_CHANGE_MESSAGE_HEAD)) {
+    try {
+      const doneReply = await buildMenuChangeDoneReply(adminClient, store, userId);
+      if (doneReply) await replyRawMessages(replyToken, accessToken, doneReply);
+    } catch (e) {
+      console.error('[LINE Webhook] メニュー変更の完了通知エラー:', e);
     }
     return NextResponse.json({ success: true });
   }
