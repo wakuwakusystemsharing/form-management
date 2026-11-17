@@ -6,6 +6,7 @@ import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { createReservationEvent, getBusyCalendarsByEvents, countStoreCalendarEventsInSlot } from '@/lib/google-calendar';
 import { resolveMaxConcurrentEvents, resolveReservationSlotWindow } from '@/lib/staff-availability';
+import { filterNoPreferenceStaffByRules } from '@/lib/staff-slot-rules';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { sendReservationEmails } from '@/lib/reservation-email';
 import { scheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
@@ -893,10 +894,31 @@ export async function POST(request: Request) {
               return !selectedMenuIds.some((id: string) => hiddenMenus.includes(id))
                 && !selectedOptionIds.some((id: string) => hiddenOptions.includes(id));
             };
-            const capableStaff = staffWithCalendar.filter(canHandleSelection);
-            if (capableStaff.length === 0) {
+            const menuCapableStaff = staffWithCalendar.filter(canHandleSelection);
+            if (menuCapableStaff.length === 0) {
               return NextResponse.json(
                 { error: '申し訳ありません。選択されたメニューに対応できるスタッフがいません。メニューをご確認ください。', code: 'slot_taken' },
+                { status: 409 }
+              );
+            }
+            // 「指名なしの自動割当の対象にする」が OFF のスタッフと、スタッフごとの希望日時設定
+            // （営業時間・事前予約可能日数・予約受付開始・✕にする時間帯・祝日）でその日時を受けられないスタッフは候補から外す。
+            // 画面の〇✕と同じ規則（src/lib/staff-slot-rules.ts）。以前はカレンダーの予定だけを見ていたため、
+            // 受付期間外・営業時間外のスタッフにも割り当てられていた
+            const capableStaff = filterNoPreferenceStaffByRules(
+              menuCapableStaff,
+              formConfigForStaff?.calendar_settings,
+              {
+                date: body.reservation_date,
+                time: String(body.reservation_time || '').slice(0, 5),
+                durationMinutes: Number(customerInfo.total_duration) > 0 ? Number(customerInfo.total_duration) : 0,
+                now: new Date(),
+              }
+            );
+            if (capableStaff.length === 0) {
+              console.warn('[API] no-preference: no staff can take this slot by rules:', { storeId: body.store_id, date: body.reservation_date, time: body.reservation_time });
+              return NextResponse.json(
+                { error: '申し訳ありません。選択された日時は「指名なし」ではご予約いただけません。別の日時をお選びください。', code: 'slot_taken' },
                 { status: 409 }
               );
             }

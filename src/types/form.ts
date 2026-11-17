@@ -535,6 +535,8 @@ export interface FormConfig {
       event_color_id?: string;      // 予約イベントの色（colorId '1'〜'11'。空 = カレンダーの既定色）
       hidden_menu_ids?: string[];   // このスタッフ選択時に非表示にするメニューID（空 = 全メニュー表示）
       hidden_option_ids?: string[]; // このスタッフ選択時に非表示にするオプションID（メニュー内・カテゴリー共通）
+      // 「指名なし」の自動割当の対象にするか（未設定 = true。false = 指名されたときだけ担当する）
+      no_preference_assignable?: boolean;
       // 希望日時設定（カレンダー表示モードのみ。未設定 / 各項目 undefined = フォームの営業時間・ルール設定）
       schedule?: StaffScheduleSettings;
     }>;

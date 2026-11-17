@@ -2387,11 +2387,13 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     });
   };
 
-  const updateStaffMember = (index: number, patch: Partial<{ name: string; calendar_id: string; calendar_name: string; event_color_id: string; hidden_menu_ids: string[]; hidden_option_ids: string[]; schedule: StaffScheduleSettings | undefined }>) => {
+  const updateStaffMember = (index: number, patch: Partial<{ name: string; calendar_id: string; calendar_name: string; event_color_id: string; hidden_menu_ids: string[]; hidden_option_ids: string[]; schedule: StaffScheduleSettings | undefined; no_preference_assignable: boolean | undefined }>) => {
     const staff = [...currentStaffSelection().staff];
     staff[index] = { ...staff[index], ...patch };
     // 希望日時設定が空になったらキー自体を消す（= フォームの設定どおり）
     if ('schedule' in patch && !patch.schedule) delete staff[index].schedule;
+    // 自動割当の対象（既定）に戻したらキー自体を消す
+    if ('no_preference_assignable' in patch && patch.no_preference_assignable !== false) delete staff[index].no_preference_assignable;
     updateStaffSelection({ staff });
   };
 
@@ -2653,6 +2655,13 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                 />
                 <span className={`text-sm ${themeClasses.text.secondary}`}>「指名なし」ボタンを表示（空いているスタッフに自動割当）</span>
               </label>
+              {form.config?.staff_selection?.allow_no_preference !== false
+                && (form.config?.staff_selection?.staff || []).some(m => m.name && m.calendar_id)
+                && !(form.config?.staff_selection?.staff || []).some(m => m.name && m.calendar_id && m.no_preference_assignable !== false) && (
+                <p className={`text-xs mt-2 ${theme === 'light' ? 'text-amber-600' : 'text-amber-400'}`}>
+                  自動割当の対象にしているスタッフがいないため、フォームに「指名なし」ボタンは表示されません。
+                </p>
+              )}
             </div>
 
             {/* スタッフ同時刻に埋まるイベント数 */}
@@ -2811,6 +2820,26 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                       {countStaffScheduleOverrides(member.schedule) > 0 ? `（${countStaffScheduleOverrides(member.schedule)}項目 個別設定）` : ''}
                     </button>
                   </div>
+                  {/* 「指名なし」の自動割当の対象にするか（「指名なし」ボタンを表示しているときだけ） */}
+                  {form.config?.staff_selection?.allow_no_preference !== false && (
+                    <div className="mt-2">
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          data-testid={`staff-no-preference-${index}`}
+                          checked={member.no_preference_assignable !== false}
+                          onChange={(e) => updateStaffMember(index, { no_preference_assignable: e.target.checked ? undefined : false })}
+                          className="rounded"
+                        />
+                        <span className={`text-xs ${themeClasses.text.secondary}`}>「指名なし」の自動割当の対象にする</span>
+                      </label>
+                      {member.no_preference_assignable === false && (
+                        <p className={`text-xs mt-1 ${themeClasses.text.tertiary}`}>
+                          このスタッフは指名されたときだけ担当します。「指名なし」の予約は他のスタッフに割り当てられます。
+                        </p>
+                      )}
+                    </div>
+                  )}
                   </div>
                 ))
               )}
