@@ -32,7 +32,7 @@ import {
   listLineFlexMessages,
   updateLineFlexMessage,
 } from '@/lib/line-flex-repository';
-import { buildLineFlexPayloads, lineFlexItemsReference, LINE_FLEX_ATTACH_MAX, normalizeLineFlexItems, validateLineFlexItems } from '@/lib/line-flex-items';
+import { buildLineFlexPayloads, lineFlexItemsReference, LINE_FLEX_ATTACH_MAX, LINE_FLEX_ITEMS_MAX, normalizeLineFlexItems, validateLineFlexItems } from '@/lib/line-flex-items';
 import { getBroadcastSettings } from '@/lib/broadcast-repository';
 import { DEFAULT_OPT_IN_KEYWORD, DEFAULT_OPT_OUT_KEYWORD } from '@/lib/broadcast-quota';
 
@@ -157,6 +157,7 @@ export function prepareLineFlexMessage(
       attach_confirm: input.attach_confirm === true,
       attach_reminder: input.attach_reminder === true,
       attach_follow: input.attach_follow === true,
+      send_on_follow: input.send_on_follow === true,
       enabled: input.enabled !== false,
       track_taps: trackTaps,
       items,
@@ -308,6 +309,33 @@ export async function handleLineFlexPostback(storeId: string, lineUserId: string
     return null;
   } catch (e) {
     console.error('[line-flex] 分岐ボタンの処理エラー:', e);
+    return null;
+  }
+}
+
+/**
+ * あいさつメッセージ: 友だち追加（ブロック解除を含む）されたときに返すメッセージ。
+ * 「友だち追加されたときに送る」が ON の有効なメッセージを一覧の順に、LINE の 1 回の返信上限（5 通）まで。
+ * 無ければ null（何も返さない）。取得に失敗しても Webhook は止めない
+ */
+export async function listLineFlexGreetingMessages(storeId: string): Promise<Record<string, unknown>[] | null> {
+  try {
+    const rows = await listEnabledLineFlexMessages(storeId);
+    const out: Record<string, unknown>[] = [];
+    const usedIds: string[] = [];
+    for (const r of rows) {
+      if (r.send_on_follow !== true) continue;
+      if (out.length >= LINE_FLEX_ITEMS_MAX) break;
+      const msgs = lineFlexSendMessages(r);
+      if (msgs.length === 0) continue;
+      usedIds.push(r.id);
+      out.push(...msgs.slice(0, LINE_FLEX_ITEMS_MAX - out.length));
+    }
+    if (out.length === 0) return null;
+    await incrementLineFlexReply(usedIds);
+    return out;
+  } catch (e) {
+    console.error('[line-flex] あいさつメッセージの取得エラー:', e);
     return null;
   }
 }
