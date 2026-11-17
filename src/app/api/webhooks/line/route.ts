@@ -8,7 +8,7 @@ import { cancelFollowMessageForReservation, restoreFollowMessageForUser } from '
 import { buildCancelDeadlineMessage, buildCancelNotificationEmail, isCancelAllowed, resolveCancelRules, type CancelRules } from '@/lib/cancel-rules';
 import { resolveStayCancelFee } from '@/lib/stay-reservation';
 import { sendEmail } from '@/lib/email-sender';
-import { findLineFlexReplyForText, handleLineFlexPostback, listLineFlexAttachments } from '@/lib/line-flex-service';
+import { findLineFlexReplyForText, handleLineFlexPostback, listLineFlexAttachments, listLineFlexGreetingMessages } from '@/lib/line-flex-service';
 import { handleBroadcastOptCommand } from '@/lib/broadcast-opt-out';
 import { ensureFriendCustomer } from '@/lib/line-friend-customers';
 
@@ -522,6 +522,13 @@ export async function POST(req: NextRequest) {
   console.log(`[LINE Webhook] storeId=${storeId} eventCount=${events.length} type=${event.type || 'unknown'} userId=${userId ? 'yes' : 'no'} message=${messageText ? messageText.substring(0, 30) : '(empty)'}`);
 
   if (!replyToken || !userId) {
+    return NextResponse.json({ success: true });
+  }
+
+  // あいさつメッセージ: 友だち追加（ブロック解除を含む）されたら、LINE メッセージの「友だち追加されたときに送る」が ON のものを返す
+  if (event.type === 'follow') {
+    const greeting = await listLineFlexGreetingMessages(storeId);
+    if (greeting) await replyRawMessages(replyToken, accessToken, greeting);
     return NextResponse.json({ success: true });
   }
 

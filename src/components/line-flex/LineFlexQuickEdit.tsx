@@ -149,6 +149,7 @@ export default function LineFlexQuickEdit({ storeId, message, forms, others, onS
         attach_confirm: message.attach_confirm,
         attach_reminder: message.attach_reminder,
         attach_follow: message.attach_follow,
+        send_on_follow: message.send_on_follow === true,
         enabled: message.enabled,
         track_taps: message.track_taps,
         items,

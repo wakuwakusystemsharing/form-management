@@ -63,6 +63,7 @@ function normalizeRow(row: Record<string, unknown>): LineFlexMessage {
     attach_confirm: row.attach_confirm === true,
     attach_reminder: row.attach_reminder === true,
     attach_follow: row.attach_follow === true,
+    send_on_follow: row.send_on_follow === true,
     enabled: row.enabled !== false,
     track_taps: row.track_taps !== false,
     items: normalizeLineFlexItems(parse<unknown>(row.message_items ?? row.items, [])),
@@ -123,6 +124,11 @@ export async function insertLineFlexMessage(row: LineFlexMessage): Promise<LineF
     return row;
   }
   let { data, error } = await client().from('line_flex_messages').insert(toDbRow(row)).select('*').single();
+  // あいさつメッセージの列が未適用の環境では、その設定を使っていないメッセージだけ列なしで保存する
+  if (error && isMissingGreetingColumn(error)) {
+    if (row.send_on_follow === true) throw new Error(`LINE メッセージの保存に失敗しました: ${GREETING_COLUMN_HINT}`);
+    return createLineFlexMessageWithout(row);
+  }
   // 分岐の列が未適用の環境では、分岐の無いメッセージだけ列なしで保存する
   if (error && isMissingBranchColumn(error) && !usesBranching(row)) ({ data, error } = await client().from('line_flex_messages').insert(withoutBranchColumns(toDbRow(row))).select('*').single());
   if (error) throw new Error(`LINE メッセージの保存に失敗しました: ${branchColumnHint(error)}`);
@@ -141,6 +147,14 @@ export async function updateLineFlexMessage(row: LineFlexMessage): Promise<LineF
   const { id, store_id, created_at, reply_count, tap_counts, ...rest } = toDbRow(row);
   void created_at; void reply_count; void tap_counts;
   let { data, error } = await client().from('line_flex_messages').update(rest).eq('id', id).eq('store_id', store_id).select('*').single();
+  if (error && isMissingGreetingColumn(error)) {
+    if (row.send_on_follow === true) throw new Error(`LINE メッセージの更新に失敗しました: ${GREETING_COLUMN_HINT}`);
+    const restNoGreeting = withoutGreetingColumn(rest);
+    ({ data, error } = await client().from('line_flex_messages').update(restNoGreeting).eq('id', id).eq('store_id', store_id).select('*').single());
+    if (error && isMissingBranchColumn(error) && !usesBranching(row)) ({ data, error } = await client().from('line_flex_messages').update(withoutBranchColumns(restNoGreeting)).eq('id', id).eq('store_id', store_id).select('*').single());
+    if (error) throw new Error(`LINE メッセージの更新に失敗しました: ${branchColumnHint(error)}`);
+    return normalizeRow(data as Record<string, unknown>);
+  }
   if (error && isMissingBranchColumn(error) && !usesBranching(row)) ({ data, error } = await client().from('line_flex_messages').update(withoutBranchColumns(rest)).eq('id', id).eq('store_id', store_id).select('*').single());
   if (error) throw new Error(`LINE メッセージの更新に失敗しました: ${branchColumnHint(error)}`);
   return normalizeRow(data as Record<string, unknown>);
@@ -197,6 +211,24 @@ export async function incrementLineFlexTap(id: string, key: string): Promise<voi
   if (error) console.warn('[line-flex] tap_counts 更新に失敗:', error.message);
 }
 
+// ---- あいさつメッセージの列（20261117000000_add_line_flex_send_on_follow.sql）が未適用の環境への備え ----
+const GREETING_COLUMN_HINT = 'あいさつメッセージのデータベース更新（マイグレーション）がまだ適用されていません';
+function isMissingGreetingColumn(error: { message?: string; code?: string }): boolean {
+  return (error?.message ?? '').includes('send_on_follow');
+}
+function withoutGreetingColumn(dbRow: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...dbRow };
+  delete out.send_on_follow;
+  return out;
+}
+async function createLineFlexMessageWithout(row: LineFlexMessage): Promise<LineFlexMessage> {
+  const dbRow = withoutGreetingColumn(toDbRow(row));
+  let { data, error } = await client().from('line_flex_messages').insert(dbRow).select('*').single();
+  if (error && isMissingBranchColumn(error) && !usesBranching(row)) ({ data, error } = await client().from('line_flex_messages').insert(withoutBranchColumns(dbRow)).select('*').single());
+  if (error) throw new Error(`LINE メッセージの保存に失敗しました: ${branchColumnHint(error)}`);
+  return normalizeRow(data as Record<string, unknown>);
+}
+
 // ---- 分岐の列（20261116000000_add_line_flex_branching.sql）が未適用の環境への備え ----
 const BRANCH_COLUMNS = ['branches', 'branch_payloads', 'show_choice_text'];
 function isMissingBranchColumn(error: { message?: string; code?: string }): boolean {
@@ -228,6 +260,7 @@ function toDbRow(row: LineFlexMessage): Record<string, unknown> {
     attach_confirm: row.attach_confirm,
     attach_reminder: row.attach_reminder,
     attach_follow: row.attach_follow,
+    send_on_follow: row.send_on_follow === true,
     enabled: row.enabled,
     track_taps: row.track_taps,
     message_items: row.items,
