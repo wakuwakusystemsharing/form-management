@@ -556,7 +556,8 @@ export interface FormConfig {
     deadline_hours?: number;          // 予約日時の何時間前までお客様自身（LINE）でキャンセルできるか。0 / 未設定 = いつでも
     policy_text?: string;             // キャンセル規定の文言（フォームの送信ボタンの上に表示）
     show_policy_on_form?: boolean;    // 上の文言をフォームに表示する
-    notify_store_on_cancel?: boolean; // お客様が LINE でキャンセルしたとき店舗へメール通知（notification_email > owner_email）
+    notify_store_on_cancel?: boolean; // お客様が LINE でキャンセル・変更したとき店舗へメール通知（notification_email > owner_email）
+    allow_change?: boolean;           // お客様が LINE の「予約を変更」で日時・メニューを変更できるか（未設定 = できる。期限は deadline_hours と同じ）
     fee_tiers?: CancelFeeTier[];      // 段階式キャンセル料（days_before の大きい順に判定。空 = キャンセル料なし）
     fee_base?: 'stay' | 'total';      // キャンセル料の基準（宿泊料金のみ / オプション込みの合計）。既定 'stay'
     self_cancel_with_fee?: 'confirm' | 'deny'; // キャンセル料がかかる期間の LINE キャンセル: 金額を確認して取り消す / 受け付けず店舗へ誘導。既定 'confirm'
