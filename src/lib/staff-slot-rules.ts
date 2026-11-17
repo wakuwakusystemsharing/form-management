@@ -46,7 +46,7 @@ export function isNoPreferenceAssignable(member: { no_preference_assignable?: bo
 }
 
 /** 当日の営業時間: 臨時営業日 > 祝日の営業時間 > 曜日設定（静的 HTML の getDayBusinessHoursFor と同じ） */
-function dayBusinessHours(
+export function dayBusinessHours(
   cs: CalendarSettings | null | undefined,
   date: string,
   dayOfWeek: number

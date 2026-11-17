@@ -187,7 +187,7 @@ function findKeywordConflict(rows: LineFlexMessage[], candidate: LineFlexMessage
 }
 
 /** このシステムが既に使っている言葉（予約確認・キャンセル）は登録できない */
-const RESERVED_KEYWORDS = ['予約確認', 'キャンセル'];
+const RESERVED_KEYWORDS = ['予約確認', 'キャンセル', '予約を変更'];
 
 /** 予約語 + その店舗の配信停止 / 再開キーワード（Webhook が先に処理するため、自動応答には使えない） */
 async function reservedKeywordsFor(storeId: string): Promise<string[]> {

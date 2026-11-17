@@ -247,7 +247,7 @@ export async function runDueAutomations(now: Date, origin: string, deadline: num
 // ---------------------------------------------------------------------------
 
 /** 予約確認・キャンセルなど、システムが使う言葉（配信停止 / 再開のキーワードにできない） */
-const SYSTEM_KEYWORDS = ['予約確認', '予約をキャンセル', 'キャンセル'];
+const SYSTEM_KEYWORDS = ['予約確認', '予約をキャンセル', 'キャンセル', '予約を変更'];
 
 export async function saveBroadcastSettings(storeId: string, raw: unknown): Promise<ServiceResult<BroadcastSettings>> {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
