@@ -214,6 +214,7 @@ export interface LineFlexMessage {
   attach_confirm: boolean; // 【ご予約確認】の返信に添える
   attach_reminder: boolean; // リマインダーに添える
   attach_follow: boolean; // フォローメッセージに添える
+  send_on_follow?: boolean; // あいさつメッセージ: 友だち追加（ブロック解除を含む）されたときに送る（未設定 = false）
   enabled: boolean;
   track_taps: boolean; // ボタンの URL を計測リンクにする
   items: LineFlexItem[]; // まとめて送るメッセージの並び（main を含む。旧データは [main] だけ）
@@ -241,6 +242,7 @@ export interface LineFlexMessageInput {
   attach_confirm?: boolean;
   attach_reminder?: boolean;
   attach_follow?: boolean;
+  send_on_follow?: boolean;
   enabled?: boolean;
   track_taps?: boolean;
   items?: LineFlexItem[];

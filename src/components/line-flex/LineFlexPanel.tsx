@@ -178,6 +178,7 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
                         ) : (
                           <span className="text-muted-foreground">キーワードなし</span>
                         )}
+                        {m.send_on_follow && <Badge variant="outline" className="text-[10px]">あいさつメッセージ</Badge>}
                         {m.attach_confirm && <Badge variant="outline" className="text-[10px]">予約確認に添付</Badge>}
                         {m.attach_reminder && <Badge variant="outline" className="text-[10px]">リマインダーに添付</Badge>}
                         {m.attach_follow && <Badge variant="outline" className="text-[10px]">フォローに添付</Badge>}

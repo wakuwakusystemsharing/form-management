@@ -396,6 +396,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
   const [attachConfirm, setAttachConfirm] = useState(initial?.attach_confirm ?? false);
   const [attachReminder, setAttachReminder] = useState(initial?.attach_reminder ?? false);
   const [attachFollow, setAttachFollow] = useState(initial?.attach_follow ?? false);
+  const [sendOnFollow, setSendOnFollow] = useState(initial?.send_on_follow ?? false);
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
   const [trackTaps, setTrackTaps] = useState(initial?.track_taps ?? true);
   // 分岐ボタンを押したとき、お客様のトークに選んだ文言を表示するか
@@ -438,6 +439,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
     setAttachConfirm(next?.attach_confirm ?? false);
     setAttachReminder(next?.attach_reminder ?? false);
     setAttachFollow(next?.attach_follow ?? false);
+    setSendOnFollow(next?.send_on_follow ?? false);
     setEnabled(next?.enabled ?? true);
     setTrackTaps(next?.track_taps ?? true);
     setShowChoiceText(next?.show_choice_text ?? true);
@@ -696,6 +698,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
         attach_confirm: attachConfirm,
         attach_reminder: attachReminder,
         attach_follow: attachFollow,
+        send_on_follow: sendOnFollow,
         enabled,
         track_taps: trackTaps,
         items,
@@ -1127,6 +1130,15 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
                   </p>
                 </div>
                 <div className="space-y-2">
+                  <Label className="text-xs">あいさつメッセージ</Label>
+                  <Check checked={sendOnFollow} onChange={(v) => { setSendOnFollow(v); touch(); }} label="友だち追加されたときに送る" hint="お客様が公式 LINE を友だち追加したとき（ブロック解除を含む）に、このメッセージを自動で送ります（無料）" />
+                  {sendOnFollow && (
+                    <p className="rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                      公式 LINE 管理画面の「あいさつメッセージ」が ON のままだと、そちらのメッセージも一緒に届きます。このメッセージだけにしたいときは、公式 LINE 管理画面のあいさつメッセージを OFF にしてください。
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
                   <Label className="text-xs">自動メッセージに添える</Label>
                   <Check checked={attachConfirm} onChange={(v) => { setAttachConfirm(v); touch(); }} label="予約完了時の【ご予約確認】のあとに送る" hint="お客様が LINE の予約フォームから予約したとき" />
                   <Check checked={attachReminder} onChange={(v) => { setAttachReminder(v); touch(); }} label="予約リマインダーのあとに送る" hint="前日・当日・直前リマインダーすべて" />
@@ -1142,7 +1154,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
                 </div>
                 <Check checked={trackTaps} onChange={(v) => { setTrackTaps(v); touch(); }} label="ボタンのタップ数を計測する" hint="ボタンの URL を計測リンク経由にします（リンク先は変わりません）。OFF にすると直接リンクになります" />
                 <Check checked={showChoiceText} onChange={(v) => { setShowChoiceText(v); touch(); }} label="分岐ボタンを押したとき、選んだ内容をお客様のトークに表示する" hint="「押したら次のメッセージを送る」ボタン・分岐アンケートの選択肢が対象です。ON = ボタンの文言がお客様の発言として残ります / OFF = 何も表示せず次のメッセージだけ届きます" />
-                <Check checked={enabled} onChange={(v) => { setEnabled(v); touch(); }} label="有効" hint="OFF にするとキーワード応答・差し込みを止めます（内容は残ります）" />
+                <Check checked={enabled} onChange={(v) => { setEnabled(v); touch(); }} label="有効" hint="OFF にするとキーワード応答・あいさつメッセージ・差し込みを止めます（内容は残ります）" />
               </section>
             </div>
 
