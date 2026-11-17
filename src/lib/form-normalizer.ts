@@ -600,6 +600,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
               hidden_option_ids: Array.isArray(m.hidden_option_ids)
                 ? m.hidden_option_ids.filter((x): x is string => typeof x === 'string')
                 : [],
+              // 「指名なし」の自動割当の対象外（対象のときはキー自体を持たない）
+              ...(m.no_preference_assignable === false ? { no_preference_assignable: false } : {}),
               // 希望日時設定（上書きが無ければキー自体を持たない）
               ...(() => { const sc = normalizeStaffSchedule(m.schedule); return sc ? { schedule: sc } : {}; })()
             }))
