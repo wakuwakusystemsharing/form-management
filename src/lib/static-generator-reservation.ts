@@ -2076,7 +2076,7 @@ class BookingForm {
                     // （設定の組がスタッフ単位でないときは、対応できるスタッフの誰かが空いていれば〇 = 従来どおり）
                     isAvailable = !capReached && ruleContexts.some((c, i) => ruleResults[i].ok && (c.staffId
                         ? !busyByStaff[c.staffId]
-                        : this.getCapableCalendarStaff().some(m => !busyByStaff[m.id])));
+                        : this.getNoPreferenceStaff().some(m => !busyByStaff[m.id])));
                 }
             } else if (isBusinessEventTime && count >= maxConcurrent) {
                 // 営業日のイベント時間内で同時刻に閾値以上のイベントがある場合
@@ -3608,6 +3608,14 @@ class BookingForm {
         });
     }
 
+    // 「指名なし」を選んでいるときの空き判定に使うスタッフ: 対応できるスタッフのうち、自動割当の対象にしているスタッフだけ
+    // （未選択のときは従来どおり対応できる全スタッフ。サーバー側の割当 = src/lib/staff-slot-rules.ts と同じ絞り込み）
+    getNoPreferenceStaff() {
+        const capable = this.getCapableCalendarStaff();
+        if (this.state.selectedStaffId !== 'none') return capable;
+        return capable.filter(m => m.no_preference_assignable !== false);
+    }
+
     // スタッフ選択: カレンダー連携対象のスタッフ一覧（名前とカレンダーIDが設定済みのもの）
     getCalendarStaff() {
         const ss = this.config.staff_selection;
@@ -3689,7 +3697,7 @@ class BookingForm {
             const member = staff.find(m => m.id === sel);
             return [{ staffId: sel, cs: member ? mergeStaffSchedule(base, member.schedule) : base }];
         }
-        return this.getCapableCalendarStaff().map(m => ({ staffId: m.id, cs: mergeStaffSchedule(base, m.schedule) }));
+        return this.getNoPreferenceStaff().map(m => ({ staffId: m.id, cs: mergeStaffSchedule(base, m.schedule) }));
     }
 
     // 時間間隔・追加で表示する分などカレンダー全体に 1 つしか使えない設定: 指名中のスタッフの設定、それ以外はフォームの設定
@@ -4595,7 +4603,9 @@ if (document.readyState === 'loading') {
     const buttons = staff.map(m =>
       `<button type="button" class="choice-button staff-button" data-staff-id="${this.escapeHtml(m.id)}">${this.escapeHtml(m.name)}</button>`
     ).join('\n                    ');
-    const noPrefButton = ss.allow_no_preference !== false
+    // カレンダー表示モードで、自動割当の対象にしているスタッフが 1 人もいないときは「指名なし」を出さない（全部 ✕ になるため）
+    const hasAssignable = bookingMode !== 'calendar' || staff.some(m => m.no_preference_assignable !== false);
+    const noPrefButton = ss.allow_no_preference !== false && hasAssignable
       ? `\n                    <button type="button" class="choice-button staff-button" data-staff-id="none">指名なし</button>`
       : '';
     return `
