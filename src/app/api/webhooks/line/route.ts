@@ -13,6 +13,8 @@ import { handleBroadcastOptCommand } from '@/lib/broadcast-opt-out';
 import { ensureFriendCustomer } from '@/lib/line-friend-customers';
 import { CHANGE_KEYWORD, MENU_CHANGE_MESSAGE_HEAD, isChangePostback } from '@/lib/reservation-change';
 import { buildChangeMenuReply, buildMenuChangeDoneReply, handleChangePostback } from '@/lib/reservation-change-service';
+import { WAITLIST_KEYWORD, WAITLIST_MESSAGE_HEAD, isWaitlistPostback } from '@/lib/waitlist';
+import { buildWaitlistListReply, buildWaitlistRegisteredReply, handleWaitlistPostback, scheduleWaitlistCheck } from '@/lib/waitlist-service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -547,6 +549,17 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ success: true });
     }
+    // 空き待ちの「取り消す」ボタン（data = wl:x:{空き待ちID}）
+    if (isWaitlistPostback(event.postback?.data)) {
+      try {
+        const waitlistReply = await handleWaitlistPostback(store, userId, event.postback?.data ?? '');
+        if (waitlistReply) await replyRawMessages(replyToken, accessToken, waitlistReply);
+      } catch (e) {
+        console.error('[LINE Webhook] 空き待ちの取り消しエラー:', e);
+        await replyRawMessages(replyToken, accessToken, [{ type: 'text', text: '空き待ちを取り消せませんでした。お手数ですが、時間をおいてもう一度お試しください。' }]);
+      }
+      return NextResponse.json({ success: true });
+    }
     const branchReply = await handleLineFlexPostback(storeId, userId, event.postback?.data ?? '');
     if (branchReply) await replyRawMessages(replyToken, accessToken, branchReply.slice(0, 5));
     return NextResponse.json({ success: true });
@@ -637,6 +650,28 @@ export async function POST(req: NextRequest) {
       if (doneReply) await replyRawMessages(replyToken, accessToken, doneReply);
     } catch (e) {
       console.error('[LINE Webhook] メニュー変更の完了通知エラー:', e);
+    }
+    return NextResponse.json({ success: true });
+  }
+
+  // 空き待ち確認: 登録中の空き待ち（キャンセル待ち）の一覧と「取り消す」ボタンを返す
+  if (messageText === WAITLIST_KEYWORD) {
+    try {
+      await replyRawMessages(replyToken, accessToken, await buildWaitlistListReply(store, userId));
+    } catch (e) {
+      console.error('[LINE Webhook] 空き待ちの一覧エラー:', e);
+      await replyRawMessages(replyToken, accessToken, [{ type: 'text', text: '空き待ちを確認できませんでした。お手数ですが、時間をおいてもう一度お試しください。' }]);
+    }
+    return NextResponse.json({ success: true });
+  }
+
+  // 予約フォームで空き待ちを登録したあとにフォームが送ってくるメッセージ: 受付のカードを返す（登録は API で済んでいる）
+  if (messageText.startsWith(WAITLIST_MESSAGE_HEAD)) {
+    try {
+      const registeredReply = await buildWaitlistRegisteredReply(store, userId);
+      if (registeredReply) await replyRawMessages(replyToken, accessToken, registeredReply);
+    } catch (e) {
+      console.error('[LINE Webhook] 空き待ちの受付通知エラー:', e);
     }
     return NextResponse.json({ success: true });
   }
@@ -911,6 +946,9 @@ export async function POST(req: NextRequest) {
         console.error('[LINE] Calendar delete error:', calendarError);
       }
     }
+
+    // 空き待ち: キャンセルで空いた枠を待っている人に知らせる（レスポンスを返したあとに実行。空き待ちが無い店舗では何もしない）
+    scheduleWaitlistCheck(storeId);
 
     const menu = target.submenu_name
       ? `${target.menu_name} > ${target.submenu_name}`

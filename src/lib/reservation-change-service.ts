@@ -69,7 +69,7 @@ const LIST_HINT = '「予約を変更」と送ると、変更できるご予約�
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-async function loadForm(adminClient: any, storeId: string, formId: string | null | undefined): Promise<LoadedForm | null> {
+export async function loadForm(adminClient: any, storeId: string, formId: string | null | undefined): Promise<LoadedForm | null> {
   if (!formId) return null;
   try {
     const { data } = await adminClient
@@ -295,6 +295,14 @@ async function applyReservationChange(adminClient: any, store: ChangeStore, rese
   }
 
   await notifyStoreOfChange(store, config, reservation, updated);
+
+  // 空き待ち: 元の枠が空いたかもしれないので、この店舗の空き待ちを見回る（レスポンスを返したあとに実行）
+  try {
+    const { scheduleWaitlistCheck } = await import('@/lib/waitlist-service');
+    scheduleWaitlistCheck(store.id);
+  } catch (e) {
+    console.error('[reservation-change] waitlist check error:', e);
+  }
   return updated;
 }
 
@@ -400,7 +408,7 @@ function readLocalReservations(): any[] {
   }
 }
 
-function loadLocalFormConfig(formId: string | null | undefined): FormConfig | null {
+export function loadLocalFormConfig(formId: string | null | undefined): FormConfig | null {
   if (!formId || !fs.existsSync(DATA_DIR)) return null;
   for (const file of fs.readdirSync(DATA_DIR).filter((f) => f.startsWith('forms') && f.endsWith('.json'))) {
     try {

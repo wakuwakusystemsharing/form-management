@@ -22,6 +22,7 @@ import { sanitizeStaySettings } from '@/lib/stay-pricing';
 import { occupiedCountByNight } from '@/lib/stay-availability';
 import { buildEventParamsFromReservation } from '@/lib/reservation-event-params';
 import { checkStayNightsFree } from '@/lib/stay-service';
+import { scheduleWaitlistCheck } from '@/lib/waitlist-service';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
@@ -385,6 +386,7 @@ export async function PATCH(
         console.error('[CRM] visit sync error (local):', e);
       }
       await syncFollowMessageForChange(existing, previousStatus, status, hasContentEdit && existing.reservation_date !== previousDate);
+      if (status === 'cancelled' || hasContentEdit) scheduleWaitlistCheck(existing.store_id);
 
       return NextResponse.json(existing);
     }
@@ -572,6 +574,10 @@ export async function PATCH(
         calendarSync = 'failed';
       }
     }
+
+    // 空き待ち: キャンセル・日時などの編集で枠が空いたかもしれないので、この店舗の空き待ちを見回る
+    // （レスポンスを返したあとに実行。有効な空き待ちが無い店舗では何もしない）
+    if (status === 'cancelled' || hasContentEdit) scheduleWaitlistCheck(reservation.store_id);
 
     return NextResponse.json({ ...reservation, calendar_sync: calendarSync });
   } catch (error) {
