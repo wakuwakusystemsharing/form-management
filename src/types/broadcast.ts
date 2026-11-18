@@ -111,7 +111,23 @@ export type AutomationTrigger =
   | { type: 'birthday'; day: number } // 誕生月の N 日
   | { type: 'first_visit_after'; days: number } // 初回来店の N 日後
   | { type: 'visits_reached'; counts: number[] } // 来店 N 回目
-  | { type: 'tag_added'; tags: string[] }; // タグが付いている
+  | { type: 'tag_added'; tags: string[] } // タグが付いている
+  | {
+      // 予約フォームでキャンセルが出た時（1 日 1 回の判定ではなく、キャンセルのその場で動く。src/lib/broadcast-cancel-opening.ts）
+      type: 'reservation_cancelled';
+      /** その日時がいま実際に予約できる状態のときだけ送る */
+      only_if_open: boolean;
+      /** 予約の N 時間前より後のキャンセルは送らない（0 = 制限なし） */
+      min_hours_before: number;
+      /** 夜間のキャンセルは送らない（日本時間の start 時 〜 end 時の前まで） */
+      quiet_hours: { enabled: boolean; start: number; end: number };
+      /** 1 日に送る回数の上限（0 = 制限なし） */
+      max_per_day: number;
+      /** 店舗が管理画面でキャンセルした時も送る（既定はお客様の LINE キャンセルだけ） */
+      include_store_cancel: boolean;
+      /** 自動で付ける「空きが出ました」カードの文言（`{日時}` `{店名}` を差し込める） */
+      card: { title: string; text: string; button_label: string };
+    };
 
 export interface BroadcastAutomation {
   id: string;

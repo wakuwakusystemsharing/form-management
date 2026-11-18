@@ -10,6 +10,7 @@ import { resolveStayCancelFee } from '@/lib/stay-reservation';
 import { sendEmail } from '@/lib/email-sender';
 import { findLineFlexReplyForText, handleLineFlexPostback, listLineFlexAttachments, listLineFlexGreetingMessages } from '@/lib/line-flex-service';
 import { handleBroadcastOptCommand } from '@/lib/broadcast-opt-out';
+import { scheduleCancelOpeningBroadcast } from '@/lib/broadcast-automation-service';
 import { ensureFriendCustomer } from '@/lib/line-friend-customers';
 import { CHANGE_KEYWORD, MENU_CHANGE_MESSAGE_HEAD, isChangePostback } from '@/lib/reservation-change';
 import { buildChangeMenuReply, buildMenuChangeDoneReply, handleChangePostback } from '@/lib/reservation-change-service';
@@ -949,6 +950,8 @@ export async function POST(req: NextRequest) {
 
     // 空き待ち: キャンセルで空いた枠を待っている人に知らせる（レスポンスを返したあとに実行。空き待ちが無い店舗では何もしない）
     scheduleWaitlistCheck(storeId);
+    // 自動配信「予約フォームでキャンセルが出た時」: ON のルールがある店舗だけ、キャンセルした本人以外へ「空きが出ました」を送る
+    scheduleCancelOpeningBroadcast({ storeId, reservation: target, source: 'customer', origin: new URL(req.url).origin });
 
     const menu = target.submenu_name
       ? `${target.menu_name} > ${target.submenu_name}`
