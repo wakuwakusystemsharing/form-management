@@ -74,6 +74,20 @@ describe('空き待ちの保存（local）', () => {
     expect(rest.map((e) => e.reservation_date)).toEqual(['2026-11-26']);
   });
 
+  it('送信履歴: 新しい順に、お客様名と希望日時を添えて返す。今月の送信数は成功と失敗を分けて数える', async () => {
+    const [entry] = await repo.listWaitlistForStore('st0001', { statuses: ['fulfilled'] });
+    await repo.recordWaitlistNotification({ waitlist_entry_id: entry.id, store_id: 'st0001', type: 'slot_opened', slot_start_at: null, result: 'success', error_message: null });
+    await new Promise((r) => setTimeout(r, 5));
+    await repo.recordWaitlistNotification({ waitlist_entry_id: entry.id, store_id: 'st0001', type: 'slot_filled', slot_start_at: null, result: 'failed', error_message: '400 blocked' });
+    await repo.recordWaitlistNotification({ waitlist_entry_id: entry.id, store_id: 'st9999', type: 'slot_opened', slot_start_at: null, result: 'success', error_message: null });
+    const list = await repo.listWaitlistNotifications('st0001');
+    expect(list.map((n) => [n.type, n.result])).toEqual([['slot_filled', 'failed'], ['slot_opened', 'success']]);
+    expect(list[0]).toMatchObject({ reservation_date: '2026-11-25', reservation_time: '14:00', error_message: '400 blocked' });
+    const now = Date.now();
+    expect(await repo.countWaitlistNotifications('st0001', new Date(now - 3600000).toISOString(), new Date(now + 3600000).toISOString())).toEqual({ sent: 1, failed: 1 });
+    expect(await repo.countWaitlistNotifications('st0001', new Date(now + 3600000).toISOString(), new Date(now + 7200000).toISOString())).toEqual({ sent: 0, failed: 0 });
+  });
+
   it('日時を過ぎた空き待ちは、見回りで自動的に終了する', async () => {
     const summary = await service.processWaitlist({ now: new Date('2026-11-26T10:00:00+09:00') });
     expect(summary.expired).toBe(1);

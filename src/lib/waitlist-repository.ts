@@ -255,6 +255,69 @@ export async function fulfillWaitlistForSlot(storeId: string, lineUserId: string
   }
 }
 
+/** 送信履歴（新しい順）。どの空き待ちへの通知かが分かるよう、お客様名と希望日時を添える */
+export interface WaitlistNotificationRow extends WaitlistNotification {
+  customer_name: string | null;
+  reservation_date: string | null;
+  reservation_time: string | null;
+}
+
+export async function listWaitlistNotifications(storeId: string, limit = 100): Promise<WaitlistNotificationRow[]> {
+  const attach = (n: WaitlistNotification, e: WaitlistEntry | undefined): WaitlistNotificationRow => ({
+    ...n,
+    customer_name: e?.customer_name ?? null,
+    reservation_date: e?.reservation_date ?? null,
+    reservation_time: e?.reservation_time ?? null,
+  });
+  if (isLocal()) {
+    const data = readLocal();
+    const byId = new Map(data.entries.map((e) => [e.id, e]));
+    return data.notifications
+      .filter((n) => n.store_id === storeId)
+      .sort((a, b) => b.sent_at.localeCompare(a.sent_at))
+      .slice(0, limit)
+      .map((n) => attach(n, byId.get(n.waitlist_entry_id)));
+  }
+  const client = admin();
+  if (!client) throw new Error('Supabase 接続エラー');
+  const { data, error } = await client.from('waitlist_notifications').select('*').eq('store_id', storeId).order('sent_at', { ascending: false }).limit(limit);
+  if (error) throw new Error(error.message || '送信履歴の取得に失敗しました');
+  const rows: WaitlistNotification[] = data || [];
+  const ids = [...new Set(rows.map((n) => n.waitlist_entry_id))];
+  const byId = new Map<string, WaitlistEntry>();
+  if (ids.length > 0) {
+    const { data: entries } = await client.from('waitlist_entries').select('*').in('id', ids);
+    (entries || []).forEach((e: any) => byId.set(e.id, normalizeRow(e)));
+  }
+  return rows.map((n) => attach(n, byId.get(n.waitlist_entry_id)));
+}
+
+/** 期間内（sent_at が from 以上 to 未満）の送信数。空き待ちのお知らせ・おわびで使った通数の目安 */
+export async function countWaitlistNotifications(storeId: string, fromIso: string, toIso: string): Promise<{ sent: number; failed: number }> {
+  if (isLocal()) {
+    const list = readLocal().notifications.filter((n) => n.store_id === storeId && n.sent_at >= fromIso && n.sent_at < toIso);
+    return { sent: list.filter((n) => n.result === 'success').length, failed: list.filter((n) => n.result === 'failed').length };
+  }
+  try {
+    const client = admin();
+    if (!client) return { sent: 0, failed: 0 };
+    const count = async (result: 'success' | 'failed') => {
+      const { count: n, error } = await client
+        .from('waitlist_notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('store_id', storeId)
+        .eq('result', result)
+        .gte('sent_at', fromIso)
+        .lt('sent_at', toIso);
+      return error ? 0 : n || 0;
+    };
+    const [sent, failed] = await Promise.all([count('success'), count('failed')]);
+    return { sent, failed };
+  } catch {
+    return { sent: 0, failed: 0 };
+  }
+}
+
 /** 通知の記録（失敗しても処理は続ける） */
 export async function recordWaitlistNotification(input: Omit<WaitlistNotification, 'id' | 'sent_at'>): Promise<void> {
   try {
