@@ -127,6 +127,27 @@ export type AutomationTrigger =
       include_store_cancel: boolean;
       /** 自動で付ける「空きが出ました」カードの文言（`{日時}` `{店名}` を差し込める） */
       card: { title: string; text: string; button_label: string };
+    }
+  | {
+      // 特定の曜日に 1 週間の空き状況（選んだ曜日の実行時刻に、予約フォームの空き状況を 〇△✕ の表で送る。src/lib/broadcast-weekly-availability.ts）
+      type: 'weekly_availability';
+      /** 送る曜日（0 = 日 〜 6 = 土） */
+      weekdays: number[];
+      /** 空き状況を載せる予約フォーム（カレンダー表示モード） */
+      form_id: string;
+      /** 載せる日数（3 / 5 / 7 / 10 / 14） */
+      days: number;
+      /** 当日から載せる（false = 翌日から） */
+      include_today: boolean;
+      /** 「◯ 分の予約が入る空き」として数える所要時間（0 = フォームの時間間隔） */
+      duration_minutes: number;
+      /** 空きが合計この枠数以上ある時だけ送る */
+      min_open_slots: number;
+      /** そのスタッフの空きだけを載せる（null = 誰か 1 人でも空いていれば空き） */
+      staff_id: string | null;
+      /** 時間帯の空きがこの枠数以下なら △（残りわずか） */
+      few_threshold: number;
+      card: { title: string; text: string; button_label: string };
     };
 
 export interface BroadcastAutomation {
