@@ -20,6 +20,7 @@ import { buildCancelPolicyText } from './cancel-rules';
 import { EXTRA_MESSAGE_RUNTIME_JS } from './extra-messages';
 import { flattenConfigSubOptions, normalizeSubOptions, resolveSubOptionsLabel, resolveSubOptionsMode, SUB_OPTIONS_RUNTIME_JS } from './sub-options';
 import type { FlatMenuOption, SubOptionHost } from './sub-options';
+import { ADDITIONAL_QUESTION_MAX_DEPTH, flattenAdditionalQuestions } from './additional-question-tree';
 
 export class StaticReservationGenerator {
   /**
@@ -1207,13 +1208,31 @@ class BookingForm {
         }
     }
 
-    // メニュー / オプションの追加質問一覧（{ field, ownerType, ownerId } の配列）
+    // メニュー / オプション / カスタム項目の選択肢の追加質問一覧（{ field, ownerType, ownerId } の配列）。
+    // 追加質問の選択肢に付けた追加質問（入れ子）は ownerType 'aq_option'（ownerId = 親の質問 ID、ownerValue = 選択肢の値、
+    // parent = 親の entry、root = いちばん上の entry）として親のすぐ後ろに並べる。
+    // 親 → 子 の順に並ぶこと（親が隠れて回答が消える → 子も隠れる、の連鎖がこの順に依存する）。
+    // 規則は src/lib/additional-question-tree.ts の flattenAdditionalQuestions と同じ（直すときは両方）
     getAdditionalQuestionEntries() {
         if (this._aqEntries) return this._aqEntries;
         const entries = [];
+        const pushNested = (parentEntry, depth) => {
+            const q = parentEntry.field;
+            if (depth >= ${ADDITIONAL_QUESTION_MAX_DEPTH}) return;
+            if (q.type !== 'radio' && q.type !== 'checkbox' && q.type !== 'select') return;
+            (q.options || []).forEach(opt => {
+                ((opt && opt.additional_questions) || []).forEach(child => {
+                    if (!(child && child.id && child.title)) return;
+                    const entry = { field: child, ownerType: 'aq_option', ownerId: q.id, ownerValue: opt.value, parent: parentEntry, root: parentEntry.root || parentEntry };
+                    entries.push(entry);
+                    pushNested(entry, depth + 1);
+                });
+            });
+        };
+        const pushEntry = (entry) => { entries.push(entry); pushNested(entry, 1); };
         const pushQuestions = (list, ownerType, ownerId) => {
             (list || []).forEach(q => {
-                if (q && q.id && q.title) entries.push({ field: q, ownerType: ownerType, ownerId: ownerId });
+                if (q && q.id && q.title) pushEntry({ field: q, ownerType: ownerType, ownerId: ownerId });
             });
         };
         const processMenu = (menu) => {
@@ -1229,7 +1248,7 @@ class BookingForm {
         (this.config.custom_fields || []).forEach(field => {
             (field.options || []).forEach(opt => {
                 (opt.additional_questions || []).forEach(q => {
-                    if (q && q.id && q.title) entries.push({ field: q, ownerType: 'custom_option', ownerId: field.id, ownerValue: opt.value });
+                    if (q && q.id && q.title) pushEntry({ field: q, ownerType: 'custom_option', ownerId: field.id, ownerValue: opt.value });
                 });
             });
         });
@@ -1296,6 +1315,12 @@ class BookingForm {
     }
 
     isAdditionalQuestionVisible(entry, sel) {
+        if (entry.ownerType === 'aq_option') {
+            // 追加質問の追加質問: 親の質問が表示されていて、その選択肢が選ばれているときだけ
+            if (!entry.parent || !this.isAdditionalQuestionVisible(entry.parent, sel)) return false;
+            const pv = this.state.customFields[entry.ownerId];
+            return Array.isArray(pv) ? pv.indexOf(entry.ownerValue) !== -1 : pv === entry.ownerValue;
+        }
         if (entry.ownerType === 'custom_option') {
             // 親のカスタムフィールド自体が非表示なら出さない
             if (this.getHiddenCustomFieldIds().indexOf(entry.ownerId) !== -1) return false;
@@ -1316,7 +1341,10 @@ class BookingForm {
             const visible = this.isAdditionalQuestionVisible(entry, sel);
             const wrap = document.getElementById('aq-wrap-' + entry.field.id);
             if (wrap) {
-                if (visible) this.placeAdditionalQuestionBelowChoice(entry, wrap);
+                if (visible) {
+                    this.placeAdditionalQuestionBelowChoice(entry, wrap);
+                    this.placeNestedAdditionalQuestion(entry, wrap);
+                }
                 wrap.style.display = visible ? '' : 'none';
             }
             if (!visible && this.state.customFields[entry.field.id] !== undefined) {
@@ -1340,10 +1368,13 @@ class BookingForm {
             anchor = btn ? (btn.parentElement && btn.parentElement.id !== 'menu-field' ? btn.parentElement : btn) : null;
         } else if (entry.ownerType === 'option') {
             anchor = document.querySelector('.menu-option-item[data-option-id="' + entry.ownerId + '"], .category-option-item[data-option-id="' + entry.ownerId + '"]');
-        } else if (entry.ownerType === 'custom_option') {
+        } else if (entry.ownerType === 'custom_option' || entry.ownerType === 'aq_option') {
+            // カスタム項目も追加質問も同じ作り（custom-field-wrap-{id} の中に選択肢）なので同じ探し方をする
             const fieldWrap = document.getElementById('custom-field-wrap-' + entry.ownerId);
             if (fieldWrap) {
-                const inputs = Array.prototype.slice.call(fieldWrap.querySelectorAll('.choice-label input'));
+                // 中に割り込んだ別の追加質問の選択肢（同じ値のことがある）を拾わないよう、この項目の選択肢だけを見る
+                const inputs = Array.prototype.slice.call(fieldWrap.querySelectorAll('.choice-label input'))
+                    .filter(i => i.getAttribute('data-field-id') === entry.ownerId);
                 const hit = inputs.filter(i => i.value === entry.ownerValue)[0];
                 if (hit) {
                     anchor = hit.closest('.choice-label');
@@ -1356,6 +1387,24 @@ class BookingForm {
         }
         if (!anchor || anchor === wrap || anchor.nextElementSibling === wrap) return;
         if (anchor.contains(wrap)) return;
+        wrap.classList.add('aq-field--inline');
+        anchor.after(wrap);
+    }
+
+    // 追加質問の追加質問（「選択したボタンのすぐ下に表示する」が OFF のもの）を、親の質問のすぐ後ろへ寄せる。
+    // 親が「選択したボタンのすぐ下」に移動していると、元の場所（項目の後ろ）に取り残されて親と離れてしまうため。
+    // 親と同じ並びにあるときは何もしない（描画した順 = 親のすぐ後ろのまま）
+    placeNestedAdditionalQuestion(entry, wrap) {
+        if (entry.ownerType !== 'aq_option' || entry.field.show_below_choice === true) return;
+        const parentWrap = document.getElementById('aq-wrap-' + entry.ownerId);
+        if (!parentWrap || parentWrap.parentElement === wrap.parentElement) return;
+        // 先に寄せてある、同じ親の下の質問（その子孫を含む）の後ろに置く
+        let anchor = parentWrap;
+        const mark = ' ' + entry.ownerId + ' ';
+        while (anchor.nextElementSibling && anchor.nextElementSibling !== wrap
+            && (anchor.nextElementSibling.getAttribute('data-aq-path') || '').indexOf(mark) !== -1) {
+            anchor = anchor.nextElementSibling;
+        }
         wrap.classList.add('aq-field--inline');
         anchor.after(wrap);
     }
@@ -3473,9 +3522,10 @@ class BookingForm {
                     if (msgFieldHasPlacement(field)) return;
                     const display = customFieldDisplayValue(field);
                     if (display !== null) addMsgSegment('custom_fields', '《' + oneLine(field.title) + '》\\n' + display);
-                    // この項目の選択肢に紐づく追加質問（選択中のものだけ値がある）
+                    // この項目の選択肢に紐づく追加質問（選択中のものだけ値がある。追加質問の追加質問は親のすぐ後ろに続く）
                     this.getAdditionalQuestionEntries().forEach(entry => {
-                        if (entry.ownerType !== 'custom_option' || entry.ownerId !== field.id) return;
+                        const root = entry.root || entry;
+                        if (root.ownerType !== 'custom_option' || root.ownerId !== field.id) return;
                         const fuDisplay = customFieldDisplayValue(entry.field);
                         if (fuDisplay !== null) addMsgSegment('custom_fields', '《' + oneLine(entry.field.title) + '》\\n' + fuDisplay);
                     });
@@ -3494,7 +3544,7 @@ class BookingForm {
             // メニュー/オプションの追加質問（フォーム上はメニュー欄の直後に表示される）
             if (showLineItem('custom_fields')) {
                 this.getAdditionalQuestionEntries().forEach(entry => {
-                    if (entry.ownerType === 'custom_option') return;  // カスタム項目の追加質問は項目の直後に入れる
+                    if ((entry.root || entry).ownerType === 'custom_option') return;  // カスタム項目の追加質問は項目の直後に入れる
                     const display = customFieldDisplayValue(entry.field);
                     if (display !== null) addMsgSegment('menu', '《' + oneLine(entry.field.title) + '》\\n' + display);
                 });
@@ -4590,7 +4640,16 @@ if (document.readyState === 'loading') {
     if (entries.length === 0) return '';
     return entries.map(e =>
       `<div class="aq-field" id="aq-wrap-${e.field.id}"${this.aqInlineAttr(e.field)} style="display:none;">${this.renderCustomFieldItem(e.field)}</div>`
+      + this.renderNestedAdditionalQuestions(e.field, '', '')
     ).join('\n            ');
+  }
+
+  // 追加質問の選択肢に付けた追加質問（入れ子）。親の追加質問のすぐ後ろに 親 → 子 の順で並べる（初期状態は非表示）。
+  // data-aq-path = 祖先の追加質問の ID（前後に空白。クライアント側が「同じ親の下か」の判定に使う）
+  private renderNestedAdditionalQuestions(q: import('@/types/form').AdditionalQuestion, extraClass: string, ownerAttr: string): string {
+    return flattenAdditionalQuestions([q]).slice(1).map(node =>
+      `\n            <div class="aq-field aq-nested${extraClass}" id="aq-wrap-${node.question.id}"${ownerAttr} data-aq-path=" ${node.path.join(' ')} "${this.aqInlineAttr(node.question)} style="display:none;">${this.renderCustomFieldItem(node.question)}</div>`
+    ).join('');
   }
 
   // 追加質問「選択したボタンのすぐ下に表示する」（show_below_choice）の目印。クライアント側が選択時にボタンの直後へ移動する
@@ -4605,7 +4664,8 @@ if (document.readyState === 'loading') {
     const followUps = (field.options || []).flatMap(opt =>
       (opt.additional_questions || [])
         .filter(q => q && q.id && q.title)
-        .map(q => `<div class="aq-field aq-followup" id="aq-wrap-${q.id}" data-owner-field="${field.id}"${this.aqInlineAttr(q)} style="display:none;">${this.renderCustomFieldItem(q)}</div>`)
+        .map(q => `<div class="aq-field aq-followup" id="aq-wrap-${q.id}" data-owner-field="${field.id}"${this.aqInlineAttr(q)} style="display:none;">${this.renderCustomFieldItem(q)}</div>`
+          + this.renderNestedAdditionalQuestions(q, ' aq-followup', ` data-owner-field="${field.id}"`))
     );
     return followUps.length > 0 ? core + '\n            ' + followUps.join('\n            ') : core;
   }
@@ -5292,6 +5352,8 @@ if (document.readyState === 'loading') {
         body.menu-change-mode .notice-banner,
         body.menu-change-mode .form-content > .content-block,
         body.menu-change-mode #repeat-booking-button { display: none !important; }
+        /* メニュー / オプションの追加質問は、メニュー変更フォームでも答えられるようにする（中身の枠も custom-field-wrap-… なので上の指定で隠れてしまう） */
+        body.menu-change-mode .aq-field:not(.aq-followup) [id^="custom-field-wrap-"] { display: block !important; }
         body.menu-change-mode:not(.menu-change-pick-datetime) #datetime-field { display: none !important; }
         .change-banner { border-radius: 0.5rem; padding: 0.875rem 1rem; margin-bottom: 1rem; font-size: 0.875rem; line-height: 1.7; background: #eff6ff; border: 1px solid #93c5fd; color: #1e3a8a; }
         .change-banner--error { background: #fee; border-color: #f99; color: #c00; }

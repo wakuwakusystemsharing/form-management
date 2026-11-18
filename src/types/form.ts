@@ -28,6 +28,8 @@ export interface AdditionalQuestion {
     value: string;
     // この選択肢が選ばれた状態で送信されたときに LINE トークへ追加で送るメッセージ
     extra_message?: OptionExtraMessage;
+    // この選択肢が選ばれたときだけ表示する追加質問（追加質問の追加質問。深さは ADDITIONAL_QUESTION_MAX_DEPTH 段まで。src/lib/additional-question-tree.ts）
+    additional_questions?: AdditionalQuestion[];
   }>;
   placeholder?: string;
   // radio / checkbox の表示形式（未設定 = ボタン式。'checkbox' = チェックボックス式 1 列）と大きさ（未設定 = 中）。純粋ロジック: src/lib/choice-style.ts
