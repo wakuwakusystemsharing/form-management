@@ -8,6 +8,7 @@ import { resolveCancelRules } from './cancel-rules';
 import { normalizeStaffSchedule } from './staff-schedule';
 import { sanitizeConditionalAdvanceRules } from './advance-rules';
 import { sanitizeFewLeftMark } from './slot-mark';
+import { sanitizeWaitlistSettings } from './waitlist';
 import { sanitizeStaySettings } from './stay-pricing';
 
 /**
@@ -485,6 +486,13 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
           const max = typeof v === 'number' && Number.isFinite(v) && v >= 1 ? Math.floor(v) : 1;
           const mark = sanitizeFewLeftMark(raw, max);
           return mark ? { few_left_mark: mark } : {};
+        })(),
+        // 空き待ち（キャンセル待ち）。未設定ならキーを持たない（= OFF）
+        ...(() => {
+          const raw = existingConfig?.calendar_settings?.waitlist
+            ?? (typedConfig?.calendar_settings as Form['config']['calendar_settings'])?.waitlist;
+          const waitlist = sanitizeWaitlistSettings(raw);
+          return waitlist ? { waitlist } : {};
         })(),
         max_concurrent_reservations_per_user: (() => {
           const v = existingConfig?.calendar_settings?.max_concurrent_reservations_per_user

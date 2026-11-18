@@ -16,6 +16,8 @@ import { STAFF_SCHEDULE_RUNTIME_JS } from './staff-schedule';
 import { ADVANCE_RULES_RUNTIME_JS } from './advance-rules';
 import { SLOT_MARK_RUNTIME_JS, resolveFewLeftMark, usesStaffCalendars } from './slot-mark';
 import { STAY_CSS, STAY_RUNTIME_JS, renderStayFieldHtml } from './stay-runtime-js';
+import { isWaitlistActive, resolveWaitlistSettings } from './waitlist';
+import { WAITLIST_CSS, WAITLIST_RUNTIME_JS, renderWaitlistBarHtml, renderWaitlistHintHtml, renderWaitlistModalHtml } from './waitlist-runtime-js';
 import { buildCancelPolicyText } from './cancel-rules';
 import { EXTRA_MESSAGE_RUNTIME_JS } from './extra-messages';
 import { flattenConfigSubOptions, normalizeSubOptions, resolveSubOptionsLabel, resolveSubOptionsMode, SUB_OPTIONS_RUNTIME_JS } from './sub-options';
@@ -44,6 +46,12 @@ export class StaticReservationGenerator {
     const nameLabel = (config.calendar_settings?.customer_name_label || '').trim() || 'お名前';
     // config は immutable に扱うため、深くコピーして修正
     const safeConfig: FormConfig = JSON.parse(JSON.stringify(config));
+    const waitlistSettings = resolveWaitlistSettings(config.calendar_settings);
+    const waitlistConfig = {
+      enabled: !manualMode && !previewMode && isWaitlistActive(config),
+      deadlineHours: waitlistSettings.deadline_hours,
+      maxPerUser: waitlistSettings.max_per_user,
+    };
 
     // 必須フィールドの初期化
     if (!safeConfig.basic_info) {
@@ -190,6 +198,7 @@ ${this.generateDesignOverridesCSS(safeConfig)}</style>
     </div>
     `}
     <div id="treatment-text"></div>
+${waitlistConfig.enabled ? renderWaitlistModalHtml() : ''}
     <div id="image-lightbox" class="image-lightbox" role="dialog" aria-modal="true" aria-label="画像の拡大表示" style="display:none;">
         <button type="button" class="image-lightbox-close" onclick="window.bookingForm.closeImageLightbox()">閉じる ×</button>
         <img id="image-lightbox-img" src="" alt="" onclick="event.stopPropagation()">
@@ -286,6 +295,8 @@ const SUBMIT_LABEL = ${JSON.stringify(submitLabel)};
 const LINE_ONLY = ${lineOnly ? 'true' : 'false'};
 // 管理画面のプレビュー（空き状況 API を呼ばず、埋め込み設定で料金だけ計算する）
 const PREVIEW_MODE = ${previewMode ? 'true' : 'false'};
+// 空き待ち（キャンセル待ち）: 満席（✕）の時間をタップして登録できる（LINE フォーム × カレンダー表示モードで ON のときだけ）
+const WAITLIST = ${JSON.stringify(waitlistConfig)};
 
 ${HOLIDAY_RUNTIME_JS}
 ${MULTIPLE_DATES_RUNTIME_JS}
@@ -298,6 +309,7 @@ ${SLOT_MARK_RUNTIME_JS}
 ${STAY_RUNTIME_JS}
 ${EXTRA_MESSAGE_RUNTIME_JS}
 ${SUB_OPTIONS_RUNTIME_JS}
+${WAITLIST_RUNTIME_JS}
 function formatDateTimeForDisplay(value) {
     // "2026-04-30T15:08[:00]" → "2026年04月30日 15:08"
     // "2026-04-30"            → "2026年04月30日"
@@ -463,6 +475,10 @@ class BookingForm {
             // 手動モード: お客様選択（LINE友だち一覧）の読み込み
             if (MANUAL_MODE) {
                 this.initManualCustomerPicker();
+            }
+            // 空き待ち: 登録中の空き待ちの取得と、空きのお知らせから開いたとき（?waitlist=）の入力済み表示
+            if (!MANUAL_MODE && !PREVIEW_MODE && !this.state.changeRequested) {
+                try { wlInit(this); } catch (e) {}
             }
         }
     }
@@ -2423,6 +2439,8 @@ class BookingForm {
         let isAvailable = false;
         // その時間に重なる予定の数（△ の判定に使う。空き状況を取得できていないときは 0）
         let slotEventCount = 0;
+        // 受付している時間なのに予定で埋まっている（= 満席）か。空き待ちを登録できる枠の判定に使う
+        let slotFull = false;
 
         if (!rulesOk) {
             isAvailable = false;
@@ -2512,6 +2530,11 @@ class BookingForm {
             } else {
                 isAvailable = false;
             }
+            // 満席 = スタッフ選択のフォームは空いているスタッフがいない / それ以外は予定が上限に達している
+            // （「営業日」イベントの時間外は満席ではなく受付していない時間なので除く）
+            slotFull = !isAvailable && (this.isStaffCalendarMode()
+                ? true
+                : (count >= maxConcurrent && (isBusinessEventTime || businessEventTimes.length === 0)));
         } else {
             // カレンダーAPIから取得したデータがない場合、営業時間のみで判定
             isAvailable = true;
@@ -2531,17 +2554,20 @@ class BookingForm {
                 const bgColor = showSelected ? 'var(--primary-color)' : (isAvailable && !isPast ? '#fff' : '#a0a0a0');
                 const textColor = showSelected ? '#fff' : (isAvailable && !isPast ? 'var(--primary-color)' : '#ffffff');
                 const cursor = isAvailable && !isPast ? 'pointer' : 'not-allowed';
+                // 空き待ち: 満席（✕）で、受付締切より前の枠はタップして登録できる。登録済みの枠は「待」
+                const wlCell = slotFull && !isPast && wlCanRegister(this, slotStart, now);
+                const wlMine = wlCell ? wlFindMine(this, dateStr, time) : null;
                 const hoverStyle = isAvailable && !isPast ? 'onmouseover="this.style.backgroundColor=&quot;#fffbe6&quot;" onmouseout="if(!this.classList.contains(&quot;selected&quot;)){this.style.backgroundColor=&quot;#fff&quot;}"' : '';
 
                 bodyHTML += \`<td
                     data-date="\${dateStr}"
                     data-time="\${time}"
-                    class="calendar-cell\${showSelected ? ' selected' : ''}\${isAvailable && !isPast ? '' : ' unavailable'}\${slotMark === 'few' ? ' few' : ''}"
+                    class="calendar-cell\${showSelected ? ' selected' : ''}\${isAvailable && !isPast ? '' : ' unavailable'}\${slotMark === 'few' ? ' few' : ''}\${wlCell ? ' waitlist' : ''}\${wlMine ? ' waitlist-mine' : ''}"
                     data-mark="\${slotMark}"
                     style="text-align:center;padding:0.25rem;border:1px solid #696969;font-size:0.9rem;font-weight:bold;cursor:\${cursor};background:\${bgColor};color:\${textColor};"
                     \${hoverStyle}
-                    onclick="window.bookingForm.handleDateTimeSelect('\${dateStr}', '\${time}', \${isAvailable && !isPast})"
-                >\${slotMark === 'few' ? '△' : (slotMark === 'ok' ? '○' : '×')}</td>\`;
+                    onclick="window.bookingForm.handleDateTimeSelect('\${dateStr}', '\${time}', \${isAvailable && !isPast}, \${wlCell})"
+                >\${wlMine ? '待' : (slotMark === 'few' ? '△' : (slotMark === 'ok' ? '○' : '×'))}</td>\`;
             });
             
             bodyHTML += '</tr>';
@@ -2575,8 +2601,12 @@ class BookingForm {
     }
     
     // 日時選択ハンドラー
-    handleDateTimeSelect(dateStr, time, isAvailable) {
-        if (!isAvailable) return;
+    handleDateTimeSelect(dateStr, time, isAvailable, canWaitlist) {
+        if (!isAvailable) {
+            // 満席の時間: 空き待ち（キャンセル待ち）の登録ダイアログを出す（機能 ON のフォームだけ）
+            if (canWaitlist) wlOpenDialog(this, dateStr, time);
+            return;
+        }
         
         // 以前の選択をクリア
         document.querySelectorAll('.calendar-cell.selected').forEach(cell => {
@@ -4894,6 +4924,10 @@ if (document.readyState === 'loading') {
   private renderCalendarField(initiallyHidden: boolean, config?: FormConfig): string {
     // 「予約が一定数で△で表示する」が ON のフォームだけ、凡例に △ の説明を足す（スタッフ選択を使うフォームでは △ を出さない）
     const fewMark = resolveFewLeftMark(config?.calendar_settings);
+    // 空き待ち（キャンセル待ち）が ON のフォームだけ、「あなたの空き待ち」と案内の入れ物を出す（表示はフォーム側の JS が切り替える）
+    const waitlistOn = isWaitlistActive(config);
+    const waitlistBar = waitlistOn ? renderWaitlistBarHtml() : '';
+    const waitlistHint = waitlistOn ? renderWaitlistHintHtml() : '';
     const fewLegend = fewMark.enabled && !usesStaffCalendars(config)
       ? `
                         <div class="legend-item legend-item-few"><span class="legend-marker marker-few">△</span><span>${this.escapeHtml(fewMark.label)}</span></div>`
@@ -4923,11 +4957,12 @@ if (document.readyState === 'loading') {
                         </div>
                     </div>
 
+${waitlistBar}
                     <!-- 凡例（〇✕の説明） -->
                     <div class="calendar-legend">
                         <div class="legend-item"><span class="legend-marker marker-ok"></span><span>予約可</span></div>${fewLegend}
                         <div class="legend-item"><span class="legend-marker marker-ng">✕</span><span>満席</span></div>
-                    </div>
+                    </div>${waitlistHint}
 
                     <!-- カレンダーテーブル -->
                     <div class="calendar-table-wrapper" style="overflow-x:auto;background:#fff;border:1px solid #d1d5db;border-radius:0.25rem;box-shadow:0 1px 2px 0 rgba(0,0,0,0.05);">
@@ -5518,6 +5553,7 @@ if (document.readyState === 'loading') {
         ${BIRTHDAY_CSS}
         ${ADDRESS_CSS}
         ${STAY_CSS}
+        ${WAITLIST_CSS}
         ${SEARCHABLE_SELECT_CSS}
         /* キャンセル規定（送信ボタンの上） */
         .cancel-policy { margin: 0 0 1rem; padding: 0.75rem 0.9rem; border: 1px solid #f1c9a5; background: #fff7ef; border-radius: 0.375rem; font-size: 0.8rem; color: #444; line-height: 1.6; }

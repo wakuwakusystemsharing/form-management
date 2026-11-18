@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
+import WaitlistPanel from '@/components/WaitlistPanel';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -138,6 +139,8 @@ export default function StoreReservationsPage() {
 
           {/* 予約一覧タブ */}
           <TabsContent value="list" className="space-y-6">
+            {/* 空き待ち（キャンセル待ち）。1 件も無い店舗では表示されない */}
+            <WaitlistPanel storeId={storeId} />
             {/* フィルター */}
             <Card>
               <CardHeader>
