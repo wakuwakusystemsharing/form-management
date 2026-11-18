@@ -6,7 +6,7 @@
  * - 時間の〇✕: 予約フォームのカレンダーと同じ規則（`staff-slot-rules.ts` の `isSlotBookableForSettings`）
  *   + Google カレンダーの予定（自分の予約の予定は除いて数える）
  *
- * 見ないもの: メニュー / オプションの対応時間設定（フォームから変更する「メニューを変更」では従来どおり効く）
+ * 見ないもの: メニュー / オプションの対応時間設定
  */
 import type { FormConfig } from '@/types/form';
 import { isCancelAllowed, resolveCancelRules, type CancelRules } from './cancel-rules';
@@ -24,6 +24,8 @@ type CalendarSettings = FormConfig['calendar_settings'];
 
 export const CHANGE_KEYWORD = '予約を変更';
 export const CHANGE_POSTBACK_PREFIX = 'rc:';
+/** メニュー変更フォームが送信後に LINE へ送るメッセージの 1 行目（Webhook が完了のカードを返す） */
+export const MENU_CHANGE_MESSAGE_HEAD = '【メニュー変更】';
 /** 日付の一覧 1 回ぶんの日数（続きは「続きの日付を見る」） */
 export const CHANGE_DATES_PAGE_DAYS = 28;
 /** 選べる日付の上限（事前予約可能日数がこれより長くてもここまで） */
@@ -153,7 +155,7 @@ export type ChangeBlockReason = 'cancelled' | 'past' | 'stay' | 'no_form' | 'dis
 export interface ChangeEligibility {
   allowed: boolean;
   reason?: ChangeBlockReason;
-  /** calendar = トーク内で日時・時間を選べる / form_only = 予約フォームを開いて変更する（第三希望日時モードなど） */
+  /** calendar = トーク内で日時・時間を選べる / form_only = メニューの変更だけ（第三希望日時モードなど。日時は店舗へ連絡） */
   mode: 'calendar' | 'form_only';
   rules: CancelRules;
   deadline: Date | null;

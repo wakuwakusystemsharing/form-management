@@ -9,6 +9,7 @@ import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { Form, StaticDeploy } from '@/types/form';
 import { logFormAudit } from '@/lib/form-audit';
+import { RESERVATION_FORM_FEATURES } from '@/lib/form-deploy-features';
 
 export async function POST(
   request: NextRequest,
@@ -112,7 +113,8 @@ export async function POST(
       deployed_at: new Date().toISOString(),
       deploy_url: deployUrl,
       storage_url: deployResult.storage_url,
-      status: 'deployed'
+      status: 'deployed',
+      features: [...RESERVATION_FORM_FEATURES]
     };
 
     if (env === 'local') {

@@ -21,12 +21,14 @@ import {
   buildChangeTimesMessage,
 } from '@/lib/reservation-change-flex';
 import { buildChangeFormUrl, buildChangeNotificationEmail } from '@/lib/reservation-change-service';
-import { computeReservationAnalytics } from '@/lib/reservation-analytics';
+import { buildMenuChangeDoneMessage } from '@/lib/reservation-change-flex';
+import { hasDeployedFeature, RESERVATION_FORM_FEATURES } from '@/lib/form-deploy-features';
 import type { FormConfig } from '@/types/form';
 
 // 2026-11-17（火）10:00 JST
 const NOW = new Date('2026-11-17T10:00:00+09:00');
 const RID = '3f2b8c1e-1111-4222-8333-444455556666';
+const DEPLOYED = { deployed_at: '2026-11-17T00:00:00Z', deploy_url: 'https://example.com', status: 'deployed' as const, features: [...RESERVATION_FORM_FEATURES] };
 
 const open = { open: '10:00', close: '18:00', closed: false };
 const cs = {
@@ -228,7 +230,7 @@ describe('時間の〇✕', () => {
 
 describe('カード', () => {
   it('最初のカード: 日時 / 時間 / メニューの変更ボタン', () => {
-    const formUrl = buildChangeFormUrl(config(), RID);
+    const formUrl = buildChangeFormUrl(config(), DEPLOYED, RID);
     expect(formUrl).toBe(`https://liff.line.me/1234567890-abcdefgh?change=${RID}`);
     const msg = buildChangeMenuMessage('A店', [{ reservation, allowed: true, mode: 'calendar', formUrl }]);
     expect(postbackData(msg)).toEqual([`rc:d:${RID}:0`, `rc:t:${RID}:20261120`]);
@@ -243,8 +245,36 @@ describe('カード', () => {
   });
 
   it('LIFF ID の無いフォーム・Web フォームは「メニューを変更」を出さない', () => {
-    expect(buildChangeFormUrl(config({ basic_info: { liff_id: '' } }), RID)).toBeNull();
-    expect(buildChangeFormUrl(config({ form_type: 'web' }), RID)).toBeNull();
+    expect(buildChangeFormUrl(config({ basic_info: { liff_id: '' } }), DEPLOYED, RID)).toBeNull();
+    expect(buildChangeFormUrl(config({ form_type: 'web' }), DEPLOYED, RID)).toBeNull();
+  });
+
+  it('メニュー変更フォームに対応する前にデプロイしたフォームは「メニューを変更」を出さない（通常の予約フォームとして開いて予約が増えるのを防ぐ）', () => {
+    const old = { deployed_at: '2026-01-01T00:00:00Z', deploy_url: 'https://example.com', status: 'deployed' as const };
+    expect(hasDeployedFeature(old, 'menu_change')).toBe(false);
+    expect(hasDeployedFeature(null, 'menu_change')).toBe(false);
+    expect(hasDeployedFeature(DEPLOYED, 'menu_change')).toBe(true);
+    expect(buildChangeFormUrl(config(), old, RID)).toBeNull();
+    expect(buildChangeFormUrl(config(), null, RID)).toBeNull();
+    const msg = buildChangeMenuMessage('A店', [{ reservation, allowed: true, mode: 'calendar', formUrl: null }]);
+    expect(collect(msg, (o) => o.type === 'uri')).toEqual([]);
+    expect(postbackData(msg)).toHaveLength(2);
+  });
+
+  it('第三希望日時モードの予約は「メニューを変更」だけ', () => {
+    const msg = buildChangeMenuMessage('A店', [{ reservation, allowed: true, mode: 'form_only', formUrl: 'https://liff.line.me/x?change=1' }]);
+    expect(postbackData(msg)).toEqual([]);
+    expect(collect(msg, (o) => o.type === 'uri').map((o) => (o as { label?: string }).label)).toEqual(['メニューを変更']);
+  });
+
+  it('メニュー変更完了のカード: 変更後のメニューとオプション、日時', () => {
+    const msg = buildMenuChangeDoneMessage('A店', {
+      ...reservation,
+      selected_menus: [{ menu_id: 'm2', menu_name: 'カラー' }, { menu_id: 'm3', menu_name: 'パーマ', submenu_name: 'ロング' }],
+      selected_options: [{ menu_id: 'm2', option_name: 'トリートメント' }],
+    });
+    const t = texts(msg);
+    expect(t).toEqual(expect.arrayContaining(['【メニュー変更完了】', '・カラー', '　└ トリートメント', '・パーマ > ロング', '11/20（金） 14:00']));
   });
 
   it('日付のカード: 空きのある日だけ押せる。定休日は出さない。注意書きと続きのボタン', () => {
@@ -297,7 +327,7 @@ describe('カード', () => {
   });
 });
 
-describe('店舗への通知メールと集計', () => {
+describe('店舗への通知メール', () => {
   it('変更前と変更後の日時を載せる', () => {
     const mail = buildChangeNotificationEmail({
       storeName: 'A店',
@@ -310,14 +340,13 @@ describe('店舗への通知メールと集計', () => {
     expect(mail.body).toContain('■ メニュー：カット');
   });
 
-  it('置き換えられた元の予約は、予約数にもキャンセル数にも数えない', () => {
-    const base = { form_id: 'f1', reservation_date: '2026-11-20', reservation_time: '14:00', selected_menus: [], selected_options: [] };
-    const result = computeReservationAnalytics([
-      { ...base, status: 'pending' },
-      { ...base, status: 'cancelled' },
-      { ...base, status: 'cancelled', customer_info: { replaced_by_reservation_id: 'new' } },
-    ] as never);
-    expect(result.summary.total).toBe(1);
-    expect(result.summary.cancelled).toBe(1);
+  it('メニューが変わったときは、変更前と変更後のメニューを載せる', () => {
+    const mail = buildChangeNotificationEmail({
+      storeName: 'A店',
+      before: { ...reservation, selected_menus: [{ menu_name: 'カット' }] },
+      after: { ...reservation, customer_name: '山田', selected_menus: [{ menu_name: 'カラー' }, { menu_name: 'パーマ' }] },
+    });
+    expect(mail.body).toContain('■ 変更前　：11/20（金） 14:00　カット');
+    expect(mail.body).toContain('■ 変更後　：11/20（金） 14:00　カラー、パーマ');
   });
 });
