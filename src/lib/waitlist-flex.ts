@@ -3,7 +3,7 @@
  * 見た目は「予約を変更」のカード（reservation-change-flex.ts）に合わせる
  */
 import { formatDateTimeShortJa } from './reservation-change';
-import { buildWaitlistCancelPostback, waitlistMenuText, type WaitlistEntry } from './waitlist';
+import { WAITLIST_MESSAGE_DEFAULTS, buildWaitlistCancelPostback, waitlistMenuText, type WaitlistEntry } from './waitlist';
 
 export const WAITLIST_THEME_COLOR = '#f7a3a3';
 const NOTE = '#555555';
@@ -72,12 +72,12 @@ export function buildWaitlistSimpleMessage(title: string, body: string, storeNam
 }
 
 /** 登録したとき: 「空き待ちを受け付けました」 */
-export function buildWaitlistRegisteredMessage(storeName: string | null | undefined, entry: CardEntry): Obj {
+export function buildWaitlistRegisteredMessage(storeName: string | null | undefined, entry: CardEntry, lead: string = WAITLIST_MESSAGE_DEFAULTS.registered): Obj {
   return flexMessage('空き待ちを受け付けました', [
     bubble('空き待ちを受け付けました', storeName, [
       { type: 'box', layout: 'vertical', spacing: 'sm', contents: entryLines(entry) },
       { type: 'separator', margin: 'lg' },
-      { type: 'text', text: 'この日時に空きが出たら、LINE でお知らせします。', size: 'sm', wrap: true, margin: 'lg' },
+      { type: 'text', text: lead || WAITLIST_MESSAGE_DEFAULTS.registered, size: 'sm', wrap: true, margin: 'lg' },
       note(`※ ${WAITLIST_NOTICE_NO_GUARANTEE}`, WARN),
       note(`※ ${WAITLIST_NOTICE_FIRST_COME}`),
       note('「空き待ち確認」と送ると、登録中の空き待ちの確認・取り消しができます。'),
@@ -109,9 +109,14 @@ export function buildWaitlistListMessage(storeName: string | null | undefined, e
 }
 
 /** 枠が空いたとき: 予約フォームへのボタン付き */
-export function buildWaitlistSlotOpenedMessage(storeName: string | null | undefined, entry: CardEntry, bookingUrl: string | null): Obj {
+export function buildWaitlistSlotOpenedMessage(
+  storeName: string | null | undefined,
+  entry: CardEntry,
+  bookingUrl: string | null,
+  lead: string = WAITLIST_MESSAGE_DEFAULTS.slot_opened
+): Obj {
   const contents: Obj[] = [
-    { type: 'text', text: 'お待ちいただいていた日時に空きが出ました。', size: 'sm', wrap: true },
+    { type: 'text', text: lead || WAITLIST_MESSAGE_DEFAULTS.slot_opened, size: 'sm', wrap: true },
     { type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg', contents: entryLines(entry, '📅 空きが出た日時') },
     { type: 'separator', margin: 'lg' },
     note(`※ ${WAITLIST_NOTICE_FIRST_COME}`, WARN),
@@ -132,10 +137,10 @@ export function buildWaitlistSlotOpenedMessage(storeName: string | null | undefi
 }
 
 /** お知らせした枠が埋まったとき: おわび（空き待ちは続く） */
-export function buildWaitlistSlotFilledMessage(storeName: string | null | undefined, entry: CardEntry): Obj {
+export function buildWaitlistSlotFilledMessage(storeName: string | null | undefined, entry: CardEntry, lead: string = WAITLIST_MESSAGE_DEFAULTS.slot_filled): Obj {
   return flexMessage('お知らせした枠は埋まりました', [
     bubble('お知らせした枠は埋まりました', storeName, [
-      { type: 'text', text: '申し訳ありません。先ほどお知らせした日時は、ほかのお客様のご予約で埋まりました。', size: 'sm', wrap: true },
+      { type: 'text', text: lead || WAITLIST_MESSAGE_DEFAULTS.slot_filled, size: 'sm', wrap: true },
       { type: 'box', layout: 'vertical', spacing: 'sm', margin: 'lg', contents: entryLines(entry) },
       { type: 'separator', margin: 'lg' },
       note('空き待ちは継続しています。また空きが出たらお知らせします。'),

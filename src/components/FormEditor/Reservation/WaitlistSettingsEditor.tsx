@@ -8,9 +8,22 @@ import {
   WAITLIST_DEADLINE_OPTIONS,
   WAITLIST_KEYWORD,
   WAITLIST_MAX_PER_USER_LIMIT,
+  WAITLIST_MESSAGE_DEFAULTS,
+  WAITLIST_MESSAGE_KEYS,
+  WAITLIST_MESSAGE_LABELS,
+  WAITLIST_MESSAGE_MAX,
+  WAITLIST_MESSAGE_VARIABLES,
+  isWaitlistQuietTime,
+  renderWaitlistMessageText,
   resolveWaitlistSettings,
+  type WaitlistMessageKey,
   type WaitlistSettings,
 } from '@/lib/waitlist';
+
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const hourLabel = (h: number) => `${String(h).padStart(2, '0')}:00`;
+/** 文面のプレビューに使う例 */
+const SAMPLE_VARS = { 日時: '11/25（水） 14:00', メニュー: 'カット', 店名: '（店舗名）', 予約URL: 'https://liff.line.me/…' };
 
 /**
  * 営業時間・ルール → 「空き待ち（キャンセル待ち）設定」。
@@ -24,6 +37,7 @@ const WaitlistSettingsEditor: React.FC<{
 }> = ({ form, onUpdate, theme = 'dark' }) => {
   const themeClasses = getThemeClasses(theme);
   const [open, setOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
   const cs = form.config?.calendar_settings;
   const settings = resolveWaitlistSettings(cs);
   const isWeb = (form.config as { form_type?: string } | undefined)?.form_type === 'web';
@@ -42,6 +56,17 @@ const WaitlistSettingsEditor: React.FC<{
       },
     });
   };
+
+  const updateQuiet = (patch: Partial<WaitlistSettings['quiet_hours']>) => update({ quiet_hours: { ...settings.quiet_hours, ...patch } });
+  const updateMessage = (key: WaitlistMessageKey, text: string) => {
+    const messages = { ...settings.messages };
+    const value = text.slice(0, WAITLIST_MESSAGE_MAX);
+    if (value.trim()) messages[key] = value;
+    else delete messages[key];
+    update({ messages });
+  };
+  const quiet = settings.quiet_hours;
+  const customizedCount = WAITLIST_MESSAGE_KEYS.filter((k) => settings.messages[k]).length;
 
   return (
     <div className={themeClasses.card} data-slot="waitlist-settings">
@@ -148,8 +173,101 @@ const WaitlistSettingsEditor: React.FC<{
                 </select>
               </div>
 
+              {/* 夜間に送らない */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>夜間はお知らせを送らない</label>
+                    <InfoTooltip
+                      theme={theme}
+                      text={'ONにすると、指定した時間帯は「空きのお知らせ」と「埋まったお知らせ」を送りません。\n時間帯が明けたあとの見回りで、その時点で空いていればお知らせします（夜のうちに埋まった枠は知らせません）。\n空き待ちを登録したときの受付カードは、お客様の操作への返信なので時間帯に関係なく届きます。'}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="waitlist-quiet-enabled"
+                    onClick={() => updateQuiet({ enabled: !quiet.enabled })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${quiet.enabled ? themeClasses.toggle.enabled : themeClasses.toggle.disabled}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${quiet.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+                {quiet.enabled && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select data-testid="waitlist-quiet-start" value={quiet.start} onChange={(e) => updateQuiet({ start: parseInt(e.target.value, 10) || 0 })} className={`${themeClasses.input} !w-auto`}>
+                      {HOURS.map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
+                    </select>
+                    <span className={`text-sm ${themeClasses.text.secondary}`}>から</span>
+                    <select data-testid="waitlist-quiet-end" value={quiet.end} onChange={(e) => updateQuiet({ end: parseInt(e.target.value, 10) || 0 })} className={`${themeClasses.input} !w-auto`}>
+                      {HOURS.map((h) => <option key={h} value={h}>{hourLabel(h)}</option>)}
+                    </select>
+                    <span className={`text-sm ${themeClasses.text.secondary}`}>まで送らない{quiet.start > quiet.end ? '（翌日）' : ''}</span>
+                  </div>
+                )}
+                <p className={`text-xs ${themeClasses.text.tertiary}`}>
+                  {!quiet.enabled
+                    ? '時間帯に関係なく、空きが出たらすぐにお知らせします。'
+                    : quiet.start === quiet.end
+                      ? '開始と終了が同じ時刻のため、送らない時間帯はありません。'
+                      : `${hourLabel(quiet.start)} 〜 ${quiet.start > quiet.end ? '翌 ' : ''}${hourLabel(quiet.end)} はお知らせを送りません。${isWaitlistQuietTime(settings, new Date()) ? '（いまは送らない時間帯です）' : ''}`}
+                </p>
+              </div>
+
+              {/* 通知の文面 */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <label className={`block text-sm font-medium ${themeClasses.text.secondary}`}>お知らせの文面</label>
+                    <InfoTooltip
+                      theme={theme}
+                      text={'LINE に届くカードの、最初の文章を変更できます（空欄 = 既定の文面）。\n日時・メニュー・担当の表示、注意書き（予約をお約束するものではないこと・先着順であること）、「この日時で予約する」ボタンは、文面を変えても必ず表示されます。\n文面の変更は保存するとすぐ反映されます（再デプロイは不要です）。'}
+                    />
+                  </div>
+                  <button type="button" data-testid="waitlist-messages-toggle" onClick={() => setMessagesOpen((v) => !v)} className={`px-3 py-1 text-xs rounded border ${themeClasses.button.secondary}`}>
+                    {messagesOpen ? '閉じる' : `文面を編集${customizedCount > 0 ? `（${customizedCount} 件変更中）` : ''}`}
+                  </button>
+                </div>
+                {messagesOpen && (
+                  <div className="space-y-4">
+                    <p className={`text-xs ${themeClasses.text.tertiary}`}>
+                      文中に {WAITLIST_MESSAGE_VARIABLES.map((v) => `{${v}}`).join(' ')} と書くと、その部分が実際の内容に置き換わります。
+                    </p>
+                    {WAITLIST_MESSAGE_KEYS.map((key) => {
+                      const value = settings.messages[key] || '';
+                      return (
+                        <div key={key} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className={`block text-xs font-medium ${themeClasses.text.secondary}`}>{WAITLIST_MESSAGE_LABELS[key]}</label>
+                            {value && (
+                              <button type="button" onClick={() => updateMessage(key, '')} className={`text-xs underline ${themeClasses.text.tertiary}`}>既定に戻す</button>
+                            )}
+                          </div>
+                          <textarea
+                            data-testid={`waitlist-message-${key}`}
+                            value={value}
+                            onChange={(e) => updateMessage(key, e.target.value)}
+                            placeholder={WAITLIST_MESSAGE_DEFAULTS[key]}
+                            rows={2}
+                            maxLength={WAITLIST_MESSAGE_MAX}
+                            className={themeClasses.input}
+                          />
+                          <div className="flex flex-wrap gap-1">
+                            {WAITLIST_MESSAGE_VARIABLES.map((v) => (
+                              <button key={v} type="button" onClick={() => updateMessage(key, `${value || WAITLIST_MESSAGE_DEFAULTS[key]}{${v}}`)} className={`px-2 py-0.5 text-xs rounded border ${themeClasses.button.secondary}`}>
+                                ＋{`{${v}}`}
+                              </button>
+                            ))}
+                          </div>
+                          <p className={`text-xs ${themeClasses.text.tertiary}`}>表示例: {renderWaitlistMessageText(value || WAITLIST_MESSAGE_DEFAULTS[key], SAMPLE_VARS)}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <ul className={`text-xs ${themeClasses.text.tertiary} list-disc pl-5 space-y-1`}>
-                <li>登録した空き待ちは、店舗ページの予約一覧にある「空き待ち」で確認・取り消しができます。</li>
+                <li>登録した空き待ちは、店舗ページの予約一覧にある「空き待ち」で確認・取り消しができます。日時ごとの人数・お知らせの送信履歴・今月の送信数もそこで確認できます。</li>
                 <li>空きの確認は、予約のキャンセル・日時変更の直後と、10 分おきに自動で行います（Google カレンダーの予定を直接消したときも 10 分以内にお知らせします）。</li>
                 <li>ご希望の日時を過ぎた空き待ちは自動で終了します。</li>
                 <li>リッチメニューに「{WAITLIST_KEYWORD}」と送るボタンを置くと、お客様が確認しやすくなります。</li>

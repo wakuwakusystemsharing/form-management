@@ -30,9 +30,13 @@ import {
   isWaitlistActive,
   isWaitlistSlotPast,
   parseWaitlistPostback,
+  renderWaitlistMessageText,
+  resolveWaitlistMessageTemplate,
   resolveWaitlistSettings,
+  waitlistMenuText,
   waitlistSlotStartMs,
   type WaitlistEntry,
+  type WaitlistMessageKey,
   type WaitlistSlotState,
   type WaitlistStatus,
 } from '@/lib/waitlist';
@@ -392,6 +396,17 @@ export interface WaitlistRunSummary {
   deferred: number;
 }
 
+/** 通知の文面（店舗が編集した文章。`{日時}` などを置き換える） */
+function messageLead(config: FormConfig | null | undefined, key: WaitlistMessageKey, store: WaitlistStore, entry: WaitlistEntry): string {
+  const settings = resolveWaitlistSettings(config?.calendar_settings);
+  return renderWaitlistMessageText(resolveWaitlistMessageTemplate(settings, key), {
+    日時: formatDateTimeShortJa(entry.reservation_date, entry.reservation_time),
+    メニュー: waitlistMenuText(entry),
+    店名: store.name || '',
+    予約URL: buildWaitlistBookingUrl(config?.basic_info?.liff_id, entry.id) || '',
+  });
+}
+
 const emptySummary = (): WaitlistRunSummary => ({ checked: 0, notified: 0, apologized: 0, expired: 0, failed: 0, deferred: 0 });
 
 async function sendAndLog(store: WaitlistStore, entry: WaitlistEntry, type: 'slot_opened' | 'slot_filled', message: Message): Promise<boolean> {
@@ -462,7 +477,7 @@ export async function processWaitlist(opts: { storeId?: string | null; now?: Dat
         });
         if (!claimed) continue;
         const url = buildWaitlistBookingUrl(config.basic_info?.liff_id, entry.id);
-        const sent = await sendAndLog(store, entry, 'slot_opened', buildWaitlistSlotOpenedMessage(store.name, entry, url));
+        const sent = await sendAndLog(store, entry, 'slot_opened', buildWaitlistSlotOpenedMessage(store.name, entry, url, messageLead(config, 'slot_opened', store, entry)));
         if (sent) {
           summary.notified++;
         } else {
@@ -478,7 +493,7 @@ export async function processWaitlist(opts: { storeId?: string | null; now?: Dat
       } else if (action === 'apologize') {
         const claimed = await transitionWaitlistEntry(entry.id, ['notified'], { status: 'waiting' });
         if (!claimed) continue;
-        const sent = await sendAndLog(store, entry, 'slot_filled', buildWaitlistSlotFilledMessage(store.name, entry));
+        const sent = await sendAndLog(store, entry, 'slot_filled', buildWaitlistSlotFilledMessage(store.name, entry, messageLead(config, 'slot_filled', store, entry)));
         if (sent) summary.apologized++;
         else summary.failed++;
       }
@@ -562,5 +577,11 @@ export async function buildWaitlistRegisteredReply(store: WaitlistStore, userId:
   const entries = await listActiveWaitlistForUser(store.id, userId);
   if (entries.length === 0) return null;
   const latest = [...entries].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-  return [buildWaitlistRegisteredMessage(store.name, latest)];
+  let config: FormConfig | null = null;
+  try {
+    config = await loadFormConfig(latest.store_id, latest.form_id);
+  } catch {
+    config = null;
+  }
+  return [buildWaitlistRegisteredMessage(store.name, latest, messageLead(config, 'registered', store, latest))];
 }

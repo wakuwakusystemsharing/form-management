@@ -3,7 +3,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import { normalizeForm } from '../form-normalizer';
+import { groupWaitlistBySlot } from '../waitlist-summary';
 import {
+  isWaitlistQuietTime,
+  renderWaitlistMessageText,
+  resolveWaitlistMessageTemplate,
   buildWaitlistBookingUrl,
   buildWaitlistCancelPostback,
   checkWaitlistRegistration,
@@ -23,14 +27,15 @@ const NOW = at('2026-11-20T10:00:00+09:00');
 
 describe('設定', () => {
   it('未設定は OFF・上限 3 件・締切 1 時間前', () => {
-    expect(resolveWaitlistSettings(undefined)).toEqual({ enabled: false, max_per_user: 3, deadline_hours: 1 });
-    expect(resolveWaitlistSettings({})).toEqual({ enabled: false, max_per_user: 3, deadline_hours: 1 });
+    const off = { enabled: false, max_per_user: 3, deadline_hours: 1, quiet_hours: { enabled: false, start: 22, end: 8 }, messages: {} };
+    expect(resolveWaitlistSettings(undefined)).toEqual(off);
+    expect(resolveWaitlistSettings({})).toEqual(off);
     expect(sanitizeWaitlistSettings(undefined)).toBeUndefined();
   });
 
   it('値を範囲に収める。enabled は true のときだけ ON', () => {
-    expect(resolveWaitlistSettings({ waitlist: { enabled: true, max_per_user: 99, deadline_hours: -5 } })).toEqual({ enabled: true, max_per_user: 10, deadline_hours: 0 });
-    expect(resolveWaitlistSettings({ waitlist: { enabled: 'true', max_per_user: 0, deadline_hours: '6' } })).toEqual({ enabled: false, max_per_user: 1, deadline_hours: 6 });
+    expect(resolveWaitlistSettings({ waitlist: { enabled: true, max_per_user: 99, deadline_hours: -5 } })).toMatchObject({ enabled: true, max_per_user: 10, deadline_hours: 0 });
+    expect(resolveWaitlistSettings({ waitlist: { enabled: 'true', max_per_user: 0, deadline_hours: '6' } })).toMatchObject({ enabled: false, max_per_user: 1, deadline_hours: 6 });
   });
 
   it('LINE フォーム × カレンダー表示モードで ON のときだけ動く', () => {
@@ -48,7 +53,10 @@ describe('設定', () => {
     const base = { id: 'f1', store_id: 's1', config: { basic_info: { form_name: 'a' }, calendar_settings: { booking_mode: 'calendar' } } };
     expect((normalizeForm(base as never).config.calendar_settings as { waitlist?: unknown }).waitlist).toBeUndefined();
     const withWl = { ...base, config: { ...base.config, calendar_settings: { booking_mode: 'calendar', waitlist: { enabled: true, max_per_user: 5, deadline_hours: 2 } } } };
-    expect(normalizeForm(withWl as never).config.calendar_settings.waitlist).toEqual({ enabled: true, max_per_user: 5, deadline_hours: 2 });
+    expect(normalizeForm(withWl as never).config.calendar_settings.waitlist).toEqual({ enabled: true, max_per_user: 5, deadline_hours: 2, quiet_hours: { enabled: false, start: 22, end: 8 }, messages: {} });
+    // 第 1 弾で保存した設定（夜間・文面なし）も、そのまま読める
+    const full = { ...base, config: { ...base.config, calendar_settings: { booking_mode: 'calendar', waitlist: { enabled: true, max_per_user: 5, deadline_hours: 2, quiet_hours: { enabled: true, start: 21, end: 9 }, messages: { slot_opened: '  空きました  ', slot_filled: '' } } } } };
+    expect(normalizeForm(full as never).config.calendar_settings.waitlist).toMatchObject({ quiet_hours: { enabled: true, start: 21, end: 9 }, messages: { slot_opened: '空きました' } });
   });
 });
 
@@ -94,6 +102,73 @@ describe('見回りで何をするか', () => {
     expect(decideWaitlistAction(entry('waiting', '09:00'), 'open', settings, NOW)).toBe('expire');
     expect(decideWaitlistAction(entry('notified', '09:00'), 'full', settings, NOW)).toBe('expire');
     expect(decideWaitlistAction({ ...entry('waiting'), status: 'cancelled' as never }, 'open', settings, NOW)).toBe('none');
+  });
+});
+
+describe('夜間に送らない', () => {
+  const quiet = (start: number, end: number, enabled = true) => ({ quiet_hours: { enabled, start, end } });
+  it('日付をまたぐ時間帯（22:00〜8:00）', () => {
+    expect(isWaitlistQuietTime(quiet(22, 8), at('2026-11-20T21:59:00+09:00'))).toBe(false);
+    expect(isWaitlistQuietTime(quiet(22, 8), at('2026-11-20T22:00:00+09:00'))).toBe(true);
+    expect(isWaitlistQuietTime(quiet(22, 8), at('2026-11-21T03:00:00+09:00'))).toBe(true);
+    expect(isWaitlistQuietTime(quiet(22, 8), at('2026-11-21T07:59:00+09:00'))).toBe(true);
+    expect(isWaitlistQuietTime(quiet(22, 8), at('2026-11-21T08:00:00+09:00'))).toBe(false);
+  });
+  it('同じ日の中の時間帯・OFF・開始と終了が同じ', () => {
+    expect(isWaitlistQuietTime(quiet(1, 6), at('2026-11-21T05:30:00+09:00'))).toBe(true);
+    expect(isWaitlistQuietTime(quiet(1, 6), at('2026-11-21T06:00:00+09:00'))).toBe(false);
+    expect(isWaitlistQuietTime(quiet(22, 8, false), at('2026-11-21T03:00:00+09:00'))).toBe(false);
+    expect(isWaitlistQuietTime(quiet(9, 9), at('2026-11-21T09:00:00+09:00'))).toBe(false);
+    expect(isWaitlistQuietTime(undefined, at('2026-11-21T03:00:00+09:00'))).toBe(false);
+  });
+  it('送らない時間帯は、お知らせもおわびも送らない。日時を過ぎた空き待ちの終了は行う', () => {
+    const night = at('2026-11-20T23:00:00+09:00');
+    const settings = { deadline_hours: 1, ...quiet(22, 8) };
+    const e = (status: 'waiting' | 'notified', date = '2026-11-21') => ({ status, reservation_date: date, reservation_time: '15:00' });
+    expect(decideWaitlistAction(e('waiting'), 'open', settings, night)).toBe('none');
+    expect(decideWaitlistAction(e('notified'), 'full', settings, night)).toBe('none');
+    expect(decideWaitlistAction(e('waiting', '2026-11-20'), 'open', settings, night)).toBe('expire');
+    // 明けたら送る
+    expect(decideWaitlistAction(e('waiting'), 'open', settings, at('2026-11-21T08:00:00+09:00'))).toBe('notify');
+  });
+});
+
+describe('お知らせの文面', () => {
+  it('未設定・空白だけは既定の文面', () => {
+    expect(resolveWaitlistMessageTemplate(resolveWaitlistSettings({}), 'slot_opened')).toBe('お待ちいただいていた日時に空きが出ました。');
+    expect(resolveWaitlistMessageTemplate({ messages: { slot_filled: '   ' } }, 'slot_filled')).toContain('埋まりました');
+    expect(resolveWaitlistMessageTemplate({ messages: { registered: '受け付けました！' } }, 'registered')).toBe('受け付けました！');
+  });
+  it('{日時} {メニュー} {店名} {予約URL} を置き換える。値が無い変数は空、知らない変数はそのまま', () => {
+    expect(renderWaitlistMessageText('{店名}です。{日時} の {メニュー} が空きました。{日時}', { 日時: '11/25（水） 14:00', メニュー: 'カット', 店名: 'テスト店' }))
+      .toBe('テスト店です。11/25（水） 14:00 の カット が空きました。11/25（水） 14:00');
+    expect(renderWaitlistMessageText('予約はこちら {予約URL}', {})).toBe('予約はこちら');
+    expect(renderWaitlistMessageText('{名前}様', { 日時: 'x' })).toBe('{名前}様');
+  });
+  it('文面は 300 文字まで', () => {
+    const s = resolveWaitlistSettings({ waitlist: { messages: { slot_opened: 'あ'.repeat(500) } } });
+    expect(s.messages.slot_opened).toHaveLength(300);
+  });
+});
+
+describe('日時ごとの人数', () => {
+  const e = (date: string, time: string, status: string, name: string, staff: string | null = null) => ({ reservation_date: date, reservation_time: time, status: status as never, customer_name: name, staff_name: staff });
+  it('受付中の空き待ちだけを、日付 → 時間の早い順にまとめる', () => {
+    const days = groupWaitlistBySlot([
+      e('2026-11-26', '10:00', 'waiting', 'A'),
+      e('2026-11-25', '14:00', 'waiting', 'B', '佐藤'),
+      e('2026-11-25', '14:00', 'notified', 'C', '佐藤'),
+      e('2026-11-25', '14:00', 'waiting', 'D'),
+      e('2026-11-25', '09:30', 'waiting', 'E'),
+      e('2026-11-25', '14:00', 'cancelled', 'F'),
+      e('2026-11-25', '14:00', 'fulfilled', 'G'),
+    ]);
+    expect(days.map((d) => d.date)).toEqual(['2026-11-25', '2026-11-26']);
+    expect(days[0].total).toBe(4);
+    expect(days[0].slots.map((s) => [s.time, s.count, s.notified])).toEqual([['09:30', 1, 0], ['14:00', 3, 1]]);
+    expect(days[0].slots[1].names).toEqual(['B', 'C', 'D']);
+    expect(days[0].slots[1].staffNames).toEqual(['佐藤']);
+    expect(groupWaitlistBySlot([])).toEqual([]);
   });
 });
 
@@ -177,6 +252,23 @@ describe('LINE のカード', () => {
     expect(s).toContain('https://liff.line.me/1234567890-abcdefgh?waitlist=e1');
     expect(s).toContain('先着順');
     expect(text(buildWaitlistSlotOpenedMessage('テスト店', entry, null))).not.toContain('"uri"');
+  });
+
+  it('文面を変えても、日時・注意書き・ボタンは必ず載る', () => {
+    const opened = text(buildWaitlistSlotOpenedMessage('テスト店', entry, 'https://liff.line.me/1234567890-abcdefgh?waitlist=e1', 'お席が空きました！'));
+    expect(opened).toContain('お席が空きました！');
+    expect(opened).not.toContain('お待ちいただいていた日時に空きが出ました。');
+    expect(opened).toContain('11/25（水） 14:00');
+    expect(opened).toContain('先着順');
+    expect(opened).toContain('この日時で予約する');
+    const registered = text(buildWaitlistRegisteredMessage('テスト店', entry, 'ご登録ありがとうございます。'));
+    expect(registered).toContain('ご登録ありがとうございます。');
+    expect(registered).toContain('お約束するものではありません');
+    const filled = text(buildWaitlistSlotFilledMessage('テスト店', entry, 'ごめんなさい、埋まってしまいました。'));
+    expect(filled).toContain('ごめんなさい、埋まってしまいました。');
+    expect(filled).toContain('空き待ちは継続しています');
+    // 空の文面は既定に戻る
+    expect(text(buildWaitlistSlotFilledMessage('テスト店', entry, ''))).toContain('ほかのお客様のご予約で埋まりました');
   });
 
   it('おわび: 埋まったことと、空き待ちが続くこと', () => {

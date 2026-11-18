@@ -36,6 +36,39 @@ export const WAITLIST_STATUS_LABELS: Record<WaitlistStatus, string> = {
 };
 
 export type WaitlistNotificationType = 'slot_opened' | 'slot_filled';
+export const WAITLIST_NOTIFICATION_LABELS: Record<WaitlistNotificationType, string> = {
+  slot_opened: '空きのお知らせ',
+  slot_filled: '埋まったお知らせ（おわび）',
+};
+
+/** 通知の種類ごとの文面（カードの最初の文章。空 = 既定の文面） */
+export type WaitlistMessageKey = 'registered' | 'slot_opened' | 'slot_filled';
+export const WAITLIST_MESSAGE_KEYS: WaitlistMessageKey[] = ['registered', 'slot_opened', 'slot_filled'];
+export const WAITLIST_MESSAGE_MAX = 300;
+
+export const WAITLIST_MESSAGE_LABELS: Record<WaitlistMessageKey, string> = {
+  registered: '受付完了（空き待ちを登録したとき）',
+  slot_opened: '空きのお知らせ（枠が空いたとき）',
+  slot_filled: 'おわび（お知らせした枠が埋まったとき）',
+};
+
+export const WAITLIST_MESSAGE_DEFAULTS: Record<WaitlistMessageKey, string> = {
+  registered: 'この日時に空きが出たら、LINE でお知らせします。',
+  slot_opened: 'お待ちいただいていた日時に空きが出ました。',
+  slot_filled: '申し訳ありません。先ほどお知らせした日時は、ほかのお客様のご予約で埋まりました。',
+};
+
+/** 文面に差し込める変数（`{日時}` のように書く） */
+export const WAITLIST_MESSAGE_VARIABLES = ['日時', 'メニュー', '店名', '予約URL'] as const;
+export type WaitlistMessageVariable = (typeof WAITLIST_MESSAGE_VARIABLES)[number];
+
+/** 夜間に送らない時間帯（日本時間の「時」。start 時 〜 end 時の前まで。日付をまたいでよい） */
+export interface WaitlistQuietHours {
+  enabled: boolean;
+  start: number;
+  end: number;
+}
+export const WAITLIST_DEFAULT_QUIET_HOURS: WaitlistQuietHours = { enabled: false, start: 22, end: 8 };
 
 /** 保存する形（`calendar_settings.waitlist`） */
 export interface WaitlistSettings {
@@ -44,6 +77,10 @@ export interface WaitlistSettings {
   max_per_user: number;
   /** 予約日時の何時間前まで空きを知らせるか（これを過ぎた枠は知らせない・登録も受け付けない） */
   deadline_hours: number;
+  /** 夜間に送らない（この時間帯は空きのお知らせ・おわびを送らず、明けてから確認して送る） */
+  quiet_hours: WaitlistQuietHours;
+  /** 通知の文面（設定したものだけ。無いものは既定の文面） */
+  messages: Partial<Record<WaitlistMessageKey, string>>;
 }
 
 export interface WaitlistEntry {
@@ -89,11 +126,45 @@ export function resolveWaitlistSettings(calendarSettings: { waitlist?: unknown }
   const raw = calendarSettings && typeof calendarSettings.waitlist === 'object' && calendarSettings.waitlist
     ? (calendarSettings.waitlist as Record<string, unknown>)
     : {};
+  const q = raw.quiet_hours && typeof raw.quiet_hours === 'object' ? (raw.quiet_hours as Record<string, unknown>) : {};
+  const m = raw.messages && typeof raw.messages === 'object' ? (raw.messages as Record<string, unknown>) : {};
+  const messages: Partial<Record<WaitlistMessageKey, string>> = {};
+  for (const key of WAITLIST_MESSAGE_KEYS) {
+    const text = typeof m[key] === 'string' ? (m[key] as string).trim().slice(0, WAITLIST_MESSAGE_MAX) : '';
+    if (text) messages[key] = text;
+  }
   return {
     enabled: raw.enabled === true,
     max_per_user: clamp(toInt(raw.max_per_user, WAITLIST_DEFAULT_MAX_PER_USER), 1, WAITLIST_MAX_PER_USER_LIMIT),
     deadline_hours: clamp(toInt(raw.deadline_hours, WAITLIST_DEFAULT_DEADLINE_HOURS), 0, 24 * 30),
+    quiet_hours: {
+      enabled: q.enabled === true,
+      start: clamp(toInt(q.start, WAITLIST_DEFAULT_QUIET_HOURS.start), 0, 23),
+      end: clamp(toInt(q.end, WAITLIST_DEFAULT_QUIET_HOURS.end), 0, 23),
+    },
+    messages,
   };
+}
+
+/** いまが「夜間に送らない」時間帯か（日本時間）。OFF、または開始と終了が同じなら常に false */
+export function isWaitlistQuietTime(settings: { quiet_hours?: WaitlistQuietHours } | null | undefined, now: Date): boolean {
+  const q = settings?.quiet_hours;
+  if (!q || q.enabled !== true || q.start === q.end) return false;
+  const hour = new Date(now.getTime() + 9 * 3600000).getUTCHours();
+  return q.start < q.end ? hour >= q.start && hour < q.end : hour >= q.start || hour < q.end;
+}
+
+/** その通知の文面（設定が空なら既定） */
+export function resolveWaitlistMessageTemplate(settings: Pick<WaitlistSettings, 'messages'> | null | undefined, key: WaitlistMessageKey): string {
+  const custom = settings?.messages?.[key];
+  return typeof custom === 'string' && custom.trim() ? custom.trim() : WAITLIST_MESSAGE_DEFAULTS[key];
+}
+
+/** 文面の `{日時}` `{メニュー}` `{店名}` `{予約URL}` を置き換える（値が無い変数は空文字） */
+export function renderWaitlistMessageText(template: string, vars: Partial<Record<WaitlistMessageVariable, string | null | undefined>>): string {
+  let out = template;
+  for (const name of WAITLIST_MESSAGE_VARIABLES) out = out.split(`{${name}}`).join(vars[name] || '');
+  return out.trim();
 }
 
 /** 保存用に整える（normalizeForm が使う）。未設定なら undefined（キーを持たない） */
@@ -156,16 +227,18 @@ export type WaitlistAction = 'expire' | 'notify' | 'apologize' | 'none';
  * - 開始時刻を過ぎた → 終了（expire）
  * - 空き待ち中で、枠が空いていて、受付締切の前 → 空きを知らせる（notify）
  * - お知らせ済みで、枠がまた埋まった → おわびを送って空き待ちに戻す（apologize）
- * 判断できないとき（unknown）や、受付していない時間（closed）は何もしない
+ * 判断できないとき（unknown）や、受付していない時間（closed）は何もしない。
+ * 「夜間に送らない」時間帯は、お知らせもおわびも送らない（状態はそのまま。明けてからの見回りで送る）
  */
 export function decideWaitlistAction(
   entry: Pick<WaitlistEntry, 'status' | 'reservation_date' | 'reservation_time'>,
   state: WaitlistSlotState,
-  settings: Pick<WaitlistSettings, 'deadline_hours'>,
+  settings: Pick<WaitlistSettings, 'deadline_hours'> & { quiet_hours?: WaitlistQuietHours },
   now: Date
 ): WaitlistAction {
   if (entry.status !== 'waiting' && entry.status !== 'notified') return 'none';
   if (isWaitlistSlotPast(entry.reservation_date, entry.reservation_time, now)) return 'expire';
+  if (isWaitlistQuietTime(settings, now)) return 'none';
   if (entry.status === 'waiting') {
     return state === 'open' && isBeforeWaitlistDeadline(settings, entry.reservation_date, entry.reservation_time, now) ? 'notify' : 'none';
   }
@@ -176,7 +249,7 @@ export type WaitlistRegisterBlock = 'invalid' | 'past' | 'deadline' | 'limit' | 
 
 /** 登録できるか（枠が満席かどうかはサーバーがカレンダーを見て別に確認する） */
 export function checkWaitlistRegistration(args: {
-  settings: WaitlistSettings;
+  settings: Pick<WaitlistSettings, 'max_per_user' | 'deadline_hours'>;
   date: unknown;
   time: unknown;
   staffId: string | null;

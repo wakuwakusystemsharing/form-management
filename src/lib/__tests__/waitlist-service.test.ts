@@ -83,6 +83,7 @@ vi.mock('@/lib/waitlist-repository', () => {
 });
 
 import {
+  buildWaitlistRegisteredReply,
   cancelMyWaitlist,
   evaluateWaitlistSlot,
   getWaitlistSourceForForm,
@@ -292,6 +293,64 @@ describe('見回り: お知らせ → おわび → 再通知', () => {
     expect((await processWaitlist({ now: NOW })).notified).toBe(0);
     h.events['store-cal'] = [ev(DATE, '14:00', '15:00')];
     expect((await processWaitlist({ now: NOW })).notified).toBe(1);
+  });
+});
+
+describe('夜間に送らない・文面の編集', () => {
+  const quietConfig = () => config({ waitlist: { enabled: true, max_per_user: 2, deadline_hours: 1, quiet_hours: { enabled: true, start: 22, end: 8 } } });
+
+  it('送らない時間帯に空いた枠は、明けてからの見回りで知らせる', async () => {
+    h.config = quietConfig();
+    await registerWaitlist(input('U1'));
+    h.events['store-cal'] = [];
+    const night = new Date('2026-11-20T23:30:00+09:00');
+    expect((await processWaitlist({ now: night })).notified).toBe(0);
+    expect(h.pushes).toHaveLength(0);
+    expect(statusOf('e1')).toBe('waiting');
+    const morning = new Date('2026-11-21T08:05:00+09:00');
+    expect((await processWaitlist({ now: morning })).notified).toBe(1);
+    expect(h.pushes.map((p) => p.to)).toEqual(['U1']);
+  });
+
+  it('夜のうちに埋まった枠は、朝になっても知らせない', async () => {
+    h.config = quietConfig();
+    await registerWaitlist(input('U1'));
+    h.events['store-cal'] = [];
+    await processWaitlist({ now: new Date('2026-11-20T23:30:00+09:00') });
+    h.events['store-cal'] = [ev(DATE, '14:00', '15:00')];
+    expect((await processWaitlist({ now: new Date('2026-11-21T08:05:00+09:00') })).notified).toBe(0);
+    expect(h.pushes).toHaveLength(0);
+  });
+
+  it('送らない時間帯は、おわびも送らない（お知らせ済みのまま。明けても埋まっていれば送る）', async () => {
+    h.config = quietConfig();
+    await registerWaitlist(input('U1'));
+    h.events['store-cal'] = [];
+    await processWaitlist({ now: NOW });
+    expect(statusOf('e1')).toBe('notified');
+    h.events['store-cal'] = [ev(DATE, '14:00', '15:00')];
+    expect((await processWaitlist({ now: new Date('2026-11-20T22:30:00+09:00') })).apologized).toBe(0);
+    expect(statusOf('e1')).toBe('notified');
+    expect((await processWaitlist({ now: new Date('2026-11-21T09:00:00+09:00') })).apologized).toBe(1);
+    expect(statusOf('e1')).toBe('waiting');
+  });
+
+  it('店舗が編集した文面で送る（日時・メニュー・店名を差し込む）。未設定の通知は既定の文面', async () => {
+    h.config = config({ waitlist: { enabled: true, max_per_user: 2, deadline_hours: 1, messages: { slot_opened: '{店名}です。{日時} の {メニュー} に空きが出ました！', registered: '{日時} の空き待ち、承りました。' } } });
+    await registerWaitlist(input('U1'));
+    const reply = JSON.stringify(await buildWaitlistRegisteredReply(store, 'U1'));
+    expect(reply).toContain('11/25（水） 14:00 の空き待ち、承りました。');
+    expect(reply).toContain('お約束するものではありません');
+
+    h.events['store-cal'] = [];
+    await processWaitlist({ now: NOW });
+    const opened = JSON.stringify(h.pushes[0].messages);
+    expect(opened).toContain('テスト店です。11/25（水） 14:00 の カット に空きが出ました！');
+    expect(opened).toContain('この日時で予約する');
+
+    h.events['store-cal'] = [ev(DATE, '14:00', '15:00')];
+    await processWaitlist({ now: NOW });
+    expect(JSON.stringify(h.pushes[1].messages)).toContain('ほかのお客様のご予約で埋まりました');
   });
 });
 
