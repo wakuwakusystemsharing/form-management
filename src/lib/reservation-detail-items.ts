@@ -244,12 +244,15 @@ export function buildReservationDetailItems(config: FormConfigLike, reservation:
 /** フォーム設定からカスタム項目・追加質問の定義を ID で引く（管理画面での表示ラベル・日付整形用） */
 function collectFieldDefs(config: FormConfigLike): Map<string, { title: string; type?: string }> {
   const map = new Map<string, { title: string; type?: string }>();
-  const push = (list: unknown) => {
+  const push = (list: unknown, depth = 0) => {
     (Array.isArray(list) ? list : []).forEach((q) => {
       const f = q as { id?: string; title?: string; type?: string };
       if (f && f.id && f.title && !map.has(f.id)) {
         map.set(f.id, { title: String(f.title).replace(/\s*\r?\n\s*/g, ' ').trim(), type: f.type });
       }
+      // 選択肢に付けた追加質問（追加質問の追加質問も同じ形なので、そのままたどる）
+      const opts = (q as { options?: Array<{ additional_questions?: unknown }> } | null)?.options;
+      if (depth < 5 && Array.isArray(opts)) opts.forEach((o) => push(o?.additional_questions, depth + 1));
     });
   };
   const processMenu = (menu: unknown) => {
@@ -266,8 +269,8 @@ function collectFieldDefs(config: FormConfigLike): Map<string, { title: string; 
   });
   (ms?.menus || []).forEach(processMenu);
   (config?.custom_fields || []).forEach((field) => {
+    // カスタム項目そのもの + 選択肢の追加質問（push が選択肢の下をたどる）
     push([field]);
-    ((field as { options?: Array<{ additional_questions?: unknown }> }).options || []).forEach((o) => push(o?.additional_questions));
   });
   return map;
 }

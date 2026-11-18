@@ -95,7 +95,8 @@ function additionalQuestionsWorst(list: AdditionalQuestion[] | undefined): numbe
   let n = 0;
   for (const q of list || []) {
     if (!q || !isChoiceType(q.type)) continue;
-    n += combine(q.type, (q.options || []).map((o) => hasExtraMessage(o?.extra_message)));
+    // 選択肢の下に付けた追加質問（入れ子）も、その選択肢を選んだときに送られうるものとして数える
+    n += combine(q.type, (q.options || []).map((o) => hasExtraMessage(o?.extra_message) + additionalQuestionsWorst(o?.additional_questions)));
   }
   return n;
 }
