@@ -8,6 +8,7 @@ import type { HeadingContentOrder } from '@/lib/menu-headings';
 import { ColoredTextToolbar } from '@/components/FormEditor/Survey/SurveyContentBlockEditor';
 import React, { useState } from 'react';
 import { AdditionalQuestion, Form, MenuCategory, MenuItem, MenuOption, OptionExtraMessage, StaffScheduleSettings, SubMenuItem } from '@/types/form';
+import { ADDITIONAL_QUESTION_MAX_DEPTH, countAdditionalQuestionsDeep } from '@/lib/additional-question-tree';
 import OptionExtraMessageEditor, { optionSettingsButtonLabel } from '../OptionExtraMessageEditor';
 import TagInput from '@/components/customers/TagInput';
 import StaffScheduleEditor from './StaffScheduleEditor';
@@ -211,13 +212,28 @@ const parsePrice = (value: string): string => {
   return value.replace(/,/g, '');
 };
 
-// メニュー / オプション選択時に表示される「追加質問」の編集 UI（メニュー編集・オプション編集モーダルで共用）
+// メニュー / オプション選択時に表示される「追加質問」の編集 UI（メニュー編集・オプション編集モーダルで共用）。
+// 回答タイプが 単一選択 / 複数選択 / ドロップダウン のときは、選択肢ごとにさらに追加質問を付けられる（自分自身を入れ子で描く。
+// depth = 何段目か。ADDITIONAL_QUESTION_MAX_DEPTH 段まで。src/lib/additional-question-tree.ts）
 const AdditionalQuestionsEditor: React.FC<{
   questions: AdditionalQuestion[];
   onChange: (questions: AdditionalQuestion[]) => void;
   theme?: 'light' | 'dark';
-}> = ({ questions, onChange, theme = 'dark' }) => {
+  depth?: number;
+  /** 入れ子のとき: どの選択肢を選んだら表示されるか（見出しに使う） */
+  parentChoiceLabel?: string;
+}> = ({ questions, onChange, theme = 'dark', depth = 1, parentChoiceLabel }) => {
   const themeClasses = getThemeClasses(theme);
+  const canNest = depth < ADDITIONAL_QUESTION_MAX_DEPTH;
+  // 選択肢の「追加質問」（入れ子）の開閉（`${質問 index}:${選択肢 index}`）
+  const [openNestedPanels, setOpenNestedPanels] = useState<Set<string>>(new Set());
+  const toggleNestedPanel = (key: string) => {
+    setOpenNestedPanels((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
   // 選択肢の「設定」パネル（送信時の追加メッセージ）の開閉（`${質問 index}:${選択肢 index}`）
   const [openSettingPanels, setOpenSettingPanels] = useState<Set<string>>(new Set());
   const toggleSettingPanel = (key: string) => {
@@ -239,10 +255,12 @@ const AdditionalQuestionsEditor: React.FC<{
       <div className="flex items-center justify-between">
         <div className="flex-1">
           <h4 className={`text-md font-medium ${themeClasses.text.primary} border-b ${themeClasses.divider} pb-2`}>
-            追加質問
+            {depth > 1 ? `「${parentChoiceLabel || '選択肢'}」の追加質問` : '追加質問'}
           </h4>
           <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
-            予約フォームでこの項目が選択されたときに表示される質問です
+            {depth > 1
+              ? `予約フォームで「${parentChoiceLabel || 'この選択肢'}」が選ばれたときだけ表示される質問です`
+              : '予約フォームでこの項目が選択されたときに表示される質問です'}
           </p>
         </div>
         <button
@@ -405,6 +423,8 @@ const AdditionalQuestionsEditor: React.FC<{
                   <div className="space-y-2">
                     {(q.options || []).map((opt, optIndex) => {
                       const settingKey = `${index}:${optIndex}`;
+                      const nestedCount = countAdditionalQuestionsDeep(opt.additional_questions);
+                      const highlight = theme === 'light' ? 'border-[rgb(244,144,49)] text-[rgb(220,125,35)] bg-orange-50' : 'border-cyan-500 text-cyan-300 bg-cyan-950/40';
                       return (
                       <div key={optIndex}>
                         <div className="flex items-center space-x-2">
@@ -427,11 +447,26 @@ const AdditionalQuestionsEditor: React.FC<{
                           >
                             {optionSettingsButtonLabel(opt.extra_message)}
                           </button>
+                          {canNest && (
+                            <button
+                              type="button"
+                              onClick={() => toggleNestedPanel(settingKey)}
+                              title="この選択肢が選ばれたときだけ表示する追加質問"
+                              data-testid={`aq-nested-toggle-${q.id}-${optIndex}`}
+                              className={`shrink-0 px-2 py-1 text-xs rounded border ${nestedCount > 0 || openNestedPanels.has(settingKey) ? highlight : themeClasses.button.secondary}`}
+                            >
+                              追加質問{nestedCount > 0 ? `(${nestedCount})` : ''}
+                            </button>
+                          )}
                           <button
                             onClick={() => {
+                              if (nestedCount > 0 && !window.confirm('この選択肢に付けた追加質問も一緒に削除されます。よろしいですか？')) return;
                               const newOptions = [...(q.options || [])];
                               newOptions.splice(optIndex, 1);
                               updateQuestion(index, { options: newOptions });
+                              // 選択肢の番号がずれるので、開いているパネルは閉じる
+                              setOpenNestedPanels(new Set());
+                              setOpenSettingPanels(new Set());
                             }}
                             className="text-red-400 hover:text-red-300"
                           >
@@ -450,6 +485,21 @@ const AdditionalQuestionsEditor: React.FC<{
                                 newOptions[optIndex] = { ...newOptions[optIndex], extra_message };
                                 updateQuestion(index, { options: newOptions });
                               }}
+                            />
+                          </div>
+                        )}
+                        {canNest && openNestedPanels.has(settingKey) && (
+                          <div className={`mt-2 ml-2 pl-3 border-l-2 ${theme === 'light' ? 'border-orange-200' : 'border-cyan-800'}`}>
+                            <AdditionalQuestionsEditor
+                              questions={opt.additional_questions || []}
+                              onChange={(nested) => {
+                                const newOptions = [...(q.options || [])];
+                                newOptions[optIndex] = { ...newOptions[optIndex], additional_questions: nested.length > 0 ? nested : undefined };
+                                updateQuestion(index, { options: newOptions });
+                              }}
+                              theme={theme}
+                              depth={depth + 1}
+                              parentChoiceLabel={opt.label || `選択肢 ${optIndex + 1}`}
                             />
                           </div>
                         )}
@@ -4565,7 +4615,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                           title="この選択肢が選ばれたときに表示する追加質問を設定"
                           className={`shrink-0 px-2 py-1 text-xs rounded border ${(opt.additional_questions || []).length > 0 ? (theme === 'light' ? 'border-[rgb(244,144,49)] text-[rgb(220,125,35)] bg-orange-50' : 'border-cyan-500 text-cyan-300 bg-cyan-950/40') : themeClasses.button.secondary}`}
                         >
-                          追加質問{(opt.additional_questions || []).length > 0 ? `(${(opt.additional_questions || []).length})` : ''}
+                          追加質問{(opt.additional_questions || []).length > 0 ? `(${countAdditionalQuestionsDeep(opt.additional_questions)})` : ''}
                         </button>
                         <button
                           type="button"
