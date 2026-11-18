@@ -16,6 +16,7 @@
  */
 import type { AudienceCustomer, AutomationTrigger, BroadcastAudience, CustomerFacts } from '@/types/broadcast';
 import { daysBetween, isLineBlocked, jstDateOf, matchAudience, toJstDate } from '@/lib/broadcast-audience';
+import { CANCEL_OPENING_DEFAULT_TRIGGER, describeCancelOpeningTrigger, normalizeCancelOpeningTrigger } from '@/lib/broadcast-cancel-opening';
 
 export const AUTOMATION_WINDOW_DAYS = 14;
 
@@ -25,6 +26,7 @@ export const AUTOMATION_TEMPLATES: Array<{ id: AutomationTrigger['type']; label:
   { id: 'first_visit_after', label: '初回来店のお礼', description: '初めての来店から 7 日後にお礼と次回予約の案内を送る', trigger: { type: 'first_visit_after', days: 7 }, resend_after_days: null },
   { id: 'visits_reached', label: '来店 N 回目', description: '来店回数が 5 回・10 回に達した翌日に特別な案内を送る', trigger: { type: 'visits_reached', counts: [5, 10] }, resend_after_days: null },
   { id: 'tag_added', label: 'タグが付いたとき', description: '指定したタグが付いたお客様に、タグに合わせた案内を送る', trigger: { type: 'tag_added', tags: [] }, resend_after_days: null },
+  { id: 'reservation_cancelled', label: '予約フォームでキャンセルが出た時', description: 'お客様が予約をキャンセルして空きが出たら、ほかのお客様へ「空きが出ました」を一斉に送る', trigger: CANCEL_OPENING_DEFAULT_TRIGGER, resend_after_days: null },
 ];
 
 function clampInt(v: unknown, min: number, max: number, fallback: number): number {
@@ -52,6 +54,8 @@ export function normalizeAutomationTrigger(raw: unknown): AutomationTrigger | nu
       const tags = Array.isArray(o.tags) ? [...new Set(o.tags.filter((t): t is string => typeof t === 'string' && !!t.trim()).map((t) => t.trim()))].slice(0, 20) : [];
       return tags.length > 0 ? { type: 'tag_added', tags } : null;
     }
+    case 'reservation_cancelled':
+      return normalizeCancelOpeningTrigger(o);
     default:
       return null;
   }
@@ -63,7 +67,12 @@ export function normalizeResendAfterDays(raw: unknown): number | null {
   return n >= 1 ? n : null;
 }
 
-/** 今日この顧客がきっかけに該当するなら marker、しないなら null */
+/** キャンセルのその場で動くきっかけか（1 日 1 回の判定では扱わない） */
+export function isEventTrigger(t: AutomationTrigger): boolean {
+  return t.type === 'reservation_cancelled';
+}
+
+/** 今日この顧客がきっかけに該当するなら marker、しないなら null（その場で動くきっかけは常に null） */
 export function evaluateAutomationTrigger(trigger: AutomationTrigger, c: AudienceCustomer, now: Date): string | null {
   const today = jstDateOf(now);
   const inWindow = (fromDate: string | null, days: number): boolean => {
@@ -133,6 +142,8 @@ export function describeAutomationTrigger(t: AutomationTrigger): string {
       return `来店 ${t.counts.join('・')} 回目の翌日`;
     case 'tag_added':
       return `タグ ${t.tags.map((x) => `「${x}」`).join('・')} が付いたとき`;
+    case 'reservation_cancelled':
+      return describeCancelOpeningTrigger(t);
     default:
       return '';
   }
