@@ -54,6 +54,23 @@ import { reservationDurationMinutes } from '@/lib/reservation-change';
 import { listBroadcastAutomations, listBroadcasts } from '@/lib/broadcast-repository';
 import { isEventTrigger } from '@/lib/broadcast-automation';
 import { BROADCAST_ITEMS_MAX } from '@/lib/broadcast-items';
+import {
+  buildWeeklyAvailabilityFlex,
+  hasEnoughOpenSlots,
+  isWeeklyAvailabilityDay,
+  summarizeAvailability,
+  weeklyAvailabilityDates,
+  weeklyAvailabilityMarker,
+  type AvailabilitySummary,
+  type DaySlotsInput,
+  type WeeklyAvailabilityTrigger,
+} from '@/lib/broadcast-weekly-availability';
+import { addDays, evaluateDaySlots, type ChangeSlotContext } from '@/lib/reservation-change';
+import { listCalendarEventsAll } from '@/lib/google-calendar';
+import { mergeStaffSchedule } from '@/lib/staff-schedule';
+import { isNoPreferenceAssignable } from '@/lib/staff-slot-rules';
+import { resolveMaxConcurrentEvents, type CalendarEventLike } from '@/lib/staff-availability';
+import type { AudienceCustomer } from '@/types/broadcast';
 
 interface BuildContext {
   messages: LineFlexMessage[];
@@ -88,9 +105,13 @@ export function prepareAutomation(storeId: string, input: BroadcastAutomationInp
   const items = normalizeBroadcastItems(input.items ?? existing?.items ?? []);
   const id = existing?.id ?? randomUUID();
   // 送信用メッセージは実行のたびに作る（計測リンクがその日の配信 ID を使うため）。ここでは検証だけ
-  const isCancelOpening = trigger.type === 'reservation_cancelled';
+  // カードが自動で付くきっかけ（追加メッセージは無くてもよい。カードと合わせて 5 通まで）
+  const isCancelOpening = trigger.type === 'reservation_cancelled' || trigger.type === 'weekly_availability';
   if (isCancelOpening && items.length > BROADCAST_ITEMS_MAX - 1) {
-    return { ok: false, status: 400, error: `追加のメッセージは ${BROADCAST_ITEMS_MAX - 1} 通までです（「空きが出ました」のカードと合わせて ${BROADCAST_ITEMS_MAX} 通）` };
+    return { ok: false, status: 400, error: `追加のメッセージは ${BROADCAST_ITEMS_MAX - 1} 通までです（自動で付くカードと合わせて ${BROADCAST_ITEMS_MAX} 通）` };
+  }
+  if (trigger.type === 'weekly_availability' && enabled && !trigger.form_id) {
+    return { ok: false, status: 400, error: 'ON にするには、空き状況を載せる予約フォームを選んでください' };
   }
   const built = buildPayloads(items, ctx, origin, id, enabled && !isCancelOpening);
   if (built.error) return { ok: false, status: 400, error: enabled && items.length === 0 ? 'ON にするには、送るメッセージを 1 つ以上追加してください' : built.error };
@@ -143,9 +164,38 @@ async function selectTargets(rule: Pick<BroadcastAutomation, 'id' | 'store_id' |
 }
 
 /** いま ON にしたら、次の実行で何人に送られるか（編集画面の見積り。保存前の内容でも計算できる） */
-export async function previewAutomation(storeId: string, id: string | null, input: Pick<BroadcastAutomationInput, 'trigger' | 'audience' | 'resend_after_days'>, now: Date = new Date()): Promise<ServiceResult<{ count: number; sample: string[]; trigger: string }>> {
+export interface AutomationPreview {
+  count: number;
+  sample: string[];
+  trigger: string;
+  /** 「1 週間の空き状況」: いまの空き状況（編集画面のプレビューに使う。取得できなければ null + availability_error） */
+  availability?: AvailabilitySummary | null;
+  availability_error?: string | null;
+  /** 「1 週間の空き状況」: そのフォームで選べるスタッフ */
+  staff?: Array<{ id: string; name: string }>;
+}
+
+export async function previewAutomation(storeId: string, id: string | null, input: Pick<BroadcastAutomationInput, 'trigger' | 'audience' | 'resend_after_days'>, now: Date = new Date()): Promise<ServiceResult<AutomationPreview>> {
   const trigger = normalizeAutomationTrigger(input.trigger);
   if (!trigger) return { ok: true, value: { count: 0, sample: [], trigger: '' } };
+  if (trigger.type === 'weekly_availability') {
+    const audience = normalizeAudience(input.audience ?? {});
+    const [list, avail] = await Promise.all([
+      selectBroadcastTargets({ id: id ?? '', store_id: storeId, audience, resend_after_days: normalizeResendAfterDays(input.resend_after_days) }, weeklyAvailabilityMarker(now), now, !!id),
+      computeWeeklyAvailability(storeId, trigger, now),
+    ]);
+    return {
+      ok: true,
+      value: {
+        count: list.length,
+        sample: list.slice(0, 8).map((c) => resolveRecipientName(c)),
+        trigger: describeAutomationTrigger(trigger),
+        availability: avail.ok ? avail.summary : null,
+        availability_error: avail.ok ? null : avail.error,
+        staff: avail.staff,
+      },
+    };
+  }
   if (trigger.type === 'reservation_cancelled') {
     const audience = normalizeAudience(input.audience ?? {});
     const src = await loadAudienceSource(storeId, { reservations: !!audience.menus || !!audience.forms || audience.upcoming_reservation !== undefined, visits: !!audience.menus, surveys: !!audience.survey });
@@ -227,12 +277,25 @@ export async function runDueAutomations(now: Date, origin: string, deadline: num
         settingsCache.set(rule.store_id, settings);
       }
       if (!opts.ignoreTime && !isAutomationTimeReached(settings.automation_time, now)) continue;
+      // 「1 週間の空き状況」は、選んだ曜日だけ動く
+      if (rule.trigger.type === 'weekly_availability' && !isWeeklyAvailabilityDay(rule.trigger, now)) continue;
       // 今日の実行を確保（他の実行と重ならない）。以降で失敗しても今日はもう実行しない（二重送信を避ける方を優先）
       if (!(await claimAutomationRun(rule.id, today))) continue;
       summary.checked += 1;
 
       if (!(await getStoreLineToken(rule.store_id))) {
         summary.skipped.push({ automation_id: rule.id, reason: 'LINE チャネルアクセストークンが未設定' });
+        continue;
+      }
+      if (rule.trigger.type === 'weekly_availability') {
+        const r = await runWeeklyAvailabilityRule(rule, rule.trigger, now, origin, settings);
+        if (r.created) {
+          summary.created += 1;
+          summary.recipients += r.recipients;
+          anyCreated = true;
+        } else if (r.reason) {
+          summary.skipped.push({ automation_id: rule.id, reason: r.reason });
+        }
         continue;
       }
       const targets = await selectTargets(rule, now, true);
@@ -270,6 +333,136 @@ export async function runDueAutomations(now: Date, origin: string, deadline: num
   }
   if (anyCreated) await triggerBroadcastSender();
   return summary;
+}
+
+// ---------------------------------------------------------------------------
+// 特定の曜日に 1 週間の空き状況
+// ---------------------------------------------------------------------------
+
+/** 配信の相手（追加の絞り込みに合う、送れる人）。marker を送り済みの人・再送間隔の中の人は除く */
+async function selectBroadcastTargets(rule: Pick<BroadcastAutomation, 'id' | 'store_id' | 'audience' | 'resend_after_days'>, marker: string, now: Date, withSends: boolean): Promise<AudienceCustomer[]> {
+  const a = rule.audience;
+  const [src, sends] = await Promise.all([
+    loadAudienceSource(rule.store_id, { reservations: !!a.menus || !!a.forms || a.upcoming_reservation !== undefined, visits: !!a.menus, surveys: !!a.survey }),
+    withSends ? listAutomationSends(rule.id) : Promise.resolve([]),
+  ]);
+  const facts = buildCustomerFacts({ ...src, today: jstDateOf(now) });
+  return pickCancelOpeningTargets({ customers: src.customers, facts, audience: a, excludeLineUserId: null, marker, resend_after_days: rule.resend_after_days, sends, now });
+}
+
+export type WeeklyAvailabilityResult =
+  | { ok: true; summary: AvailabilitySummary; bookingUrl: string | null; storeName: string | null; staffName: string | null; staff: Array<{ id: string; name: string }> }
+  | { ok: false; error: string; staff: Array<{ id: string; name: string }> };
+
+/**
+ * 予約フォームの、これから N 日間の空き状況を集計する。
+ * 空きの判定は予約フォームのカレンダーの〇✕と同じ規則（受付期間・営業時間などの設定 + Google カレンダーの予定）。
+ * スタッフ選択のフォームは、スタッフを選んでいればそのスタッフ、選んでいなければ「指名なし」と同じ（自動割当の対象の誰かが空いていれば空き）。
+ * メニュー / オプションの対応時間設定・スタッフごとのメニュー表示は見ない（メニューを決めずに載せるため）
+ */
+export async function computeWeeklyAvailability(storeId: string, trigger: WeeklyAvailabilityTrigger, now: Date = new Date()): Promise<WeeklyAvailabilityResult> {
+  const fail = (error: string, staff: Array<{ id: string; name: string }> = []): WeeklyAvailabilityResult => ({ ok: false, error, staff });
+  if (!trigger.form_id) return fail('空き状況を載せる予約フォームを選んでください');
+  const config = await loadWaitlistFormConfig(storeId, trigger.form_id);
+  if (!config) return fail('予約フォームが見つかりません（削除された可能性があります）');
+  const formCs = config.calendar_settings;
+  if ((formCs?.booking_mode || 'calendar') !== 'calendar') return fail('日時選択モードが「Googleカレンダー連携」の予約フォームを選んでください');
+  const store = await loadWaitlistStore(storeId);
+  const local = getAppEnvironment() === 'local';
+  const dates = weeklyAvailabilityDates(trigger, now);
+  const from = dates[0];
+  const toExclusive = addDays(dates[dates.length - 1], 1);
+  // local は Google カレンダーを使わない（設定だけで判定）
+  const fetchEvents = async (calendarId: string): Promise<CalendarEventLike[] | null | undefined> => {
+    if (local) return undefined;
+    try {
+      return (await listCalendarEventsAll(calendarId, `${from}T00:00:00+09:00`, `${toExclusive}T00:00:00+09:00`, storeId)) as CalendarEventLike[];
+    } catch (e) {
+      console.error(`[broadcast-automation] events.list failed (calendar=${calendarId}):`, e instanceof Error ? e.message : e);
+      return null;
+    }
+  };
+  const calendarError = 'Google カレンダーの予定を取得できませんでした';
+  const durationMinutes = trigger.duration_minutes > 0 ? trigger.duration_minutes : 0;
+  const ss = config.staff_selection as { enabled?: boolean; staff?: any[]; max_staff_concurrent_enabled?: boolean; max_staff_concurrent_events?: number } | undefined;
+  const calendarStaff = ss?.enabled === true && Array.isArray(ss.staff) ? ss.staff.filter((m) => m && m.id && m.name && m.calendar_id) : [];
+  const staff = calendarStaff.map((m) => ({ id: String(m.id), name: String(m.name) }));
+  const liffId = ((config as { form_type?: string }).form_type === 'web' ? '' : config.basic_info?.liff_id || '').trim();
+  const bookingUrl = liffId.length >= 10 ? `https://liff.line.me/${liffId}` : null;
+  let daySlots: DaySlotsInput[];
+  let staffName: string | null = null;
+
+  if (calendarStaff.length > 0) {
+    const named = trigger.staff_id ? calendarStaff.find((m) => m.id === trigger.staff_id) : null;
+    if (trigger.staff_id && !named) return fail('選んだスタッフが見つかりません（スタッフ選択の設定を確認してください）', staff);
+    const members = named ? [named] : calendarStaff.filter((m) => isNoPreferenceAssignable(m));
+    staffName = named ? String(named.name) : null;
+    let staffCap: number | null = null;
+    if (!local && ss?.max_staff_concurrent_enabled === true) {
+      const v = ss.max_staff_concurrent_events;
+      staffCap = typeof v === 'number' && Number.isFinite(v) && v >= 1 ? Math.floor(v) : 1;
+    }
+    const need = staffCap !== null ? calendarStaff : members;
+    const eventsBy = new Map<string, CalendarEventLike[] | null | undefined>();
+    await Promise.all(need.map(async (m) => eventsBy.set(m.calendar_id, await fetchEvents(m.calendar_id))));
+    if ([...eventsBy.values()].some((e) => e === null)) return fail(calendarError, staff);
+    daySlots = dates.map((date) => {
+      const byTime = new Map<string, boolean>();
+      for (const m of members) {
+        const ctx: ChangeSlotContext = {
+          cs: mergeStaffSchedule(formCs, m.schedule),
+          durationMinutes,
+          events: eventsBy.get(m.calendar_id),
+          staffMode: true,
+          capacity: 1,
+          staffCap,
+          otherStaffEvents: staffCap !== null ? calendarStaff.filter((x) => x.calendar_id !== m.calendar_id).map((x) => eventsBy.get(x.calendar_id) ?? null) : undefined,
+        };
+        for (const s of evaluateDaySlots(ctx, date, now)) byTime.set(s.time, (byTime.get(s.time) || false) || s.ok);
+      }
+      return { date, slots: [...byTime.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([time, ok]) => ({ time, ok })) };
+    });
+  } else {
+    const events = store?.google_calendar_id ? await fetchEvents(store.google_calendar_id) : undefined;
+    if (events === null) return fail(calendarError, staff);
+    const ctx: ChangeSlotContext = { cs: formCs, durationMinutes, events, staffMode: false, capacity: resolveMaxConcurrentEvents(formCs) };
+    daySlots = dates.map((date) => ({ date, slots: evaluateDaySlots(ctx, date, now) }));
+  }
+  return { ok: true, summary: summarizeAvailability(daySlots, trigger.few_threshold), bookingUrl, storeName: store?.name || null, staffName, staff };
+}
+
+/** 「1 週間の空き状況」のルールを 1 回実行する（選んだ曜日の、その日の判定から呼ぶ） */
+async function runWeeklyAvailabilityRule(rule: BroadcastAutomation, trigger: WeeklyAvailabilityTrigger, now: Date, origin: string, settings: BroadcastSettings): Promise<{ created: boolean; recipients: number; reason?: string }> {
+  const avail = await computeWeeklyAvailability(rule.store_id, trigger, now);
+  if (!avail.ok) return { created: false, recipients: 0, reason: avail.error };
+  if (!hasEnoughOpenSlots(trigger, avail.summary)) {
+    return { created: false, recipients: 0, reason: `空きが少ないため見送り（空き ${avail.summary.totalOpen} 枠 / 設定 ${trigger.min_open_slots} 枠以上）` };
+  }
+  const marker = weeklyAvailabilityMarker(now);
+  const targets = await selectBroadcastTargets(rule, marker, now, true);
+  if (targets.length === 0) return { created: false, recipients: 0 };
+
+  const broadcastId = newBroadcastId();
+  const card = buildWeeklyAvailabilityFlex(trigger.card, avail.summary, { storeName: avail.storeName, bookingUrl: avail.bookingUrl, staffName: avail.staffName });
+  const items: BroadcastAutomation['items'] = [{ key: 'availability', type: 'flex', alt_text: card.alt_text, contents: card.contents as never }, ...rule.items];
+  const built = buildPayloads(items, await loadBuildContext(rule.store_id), origin, broadcastId, true);
+  const base: Broadcast = { ...automationBroadcast(rule, broadcastId, now), items };
+  if (built.error) {
+    await insertBroadcast({ ...base, status: 'cancelled', recipient_count: targets.length, error: `自動配信を見送りました: ${built.error}` });
+    return { created: false, recipients: 0, reason: built.error };
+  }
+  const used = await countMonthlySent(rule.store_id, now);
+  const quota = evaluateQuota({ limit: settings.monthly_limit, used, recipients: targets.length, over_limit: settings.over_limit });
+  if (quota.exceeds) {
+    await insertBroadcast({ ...base, status: 'cancelled', recipient_count: targets.length, error: `今月の配信上限（${quota.limit} 通）を超えるため見送りました（対象 ${targets.length} 人）` });
+    return { created: false, recipients: 0, reason: '月間上限' };
+  }
+  // 下書きで作る → 宛先 → 送信記録 → 予約済み（この順なら、途中で止まっても二重には送られない）
+  await insertBroadcast({ ...base, payloads: built.payloads, links: built.links, has_personalization: built.has_personalization, recipient_count: targets.length });
+  await replaceBroadcastRecipients(rule.store_id, broadcastId, targets.map((c) => ({ customer_id: c.id, line_user_id: c.line_user_id as string, display_name: resolveRecipientName(c) })));
+  await insertAutomationSends(rule.id, targets.map((c) => ({ customer_id: c.id, marker })), now);
+  await updateBroadcast(rule.store_id, broadcastId, { status: 'scheduled', scheduled_at: now.toISOString() });
+  return { created: true, recipients: targets.length };
 }
 
 // ---------------------------------------------------------------------------
