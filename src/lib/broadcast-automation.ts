@@ -15,18 +15,21 @@
  * タグは付いた日が分からないため、ON にした時点でタグが付いている人にも送る。
  */
 import type { AudienceCustomer, AutomationTrigger, BroadcastAudience, CustomerFacts } from '@/types/broadcast';
+import { WEEKLY_DEFAULT_TRIGGER, describeWeeklyAvailabilityTrigger, normalizeWeeklyAvailabilityTrigger } from '@/lib/broadcast-weekly-availability';
 import { daysBetween, isLineBlocked, jstDateOf, matchAudience, toJstDate } from '@/lib/broadcast-audience';
 import { CANCEL_OPENING_DEFAULT_TRIGGER, describeCancelOpeningTrigger, normalizeCancelOpeningTrigger } from '@/lib/broadcast-cancel-opening';
 
 export const AUTOMATION_WINDOW_DAYS = 14;
 
-export const AUTOMATION_TEMPLATES: Array<{ id: AutomationTrigger['type']; label: string; description: string; trigger: AutomationTrigger; resend_after_days: number | null }> = [
+export const AUTOMATION_TEMPLATES: Array<{ id: AutomationTrigger['type']; label: string; description: string; trigger: AutomationTrigger; resend_after_days: number | null; audience?: BroadcastAudience }> = [
   { id: 'dormant', label: '休眠のお客様へ', description: '最終来店から 90 日たったお客様に再来店の案内を送る', trigger: { type: 'dormant', days: 90 }, resend_after_days: 180 },
   { id: 'birthday', label: 'お誕生日月', description: '誕生月の 1 日にバースデークーポンなどを送る', trigger: { type: 'birthday', day: 1 }, resend_after_days: null },
   { id: 'first_visit_after', label: '初回来店のお礼', description: '初めての来店から 7 日後にお礼と次回予約の案内を送る', trigger: { type: 'first_visit_after', days: 7 }, resend_after_days: null },
   { id: 'visits_reached', label: '来店 N 回目', description: '来店回数が 5 回・10 回に達した翌日に特別な案内を送る', trigger: { type: 'visits_reached', counts: [5, 10] }, resend_after_days: null },
   { id: 'tag_added', label: 'タグが付いたとき', description: '指定したタグが付いたお客様に、タグに合わせた案内を送る', trigger: { type: 'tag_added', tags: [] }, resend_after_days: null },
   { id: 'reservation_cancelled', label: '予約フォームでキャンセルが出た時', description: 'お客様が予約をキャンセルして空きが出たら、ほかのお客様へ「空きが出ました」を一斉に送る', trigger: CANCEL_OPENING_DEFAULT_TRIGGER, resend_after_days: null },
+  // すでにこれからの予約が入っている人には送らない（「さらに絞り込む」で外せる）
+  { id: 'weekly_availability', label: '特定の曜日に1週間の空き状況', description: '選んだ曜日に、予約フォームのこれから 1 週間の空き状況（〇△✕）を一斉に送る', trigger: WEEKLY_DEFAULT_TRIGGER, resend_after_days: null, audience: { upcoming_reservation: false } },
 ];
 
 function clampInt(v: unknown, min: number, max: number, fallback: number): number {
@@ -56,6 +59,8 @@ export function normalizeAutomationTrigger(raw: unknown): AutomationTrigger | nu
     }
     case 'reservation_cancelled':
       return normalizeCancelOpeningTrigger(o);
+    case 'weekly_availability':
+      return normalizeWeeklyAvailabilityTrigger(o);
     default:
       return null;
   }
@@ -144,6 +149,8 @@ export function describeAutomationTrigger(t: AutomationTrigger): string {
       return `タグ ${t.tags.map((x) => `「${x}」`).join('・')} が付いたとき`;
     case 'reservation_cancelled':
       return describeCancelOpeningTrigger(t);
+    case 'weekly_availability':
+      return describeWeeklyAvailabilityTrigger(t);
     default:
       return '';
   }

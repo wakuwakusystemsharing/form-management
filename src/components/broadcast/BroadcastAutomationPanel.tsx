@@ -26,6 +26,19 @@ import {
   buildCancelOpeningFlex,
   type CancelOpeningTrigger,
 } from '@/lib/broadcast-cancel-opening';
+import {
+  WEEKDAY_LABELS,
+  WEEKLY_BUTTON_MAX,
+  WEEKLY_DAYS_OPTIONS,
+  WEEKLY_DEFAULT_CARD,
+  WEEKLY_TEXT_MAX,
+  WEEKLY_TITLE_MAX,
+  buildWeeklyAvailabilityFlex,
+  sampleAvailabilitySummary,
+  weeklyAvailabilityDates,
+  type AvailabilitySummary,
+  type WeeklyAvailabilityTrigger,
+} from '@/lib/broadcast-weekly-availability';
 import { BROADCAST_ITEMS_MAX, BROADCAST_NAME_MAX, broadcastItemsToPreview, describeBroadcastItems, validateBroadcastItems } from '@/lib/broadcast-items';
 import { payloadsToPreview } from '@/lib/line-flex-items';
 import { validateFlexContents } from '@/lib/line-flex-templates';
@@ -64,6 +77,8 @@ function NumberInput({ value, onChange, min, max, suffix }: { value: number; onC
 }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
+/** プレビューの例の表に使う基準の日時（画面を開いた時刻） */
+const PREVIEW_NOW = new Date();
 /** プレビューのカードに出す例の日付（画面を開いた日の 3 日後） */
 const PREVIEW_SLOT_DATE = (() => {
   const d = new Date(Date.now() + 3 * 86400000);
@@ -149,8 +164,109 @@ function CancelOpeningCardEditor({ trigger, onChange }: { trigger: CancelOpening
   );
 }
 
+const selectClass = 'h-8 rounded-md border bg-background px-2 text-xs';
+
+/** 「特定の曜日に 1 週間の空き状況」の条件 */
+function WeeklyAvailabilityFields({ trigger, onChange, forms, staff, automationTime }: { trigger: WeeklyAvailabilityTrigger; onChange: (t: AutomationTrigger) => void; forms: Array<{ id: string; name: string }>; staff: Array<{ id: string; name: string }>; automationTime: string }) {
+  const set = (patch: Partial<WeeklyAvailabilityTrigger>) => onChange({ ...trigger, ...patch });
+  const toggleDay = (w: number) => {
+    const next = trigger.weekdays.includes(w) ? trigger.weekdays.filter((x) => x !== w) : [...trigger.weekdays, w].sort((a, b) => a - b);
+    set({ weekdays: next });
+  };
+  return (
+    <div className="space-y-3 text-xs" data-slot="weekly-availability-fields">
+      <p className="text-[11px] text-muted-foreground">
+        選んだ曜日の {automationTime} ごろに、予約フォームの空き状況（日付 × 午前 / 午後 / 夕方の 〇△✕）をカードにして一斉に送ります。
+        空きの判定は、予約フォームの希望日時の 〇✕ と同じです（営業時間・受付ルールと Google カレンダーの予定）。
+      </p>
+      <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+        1 回の配信で、対象のお客様の人数ぶんの通数を使います（例: 300 人 × 週 1 回 = 月に約 1,300 通）。下の「さらに絞り込む」で調整してください。
+      </p>
+      <div className="space-y-1">
+        <span className="font-medium">送る曜日</span>
+        <div className="flex flex-wrap gap-1">
+          {[1, 2, 3, 4, 5, 6, 0].map((w) => (
+            <Chip key={w} active={trigger.weekdays.includes(w)} onClick={() => toggleDay(w)}>{WEEKDAY_LABELS[w]}</Chip>
+          ))}
+        </div>
+        {trigger.weekdays.length === 0 && <p className="text-[11px] text-destructive">曜日を 1 つ以上選んでください</p>}
+      </div>
+      <div className="space-y-1">
+        <span className="font-medium">空き状況を載せる予約フォーム</span>
+        <div>
+          <select data-testid="weekly-form" value={trigger.form_id} onChange={(e) => set({ form_id: e.target.value, staff_id: null })} className={`${selectClass} max-w-full`}>
+            <option value="">選んでください</option>
+            {forms.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </div>
+        <p className="text-[11px] text-muted-foreground">日時選択モードが「Googleカレンダー連携」の予約フォームを選んでください。「予約する」ボタンもこのフォームを開きます。</p>
+      </div>
+      {staff.length > 0 && (
+        <div className="space-y-1">
+          <span className="font-medium">スタッフ</span>
+          <div>
+            <select data-testid="weekly-staff" value={trigger.staff_id ?? ''} onChange={(e) => set({ staff_id: e.target.value || null })} className={selectClass}>
+              <option value="">誰か 1 人でも空いていれば空き（指名なしと同じ）</option>
+              {staff.map((s) => <option key={s.id} value={s.id}>{s.name} の空きだけを載せる</option>)}
+            </select>
+          </div>
+          <p className="text-[11px] text-muted-foreground">スタッフを選ぶと、カードに担当名が入り、そのスタッフの空きだけを載せます（スタッフごとにルールを作れます）。</p>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <select data-testid="weekly-include-today" value={trigger.include_today ? '1' : '0'} onChange={(e) => set({ include_today: e.target.value === '1' })} className={selectClass}>
+          <option value="0">翌日から</option>
+          <option value="1">当日から</option>
+        </select>
+        <select data-testid="weekly-days" value={trigger.days} onChange={(e) => set({ days: Number(e.target.value) })} className={selectClass}>
+          {WEEKLY_DAYS_OPTIONS.map((d) => <option key={d} value={d}>{d} 日間</option>)}
+        </select>
+        の空き状況を載せる
+      </div>
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2"><NumberInput value={trigger.duration_minutes} min={0} max={600} suffix="分の予約が入る時間を「空き」として数える" onChange={(n) => set({ duration_minutes: n })} /></div>
+        <p className="text-[11px] text-muted-foreground">予約フォームの 〇✕ はメニューの所要時間で変わります。よく出るメニューの時間（例: 60）を入れると、その長さの予約が入る時間だけを数えます（0 = フォームの時間間隔ぶん空いていれば空き）。</p>
+      </div>
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">空きが合計 <NumberInput value={trigger.min_open_slots} min={1} max={500} suffix="枠以上ある時だけ送る" onChange={(n) => set({ min_open_slots: n })} /></div>
+        <p className="text-[11px] text-muted-foreground">ほぼ満席の週に通数を使わないための設定です（1 = 空きが 1 つも無い週は送らない）。送らなかった週は配信一覧に残りません。</p>
+      </div>
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">時間帯の空きが <NumberInput value={trigger.few_threshold} min={0} max={20} suffix="枠以下なら △（残りわずか）" onChange={(n) => set({ few_threshold: n })} /></div>
+        <p className="text-[11px] text-muted-foreground">それより多ければ 〇、0 枠なら ✕ です（0 にすると △ は出ません）。時間帯は 午前 = 12 時まで / 午後 = 12〜17 時 / 夕方 = 17 時以降 です。</p>
+      </div>
+    </div>
+  );
+}
+
+/** 「空き状況」カードの文言 */
+function WeeklyAvailabilityCardEditor({ trigger, onChange }: { trigger: WeeklyAvailabilityTrigger; onChange: (t: AutomationTrigger) => void }) {
+  const setCard = (patch: Partial<WeeklyAvailabilityTrigger['card']>) => onChange({ ...trigger, card: { ...trigger.card, ...patch } });
+  return (
+    <div className="space-y-3 rounded-md border bg-muted/30 p-3" data-slot="weekly-availability-card">
+      <div>
+        <p className="text-xs font-medium">1 通目: 空き状況のカード（自動で作られます）</p>
+        <p className="text-[11px] text-muted-foreground">日付 × 時間帯の 〇△✕ の表・凡例・「配信時点の空き状況です」の注意書き・予約フォームを開くボタンは自動で入ります。見出し・案内文・ボタンの文言を変更できます。文中の {'{店名}'} {'{期間}'} は実際の内容に置き換わります。</p>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="weekly_card_title" className="text-xs">見出し</Label>
+        <Input id="weekly_card_title" value={trigger.card.title} maxLength={WEEKLY_TITLE_MAX} placeholder={WEEKLY_DEFAULT_CARD.title} onChange={(e) => setCard({ title: e.target.value })} />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="weekly_card_text" className="text-xs">案内文</Label>
+        <textarea id="weekly_card_text" rows={3} value={trigger.card.text} maxLength={WEEKLY_TEXT_MAX} placeholder={WEEKLY_DEFAULT_CARD.text} onChange={(e) => setCard({ text: e.target.value })} className="w-full rounded-md border bg-background px-3 py-2 text-sm" />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="weekly_card_button" className="text-xs">ボタンの文言</Label>
+        <Input id="weekly_card_button" value={trigger.card.button_label} maxLength={WEEKLY_BUTTON_MAX} placeholder={WEEKLY_DEFAULT_CARD.button_label} onChange={(e) => setCard({ button_label: e.target.value })} className="max-w-xs" />
+      </div>
+      <button type="button" className="text-[11px] underline text-muted-foreground" onClick={() => setCard({ ...WEEKLY_DEFAULT_CARD })}>文言を既定に戻す</button>
+    </div>
+  );
+}
+
 /** きっかけごとの入力欄 */
-function TriggerFields({ trigger, onChange, tags }: { trigger: AutomationTrigger; onChange: (t: AutomationTrigger) => void; tags: string[] }) {
+function TriggerFields({ trigger, onChange, tags, forms, staff, automationTime }: { trigger: AutomationTrigger; onChange: (t: AutomationTrigger) => void; tags: string[]; forms: Array<{ id: string; name: string }>; staff: Array<{ id: string; name: string }>; automationTime: string }) {
   switch (trigger.type) {
     case 'dormant':
       return (
@@ -212,6 +328,8 @@ function TriggerFields({ trigger, onChange, tags }: { trigger: AutomationTrigger
       );
     case 'reservation_cancelled':
       return <CancelOpeningFields trigger={trigger} onChange={onChange} />;
+    case 'weekly_availability':
+      return <WeeklyAvailabilityFields trigger={trigger} onChange={onChange} forms={forms} staff={staff} automationTime={automationTime} />;
     default:
       return null;
   }
@@ -238,7 +356,7 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
   const [resend, setResend] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ count: number; sample: string[] } | null>(null);
+  const [preview, setPreview] = useState<{ count: number; sample: string[]; availability?: AvailabilitySummary | null; availability_error?: string | null; staff?: Array<{ id: string; name: string }> } | null>(null);
   const [audienceKey, setAudienceKey] = useState(0);
   const uploadId = useRef('');
 
@@ -265,7 +383,7 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
     setName(rule?.name ?? template?.label ?? '');
     setEnabled(rule?.enabled ?? false);
     setTrigger(rule?.trigger ?? template?.trigger ?? { type: 'dormant', days: 90 });
-    setAudience(rule?.audience ?? {});
+    setAudience(rule?.audience ?? template?.audience ?? {});
     const nextItems = rule?.items ?? [];
     setItems(nextItems);
     const js: ItemJsonState = {};
@@ -279,7 +397,8 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
   };
 
   // 次の実行で送られる人数（内容が変わるたびに少し待ってから計算）
-  const previewKey = JSON.stringify({ trigger, audience: normalizeAudience(audience), resend });
+  // （「1 週間の空き状況」はカレンダーを読みに行くので、カードの文言を変えただけでは取り直さない）
+  const previewKey = JSON.stringify({ trigger: trigger.type === 'weekly_availability' ? { ...trigger, card: undefined } : trigger, audience: normalizeAudience(audience), resend });
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -288,7 +407,7 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
         const body = { ...JSON.parse(previewKey), resend_after_days: resend ? Number(resend) : null, preview: true, id: editingId ?? undefined, name: 'preview' };
         const res = await fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body) });
         const json = await res.json().catch(() => null);
-        if (!cancelled && res.ok && json) setPreview({ count: json.count ?? 0, sample: Array.isArray(json.sample) ? json.sample : [] });
+        if (!cancelled && res.ok && json) setPreview({ count: json.count ?? 0, sample: Array.isArray(json.sample) ? json.sample : [], availability: json.availability ?? null, availability_error: json.availability_error ?? null, staff: Array.isArray(json.staff) ? json.staff : [] });
       } catch {
         /* 見積りは補助 */
       }
@@ -299,13 +418,23 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
     };
   }, [open, base, previewKey, resend, editingId]);
 
-  const isCancelOpening = trigger.type === 'reservation_cancelled';
+  // カードが自動で付くきっかけ（追加メッセージは任意）
+  const isCancelOpening = trigger.type === 'reservation_cancelled' || trigger.type === 'weekly_availability';
+  const isWeekly = trigger.type === 'weekly_availability';
+  const availability = preview?.availability ?? null;
   // 「空きが出ました」カード（プレビュー用の例の日時）を 1 通目に置く
   const previewItems = useMemo<BroadcastItem[]>(() => {
+    if (trigger.type === 'weekly_availability') {
+      // 実際の空き状況（取得できたとき）。フォーム未選択・取得できないときは例の表
+      const summary = availability ?? sampleAvailabilitySummary(weeklyAvailabilityDates(trigger, PREVIEW_NOW));
+      const staffName = trigger.staff_id ? (preview?.staff ?? []).find((s) => s.id === trigger.staff_id)?.name ?? null : null;
+      const card = buildWeeklyAvailabilityFlex(trigger.card, summary, { storeName: '', bookingUrl: 'https://liff.line.me/', staffName });
+      return [{ key: 'availability', type: 'flex', alt_text: card.alt_text, contents: card.contents as never }, ...items];
+    }
     if (trigger.type !== 'reservation_cancelled') return items;
     const card = buildCancelOpeningFlex(trigger.card, { storeName: '', date: PREVIEW_SLOT_DATE, time: '14:00', bookingUrl: 'https://liff.line.me/' });
     return [{ key: 'opening', type: 'flex', alt_text: card.alt_text, contents: card.contents as never }, ...items];
-  }, [trigger, items]);
+  }, [trigger, items, availability, preview?.staff]);
 
   const previewMessages = useMemo(
     () =>
@@ -363,6 +492,14 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
   const save = async () => {
     if (!name.trim()) {
       toast({ title: '自動配信の名前を入力してください', variant: 'destructive' });
+      return;
+    }
+    if (trigger.type === 'weekly_availability' && trigger.weekdays.length === 0) {
+      toast({ title: '送る曜日を 1 つ以上選んでください', variant: 'destructive' });
+      return;
+    }
+    if (trigger.type === 'weekly_availability' && enabled && !trigger.form_id) {
+      toast({ title: 'ON にするには、空き状況を載せる予約フォームを選んでください', variant: 'destructive' });
       return;
     }
     if (trigger.type === 'tag_added' && trigger.tags.length === 0) {
@@ -486,9 +623,10 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
                   <span className="truncate font-medium">{r.name}</span>
                   <Badge variant="outline" className={r.enabled ? 'border-green-300 bg-green-50 text-green-700' : 'text-muted-foreground'} data-slot="status-chip">{r.enabled ? 'ON' : 'OFF'}</Badge>
                 </div>
+                {r.trigger.type === 'weekly_availability' && <p className="text-xs text-muted-foreground">予約フォーム: {r.trigger.form_id ? formName(r.trigger.form_id) : '未選択'}</p>}
                 <p className="text-xs text-muted-foreground">きっかけ: {describeAutomationTrigger(r.trigger)}{r.resend_after_days ? `（次に送るまで ${r.resend_after_days} 日あける）` : ''}</p>
                 {Object.keys(r.audience).length > 0 && <p className="text-xs text-muted-foreground">絞り込み: {describeAudience(r.audience, { formName })}</p>}
-                <p className="text-xs text-muted-foreground">内容: {r.trigger.type === 'reservation_cancelled' ? `「${r.trigger.card.title}」カード${r.items.length > 0 ? ` + ${describeBroadcastItems(r.items)}` : ''}` : describeBroadcastItems(r.items)}</p>
+                <p className="text-xs text-muted-foreground">内容: {r.trigger.type === 'reservation_cancelled' || r.trigger.type === 'weekly_availability' ? `「${r.trigger.card.title}」カード${r.items.length > 0 ? ` + ${describeBroadcastItems(r.items)}` : ''}` : describeBroadcastItems(r.items)}</p>
                 <p className="text-xs tabular-nums">直近 30 日の送信 {recent[r.id] ?? 0} 人{r.last_run_date ? ` ・ 最後の判定 ${r.last_run_date}` : ''}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
@@ -505,7 +643,7 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
         <DialogContent className="flex max-h-[92dvh] max-w-[calc(100%-1rem)] flex-col overflow-hidden p-0 sm:max-w-6xl">
           <DialogHeader className="border-b px-5 pb-3 pt-5">
             <DialogTitle>{editingId ? '自動配信を編集' : '自動配信を作成'}</DialogTitle>
-            <DialogDescription>{isCancelOpening ? '予約のキャンセルで空きが出たら、ほかのお客様へすぐに自動で送ります。' : 'きっかけに当てはまったお客様へ、1 日 1 回の判定で自動的に送ります。'}</DialogDescription>
+            <DialogDescription>{isWeekly ? '選んだ曜日に、予約フォームの空き状況を自動で送ります。' : isCancelOpening ? '予約のキャンセルで空きが出たら、ほかのお客様へすぐに自動で送ります。' : 'きっかけに当てはまったお客様へ、1 日 1 回の判定で自動的に送ります。'}</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto px-5 py-4 [scrollbar-gutter:stable]">
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
@@ -522,12 +660,12 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
                       <Chip key={t.id} active={trigger.type === t.id} onClick={() => { if (trigger.type !== t.id) setTrigger(t.trigger); }}>{t.label}</Chip>
                     ))}
                   </div>
-                  <TriggerFields trigger={trigger} onChange={setTrigger} tags={options.tags} />
+                  <TriggerFields trigger={trigger} onChange={setTrigger} tags={options.tags} forms={options.forms} staff={preview?.staff ?? []} automationTime={automationTime} />
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     同じお客様に次に送るまで
                     <Input type="number" inputMode="numeric" min={1} value={resend} onChange={(e) => setResend(e.target.value.replace(/[^0-9]/g, ''))} placeholder="—" className="h-8 w-20 text-xs" />
                     日あける
-                    <span className="text-[11px] text-muted-foreground">{isCancelOpening ? '（空 = キャンセルのたびに全員へ送る。例: 7 と入れると、同じお客様には 7 日に 1 回まで）' : '（空 = 同じきっかけでは 1 回だけ。短い間隔で何度も届くのを防ぎます）'}</span>
+                    <span className="text-[11px] text-muted-foreground">{isWeekly ? '（空 = 送る曜日のたびに全員へ送る。例: 14 と入れると、同じお客様には 2 週間に 1 回まで）' : isCancelOpening ? '（空 = キャンセルのたびに全員へ送る。例: 7 と入れると、同じお客様には 7 日に 1 回まで）' : '（空 = 同じきっかけでは 1 回だけ。短い間隔で何度も届くのを防ぎます）'}</span>
                   </div>
                 </section>
 
@@ -535,7 +673,17 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
                   <h4 className="text-sm font-medium">② さらに絞り込む <span className="text-xs font-normal text-muted-foreground">任意</span></h4>
                   <AudienceEditor key={audienceKey} value={audience} onChange={setAudience} options={options} />
                   <div className="rounded-md bg-muted/50 px-3 py-2 text-sm" data-slot="automation-preview">
-                    {preview && isCancelOpening ? (
+                    {preview && isWeekly ? (
+                      <>
+                        1 回の配信で、最大 <span className="font-semibold tabular-nums">{preview.count} 人</span> に送られます（= {preview.count} 通）
+                        <span className="block text-[11px] text-muted-foreground">配信停止・友だちでない・LINE 未連携の方には送りません。</span>
+                        {preview.availability ? (
+                          <span className="block text-[11px] text-muted-foreground">いまの空きは合計 {preview.availability.totalOpen} 枠です（右のプレビューは、いまの実際の空き状況です）。</span>
+                        ) : preview.availability_error ? (
+                          <span className="block text-[11px] text-amber-700">{preview.availability_error}（右のプレビューは例です）</span>
+                        ) : null}
+                      </>
+                    ) : preview && isCancelOpening ? (
                       <>
                         キャンセル 1 回につき、最大 <span className="font-semibold tabular-nums">{preview.count} 人</span> に送られます（= {preview.count} 通）
                         <span className="block text-[11px] text-muted-foreground">キャンセルした本人は除きます。配信停止・友だちでない・LINE 未連携の方にも送りません。</span>
@@ -554,6 +702,12 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
 
                 <section className="space-y-2 rounded-lg border p-3">
                   <h4 className="text-sm font-medium">③ メッセージ</h4>
+                  {trigger.type === 'weekly_availability' && (
+                    <>
+                      <WeeklyAvailabilityCardEditor trigger={trigger} onChange={setTrigger} />
+                      <p className="text-xs text-muted-foreground">カードのあとに続けて送るメッセージ（任意。{BROADCAST_ITEMS_MAX - 1} 通まで）</p>
+                    </>
+                  )}
                   {trigger.type === 'reservation_cancelled' && (
                     <>
                       <CancelOpeningCardEditor trigger={trigger} onChange={setTrigger} />
@@ -567,7 +721,7 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
                   <input type="checkbox" className="mt-0.5 h-4 w-4" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
                   <span>
                     このルールを ON にする
-                    <span className="block text-[11px] text-muted-foreground">{isCancelOpening ? 'ON にすると、条件に合うキャンセルが出るたびに自動的に送られます。月間上限を超えるときは送らずに見送ります（配信一覧に理由が残ります）。' : `ON にすると、毎日 ${automationTime} ごろの判定で自動的に送られます。月間上限を超える日は送らずに見送ります。`}</span>
+                    <span className="block text-[11px] text-muted-foreground">{isWeekly ? `ON にすると、選んだ曜日の ${automationTime} ごろに自動的に送られます。月間上限を超えるときは送らずに見送ります（配信一覧に理由が残ります）。` : isCancelOpening ? 'ON にすると、条件に合うキャンセルが出るたびに自動的に送られます。月間上限を超えるときは送らずに見送ります（配信一覧に理由が残ります）。' : `ON にすると、毎日 ${automationTime} ごろの判定で自動的に送られます。月間上限を超える日は送らずに見送ります。`}</span>
                   </span>
                 </label>
               </div>
