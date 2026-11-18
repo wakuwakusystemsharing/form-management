@@ -78,7 +78,7 @@ const DATA_DIR = path.join(process.cwd(), 'data');
 
 // ---- 店舗・フォームの読み込み ----
 
-async function loadStore(storeId: string): Promise<WaitlistStore | null> {
+export async function loadWaitlistStore(storeId: string): Promise<WaitlistStore | null> {
   if (isLocal()) {
     try {
       const file = path.join(DATA_DIR, 'stores.json');
@@ -98,7 +98,7 @@ async function loadStore(storeId: string): Promise<WaitlistStore | null> {
   }
 }
 
-async function loadFormConfig(storeId: string, formId: string): Promise<FormConfig | null> {
+export async function loadWaitlistFormConfig(storeId: string, formId: string): Promise<FormConfig | null> {
   if (isLocal()) return loadLocalFormConfig(formId);
   const client = createAdminClient();
   if (!client) return null;
@@ -234,7 +234,7 @@ export async function registerWaitlist(input: WaitlistRegisterInput): Promise<Wa
   if (!storeId || !formId) return { ok: false, status: 400, error: '店舗またはフォームが指定されていません' };
   if (!lineUserId) return { ok: false, status: 400, error: '空き待ちの登録には LINE 連携が必要です。LINE アプリから予約フォームを開いてください。', code: 'no_line' };
 
-  const config = await loadFormConfig(storeId, formId);
+  const config = await loadWaitlistFormConfig(storeId, formId);
   if (!config) return { ok: false, status: 404, error: 'フォームが見つかりません' };
   if (!isWaitlistActive(config)) return { ok: false, status: 409, error: 'このフォームでは空き待ちを受け付けていません。', code: 'disabled' };
   const settings = resolveWaitlistSettings(config.calendar_settings);
@@ -263,7 +263,7 @@ export async function registerWaitlist(input: WaitlistRegisterInput): Promise<Wa
 
   let customerId: string | null = null;
   if (!isLocal()) {
-    const store = await loadStore(storeId);
+    const store = await loadWaitlistStore(storeId);
     if (!store) return { ok: false, status: 404, error: '店舗が見つかりません' };
     // 満席の枠だけ登録できる（いま予約できる枠・受付していない時間は受け付けない）
     const state = await evaluateWaitlistSlot(store, config, draft, now);
@@ -375,7 +375,7 @@ export async function getWaitlistSourceForForm(args: { entryId: string; storeId:
   let open = false;
   if (active && !isLocal()) {
     try {
-      const [store, config] = await Promise.all([loadStore(entry.store_id), loadFormConfig(entry.store_id, entry.form_id)]);
+      const [store, config] = await Promise.all([loadWaitlistStore(entry.store_id), loadWaitlistFormConfig(entry.store_id, entry.form_id)]);
       if (store && config) open = (await evaluateWaitlistSlot(store, config, entry, now)) === 'open';
     } catch {
       open = false;
@@ -455,12 +455,12 @@ export async function processWaitlist(opts: { storeId?: string | null; now?: Dat
       // local は Google カレンダー・LINE 送信を使わない（期限切れの整理だけ）
       if (isLocal()) continue;
 
-      if (!stores.has(entry.store_id)) stores.set(entry.store_id, await loadStore(entry.store_id));
+      if (!stores.has(entry.store_id)) stores.set(entry.store_id, await loadWaitlistStore(entry.store_id));
       const store = stores.get(entry.store_id);
       if (!store || !store.line_channel_access_token) continue;
 
       const formKey = `${entry.store_id}|${entry.form_id}`;
-      if (!forms.has(formKey)) forms.set(formKey, await loadFormConfig(entry.store_id, entry.form_id));
+      if (!forms.has(formKey)) forms.set(formKey, await loadWaitlistFormConfig(entry.store_id, entry.form_id));
       const config = forms.get(formKey);
       // 機能を OFF にしたフォームの空き待ちには何も送らない（期限が来たら終了する）
       if (!config || !isWaitlistActive(config)) continue;
@@ -579,7 +579,7 @@ export async function buildWaitlistRegisteredReply(store: WaitlistStore, userId:
   const latest = [...entries].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   let config: FormConfig | null = null;
   try {
-    config = await loadFormConfig(latest.store_id, latest.form_id);
+    config = await loadWaitlistFormConfig(latest.store_id, latest.form_id);
   } catch {
     config = null;
   }
