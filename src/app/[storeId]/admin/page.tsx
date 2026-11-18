@@ -25,6 +25,7 @@ import StoreAdminLayout from '@/components/StoreAdminLayout';
 import UiStyleSettings from '@/components/UiStyleSettings';
 import { resolveAdminVisibleOptions, resolveVisibleTabs } from '@/lib/store-admin-tabs';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
+import WaitlistPanel from '@/components/WaitlistPanel';
 import CustomerList from '@/components/CustomerList';
 import CustomerDetail from '@/components/CustomerDetail';
 import CustomerAnalytics from '@/components/CustomerAnalytics';
@@ -1065,6 +1066,8 @@ export default function StoreAdminPage() {
 
                     <TabsContent value="list" className="space-y-6">
                       <GuideHint text={STORE_ADMIN_HINTS.reservationList} />
+                      {/* 空き待ち（キャンセル待ち）。1 件も無い店舗では表示されない */}
+                      <WaitlistPanel storeId={storeId} />
                       <div className="mb-2">
                         <SearchBar
                           value={reservationSearchQuery}

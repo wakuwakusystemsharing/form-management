@@ -14,6 +14,7 @@ import { HOLIDAY_TYPES } from '@/lib/holiday-types';
 import ConditionalAdvanceRulesEditor from './ConditionalAdvanceRulesEditor';
 import StaySettingsEditor from './StaySettingsEditor';
 import CancelFeeTiersEditor from './CancelFeeTiersEditor';
+import WaitlistSettingsEditor from './WaitlistSettingsEditor';
 
 // ON / OFF トグル（お名前 / 電話番号 / メッセージ欄の設定で使用）
 const ToggleSwitch: React.FC<{ checked: boolean; onChange: (v: boolean) => void; theme: ThemeType; disabled?: boolean }> = ({ checked, onChange, theme, disabled }) => {
@@ -2007,6 +2008,9 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
           </div>
         )}
       </div>
+
+      {/* 空き待ち（キャンセル待ち）設定 */}
+      <WaitlistSettingsEditor form={form} onUpdate={onUpdate} theme={theme} />
 
       {/* ご予約内容 */}
       <div className={themeClasses.card}>

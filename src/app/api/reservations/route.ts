@@ -10,6 +10,7 @@ import { filterNoPreferenceStaffByRules } from '@/lib/staff-slot-rules';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { sendReservationEmails } from '@/lib/reservation-email';
 import { scheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
+import { onReservationCreatedForWaitlist } from '@/lib/waitlist-service';
 import { applyReservationCustomFieldTags } from '@/lib/reservation-tags-apply';
 import { isStayMode, prepareStayReservation, type StayPrepared } from '@/lib/stay-reservation';
 import { sanitizeStaySettings } from '@/lib/stay-pricing';
@@ -731,6 +732,9 @@ export async function POST(request: Request) {
         console.error('[API] reservation email orchestration error:', emailError);
       }
 
+      // 空き待ち: この人の同じ日時の空き待ちを「予約済み」にする（失敗しても予約は成功扱い）
+      await onReservationCreatedForWaitlist({ storeId: body.store_id, lineUserId: body.line_user_id, date: body.reservation_date, time: body.reservation_time });
+
       return NextResponse.json(newReservation, { status: 201 });
     }
 
@@ -1261,6 +1265,10 @@ export async function POST(request: Request) {
     } catch (emailError) {
       console.error('[API] reservation email orchestration error:', emailError);
     }
+
+    // 空き待ち: この人の同じ日時の空き待ちを「予約済み」にし、同じ枠を待っていたほかの人へのおわびを見回る
+    // （有効な空き待ちが無い店舗では何もしない。失敗しても予約は成功扱い）
+    await onReservationCreatedForWaitlist({ storeId: body.store_id, lineUserId: body.line_user_id, date: body.reservation_date, time: body.reservation_time });
 
     return NextResponse.json(reservation, { status: 201 });
   } catch (error) {

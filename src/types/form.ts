@@ -494,6 +494,16 @@ export interface FormConfig {
     // 予約が一定数で△で表示する（カレンダー表示モード・同時刻に埋まるイベント数が 2 以上のとき）。
     // 重なる予定が count 件以上・max_concurrent_events 件未満の時間帯を △（予約はできる）で表示。src/lib/slot-mark.ts
     few_left_mark?: { enabled: boolean; count: number; label?: string };
+    // 空き待ち（キャンセル待ち）。未設定 = OFF。LINE フォーム × カレンダー表示モードだけ（src/lib/waitlist.ts）
+    waitlist?: {
+      enabled: boolean;
+      max_per_user: number;
+      deadline_hours: number;
+      /** 夜間に送らない（日本時間の start 時 〜 end 時の前まで） */
+      quiet_hours?: { enabled: boolean; start: number; end: number };
+      /** 通知の文面（空 = 既定）。`{日時}` `{メニュー}` `{店名}` `{予約URL}` を差し込める */
+      messages?: { registered?: string; slot_opened?: string; slot_filled?: string };
+    };
     // 同一ユーザーが同時に持てる未来予約の最大数（0以下/未設定 = 制限なし）
     max_concurrent_reservations_per_user?: number;
     // 「お名前」フィールドの表示（未設定 = true）。false の場合: LIFF 表示名 or「未記入」を自動セット
