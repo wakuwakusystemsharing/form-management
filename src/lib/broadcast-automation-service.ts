@@ -156,7 +156,8 @@ export async function removeAutomation(storeId: string, id: string): Promise<Ser
 async function selectTargets(rule: Pick<BroadcastAutomation, 'id' | 'store_id' | 'trigger' | 'audience' | 'resend_after_days'>, now: Date, withSends: boolean): Promise<AutomationTarget[]> {
   const a = rule.audience;
   const [src, sends] = await Promise.all([
-    loadAudienceSource(rule.store_id, { reservations: !!a.menus || !!a.forms || a.upcoming_reservation !== undefined, visits: !!a.menus, surveys: !!a.survey }),
+    // 「いつもの来店間隔」は、これからの予約がある人を除くので予約を必ず読む
+    loadAudienceSource(rule.store_id, { reservations: rule.trigger.type === 'visit_cycle' || !!a.menus || !!a.forms || a.upcoming_reservation !== undefined, visits: !!a.menus, surveys: !!a.survey }),
     withSends ? listAutomationSends(rule.id) : Promise.resolve([]),
   ]);
   const facts = buildCustomerFacts({ ...src, today: jstDateOf(now) });
