@@ -4,6 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { fetchAllRows } from '@/lib/supabase-fetch-all';
+import { getAccessibleStoreIds, resolveStoreScope } from '@/lib/admin-store-scope';
 import { createReservationEvent, getBusyCalendarsByEvents, countStoreCalendarEventsInSlot } from '@/lib/google-calendar';
 import { resolveMaxConcurrentEvents, resolveReservationSlotWindow } from '@/lib/staff-availability';
 import { filterNoPreferenceStaffByRules } from '@/lib/staff-slot-rules';
@@ -366,34 +368,35 @@ export async function GET(request: Request) {
       );
     }
 
-    // クエリビルド
-     
-    let query = (adminClient as any)
-      .from('reservations')
-      .select('*');
-
-    if (storeId) {
-      query = query.eq('store_id', storeId);
+    // 見てよい店舗だけに絞る（マスター = 全店舗 / システム管理者 = 同じテナント / 店舗管理者 = 自分の店舗）
+    const access = await getAccessibleStoreIds(request, adminClient);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+    const scope = resolveStoreScope(access.storeIds, storeId);
+    if (!scope.ok) {
+      return NextResponse.json({ error: 'この店舗を表示する権限がありません' }, { status: 403 });
+    }
+    if (scope.storeIds && scope.storeIds.length === 0) {
+      return NextResponse.json([]);
     }
 
-    if (status) {
-      query = query.eq('status', status);
-    }
-
-    if (dateFrom) {
-      query = query.gte('reservation_date', dateFrom);
-    }
-
-    if (dateTo) {
-      query = query.lte('reservation_date', dateTo);
-    }
-
-    query = query.order('reservation_date', { ascending: false })
-                 .order('reservation_time', { ascending: false });
-
-    const { data: reservations, error } = await query;
-
-    if (error) {
+    // 1 回の取得は 1000 件までなので、1000 件ずつ全件を取る（集計ダウンロードの件数が欠けないように）
+    let reservations: unknown[];
+    try {
+      reservations = await fetchAllRows<unknown>((from, to) => {
+        let query = (adminClient as any).from('reservations').select('*');
+        if (scope.storeIds) query = query.in('store_id', scope.storeIds);
+        if (status) query = query.eq('status', status);
+        if (dateFrom) query = query.gte('reservation_date', dateFrom);
+        if (dateTo) query = query.lte('reservation_date', dateTo);
+        return query
+          .order('reservation_date', { ascending: false })
+          .order('reservation_time', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, to);
+      });
+    } catch (error) {
       console.error('[API] Reservations fetch error:', error);
       return NextResponse.json(
         { error: '予約データの取得に失敗しました' },
@@ -401,7 +404,7 @@ export async function GET(request: Request) {
       );
     }
 
-    return NextResponse.json(reservations || []);
+    return NextResponse.json(reservations);
   } catch (error) {
     console.error('Reservations fetch error:', error);
     return NextResponse.json(
