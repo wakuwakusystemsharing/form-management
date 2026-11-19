@@ -23,6 +23,8 @@ import type { WallStats } from '@/types/wall';
 import type { LotteryFormWithStats } from '@/types/lottery';
 import StoreAdminLayout from '@/components/StoreAdminLayout';
 import UiStyleSettings from '@/components/UiStyleSettings';
+import StoreDigestSettings from '@/components/StoreDigestSettings';
+import MonthlyReportView from '@/components/MonthlyReportView';
 import { resolveAdminVisibleOptions, resolveVisibleTabs } from '@/lib/store-admin-tabs';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
 import WaitlistPanel from '@/components/WaitlistPanel';
@@ -630,9 +632,28 @@ export default function StoreAdminPage() {
     const dashboardReservations = debouncedDashboardReservationSearch
       ? reservations.slice(0, 50)
       : stats.recentReservations;
+    // 月次レポート（?tab=dashboard&report=YYYY-MM。メール・LINE のリンクからも開く。空 = 先月）
+    const reportParam = searchParams.get('report');
+    if (reportParam !== null) {
+      return (
+        <MonthlyReportView
+          storeId={storeId}
+          month={reportParam || null}
+          onMonthChange={(m) => router.push(`/${storeId}/admin?tab=dashboard&report=${m}`)}
+          onBack={() => router.push(`/${storeId}/admin?tab=dashboard`)}
+        />
+      );
+    }
     return (
           <div className="space-y-5 p-4 lg:p-6">
             <StoreAdminGuide tab="dashboard" />
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-4 py-3" data-slot="card">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">月次レポート</p>
+                <p className="text-xs text-muted-foreground">{STORE_ADMIN_HINTS.monthlyReport}</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => router.push(`/${storeId}/admin?tab=dashboard&report=`)}>月次レポートを見る</Button>
+            </div>
             {/* 統計カード */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <Card className="shadow-sm">
@@ -1591,6 +1612,7 @@ export default function StoreAdminPage() {
           <div className="space-y-4 p-4 lg:p-6">
             <StoreAdminGuide tab="settings" />
             <UiStyleSettings />
+            <StoreDigestSettings storeId={storeId} />
             <Card className="shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle className="text-base">店舗設定</CardTitle>

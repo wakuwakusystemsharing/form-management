@@ -10,6 +10,8 @@ import { resolveStayCancelFee } from '@/lib/stay-reservation';
 import { sendEmail } from '@/lib/email-sender';
 import { findLineFlexReplyForText, handleLineFlexPostback, listLineFlexAttachments, listLineFlexGreetingMessages } from '@/lib/line-flex-service';
 import { handleBroadcastOptCommand } from '@/lib/broadcast-opt-out';
+import { STAFF_REGISTER_KEYWORD } from '@/lib/store-digest';
+import { handleStaffLineCommand } from '@/lib/store-digest-service';
 import { scheduleCancelOpeningBroadcast } from '@/lib/broadcast-automation-service';
 import { ensureFriendCustomer } from '@/lib/line-friend-customers';
 import { CHANGE_KEYWORD, MENU_CHANGE_MESSAGE_HEAD, isChangePostback } from '@/lib/reservation-change';
@@ -564,6 +566,24 @@ export async function POST(req: NextRequest) {
     const branchReply = await handleLineFlexPostback(storeId, userId, event.postback?.data ?? '');
     if (branchReply) await replyRawMessages(replyToken, accessToken, branchReply.slice(0, 5));
     return NextResponse.json({ success: true });
+  }
+
+  // スタッフ登録（「スタッフ登録 合言葉」/「スタッフ登録解除」）: 今日の予約まとめ・月次レポートを LINE で受け取るスタッフ
+  if (messageText.trim().startsWith(STAFF_REGISTER_KEYWORD)) {
+    try {
+      const staffReply = await handleStaffLineCommand(storeId, userId, messageText, async () => {
+        const res = await fetch(`https://api.line.me/v2/bot/profile/${encodeURIComponent(userId)}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+        const profile = res.ok ? ((await res.json()) as { displayName?: string }) : null;
+        return profile?.displayName || null;
+      });
+      if (staffReply) {
+        await replyRawMessages(replyToken, accessToken, [{ type: 'text', text: staffReply }]);
+        return NextResponse.json({ success: true });
+      }
+    } catch (e) {
+      // テーブル未適用などで失敗しても、ほかの応答は止めない
+      console.warn('[LINE Webhook] スタッフ登録の処理に失敗:', e);
+    }
   }
 
   // 配信の停止 / 再開（配信タブ。既定「配信停止」「配信再開」。予約確認・リマインダーは止めない）
