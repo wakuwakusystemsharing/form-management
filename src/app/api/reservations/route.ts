@@ -12,6 +12,7 @@ import { sendReservationEmails } from '@/lib/reservation-email';
 import { scheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
 import { onReservationCreatedForWaitlist } from '@/lib/waitlist-service';
 import { applyReservationCustomFieldTags } from '@/lib/reservation-tags-apply';
+import { applyNominationFeeToCustomerInfo } from '@/lib/nomination-fee';
 import { isStayMode, prepareStayReservation, type StayPrepared } from '@/lib/stay-reservation';
 import { sanitizeStaySettings } from '@/lib/stay-pricing';
 import { occupiedCountByNight } from '@/lib/stay-availability';
@@ -534,6 +535,17 @@ export async function POST(request: Request) {
       console.error('[reservations] concurrent reservation check error:', err);
     }
 
+    // 指名料: フォームから送られてきた金額をフォーム設定で確かめ直す（指名していない・設定が無いなら消す）
+    if (body.customer_info && typeof body.customer_info === 'object' && body.customer_info.nomination_fee !== undefined) {
+      let staffSelectionForFee: any = null;
+      try {
+        staffSelectionForFee = body.staff_id ? (await getFormConfig(body.form_id))?.staff_selection : null;
+      } catch {
+        staffSelectionForFee = null;
+      }
+      applyNominationFeeToCustomerInfo(body.customer_info, staffSelectionForFee, body.staff_id);
+    }
+
     const env = getAppEnvironment();
 
     // ローカル環境: JSON に保存
@@ -673,7 +685,7 @@ export async function POST(request: Request) {
             visit_time: body.reservation_time,
             visit_type: 'reservation',
             treatment_menus: body.selected_menus,
-            amount: calculateTotalAmount(body.selected_menus, body.selected_options) + (stayPrepared?.stay_price_total || 0),
+            amount: calculateTotalAmount(body.selected_menus, body.selected_options, body.customer_info) + (stayPrepared?.stay_price_total || 0),
           });
           await recalculateCustomerStats(customerId);
         } catch (error) {
@@ -1124,7 +1136,7 @@ export async function POST(request: Request) {
           visit_time: body.reservation_time,
           visit_type: 'reservation',
           treatment_menus: body.selected_menus,
-          amount: calculateTotalAmount(body.selected_menus, body.selected_options) + (stayPrepared?.stay_price_total || 0),
+          amount: calculateTotalAmount(body.selected_menus, body.selected_options, body.customer_info) + (stayPrepared?.stay_price_total || 0),
         });
         await recalculateCustomerStats(customerId);
       } catch (error) {

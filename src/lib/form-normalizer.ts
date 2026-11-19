@@ -6,6 +6,7 @@
 import { Form, SpecialBusinessDay } from '@/types/form';
 import { resolveCancelRules } from './cancel-rules';
 import { normalizeStaffSchedule } from './staff-schedule';
+import { sanitizeNominationFee } from './nomination-fee';
 import { sanitizeConditionalAdvanceRules } from './advance-rules';
 import { sanitizeFewLeftMark } from './slot-mark';
 import { sanitizeWaitlistSettings } from './waitlist';
@@ -610,6 +611,8 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
                 : [],
               // 「指名なし」の自動割当の対象外（対象のときはキー自体を持たない）
               ...(m.no_preference_assignable === false ? { no_preference_assignable: false } : {}),
+              // 指名料（設定があるときだけキーを持つ）
+              ...(sanitizeNominationFee(m.nomination_fee) > 0 ? { nomination_fee: sanitizeNominationFee(m.nomination_fee) } : {}),
               // 希望日時設定（上書きが無ければキー自体を持たない）
               ...(() => { const sc = normalizeStaffSchedule(m.schedule); return sc ? { schedule: sc } : {}; })()
             }))
@@ -663,7 +666,7 @@ export function normalizeForm(form: Form | Record<string, unknown>): Form {
       line_message_items: (() => {
         const raw = (existingConfig?.line_message_items
           ?? (typedConfig as Form['config'])?.line_message_items) as Record<string, unknown> | undefined;
-        const keys = ['name', 'phone', 'visit_count', 'staff', 'menu', 'options', 'total_price',
+        const keys = ['name', 'phone', 'visit_count', 'staff', 'nomination_fee', 'menu', 'options', 'total_price',
           'total_duration', 'datetime', 'message', 'gender', 'coupon', 'custom_fields'] as const;
         const out: Record<string, unknown> = {};
         keys.forEach((k) => { out[k] = raw?.[k] !== false; });

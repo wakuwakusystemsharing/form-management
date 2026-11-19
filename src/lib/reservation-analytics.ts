@@ -10,6 +10,8 @@
  * - DB 非依存（Vitest 対象）
  */
 
+import { reservationNominationFee } from './nomination-fee';
+
 export interface AnalyticsReservation {
   id?: string;
   form_id?: string | null;
@@ -112,6 +114,8 @@ export function reservationAmount(r: AnalyticsReservation): number {
   for (const o of asArray(r.selected_options)) total += toNumber(o.price);
   // 宿泊予約: 宿泊料金（割引後）を加える
   if (typeof r.stay_price_total === 'number' && Number.isFinite(r.stay_price_total)) total += r.stay_price_total;
+  // スタッフの指名料（指名した予約だけ customer_info.nomination_fee に入っている）
+  total += reservationNominationFee(r);
   return total;
 }
 

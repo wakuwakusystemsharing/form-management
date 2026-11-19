@@ -4,6 +4,7 @@ import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { normalizeForm } from '@/lib/form-normalizer';
+import { reservationNominationFee } from '@/lib/nomination-fee';
 import {
   createCustomerVisit,
   deleteCustomerVisitByReservation,
@@ -124,7 +125,8 @@ async function syncCustomerVisitForStatusChange(
       treatment_menus: reservation.selected_menus,
       amount: calculateTotalAmount(
         reservation.selected_menus,
-        reservation.selected_options
+        reservation.selected_options,
+        reservation.customer_info
       ),
     });
   }
@@ -146,7 +148,7 @@ async function syncCustomerVisitForContentChange(reservation: any): Promise<void
     visit_time: reservation.reservation_time,
     visit_type: 'reservation',
     treatment_menus: reservation.selected_menus,
-    amount: calculateTotalAmount(reservation.selected_menus, reservation.selected_options),
+    amount: calculateTotalAmount(reservation.selected_menus, reservation.selected_options, reservation.customer_info),
   });
   await recalculateCustomerStats(customerId);
 }
@@ -623,7 +625,8 @@ function applyContentEdit(
     info.total_duration = base > 0 ? base : (info.total_duration ?? 60);
   }
   if (menuOrOptionChanged) {
-    info.total_price = sumPrice(menus, options);
+    // 指名料は予約時のまま合計に含める（管理画面の編集では指名料を変えない）
+    info.total_price = sumPrice(menus, options) + reservationNominationFee({ customer_info: info });
   }
   row.customer_info = info;
 
