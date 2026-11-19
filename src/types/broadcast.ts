@@ -103,6 +103,10 @@ export interface BroadcastRecipient {
   status: BroadcastRecipientStatus;
   error: string | null;
   sent_at: string | null;
+  /** 配信のボタンを最初にタップした日時（配信の成果の集計に使う。タップしていなければ null） */
+  tapped_at: string | null;
+  /** ボタンをタップした回数 */
+  tap_count: number;
 }
 
 /** 自動配信のきっかけ */

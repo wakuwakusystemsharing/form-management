@@ -3,8 +3,10 @@ import {
   broadcastItemsToPreview,
   buildBroadcastPayloads,
   describeBroadcastItems,
+  fillRecipientLinks,
   normalizeBroadcastItems,
   payloadsHavePersonalization,
+  payloadsHaveRecipientLinks,
   personalizePayloads,
   resolveRecipientName,
   validateBroadcastItems,
@@ -88,7 +90,7 @@ describe('buildBroadcastPayloads', () => {
     const on = buildBroadcastPayloads({ ...base, items });
     expect(on.links).toEqual({ '1': 'https://example.com/a', '2': 'https://example.com/b' });
     const second = on.payloads[1] as { altText: string; contents: { footer: { contents: Array<{ action: { uri: string } }> } } };
-    expect(second.contents.footer.contents[0].action.uri).toBe(`${origin}/go/b/${id}/2`);
+    expect(second.contents.footer.contents[0].action.uri).toBe(`${origin}/go/b/${id}/2?r=__RID__`);
     expect(second.altText).toBe('メッセージが届いています');
     expect(on.has_personalization).toBe(false);
     const off = buildBroadcastPayloads({ ...base, trackTaps: false, items });
@@ -104,6 +106,42 @@ describe('buildBroadcastPayloads', () => {
     expect(over.error).toMatch(/合計 6 通/);
     const big = { type: 'bubble', body: { type: 'box', layout: 'vertical', contents: [{ type: 'text', text: 'あ'.repeat(12000) }] } };
     expect(buildBroadcastPayloads({ ...base, items: [{ key: 'a', type: 'flex', alt_text: 'a', contents: big }] }).error).toMatch(/30KB/);
+  });
+});
+
+describe('誰がタップしたかの記録（宛先ごとのリンク）', () => {
+  const base = { origin, broadcastId: id, trackTaps: true, refMessages: {}, stickers: {} };
+  const uriOf = (p: unknown) => (p as { contents: { footer: { contents: Array<{ action: { uri: string } }> } } }).contents.footer.contents[0].action.uri;
+
+  it('計測リンクに宛先の印を付ける。保存済み LINE メッセージ（ref）の計測リンクにも付ける', () => {
+    const refMsgs = [{ type: 'flex', altText: 'r', contents: bubble(`${origin}/go/abcdefghij12/1`) }];
+    const r = buildBroadcastPayloads({
+      ...base,
+      items: [{ key: 'a', type: 'flex', alt_text: 'A', contents: bubble('https://example.com/a') }, { key: 'b', type: 'ref', message_id: 'm1' }],
+      refMessages: { m1: refMsgs },
+    });
+    expect(uriOf(r.payloads[0])).toBe(`${origin}/go/b/${id}/1?r=__RID__`);
+    expect(uriOf(r.payloads[1])).toBe(`${origin}/go/abcdefghij12/1?r=__RID__`);
+    expect(payloadsHaveRecipientLinks(r.payloads)).toBe(true);
+    // 参照先の LINE メッセージ自体は書き換えない
+    expect(uriOf(refMsgs[0])).toBe(`${origin}/go/abcdefghij12/1`);
+  });
+
+  it('計測 OFF・計測リンクの無い配信には付けない', () => {
+    const off = buildBroadcastPayloads({ ...base, trackTaps: false, items: [{ key: 'a', type: 'ref', message_id: 'm1' }], refMessages: { m1: [{ type: 'flex', altText: 'r', contents: bubble(`${origin}/go/abcdefghij12/1`) }] } });
+    expect(uriOf(off.payloads[0])).toBe(`${origin}/go/abcdefghij12/1`);
+    expect(payloadsHaveRecipientLinks(off.payloads)).toBe(false);
+    const plain = buildBroadcastPayloads({ ...base, items: [{ key: 'a', type: 'text', text: 'こんにちは' }, { key: 'b', type: 'ref', message_id: 'm1' }], refMessages: { m1: [{ type: 'flex', altText: 'r', contents: bubble('https://other.example.com/go/x/1') }] } });
+    expect(payloadsHaveRecipientLinks(plain.payloads)).toBe(false);
+  });
+
+  it('送信時に宛先の ID を入れる。ID が無いとき（テスト送信）は印を外す', () => {
+    const r = buildBroadcastPayloads({ ...base, items: [{ key: 'a', type: 'flex', alt_text: 'A', contents: bubble('https://example.com/a') }] });
+    const rid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    expect(uriOf(fillRecipientLinks(r.payloads, rid)[0])).toBe(`${origin}/go/b/${id}/1?r=${rid}`);
+    expect(uriOf(fillRecipientLinks(r.payloads, null)[0])).toBe(`${origin}/go/b/${id}/1`);
+    expect(uriOf(r.payloads[0])).toBe(`${origin}/go/b/${id}/1?r=__RID__`);
+    expect(payloadsHaveRecipientLinks(fillRecipientLinks(r.payloads, rid))).toBe(false);
   });
 });
 

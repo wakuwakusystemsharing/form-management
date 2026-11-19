@@ -11,7 +11,7 @@
 import type { AudienceCustomer, Broadcast, BroadcastAudience, BroadcastInput, BroadcastSettings, BroadcastSticker } from '@/types/broadcast';
 import type { LineFlexMessage } from '@/types/line-flex';
 import { buildCustomerFacts, isAudienceUnfiltered, jstDateOf, normalizeAudience, selectAudience, type AudienceSelection } from '@/lib/broadcast-audience';
-import { BROADCAST_NAME_MAX, buildBroadcastPayloads, normalizeBroadcastItems, personalizePayloads, resolveRecipientName, validateBroadcastItems } from '@/lib/broadcast-items';
+import { BROADCAST_NAME_MAX, buildBroadcastPayloads, fillRecipientLinks, normalizeBroadcastItems, personalizePayloads, resolveRecipientName, validateBroadcastItems } from '@/lib/broadcast-items';
 import { canSendBroadcast, evaluateQuota, type QuotaEvaluation } from '@/lib/broadcast-quota';
 import {
   clearBroadcastRecipients,
@@ -314,7 +314,8 @@ export async function testSendBroadcast(storeId: string, id: string, lineUserId:
   if (built.error) return { ok: false, status: 400, error: built.error };
   const token = await getStoreLineToken(storeId);
   if (!token) return { ok: false, status: 400, error: 'この店舗の LINE チャネルアクセストークンが未設定です（店舗編集で登録してください）' };
-  const messages = personalizePayloads(built.payloads, { name: resolveRecipientName({ name }) });
+  // テスト送信は宛先の行が無いので、計測リンクの「宛先の印」は外す（タップ数だけ数える）
+  const messages = personalizePayloads(fillRecipientLinks(built.payloads, null), { name: resolveRecipientName({ name }) });
   const result = await pushLineMessages(token, lineUserId, messages);
   if (!result.ok) return { ok: false, status: 502, error: `LINE への送信に失敗しました（${result.status}）: ${result.body.slice(0, 200)}` };
   return { ok: true, value: true };
