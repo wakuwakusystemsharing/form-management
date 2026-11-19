@@ -661,6 +661,8 @@ export default function StoreDetailPage() {
   const [showReservationDetail, setShowReservationDetail] = useState(false);
   const [creatingCalendar, setCreatingCalendar] = useState(false);
   const [disconnectingCalendar, setDisconnectingCalendar] = useState(false);
+  // 「連携を解除」の確認ダイアログ（1 クリックで解除されないようにする）
+  const [disconnectConfirmOpen, setDisconnectConfirmOpen] = useState(false);
   const [calendarPickerOpen, setCalendarPickerOpen] = useState(false);
   const [calendarList, setCalendarList] = useState<Array<{ id: string; summary: string; primary: boolean; accessRole: string; backgroundColor: string | null }>>([]);
   const [loadingCalendarList, setLoadingCalendarList] = useState(false);
@@ -1486,7 +1488,7 @@ export default function StoreDetailPage() {
                           カレンダーを変更
                         </Button>
                         <Button variant="outline" size="sm" disabled={disconnectingCalendar}
-                          onClick={handleDisconnectCalendar}
+                          onClick={() => setDisconnectConfirmOpen(true)}
                           className="border-border h-8 text-xs"
                         >
                           {disconnectingCalendar ? '解除中...' : '連携を解除'}
@@ -3318,6 +3320,35 @@ Form「{getReservationFormName(forms.find(f => f.id === deletingFormId), '')}」
               }
             >
               {savingCalendarId ? '保存中...' : '保存'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Google カレンダー「連携を解除」の確認 */}
+      <Dialog open={disconnectConfirmOpen} onOpenChange={(open) => { if (!disconnectingCalendar) setDisconnectConfirmOpen(open); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>本当に連携を解除してもいいですか？</DialogTitle>
+            <DialogDescription>
+              Google カレンダーとの連携を解除します。解除すると、予約フォームの空き状況の表示や、予約の Google カレンダーへの登録ができなくなります。
+              元に戻すには、もう一度 Google アカウントで連携し直す必要があります。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDisconnectConfirmOpen(false)} disabled={disconnectingCalendar}>
+              キャンセル
+            </Button>
+            <Button
+              variant="destructive"
+              data-testid="calendar-disconnect-confirm"
+              disabled={disconnectingCalendar}
+              onClick={async () => {
+                await handleDisconnectCalendar();
+                setDisconnectConfirmOpen(false);
+              }}
+            >
+              {disconnectingCalendar ? '解除中...' : '解除する'}
             </Button>
           </DialogFooter>
         </DialogContent>
