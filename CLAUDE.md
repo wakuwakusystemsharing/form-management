@@ -250,6 +250,11 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - `ReservationAnalytics.tsx` - 上部に期間チップ + フォームのプルダウン（既定は過去12か月 / すべてのフォーム）、予約数・キャンセル・売上・1件あたりのタイル、概要（フォーム別 / ステータス別 / 日別 / 月別）・メニュー分析（メニュー・オプションの人気と売上）・時間帯分析・顧客属性・売上分析（月別 / フォーム別 / メニュー別）。`fetchWithAuth` を使う。店舗管理者ページとテナント側 店舗ページで共用
 - 顧客分析 API（`/customers/analytics`）も `fetchAllRows` で全件取得。月別新規顧客数は JST の月で数える
 
+**全予約一覧の「集計ダウンロード」（`/tenant/{slug}/admin/reservations` → 予約一覧タブ。Excel = 予約数 / キャンセル数 / アンケート回答数 / 出力条件 の 4 シート。店舗 × 月）:**
+- 予約は `GET /api/reservations`、アンケート回答数は `GET /api/surveys/stats`。どちらも **ログイン必須 + 見てよい店舗だけ**（`src/lib/admin-store-scope.ts` の `getAccessibleStoreIds` = マスター: 全店舗 / システム管理者: 同じテナント / 店舗管理者: 自分の店舗。`resolveStoreScope` で `store_id` の指定を確認し、範囲外は 403。local は認証スキップ）、**`fetchAllRows` で 1000 件ずつ全件取得**（以前は 1 回の取得 = 1000 件までで、件数が欠けていた）
+- 月の基準: 予約数・キャンセル数 = 予約日の月、アンケート回答数 = 回答日時の**日本時間**の月（`src/lib/survey-month-stats.ts` の `countSurveysByStoreMonth`）。ステータス・テスト用顧客の絞り込みは予約だけに効く。アンケート件数を取得できないときはダウンロードを止める（0 件のシートを出さない）
+- 画面の一覧は 300 件ずつ表示（「さらに表示」）。集計は全件が対象。Vitest: `survey-month-stats.test.ts`
+
 **全店舗ランキング（全予約一覧 `/tenant/{slug}/admin/reservations` → ランキングタブ）:**
 - `GET /api/stores/ranking?date_from&date_to`（マスター = 全店舗 / システム管理者 = 同テナント。店舗管理者は 403。local は認証スキップで `data/*.json`）。件数・金額だけを返す
 - 純粋ロジック `src/lib/store-ranking.ts`: `computeStoreRankings(stores, reservations, surveys, customers, period)` → 店舗ごとの 予約数（キャンセル除く）/ キャンセル率 / 売上（`reservationAmount`）/ アンケート回答数（回答日時を JST 日付に）/ LINE 友だち追加率（分母 = `line_user_id` あり。期間に依らない現在値）。`rankRows(rows, metric)` が同値同順位で順位付け（null は除外、キャンセル率は低い順）。指標の定義は `RANKING_METRICS`
