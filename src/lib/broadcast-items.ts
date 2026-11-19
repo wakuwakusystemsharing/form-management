@@ -159,7 +159,51 @@ export function buildBroadcastPayloads(args: BuildBroadcastPayloadsArgs): { payl
   if (payloads.length > BROADCAST_ITEMS_MAX) {
     return fail(`合計 ${payloads.length} 通になります。1 回に送れるのは ${BROADCAST_ITEMS_MAX} 通までです（保存済みの LINE メッセージは、その追加メッセージも数えます）`);
   }
-  return { payloads, links, has_personalization: payloadsHavePersonalization(payloads), error: null };
+  const out = args.trackTaps ? tagRecipientLinks(payloads, args.origin) : payloads;
+  return { payloads: out, links, has_personalization: payloadsHavePersonalization(out), error: null };
+}
+
+// ---------------------------------------------------------------------------
+// 誰がタップしたかの記録（配信の成果）
+// ---------------------------------------------------------------------------
+
+/**
+ * 計測リンクに付ける「宛先の印」。送信時に Edge Function `send-broadcasts` が宛先の行 ID（broadcast_recipients.id）に置き換える
+ * （= 印のある配信は multicast ではなく 1 人ずつ push。置き換えの規則は Edge Function と同じ。変更時は両方を合わせること）
+ */
+export const BROADCAST_RECIPIENT_TOKEN = '__RID__';
+const RECIPIENT_QUERY = `?r=${BROADCAST_RECIPIENT_TOKEN}`;
+
+/**
+ * このアプリの計測リンク（/go/b/{配信ID}/{key} と、保存済み LINE メッセージの /go/{メッセージID}/{key}）に宛先の印を付ける。
+ * 元の配列・参照先のメッセージは変えない
+ */
+export function tagRecipientLinks(payloads: Array<Record<string, unknown>>, origin: string): Array<Record<string, unknown>> {
+  const prefix = `${origin.replace(/\/$/, '')}/go/`;
+  const cloned = JSON.parse(JSON.stringify(payloads)) as Array<Record<string, unknown>>;
+  const walk = (node: unknown) => {
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (!node || typeof node !== 'object') return;
+    const obj = node as Record<string, unknown>;
+    if (obj.type === 'uri' && typeof obj.uri === 'string' && obj.uri.startsWith(prefix) && !obj.uri.includes('?')) obj.uri = `${obj.uri}${RECIPIENT_QUERY}`;
+    for (const v of Object.values(obj)) walk(v);
+  };
+  walk(cloned);
+  return cloned;
+}
+
+/** 宛先の印がある = 誰がタップしたかを記録する配信（1 人ずつ送る） */
+export function payloadsHaveRecipientLinks(payloads: Array<Record<string, unknown>> | null | undefined): boolean {
+  return !!payloads && payloads.length > 0 && JSON.stringify(payloads).includes(RECIPIENT_QUERY);
+}
+
+/** 宛先の印を宛先の行 ID に置き換える。recipientId が null（テスト送信など）のときは印を外す */
+export function fillRecipientLinks(payloads: Array<Record<string, unknown>>, recipientId: string | null): Array<Record<string, unknown>> {
+  if (!payloadsHaveRecipientLinks(payloads)) return payloads;
+  return JSON.parse(JSON.stringify(payloads).split(RECIPIENT_QUERY).join(recipientId ? `?r=${recipientId}` : '')) as Array<Record<string, unknown>>;
 }
 
 // ---------------------------------------------------------------------------

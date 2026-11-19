@@ -14,6 +14,7 @@ import { normalizeAudience, type FactReservation, type FactSurvey, type FactVisi
 import { normalizeBroadcastItems } from '@/lib/broadcast-items';
 import { jstMonthRange, normalizeBroadcastSettings } from '@/lib/broadcast-quota';
 import { normalizeAutomationTrigger, normalizeResendAfterDays } from '@/lib/broadcast-automation';
+import type { ResultRecipient, ResultReservation } from '@/lib/broadcast-results';
 import type {
   AudienceCustomer,
   Broadcast,
@@ -142,6 +143,8 @@ function normalizeRecipientRow(row: Record<string, unknown>): BroadcastRecipient
     status,
     error: strOrNull(row.error),
     sent_at: strOrNull(row.sent_at),
+    tapped_at: strOrNull(row.tapped_at),
+    tap_count: num(row.tap_count),
   };
 }
 
@@ -241,7 +244,7 @@ export async function replaceBroadcastRecipients(storeId: string, broadcastId: s
     const data = readLocal();
     data.recipients = data.recipients.filter((r) => r.broadcast_id !== broadcastId);
     for (const s of seeds) {
-      data.recipients.push({ id: randomUUID(), broadcast_id: broadcastId, store_id: storeId, customer_id: s.customer_id, line_user_id: s.line_user_id, display_name: s.display_name, status: 'pending', error: null, sent_at: null });
+      data.recipients.push({ id: randomUUID(), broadcast_id: broadcastId, store_id: storeId, customer_id: s.customer_id, line_user_id: s.line_user_id, display_name: s.display_name, status: 'pending', error: null, sent_at: null, tapped_at: null, tap_count: 0 });
     }
     writeLocal(data);
     return seeds.length;
@@ -524,6 +527,76 @@ export async function incrementBroadcastTap(id: string, key: string): Promise<vo
   }
   const { error } = await client().rpc('broadcast_increment_tap', { p_id: id, p_key: key });
   if (error) console.warn('[broadcast] tap_counts 更新に失敗:', error.message);
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 誰がタップしたかを記録する（計測リンクの ?r={宛先の行 ID}）。最初のタップの日時を残し、回数を 1 増やす。
+ * マイグレーション未適用の環境では何もしない（タップ数の集計は従来どおり動く）
+ */
+export async function recordBroadcastTap(recipientId: string, now: Date = new Date()): Promise<void> {
+  if (!UUID_RE.test(recipientId)) return;
+  if (isLocal()) {
+    const data = readLocal();
+    const r = data.recipients.find((x) => x.id === recipientId);
+    if (!r) return;
+    r.tapped_at = r.tapped_at ?? now.toISOString();
+    r.tap_count = (typeof r.tap_count === 'number' ? r.tap_count : 0) + 1;
+    writeLocal(data);
+    return;
+  }
+  const { error } = await client().rpc('broadcast_record_tap', { p_recipient_id: recipientId });
+  if (error) console.warn('[broadcast] タップした人の記録に失敗:', error.message);
+}
+
+// ---------------------------------------------------------------------------
+// 配信の成果（配信 → 予約数・売上）
+// ---------------------------------------------------------------------------
+
+export type ResultRecipientRow = ResultRecipient & { broadcast_id: string };
+
+const RESULT_RECIPIENT_COLUMNS_BASE = 'id,broadcast_id,customer_id,line_user_id,display_name,status,sent_at';
+
+/** 配信（複数）の送信済みの宛先。tapped_at 列が未適用の環境では列なしで取り直す（= タップ経由は 0 件になる） */
+export async function listResultRecipients(broadcastIds: string[]): Promise<ResultRecipientRow[]> {
+  if (broadcastIds.length === 0) return [];
+  const toRow = (row: Record<string, unknown>): ResultRecipientRow => ({
+    id: String(row.id),
+    broadcast_id: String(row.broadcast_id),
+    customer_id: String(row.customer_id),
+    line_user_id: String(row.line_user_id),
+    display_name: strOrNull(row.display_name),
+    status: String(row.status),
+    sent_at: strOrNull(row.sent_at),
+    tapped_at: strOrNull(row.tapped_at),
+  });
+  if (isLocal()) {
+    const ids = new Set(broadcastIds);
+    return readLocal().recipients.filter((r) => ids.has(r.broadcast_id) && r.status === 'sent').map((r) => toRow(r as unknown as Record<string, unknown>));
+  }
+  const c = client();
+  const load = (columns: string) =>
+    fetchAllRows<Record<string, unknown>>((from, to) => c.from('broadcast_recipients').select(columns).in('broadcast_id', broadcastIds).eq('status', 'sent').order('id').range(from, to));
+  const rows = await load(`${RESULT_RECIPIENT_COLUMNS_BASE},tapped_at`).catch(() => load(RESULT_RECIPIENT_COLUMNS_BASE));
+  return rows.map(toRow);
+}
+
+/** 店舗の、sinceIso 以降に受け付けた予約（配信の成果の集計用） */
+export async function listResultReservations(storeId: string, sinceIso: string): Promise<ResultReservation[]> {
+  if (isLocal()) {
+    return readJson<Array<Record<string, unknown>>>(path.join(DATA_DIR, 'reservations.json'), []).filter((r) => r.store_id === storeId && typeof r.created_at === 'string' && r.created_at >= sinceIso) as unknown as ResultReservation[];
+  }
+  const c = client();
+  return fetchAllRows<ResultReservation>((from, to) =>
+    c
+      .from('reservations')
+      .select('id,customer_id,line_user_id,created_at,reservation_date,reservation_time,status,selected_menus,selected_options,customer_info,stay_price_total')
+      .eq('store_id', storeId)
+      .gte('created_at', sinceIso)
+      .order('id')
+      .range(from, to)
+  );
 }
 
 /** 配信停止中の顧客数（LINE 連携済みのみ） */

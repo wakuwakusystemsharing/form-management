@@ -12,7 +12,9 @@
  *   途中で止まっても pending だけを続きから送る
  * - 差し込み無し: multicast（1 リクエスト 500 人まで）。X-Line-Retry-Key = そのバッチの先頭の宛先行 ID（UUID）。
  *   LINE が受け付けたあと記録前に落ちても、同じ並びで再送されるので LINE 側が 409 で重複を止める（409 は送信済みとして扱う）
- * - 差し込みあり（{name}）: 1 人ずつ push（X-Line-Retry-Key = 宛先行 ID）。10 件ずつ並列
+ * - 差し込みあり（{name}）/ 計測リンクに宛先の印（?r=__RID__）あり: 1 人ずつ push（X-Line-Retry-Key = 宛先行 ID）。20 件ずつ並列。
+ *   宛先の印は宛先行 ID に置き換える（誰がタップしたかを記録して「配信の成果」に使う。
+ *   src/lib/broadcast-items.ts の fillRecipientLinks と同じ規則。変更時は両方を合わせること）
  * - 401 / 403（トークン無効）は配信全体を failed。429 / 5xx / 通信エラーは pending のまま次の回に回す
  *   （開始から 6 時間たっても終わらなければ残りを failed にして打ち切る）
  * - payloads は保存時にサーバーで組み立て済み。ここでは {name} の置き換えだけを行う
@@ -30,11 +32,12 @@ const STALE_CLAIM_MS = 10 * 60 * 1000;
 const GIVE_UP_MS = 6 * 60 * 60 * 1000;
 const LINE_TIMEOUT_MS = 10 * 1000;
 const MULTICAST_MAX = 500;
-const PUSH_CONCURRENCY = 10;
+const PUSH_CONCURRENCY = 20;
 const BROADCAST_LIMIT = 20;
 const NAME_TOKEN = "{name}";
 const NAME_FALLBACK = "お客様";
 const TEXT_MAX = 5000;
+const RECIPIENT_QUERY = "?r=__RID__";
 
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } });
@@ -70,6 +73,16 @@ function classify(res: { ok: boolean; status: number }): "sent" | "auth" | "retr
 function personalize(payloads: Record<string, unknown>[], name: string | null) {
   const n = (name || "").trim() || NAME_FALLBACK;
   return payloads.map((p) => (p.type === "text" && typeof p.text === "string" ? { ...p, text: p.text.split(NAME_TOKEN).join(n).slice(0, TEXT_MAX) } : p));
+}
+
+/** 計測リンクの「宛先の印」があるか（= 誰がタップしたかを記録する配信。1 人ずつ送る） */
+function hasRecipientLinks(payloads: Record<string, unknown>[]) {
+  return JSON.stringify(payloads).includes(RECIPIENT_QUERY);
+}
+
+/** 宛先の印を宛先行 ID に置き換える */
+function fillRecipientLinks(payloads: Record<string, unknown>[], recipientId: string) {
+  return JSON.parse(JSON.stringify(payloads).split(RECIPIENT_QUERY).join(`?r=${recipientId}`));
 }
 
 async function markRecipients(ids: string[], patch: Record<string, unknown>) {
@@ -111,12 +124,14 @@ async function processBroadcast(b, token: string, deadline: number, totals) {
     return;
   }
 
+  const perRecipient = hasRecipientLinks(payloads);
+
   while (Date.now() < deadline) {
     const batch = await pendingBatch(b.id, MULTICAST_MAX);
     if (batch.length === 0) break;
     const nowIso = new Date().toISOString();
 
-    if (!b.has_personalization) {
+    if (!b.has_personalization && !perRecipient) {
       // 全員同じ内容 → multicast。Retry-Key はバッチ先頭の行 ID（同じ並びの再送を LINE 側で止める）
       const res = await callLine("multicast", token, { to: batch.map((r) => r.line_user_id), messages: payloads }, batch[0].id);
       const kind = classify(res);
@@ -142,7 +157,7 @@ async function processBroadcast(b, token: string, deadline: number, totals) {
       continue;
     }
 
-    const r = await pushEach(b, token, batch, payloads, true, totals);
+    const r = await pushEach(b, token, batch, payloads, b.has_personalization === true, totals, perRecipient);
     if (r !== "ok") return;
   }
 }
@@ -151,12 +166,13 @@ async function processBroadcast(b, token: string, deadline: number, totals) {
  * 1 人ずつ push（PUSH_CONCURRENCY 件ずつ並列）。
  * 戻り値: ok = 続けてよい / abort = 配信全体を打ち切った（トークン無効）/ pause = 一時的に送れない人がいるので、この回はここまで（残りは次の回）
  */
-async function pushEach(b, token: string, batch, payloads, withName: boolean, totals): Promise<"ok" | "abort" | "pause"> {
+async function pushEach(b, token: string, batch, payloads, withName: boolean, totals, withRecipientLinks = false): Promise<"ok" | "abort" | "pause"> {
   for (let i = 0; i < batch.length; i += PUSH_CONCURRENCY) {
     const group = batch.slice(i, i + PUSH_CONCURRENCY);
     const results = await Promise.all(
       group.map(async (r) => {
-        const messages = withName ? personalize(payloads, r.display_name) : payloads;
+        const named = withName ? personalize(payloads, r.display_name) : payloads;
+        const messages = withRecipientLinks ? fillRecipientLinks(named, r.id) : named;
         const res = await callLine("push", token, { to: r.line_user_id, messages }, r.id);
         return { r, res, kind: classify(res) };
       })

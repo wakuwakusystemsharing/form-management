@@ -19,6 +19,7 @@ import type { AudienceOptions } from './AudienceEditor';
 import { describeAudience } from '@/lib/broadcast-audience';
 import { describeBroadcastItems } from '@/lib/broadcast-items';
 import { formOptionsFromForms, menuNamesFromForms, surveyChoicesFromForms } from '@/lib/broadcast-options';
+import { RESULT_WINDOW_DEFAULT, RESULT_WINDOW_OPTIONS, type BroadcastResult, type BroadcastResultSummary } from '@/lib/broadcast-results';
 import type { Broadcast, BroadcastSettings, BroadcastSticker, BroadcastStatus } from '@/types/broadcast';
 import type { LineFlexMessage } from '@/types/line-flex';
 
@@ -35,7 +36,11 @@ interface RecipientRow {
   status: string;
   error: string | null;
   sent_at: string | null;
+  tapped_at?: string | null;
 }
+
+const yen = (n: number) => `¥${n.toLocaleString('ja-JP')}`;
+const isResultTarget = (b: Broadcast) => b.status === 'sent' || b.status === 'sending' || b.status === 'failed';
 
 const STATUS_LABEL: Record<BroadcastStatus, { label: string; className: string }> = {
   draft: { label: '下書き', className: 'text-muted-foreground' },
@@ -65,6 +70,9 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
   const [cancelling, setCancelling] = useState<Broadcast | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [recipients, setRecipients] = useState<{ total: number; rows: RecipientRow[] } | null>(null);
+  const [resultDays, setResultDays] = useState<number>(RESULT_WINDOW_DEFAULT);
+  const [results, setResults] = useState<Record<string, BroadcastResultSummary>>({});
+  const [detailResultState, setDetailResultState] = useState<{ key: string; result: BroadcastResult } | null>(null);
   const [stickerLabel, setStickerLabel] = useState('');
   const [stickerUploading, setStickerUploading] = useState(false);
 
@@ -105,6 +113,47 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
     const t = setInterval(load, hasSending ? 20000 : 60000);
     return () => clearInterval(t);
   }, [hasSending, hasScheduled, load]);
+
+  // 配信の成果（配信後の予約数・売上）。送信済みの配信が増えたとき・期間を切り替えたときに取り直す
+  const resultKey = broadcasts.filter(isResultTarget).map((b) => `${b.id}:${b.sent_count}`).join(',');
+  useEffect(() => {
+    if (!resultKey) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${base}/broadcasts/results?days=${resultDays}`, { credentials: 'include', cache: 'no-store' });
+        const json = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) setResults(json.results && typeof json.results === 'object' ? json.results : {});
+      } catch {
+        /* 成果は補助情報。取れなくても一覧は使える */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [base, resultDays, resultKey]);
+
+  // 開いている「宛先と結果」の、予約した人の一覧
+  useEffect(() => {
+    if (!detailId) return;
+    const key = `${detailId}:${resultDays}`;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${base}/broadcasts/${detailId}/results?days=${resultDays}`, { credentials: 'include', cache: 'no-store' });
+        const json = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok && json.result) setDetailResultState({ key, result: json.result });
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [base, detailId, resultDays]);
+
+  // 取得済みの成果が、いま開いている配信・期間のものであるときだけ出す
+  const detailResult = detailResultState && detailResultState.key === `${detailId}:${resultDays}` ? detailResultState.result : null;
 
   // 条件の選択肢（タグ・メニュー・フォーム・アンケート）と保存済み LINE メッセージ
   useEffect(() => {
@@ -269,8 +318,18 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
           <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">まだ配信がありません。「新しい配信」から作ってください。</CardContent></Card>
         ) : (
           <div className="space-y-3">
+            {resultKey && (
+              <div className="flex flex-wrap items-center gap-2 text-xs" data-slot="broadcast-result-window">
+                <span className="text-muted-foreground">配信の成果: 配信から</span>
+                {RESULT_WINDOW_OPTIONS.map((d) => (
+                  <Button key={d} size="sm" variant={resultDays === d ? 'default' : 'outline'} className="h-7 px-2.5 text-xs" onClick={() => setResultDays(d)}>{d} 日</Button>
+                ))}
+                <span className="text-muted-foreground">以内に入った予約を数えます（キャンセルを除く）</span>
+              </div>
+            )}
             {broadcasts.map((b) => {
               const st = STATUS_LABEL[b.status];
+              const result = results[b.id];
               return (
                 <Card key={b.id} data-slot="list-item">
                   <CardContent className="space-y-2 p-4">
@@ -293,6 +352,19 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
                             {b.status === 'sent' && b.track_taps && Object.keys(b.links ?? {}).length > 0 && ` ・ ボタンタップ ${totalTaps(b)} 回`}
                           </p>
                         )}
+                        {result && (
+                          <p className="text-xs tabular-nums" data-slot="broadcast-result">
+                            <span className="font-medium text-green-700">成果（{result.days} 日以内）</span>
+                            {result.tracked && (
+                              <>
+                                {' '}タップした人の予約 <span className="font-semibold">{result.tapped.reservations}</span> 件・{yen(result.tapped.revenue)}
+                                <span className="text-muted-foreground"> ／</span>
+                              </>
+                            )}
+                            {' '}受け取った人の予約 <span className={result.tracked ? '' : 'font-semibold'}>{result.received.reservations}</span> 件・{yen(result.received.revenue)}
+                            {result.counting && <span className="ml-1 text-muted-foreground">（集計中）</span>}
+                          </p>
+                        )}
                         {b.error && <p className="text-xs text-destructive">{b.error}</p>}
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center gap-1">
@@ -305,6 +377,47 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
                     </div>
                     {detailId === b.id && (
                       <div className="rounded-md border bg-muted/30 p-2 text-xs">
+                        {detailResult && detailResult.sent > 0 && (
+                          <div className="mb-2 border-b pb-2" data-slot="broadcast-result-detail">
+                            <p className="mb-1 font-medium">
+                              配信の成果（配信から {detailResult.days} 日以内の予約）
+                              {detailResult.counting && <span className="ml-1 font-normal text-muted-foreground">集計中</span>}
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {detailResult.tracked && (
+                                <div className="rounded-md border border-green-300 bg-green-50 px-2 py-1.5">
+                                  <p className="text-[11px] text-green-800">ボタンをタップした人の予約（タップした人 {detailResult.tapped_people} 人）</p>
+                                  <p className="tabular-nums"><span className="text-base font-semibold">{detailResult.tapped.reservations}</span> 件・{yen(detailResult.tapped.revenue)}</p>
+                                </div>
+                              )}
+                              <div className="rounded-md border bg-background px-2 py-1.5">
+                                <p className="text-[11px] text-muted-foreground">受け取った人の予約（送信 {detailResult.sent} 人。参考値）</p>
+                                <p className="tabular-nums"><span className="text-base font-semibold">{detailResult.received.reservations}</span> 件・{yen(detailResult.received.revenue)}</p>
+                              </div>
+                            </div>
+                            {!detailResult.tracked && (
+                              <p className="mt-1 text-[11px] text-muted-foreground">この配信は「誰がボタンをタップしたか」を記録していないため（ボタンが無い / 計測 OFF / この機能より前の配信）、受け取った人の予約だけを表示しています。</p>
+                            )}
+                            <p className="mt-1 text-[11px] text-muted-foreground">※「受け取った人の予約」には、配信と関係なく入った予約も含まれます。</p>
+                            {detailResult.rows.length > 0 && (
+                              <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">
+                                {detailResult.rows.map((row) => (
+                                  <li key={row.recipient_id}>
+                                    {row.reservations.map((rv) => (
+                                      <div key={rv.id} className="flex flex-wrap items-center gap-x-2">
+                                        <span className="font-medium">{row.name}</span>
+                                        {rv.via_tap && <Badge variant="outline" className="border-green-300 bg-green-50 px-1 py-0 text-[10px] text-green-700">タップ経由</Badge>}
+                                        <span className="text-muted-foreground">{fmt(rv.created_at)} に予約</span>
+                                        <span className="truncate">{rv.reservation_date ? `${rv.reservation_date.slice(5).replace('-', '/')} ${rv.reservation_time ?? ''}` : ''} {rv.menu}</span>
+                                        <span className="tabular-nums">{yen(rv.amount)}</span>
+                                      </div>
+                                    ))}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
                         {!recipients ? (
                           <p className="text-muted-foreground">読み込み中…</p>
                         ) : recipients.rows.length === 0 ? (
@@ -318,6 +431,7 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
                                     {r.status === 'sent' ? '送信済み' : r.status === 'failed' ? '失敗' : r.status === 'skipped' ? '見送り' : '待機中'}
                                   </span>
                                   <span className="truncate">{r.display_name || 'お客様'}</span>
+                                  {r.tapped_at && <span className="shrink-0 text-green-700">タップ {fmt(r.tapped_at)}</span>}
                                   {r.error && <span className="truncate text-muted-foreground" title={r.error}>{r.error}</span>}
                                 </li>
                               ))}

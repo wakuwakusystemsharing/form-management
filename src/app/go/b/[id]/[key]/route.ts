@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getBroadcastLinkTarget, incrementBroadcastTap } from '@/lib/broadcast-repository';
+import { getBroadcastLinkTarget, incrementBroadcastTap, recordBroadcastTap } from '@/lib/broadcast-repository';
 import { isBroadcastId } from '@/lib/broadcast-service';
 
 /**
  * GET /go/b/{broadcastId}/{key} - 配信メッセージのボタンの計測リンク
  * タップ数を 1 増やして本来の URL へリダイレクトする（認証なし。URL は店舗が配信したものだけ）
+ * ?r={宛先の行 ID} が付いていれば、誰がタップしたかも記録する（配信の成果の集計用）
  */
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string; key: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string; key: string }> }) {
   const { id, key } = await params;
   if (!isBroadcastId(id) || !/^\d{1,3}$/.test(key)) {
     return NextResponse.json({ error: 'リンクが正しくありません' }, { status: 404 });
@@ -17,5 +18,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
   // 計測は待たない（リダイレクトを遅らせない）
   incrementBroadcastTap(id, key).catch(() => {});
+  const recipientId = new URL(request.url).searchParams.get('r');
+  if (recipientId) recordBroadcastTap(recipientId).catch(() => {});
   return NextResponse.redirect(target, { status: 302, headers: { 'Cache-Control': 'no-store' } });
 }
