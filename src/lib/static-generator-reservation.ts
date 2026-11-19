@@ -13,6 +13,7 @@ import type { HeadingContent } from './menu-headings';
 import { renderCategoryBlocksAt } from './category-content-blocks';
 import { FormConfig } from '@/types/form';
 import { STAFF_SCHEDULE_RUNTIME_JS } from './staff-schedule';
+import { formatNominationFee } from './nomination-fee';
 import { ADVANCE_RULES_RUNTIME_JS } from './advance-rules';
 import { SLOT_MARK_RUNTIME_JS, resolveFewLeftMark, usesStaffCalendars } from './slot-mark';
 import { STAY_CSS, STAY_RUNTIME_JS, renderStayFieldHtml } from './stay-runtime-js';
@@ -2147,7 +2148,25 @@ class BookingForm {
                 totalDuration += visitOptForDuration.duration;
             }
         }
-        return { selectedMenus, selectedOptions, totalPrice, totalDuration, summaryHtml, menuMessageText };
+        // 指名料（スタッフを指名したときだけ、予約 1 件につき 1 回。合計金額に含める）
+        const nominationFee = this.getNominationFee();
+        totalPrice += nominationFee;
+        return { selectedMenus, selectedOptions, totalPrice, totalDuration, summaryHtml, menuMessageText, nominationFee };
+    }
+
+    // 指名料（円）。「指名なし」・未選択・設定なしは 0。src/lib/nomination-fee.ts の staffNominationFee と同じ規則
+    getNominationFee() {
+        // メニュー変更フォーム: いまの予約の指名料のまま（担当は変えられないため）
+        if (this.state.changeSource) {
+            const kept = Math.floor(Number(this.state.changeSource.nomination_fee));
+            return kept > 0 ? kept : 0;
+        }
+        const ss = this.config.staff_selection;
+        const sid = this.state.selectedStaffId;
+        if (!ss || ss.enabled !== true || !sid || sid === 'none') return 0;
+        const member = (ss.staff || []).find(m => m.id === sid);
+        const fee = member ? Math.floor(Number(member.nomination_fee)) : 0;
+        return fee > 0 ? fee : 0;
     }
     
     showSubmenu(categoryId, menuId) {
@@ -2983,6 +3002,10 @@ class BookingForm {
                 items.push(\`<div class="summary-item"><span><strong>担当スタッフ:</strong> \${staffLabel}</span><button class="summary-edit-button" data-field="staff-field">修正</button></div>\`);
             }
         }
+        const summaryNominationFee = this.getNominationFee();
+        if (summaryNominationFee > 0) {
+            items.push('<div class="summary-item"><span><strong>指名料:</strong> ¥' + summaryNominationFee.toLocaleString() + '</span><button class="summary-edit-button" data-field="staff-field">修正</button></div>');
+        }
         const hasMenuSelection = this.config.menu_structure?.allow_cross_category_selection
             ? (this.state.selectedMenus && Object.values(this.state.selectedMenus).flat().length > 0)
             : (this.state.selectedMenu || this.state.selectedSubmenu);
@@ -3330,6 +3353,8 @@ class BookingForm {
                 customerInfo.custom_fields_labeled = labeledFields;
             }
             customerInfo.total_price = totalPrice;
+            // 指名料（合計金額に含まれている。サーバーがフォーム設定で確かめ直す）
+            if (payload.nominationFee > 0) customerInfo.nomination_fee = payload.nominationFee;
             customerInfo.total_duration = totalDuration;
             // 手動モード: 後から「店舗が代理登録した予約」と識別できる印（サーバー側でも強制）
             if (MANUAL_MODE) {
@@ -3510,6 +3535,10 @@ class BookingForm {
                 if (staffMsgLabel) {
                     addMsgSegment('staff', '《担当スタッフ》\\n' + staffMsgLabel);
                 }
+            }
+            // 指名料（指名料のあるスタッフを指名したときだけ）
+            if (payload.nominationFee > 0 && showLineItem('nomination_fee')) {
+                addMsgSegment('staff', '《指名料》\\n¥' + payload.nominationFee.toLocaleString());
             }
 
             // 性別（有効時のみ表示）
@@ -5085,7 +5114,7 @@ ${waitlistBar}
     if (staff.length === 0) return '';
     const requiredMark = ss.required ? ' <span class="required">*</span>' : '';
     const buttons = staff.map(m =>
-      `<button type="button" class="choice-button staff-button" data-staff-id="${this.escapeHtml(m.id)}">${this.escapeHtml(m.name)}</button>`
+      `<button type="button" class="choice-button staff-button" data-staff-id="${this.escapeHtml(m.id)}">${this.escapeHtml(m.name)}${formatNominationFee(m.nomination_fee) ? `<span class="staff-fee">${formatNominationFee(m.nomination_fee)}</span>` : ''}</button>`
     ).join('\n                    ');
     // カレンダー表示モードで、自動割当の対象にしているスタッフが 1 人もいないときは「指名なし」を出さない（全部 ✕ になるため）
     const hasAssignable = bookingMode !== 'calendar' || staff.some(m => m.no_preference_assignable !== false);
@@ -6164,6 +6193,13 @@ ${waitlistBar}
             gap: 1rem;
         }
         
+        .staff-fee {
+            display: block;
+            margin-top: 0.15rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            opacity: 0.8;
+        }
         .choice-button {
             flex: 1;
             padding: 0.75rem 1rem;

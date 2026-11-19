@@ -14,6 +14,7 @@ import { createAdminClient } from '@/lib/supabase';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { listCalendarEventsAll, updateReservationEvent } from '@/lib/google-calendar';
 import { buildEventParamsFromReservation } from '@/lib/reservation-event-params';
+import { reservationNominationFee } from '@/lib/nomination-fee';
 import { calculateTotalAmount, createCustomerVisit, deleteCustomerVisitByReservation, recalculateCustomerStats } from '@/lib/customer-utils';
 import { rescheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
 import { sendEmail } from '@/lib/email-sender';
@@ -269,7 +270,7 @@ async function applyReservationChange(adminClient: any, store: ChangeStore, rese
         visit_time: updated.reservation_time,
         visit_type: 'reservation',
         treatment_menus: updated.selected_menus,
-        amount: calculateTotalAmount(updated.selected_menus, updated.selected_options),
+        amount: calculateTotalAmount(updated.selected_menus, updated.selected_options, updated.customer_info),
       });
       await recalculateCustomerStats(updated.customer_id);
     } catch (e) {
@@ -481,6 +482,8 @@ export interface ChangeSourceForForm {
   menu_text: string;
   staff_id: string | null;
   staff_name: string | null;
+  /** 予約時の指名料（円。無ければ 0）。メニュー変更フォームの合計金額に含める */
+  nomination_fee: number;
   customer_name: string | null;
   customer_phone: string | null;
   selected_menus: unknown;
@@ -512,6 +515,7 @@ export async function getChangeSourceForForm(args: { reservationId: string; stor
       menu_text: menuNamesOf(r),
       staff_id: r.staff_id || null,
       staff_name: r.staff_name || null,
+      nomination_fee: reservationNominationFee(r),
       customer_name: r.customer_name || null,
       customer_phone: r.customer_phone || null,
       selected_menus: Array.isArray(r.selected_menus) ? r.selected_menus : [],
@@ -617,10 +621,14 @@ export async function changeReservationMenu(input: MenuChangeInput): Promise<Men
 
   const first = menus[0] || {};
   const oldInfo = asRecord(reservation.customer_info);
+  const keptNominationFee = reservationNominationFee(reservation);
   const customerInfo = {
     ...oldInfo,
     total_duration: duration,
-    total_price: Number.isFinite(Number(input.totalPrice)) ? Number(input.totalPrice) : sumOf(menus, 'price') + sumOf(options, 'price'),
+    // 指名料のある予約は、指名料（予約時のまま）を必ず含めた金額にする（古い HTML のフォームは指名料を知らないため）
+    total_price: keptNominationFee > 0
+      ? sumOf(menus, 'price') + sumOf(options, 'price') + keptNominationFee
+      : (Number.isFinite(Number(input.totalPrice)) ? Number(input.totalPrice) : sumOf(menus, 'price') + sumOf(options, 'price')),
     custom_fields: { ...asRecord(oldInfo.custom_fields), ...asRecord(input.customFields) },
     custom_fields_labeled: { ...asRecord(oldInfo.custom_fields_labeled), ...asRecord(input.customFieldsLabeled) },
   };

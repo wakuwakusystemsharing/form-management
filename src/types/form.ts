@@ -549,6 +549,8 @@ export interface FormConfig {
       hidden_option_ids?: string[]; // このスタッフ選択時に非表示にするオプションID（メニュー内・カテゴリー共通）
       // 「指名なし」の自動割当の対象にするか（未設定 = true。false = 指名されたときだけ担当する）
       no_preference_assignable?: boolean;
+      // 指名料（円。未設定 = なし）。このスタッフを指名した予約の合計金額に 1 回だけ足す（指名なしの自動割当では足さない）。src/lib/nomination-fee.ts
+      nomination_fee?: number;
       // 希望日時設定（カレンダー表示モードのみ。未設定 / 各項目 undefined = フォームの営業時間・ルール設定）
       schedule?: StaffScheduleSettings;
     }>;
@@ -593,6 +595,7 @@ export interface FormConfig {
     phone?: boolean;           // 《電話番号》
     visit_count?: boolean;     // 《ご来店回数》
     staff?: boolean;           // 《担当スタッフ》
+    nomination_fee?: boolean;  // 《指名料》（指名料のあるスタッフを指名したときだけ）
     menu?: boolean;            // 《メニュー》
     options?: boolean;         // 《メニュー》内のオプション「　└ 名前 ¥価格」行
     total_price?: boolean;     // 《合計金額》
