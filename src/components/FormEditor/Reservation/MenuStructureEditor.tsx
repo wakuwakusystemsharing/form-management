@@ -17,6 +17,7 @@ import SubOptionsEditor from './SubOptionsEditor';
 import { subOptionsFieldsToSave, toSubOptionsEditorValue, type SubOptionsEditorValue } from '@/lib/sub-options';
 import type { CategoryContentBlock } from '@/lib/category-content-blocks';
 import { countStaffScheduleOverrides } from '@/lib/staff-schedule';
+import { formatNominationFee, sanitizeNominationFee, NOMINATION_FEE_MAX } from '@/lib/nomination-fee';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
 
 // テキストブロックの文字色プリセット
@@ -2152,6 +2153,8 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
   const [staffMenuModalIndex, setStaffMenuModalIndex] = useState<number | null>(null);
   // スタッフごとの希望日時設定モーダル
   const [staffScheduleModalIndex, setStaffScheduleModalIndex] = useState<number | null>(null);
+  // 指名料の入力欄を開いているスタッフ（ID）
+  const [staffFeeOpenId, setStaffFeeOpenId] = useState<string | null>(null);
 
   // 画像orテキスト設置ブロック
   const [uploadingBlockId, setUploadingBlockId] = useState<string | null>(null);
@@ -2437,9 +2440,11 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
     });
   };
 
-  const updateStaffMember = (index: number, patch: Partial<{ name: string; calendar_id: string; calendar_name: string; event_color_id: string; hidden_menu_ids: string[]; hidden_option_ids: string[]; schedule: StaffScheduleSettings | undefined; no_preference_assignable: boolean | undefined }>) => {
+  const updateStaffMember = (index: number, patch: Partial<{ name: string; calendar_id: string; calendar_name: string; event_color_id: string; hidden_menu_ids: string[]; hidden_option_ids: string[]; schedule: StaffScheduleSettings | undefined; no_preference_assignable: boolean | undefined; nomination_fee: number | undefined }>) => {
     const staff = [...currentStaffSelection().staff];
     staff[index] = { ...staff[index], ...patch };
+    // 指名料が 0 / 空ならキー自体を消す（= 指名料なし）
+    if ('nomination_fee' in patch && !(sanitizeNominationFee(patch.nomination_fee) > 0)) delete staff[index].nomination_fee;
     // 希望日時設定が空になったらキー自体を消す（= フォームの設定どおり）
     if ('schedule' in patch && !patch.schedule) delete staff[index].schedule;
     // 自動割当の対象（既定）に戻したらキー自体を消す
@@ -2869,7 +2874,52 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                       希望日時設定
                       {countStaffScheduleOverrides(member.schedule) > 0 ? `（${countStaffScheduleOverrides(member.schedule)}項目 個別設定）` : ''}
                     </button>
+                    {/* スタッフごとの指名料（指名した予約の合計金額に 1 回だけ足す） */}
+                    <button
+                      type="button"
+                      data-testid={`staff-fee-button-${index}`}
+                      onClick={() => setStaffFeeOpenId(staffFeeOpenId === member.id ? null : member.id)}
+                      className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
+                    >
+                      指名料設定
+                      {formatNominationFee(member.nomination_fee) ? `（${formatNominationFee(member.nomination_fee)}）` : '（なし）'}
+                    </button>
                   </div>
+                  {staffFeeOpenId === member.id && (
+                    <div className={`mt-2 p-2 rounded-md border ${theme === 'light' ? 'border-gray-200 bg-white' : 'border-gray-600 bg-gray-800'}`}>
+                      <label className={`block text-xs font-medium mb-1 ${themeClasses.text.secondary}`}>指名料（円）</label>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm ${themeClasses.text.secondary}`}>＋</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          max={NOMINATION_FEE_MAX}
+                          step={100}
+                          data-testid={`staff-fee-input-${index}`}
+                          value={member.nomination_fee ?? ''}
+                          onChange={(e) => updateStaffMember(index, { nomination_fee: sanitizeNominationFee(e.target.value) || undefined })}
+                          placeholder="0"
+                          className={`${themeClasses.input} text-sm w-32`}
+                        />
+                        <span className={`text-sm ${themeClasses.text.secondary}`}>円</span>
+                        {sanitizeNominationFee(member.nomination_fee) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => updateStaffMember(index, { nomination_fee: undefined })}
+                            className={`px-2 py-1 text-xs rounded-md ${themeClasses.button.secondary}`}
+                          >
+                            指名料なしに戻す
+                          </button>
+                        )}
+                      </div>
+                      <p className={`text-xs mt-1 ${themeClasses.text.tertiary}`}>
+                        空欄 / 0 = 指名料なし。設定すると、フォームのスタッフのボタンに「{formatNominationFee(member.nomination_fee) || '＋500円'}」と表示し、
+                        このスタッフを指名した予約の合計金額（メニュー・オプションの料金の合計）に 1 回だけ足します。
+                        「指名なし」でこのスタッフに割り当てられたときは足しません。
+                      </p>
+                    </div>
+                  )}
                   {/* 「指名なし」の自動割当の対象にするか（「指名なし」ボタンを表示しているときだけ） */}
                   {form.config?.staff_selection?.allow_no_preference !== false && (
                     <div className="mt-2">

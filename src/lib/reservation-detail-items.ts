@@ -7,6 +7,7 @@
  */
 
 import type { Form } from '@/types/form';
+import { sanitizeNominationFee } from './nomination-fee';
 import { buildStayDetailRows, formatCancelFeeText, isStayReservation } from './stay-display';
 
 export interface DetailReservationInput {
@@ -44,6 +45,7 @@ export interface DetailReservationInput {
     coupon_label?: string;
     custom_fields_labeled?: Record<string, string>;
     total_price?: number;
+    nomination_fee?: number;
     total_duration?: number;
     preferred_date2?: string;
     preferred_time2?: string;
@@ -179,6 +181,10 @@ export function buildReservationDetailItems(config: FormConfigLike, reservation:
     } else if (reservation.staff_no_preference) {
       out.push({ label: '担当スタッフ', value: '指名なし' });
     }
+  }
+  const nominationFee = sanitizeNominationFee(info.nomination_fee);
+  if (show('nomination_fee') && nominationFee > 0) {
+    out.push({ label: '指名料', value: `¥${nominationFee.toLocaleString()}` });
   }
   if (show('gender') && config?.gender_selection?.enabled) {
     const v = info.gender_label || info.gender;
@@ -322,6 +328,8 @@ export function buildAdminReservationRows(config: FormConfigLike, reservation: A
   } else if (reservation.staff_no_preference) {
     rows.push({ label: '担当スタッフ', value: '指名なし' });
   }
+  const adminNominationFee = sanitizeNominationFee(info.nomination_fee);
+  if (adminNominationFee > 0) rows.push({ label: '指名料', value: `¥${adminNominationFee.toLocaleString()}` });
   const gender = info.gender_label || optLabel(config?.gender_selection?.options, info.gender, { male: '男性', female: '女性' });
   if (gender) rows.push({ label: '性別', value: gender });
   const visit = info.visit_count_label || optLabel(config?.visit_count_selection?.options, info.visit_count, { first: '初回', repeat: '2回目以降' });

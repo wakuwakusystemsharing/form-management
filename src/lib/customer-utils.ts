@@ -4,6 +4,7 @@
 
 import { createAdminClient } from '@/lib/supabase';
 import { getAppEnvironment } from '@/lib/env';
+import { reservationNominationFee } from '@/lib/nomination-fee';
 import {
   Customer,
   CustomerInsert,
@@ -594,9 +595,11 @@ export function determineCustomerSegment(customer: Customer): CustomerSegment {
  */
 export function calculateTotalAmount(
   selectedMenus?: any[],
-  selectedOptions?: any[]
+  selectedOptions?: any[],
+  /** 予約の customer_info（スタッフの指名料 nomination_fee があれば足す） */
+  customerInfo?: unknown
 ): number {
-  let total = 0;
+  let total = reservationNominationFee({ customer_info: customerInfo });
 
   // メニューの合計
   if (selectedMenus && Array.isArray(selectedMenus)) {

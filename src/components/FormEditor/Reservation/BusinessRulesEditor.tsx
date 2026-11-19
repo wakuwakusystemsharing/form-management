@@ -2309,6 +2309,7 @@ const BusinessRulesEditor: React.FC<BusinessRulesEditorProps> = ({ form, onUpdat
               { key: 'phone', label: '《電話番号》' },
               { key: 'visit_count', label: '《ご来店回数》' },
               { key: 'staff', label: '《担当スタッフ》' },
+              { key: 'nomination_fee', label: '《指名料》（指名料のあるスタッフを指名したとき）' },
               { key: 'menu', label: '《メニュー》' },
               { key: 'options', label: 'オプション（メニュー直下の「└」行）' },
               { key: 'total_price', label: '《合計金額》' },
