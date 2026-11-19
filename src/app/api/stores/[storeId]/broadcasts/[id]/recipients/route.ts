@@ -21,7 +21,7 @@ export async function GET(request: Request, { params }: Params) {
     });
     // LINE ユーザー ID は画面に不要なので返さない
     return NextResponse.json(
-      { total: result.total, recipients: result.recipients.map((r) => ({ id: r.id, customer_id: r.customer_id, display_name: r.display_name, status: r.status, error: r.error, sent_at: r.sent_at })) },
+      { total: result.total, recipients: result.recipients.map((r) => ({ id: r.id, customer_id: r.customer_id, display_name: r.display_name, status: r.status, error: r.error, sent_at: r.sent_at, tapped_at: r.tapped_at })) },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (error) {
