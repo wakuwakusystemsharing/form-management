@@ -670,7 +670,7 @@ export function scheduleCancelOpeningBroadcast(input: { storeId: string | null |
 // ---------------------------------------------------------------------------
 
 /** 予約確認・キャンセルなど、システムが使う言葉（配信停止 / 再開のキーワードにできない） */
-const SYSTEM_KEYWORDS = ['予約確認', '予約をキャンセル', 'キャンセル', '予約を変更', '空き待ち確認'];
+const SYSTEM_KEYWORDS = ['予約確認', '予約をキャンセル', 'キャンセル', '予約を変更', '空き待ち確認', 'スタッフ登録', 'スタッフ登録解除'];
 
 export async function saveBroadcastSettings(storeId: string, raw: unknown): Promise<ServiceResult<BroadcastSettings>> {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
