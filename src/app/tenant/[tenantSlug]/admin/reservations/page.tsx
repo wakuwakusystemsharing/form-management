@@ -85,6 +85,9 @@ export default function AllReservationsPage() {
   const [editingHiddenNames, setEditingHiddenNames] = useState<boolean>(false);
   const [newHiddenName, setNewHiddenName] = useState<string>('');
   const [exporting, setExporting] = useState<boolean>(false);
+  // 一覧に一度に出す件数（全件を取るようになったので、画面が重くならないよう少しずつ出す。集計は全件が対象）
+  const LIST_PAGE_SIZE = 300;
+  const [listLimit, setListLimit] = useState<number>(LIST_PAGE_SIZE);
   const [activeTab, setActiveTab] = useState<'list' | 'analytics' | 'ranking'>('list');
 
   // 非表示リストを localStorage から復元
@@ -169,6 +172,7 @@ export default function AllReservationsPage() {
     try {
       setLoading(true);
       
+      setListLimit(LIST_PAGE_SIZE);
       const params = new URLSearchParams();
       if (filterStatus !== 'all') {
         params.append('status', filterStatus);
@@ -177,10 +181,13 @@ export default function AllReservationsPage() {
         params.append('store_id', filterStoreId);
       }
 
-      const response = await fetch(`/api/reservations?${params.toString()}`);
+      const response = await fetch(`/api/reservations?${params.toString()}`, { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
-        setReservations(data);
+        setReservations(Array.isArray(data) ? data : []);
+      } else {
+        // 取得できなかったときに前の絞り込みの結果を残さない（集計が別条件のデータになるのを防ぐ）
+        setReservations([]);
       }
     } catch (error) {
       console.error('Failed to fetch reservations:', error);
@@ -253,22 +260,20 @@ export default function AllReservationsPage() {
       }
 
       // ---- アンケート回答数の取得（store×month） ----
+      // 取得できなかったときは、0 件のシートを出さずにダウンロード自体を止める（間違った数字を出さない）
       const surveyCounts = new Map<string, number>();
-      try {
+      {
         const params = new URLSearchParams();
         if (filterStoreId !== 'all') params.append('store_id', filterStoreId);
         const res = await fetch(`/api/surveys/stats?${params.toString()}`, { credentials: 'include' });
-        if (res.ok) {
-          const data = await res.json();
-          (data.stats || []).forEach((e: { store_id: string; month: string; count: number }) => {
-            if (hideTestStores && hiddenStoreIdSet.has(e.store_id)) return;
-            surveyCounts.set(`${e.store_id}\t${e.month}`, e.count);
-            monthSet.add(e.month);
-            storeSet.add(e.store_id);
-          });
-        }
-      } catch (e) {
-        console.error('アンケート回答数の取得に失敗:', e);
+        if (!res.ok) throw new Error(`アンケート回答数の取得に失敗しました（${res.status}）`);
+        const data = await res.json();
+        (data.stats || []).forEach((e: { store_id: string; month: string; count: number }) => {
+          if (hideTestStores && hiddenStoreIdSet.has(e.store_id)) return;
+          surveyCounts.set(`${e.store_id}\t${e.month}`, e.count);
+          monthSet.add(e.month);
+          storeSet.add(e.store_id);
+        });
       }
 
       const months = [...monthSet].sort();
@@ -369,7 +374,10 @@ export default function AllReservationsPage() {
 
       // 出力条件シート
       const infoSheet = workbook.addWorksheet('出力条件');
-      const statusLabel = filterStatus === 'all' ? '全て' : filterStatus;
+      const STATUS_LABELS: Record<string, string> = {
+        all: '全て', pending: '保留中', confirmed: '確認済み', cancelled: 'キャンセル', completed: '完了',
+      };
+      const statusLabel = STATUS_LABELS[filterStatus] || filterStatus;
       const storeLabel = filterStoreId === 'all' ? '全店舗' : storeName(filterStoreId);
       const now = new Date();
       const pad = (n: number) => String(n).padStart(2, '0');
@@ -380,6 +388,8 @@ export default function AllReservationsPage() {
         ['テスト用顧客', hideTestCustomers ? '非表示（除外して集計）' : '含む'],
         ['テスト用店舗', hideTestStores ? `非表示（${hiddenStoreIds.length}店舗を除外）` : '含む'],
         ['備考', '「予約数」はキャンセルを除いた件数です。キャンセルは「キャンセル数」シートを参照。'],
+        ['月の基準', '予約数・キャンセル数は予約日の月、アンケート回答数は回答した日（日本時間）の月です。'],
+        ['絞り込み', 'ステータスとテスト用顧客の絞り込みは予約数・キャンセル数だけに効きます（アンケート回答数は店舗の絞り込みのみ）。'],
       ].forEach(([k, v], i) => {
         infoSheet.getCell(i + 1, 1).value = k;
         infoSheet.getCell(i + 1, 1).font = { bold: true };
@@ -728,7 +738,7 @@ export default function AllReservationsPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredReservations.map((reservation) => (
+                        {filteredReservations.slice(0, listLimit).map((reservation) => (
                           <TableRow key={reservation.id}>
                             <TableCell className="font-medium">
                               {isStayReservation(reservation) ? formatStayRangeShort(reservation) : formatDate(reservation.reservation_date, reservation.reservation_time)}
@@ -753,6 +763,16 @@ export default function AllReservationsPage() {
                         ))}
                       </TableBody>
                     </Table>
+                    {filteredReservations.length > listLimit && (
+                      <div className="text-center pt-4 space-y-2">
+                        <p className="text-xs text-muted-foreground">
+                          {filteredReservations.length} 件中 {listLimit} 件を表示しています（集計ダウンロードは全件が対象です）
+                        </p>
+                        <Button variant="outline" size="sm" onClick={() => setListLimit(listLimit + LIST_PAGE_SIZE)}>
+                          さらに表示
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
