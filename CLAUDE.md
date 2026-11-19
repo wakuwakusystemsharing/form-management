@@ -355,6 +355,16 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - マイグレーション `20261113000000_add_broadcasts.sql`: `broadcasts` / `broadcast_recipients` / `broadcast_automations` / `broadcast_automation_sends` / `broadcast_stickers`、`stores.broadcast_monthly_limit` / `broadcast_over_limit` / `broadcast_opt_out_keyword` / `broadcast_opt_in_keyword` / `broadcast_automation_time`、`customers.line_opt_out_at`、DB 関数 `broadcast_increment_tap`。**staging / production へは Dashboard の SQL Editor で手動適用**
 - Vitest: `broadcast-audience.test.ts` / `broadcast-items.test.ts` / `broadcast-quota-automation.test.ts` / `broadcast-repository.local.test.ts` / `broadcast-service.local.test.ts` / `broadcast-automation-service.local.test.ts`
 
+**朝の「今日の予約まとめ」・月次レポート（店舗スタッフへメール / LINE で自動送信。設計: `docs/朝のまとめ・月次レポート_実装設計.md`、リリース手順: `docs/朝のまとめ・月次レポート_リリース手順.md`）:**
+- 設定は店舗管理者ページの設定タブとテナント側 店舗ページの設定タブの `StoreDigestSettings.tsx`（同じカード。**既定はすべて OFF**）。`DigestSettings { morning: { enabled, time（HH:00。5〜12 時。JST） }, monthly: { enabled }, channels: { email, line }, emails（5 件まで） }`。ON にするには送り先が必要（`validateDigestSettings`）
+- **朝のまとめ**（`buildMorningDigest`）: 今日の予約（キャンセル除く。時刻順）の 時刻・お名前・メニュー・担当、未確認の申し送り（`pickPendingNextVisitNote`）、しるし（新規 = 台帳に無い / 来店 1 回、VIP = 5 万円以上 or 10 回以上、誕生月）、今日の日時への空き待ちの件数。**アレルギー・既往歴は中身を載せず「注意あり」とだけ出す**（要配慮個人情報。Vitest で本文に含まれないことを検査）。**予約が 0 件の日は送らない**（記録は `skipped`）。LINE は Flex 1 通（15 件まで + 「ほか N 件」）、メールは全件
+- **月次レポート**（`computeMonthlyReport(all, month, broadcasts)`）: 予約日がその月の予約（キャンセル除く。`computeReservationAnalytics` / `reservationAmount`）の 予約数・売上・1 件あたり・新規のお客様（その月より前に予約が無い人。顧客 ID → LINE ユーザー ID → 電話番号で特定）・リピート率・キャンセル率・前月比・人気メニュー上位 5・配信の成果（その月に送った配信ごとの送信後 7 日以内の予約 = `computeBroadcastResult` の合計）。集計は保存せず毎回計算する。毎月 1 日（取りこぼし用に 3 日まで）に前月分を送る（`monthlyReportTargetMonth`）
+- **月次レポートの画面**: `MonthlyReportView.tsx`。`/{storeId}/admin?tab=dashboard&report=YYYY-MM`（`report` が空 = 先月）。ダッシュボードの「月次レポートを見る」とメール・LINE のリンクから開く（未ログインでもログイン後にそのまま開く）。月の切り替え（最初の予約の月 〜 今月。`listReportMonths`）。API `GET /api/stores/{storeId}/reports/monthly?month=`
+- **LINE のスタッフ登録（合言葉）**: 設定カードに出る 4 桁の合言葉（店舗ごと。初めて開いたときに作る）を付けて、スタッフが公式 LINE に「スタッフ登録 4821」と送る → Webhook が `handleStaffLineCommand`（配信停止より先。失敗しても他の応答は止めない）で `store_digest_staff` に登録（10 人まで。表示名は LINE のプロフィール）。「スタッフ登録解除」/ 設定カードの「解除」で解除。**合言葉を 5 回間違えると無効**（`recordStaffCodeFailure` → `staff_code = NULL`。「合言葉を出し直す」= `reissueStaffCode` で戻す）。「スタッフ登録」「スタッフ登録解除」は LINE メッセージのキーワード自動応答・配信停止キーワードに登録できない（`RESERVED_KEYWORDS` / `SYSTEM_KEYWORDS`）。画面・API に LINE ユーザー ID は返さない。LINE で送ると公式 LINE の通数を使う（1 回 × スタッフの人数）
+- **送信** `runDueDigests(now, origin, deadline)`（`src/lib/store-digest-service.ts`）: ON の店舗のうち送る時刻を過ぎて `DIGEST_LATE_HOURS` = 3 時間以内（`isDigestTimeDue`）の店舗について、`claimDigestLog(store, kind, 対象日 / 対象月)`（`store_digest_logs` の一意制約）で**送る前に行を確保**してから送る = 回が重なっても 1 回だけ。メールは `sendEmail`（Resend）、LINE は `pushLineMessages`。1 件でも届けば `sent`、全滅は `failed`（理由を `detail` に）。起動は pg_cron `run_store_digest`（毎時 0 分。**本番のみ登録。マイグレーションに含めない**）→ `POST /api/cron/store-digest`（Service Role Key の Bearer。22 秒で切り上げ）。**staging は設定カードの「テスト送信」**（`POST /api/stores/{storeId}/digest/test`。記録に残さず、予約 0 件でも送る）で確認する
+- API（すべて `authorizeStoreAccess`）: `GET/PUT /api/stores/{storeId}/digest`（設定 + 合言葉 + スタッフ + 最近の送信 10 件）、`POST .../digest/staff-code`、`DELETE .../digest/staff/{staffId}`、`POST .../digest/test`
+- 純粋ロジック `src/lib/store-digest.ts`、保存 `src/lib/store-digest-repository.ts`（local は `data/store_digest.json`）。マイグレーション `20261120000000_add_store_digest.sql`（`store_digest_settings` / `store_digest_staff` / `store_digest_logs`。RLS ポリシー無し = service_role のみ。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも既存の動きには影響せず、月次レポートの画面は見られる）。Vitest: `store-digest.test.ts` / `store-digest-service.local.test.ts`
+
 **寄せ書きウォール（匿名の付箋ボード。LINE LIFF 専用）:**
 - 要件定義: `docs/寄せ書きウォール_要件定義書.md`。店舗管理者ページ / テナント側 店舗ページの「寄せ書き」タブ（`walls`。抽選と設定の間）。お客様画面は Next.js ページ `/wall/{storeId}`（`src/components/wall/WallApp.tsx`。静的 HTML ではない）を店舗ごとの LIFF（`wall_boards.liff_id`）で開く
 - **匿名性**: 投稿者は `author_hash` = HMAC-SHA256(店舗 ID + LINE ユーザー ID, `WALL_AUTHOR_HASH_SECRET`)（`src/lib/wall-author-hash.ts`）だけを保存。API の型（`WallPublicPost` / `WallAdminPost`）に hash・ユーザー ID を含めない（Vitest で再帰的に検査）。`wall_posts` / `wall_reports` / `wall_consents` / `wall_moderation_logs` は RLS ポリシー無し（service_role のみ）、`wall_boards` だけ 3 階層ポリシー
@@ -660,6 +670,7 @@ export async function GET(req, { params }) {
 - `follow_messages` - LINE フォローメッセージの配信予定・結果（1 予約 1 行。`status` / `skip_reason` / `scheduled_at` / `sent_at` / `claimed_at`）
 - `reminder_logs` - LINE 予約リマインダーの送信記録（1 予約 × 対象日 = 1 行。二重送信防止・後追い確認）
 - `waitlist_entries` / `waitlist_notifications` - 空き待ち（キャンセル待ち）の登録と通知の記録
+- `store_digest_settings` / `store_digest_staff` / `store_digest_logs` - 朝の「今日の予約まとめ」・月次レポートの設定（合言葉つき）/ LINE で受け取るスタッフ / 送信の記録
 - `wall_boards` / `wall_posts` / `wall_reports` / `wall_consents` / `wall_moderation_logs` / `wall_topics` / `wall_empathies` - 寄せ書きウォール（ボード設定 / 付箋 / 通報 / 同意 / 公開操作の記録 / お題 / 共感。投稿者・共感した人は hash のみ）
 
 **RLS（Row Level Security）:**
@@ -691,6 +702,7 @@ export async function GET(req, { params }) {
 - `20261013000000_add_same_day_reminder.sql` - stores.reminder_same_day_enabled / reminder_same_day_time（当日リマインダー）、reminder_logs.kind + 一意キーの差し替え
 - `20261014000000_add_before_time_reminder.sql` - stores.reminder_before_time_enabled / reminder_before_time_minutes（直前リマインダー）、reminder_logs.kind に before_time
 - `20261101000000_add_stay_reservation.sql` - 宿泊モード: reservations に checkout_date / stay_nights / guest_counts / guest_count / stay_price_total / cancel_fee_percent / cancel_fee_amount / cancelled_at、DB 関数 `stay_insert_reservation_checked`
+- `20261120000000_add_store_digest.sql` - 朝のまとめ・月次レポート: store_digest_settings / store_digest_staff / store_digest_logs
 - `20261009000000_add_wall.sql` - 寄せ書きウォールの 5 テーブル・RLS・DB 関数 `wall_insert_post_checked` / `wall_add_report`
 - `20261010000000_add_wall_daily_max.sql` - wall_boards.daily_max
 - `20261011000000_add_wall_engagement.sql` - 寄せ書きの追加機能（wall_topics / wall_empathies、wall_posts の reaction / topic_id / note_color / note_deco / empathy_count、wall_boards の empathy_* / customer_pick_enabled、DB 関数 `wall_toggle_empathy`）

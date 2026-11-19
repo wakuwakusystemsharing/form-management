@@ -13,6 +13,7 @@ import LotteryDeferredPanel from '@/components/LotteryDeferredPanel';
 import type { LotteryFormWithStats } from '@/types/lottery';
 import StoreAdminManager from '@/components/StoreAdminManager';
 import StoreAdminMenuSettings from '@/components/StoreAdminMenuSettings';
+import StoreDigestSettings from '@/components/StoreDigestSettings';
 import FormHistoryDialog from '@/components/FormHistoryDialog';
 import ReminderTemplateEditor from '@/components/ReminderTemplateEditor';
 import { REMINDER_BEFORE_TIME_OPTIONS, formatMinutesJa } from '@/lib/follow-message-scheduler';
@@ -2487,6 +2488,9 @@ export default function StoreDetailPage() {
 
             {/* 店舗管理者に表示するメニュー */}
             <StoreAdminMenuSettings storeId={storeId} />
+
+            {/* 今日の予約まとめ・月次レポート（スタッフへメール / LINE で自動送信） */}
+            <StoreDigestSettings storeId={storeId} />
 
             {/* 危険ゾーン */}
             <Card className="border-destructive/50">
