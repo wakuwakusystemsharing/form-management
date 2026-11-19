@@ -18,6 +18,7 @@ import AudienceEditor, { type AudienceOptions } from './AudienceEditor';
 import BroadcastItemsEditor, { type ItemJsonState } from './BroadcastItemsEditor';
 import { describeAudience, normalizeAudience } from '@/lib/broadcast-audience';
 import { AUTOMATION_TEMPLATES, AUTOMATION_WINDOW_DAYS, describeAutomationTrigger } from '@/lib/broadcast-automation';
+import { VISIT_CYCLE_MAX_DAYS, VISIT_CYCLE_MIN_DAYS, VISIT_CYCLE_OFFSET_MAX } from '@/lib/broadcast-visit-cycle';
 import {
   CANCEL_OPENING_BUTTON_MAX,
   CANCEL_OPENING_DEFAULT_CARD,
@@ -326,8 +327,49 @@ function TriggerFields({ trigger, onChange, tags, forms, staff, automationTime }
           <p className="text-[11px] text-amber-700">選んだタグのどれかが付いているお客様に、タグごとに 1 回送ります。ON にした時点ですでにタグが付いているお客様にも送られるので、下の人数を確認してください。</p>
         </div>
       );
+    case 'visit_cycle': {
+      const mode = trigger.offset_days < 0 ? 'before' : trigger.offset_days > 0 ? 'after' : 'just';
+      const abs = Math.abs(trigger.offset_days) || 3;
+      const setMode = (m: string) => onChange({ ...trigger, offset_days: m === 'before' ? -abs : m === 'after' ? abs : 0 });
+      return (
+        <div className="space-y-2" data-slot="visit-cycle-fields">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            お客様ごとの「いつもの来店間隔」の
+            <select data-testid="visit-cycle-mode" value={mode} onChange={(e) => setMode(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-xs">
+              <option value="just">ちょうどの日に送る</option>
+              <option value="before">少し前に送る</option>
+              <option value="after">少し後に送る</option>
+            </select>
+            {mode !== 'just' && (
+              <NumberInput value={Math.abs(trigger.offset_days)} min={1} max={VISIT_CYCLE_OFFSET_MAX} suffix={mode === 'before' ? '日前' : '日後'} onChange={(n) => onChange({ ...trigger, offset_days: mode === 'before' ? -n : n })} />
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            例: いつも約 30 日おきに来店するお客様には、最終来店から 30 日{mode === 'before' ? `の ${Math.abs(trigger.offset_days)} 日前` : mode === 'after' ? `の ${Math.abs(trigger.offset_days)} 日後` : ''}に送ります。
+            いつもの来店間隔は、これまでの来店日から自動で計算します（来店 2 回以上のお客様。{VISIT_CYCLE_MIN_DAYS} 日より短い間隔は {VISIT_CYCLE_MIN_DAYS} 日として扱い、1 年を超える間隔のお客様には送りません）。
+          </p>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <label className="inline-flex items-center gap-1.5">
+              <input type="checkbox" data-testid="visit-cycle-first" checked={trigger.first_visit_days !== null} onChange={(e) => onChange({ ...trigger, first_visit_days: e.target.checked ? 45 : null })} />
+              来店が 1 回のお客様にも送る
+            </label>
+            {trigger.first_visit_days !== null && (
+              <>
+                来店から
+                <NumberInput value={trigger.first_visit_days} min={VISIT_CYCLE_MIN_DAYS} max={VISIT_CYCLE_MAX_DAYS} suffix="日後を目安にする" onChange={(n) => onChange({ ...trigger, first_visit_days: n })} />
+              </>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            来店が 1 回のお客様は間隔がまだ分からないため、ここで決めた日数を使います（「少し前 / 少し後」のずらしも同じように効きます）。
+            <span className="font-medium">これからの予約があるお客様には送りません。</span>
+            同じ来店に対して送るのは 1 回だけで、次に来店すると、また間隔がたった頃に送ります。送る日を過ぎてから {AUTOMATION_WINDOW_DAYS} 日以内のお客様が対象です（ON にした日に、長く来店の無いお客様へ一斉に送ることはありません）。
+          </p>
+        </div>
+      );
+    }
     case 'reservation_cancelled':
-      return <CancelOpeningFields trigger={trigger} onChange={onChange} />;
+      return <CancelOpeningFields trigger={trigger} onChange={onChange} />
     case 'weekly_availability':
       return <WeeklyAvailabilityFields trigger={trigger} onChange={onChange} forms={forms} staff={staff} automationTime={automationTime} />;
     default:

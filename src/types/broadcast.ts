@@ -117,6 +117,14 @@ export type AutomationTrigger =
   | { type: 'visits_reached'; counts: number[] } // 来店 N 回目
   | { type: 'tag_added'; tags: string[] } // タグが付いている
   | {
+      // いつもの来店間隔に合わせてお誘い（お客様ごとの平均来店間隔がたった頃に送る。src/lib/broadcast-visit-cycle.ts）
+      type: 'visit_cycle';
+      /** 送る日をずらす日数（マイナス = いつもの間隔の N 日前 / 0 = ちょうど / プラス = N 日後） */
+      offset_days: number;
+      /** 来店 1 回の人（間隔がまだ分からない）に使う目安の日数。null = 来店 1 回の人には送らない */
+      first_visit_days: number | null;
+    }
+  | {
       // 予約フォームでキャンセルが出た時（1 日 1 回の判定ではなく、キャンセルのその場で動く。src/lib/broadcast-cancel-opening.ts）
       type: 'reservation_cancelled';
       /** その日時がいま実際に予約できる状態のときだけ送る */

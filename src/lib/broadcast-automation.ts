@@ -9,6 +9,7 @@
  *   first_visit_after  … `first_visit`（1 人 1 回）
  *   visits_reached     … `visits:{回数}`（回数ごとに 1 回）
  *   tag_added          … `tag:{タグ}`（タグごとに 1 回）
+ *   visit_cycle        … `cycle:{最終来店日}`（来店するたびに 1 回。src/lib/broadcast-visit-cycle.ts）
  *
  * ルールを ON にした日に過去の該当者へ一斉に送ってしまわないよう、日数で決まるきっかけは
  * 「到達してから AUTOMATION_WINDOW_DAYS 日以内」の人だけを対象にする（cron が数日止まっても拾える幅）。
@@ -17,6 +18,7 @@
 import type { AudienceCustomer, AutomationTrigger, BroadcastAudience, CustomerFacts } from '@/types/broadcast';
 import { WEEKLY_DEFAULT_TRIGGER, describeWeeklyAvailabilityTrigger, normalizeWeeklyAvailabilityTrigger } from '@/lib/broadcast-weekly-availability';
 import { daysBetween, isLineBlocked, jstDateOf, matchAudience, toJstDate } from '@/lib/broadcast-audience';
+import { VISIT_CYCLE_DEFAULT_TRIGGER, describeVisitCycleTrigger, normalizeVisitCycleTrigger, visitCycleDueDays } from '@/lib/broadcast-visit-cycle';
 import { CANCEL_OPENING_DEFAULT_TRIGGER, describeCancelOpeningTrigger, normalizeCancelOpeningTrigger } from '@/lib/broadcast-cancel-opening';
 
 export const AUTOMATION_WINDOW_DAYS = 14;
@@ -27,6 +29,7 @@ export const AUTOMATION_TEMPLATES: Array<{ id: AutomationTrigger['type']; label:
   { id: 'first_visit_after', label: '初回来店のお礼', description: '初めての来店から 7 日後にお礼と次回予約の案内を送る', trigger: { type: 'first_visit_after', days: 7 }, resend_after_days: null },
   { id: 'visits_reached', label: '来店 N 回目', description: '来店回数が 5 回・10 回に達した翌日に特別な案内を送る', trigger: { type: 'visits_reached', counts: [5, 10] }, resend_after_days: null },
   { id: 'tag_added', label: 'タグが付いたとき', description: '指定したタグが付いたお客様に、タグに合わせた案内を送る', trigger: { type: 'tag_added', tags: [] }, resend_after_days: null },
+  { id: 'visit_cycle', label: 'いつもの来店間隔に合わせてお誘い', description: 'お客様ごとのいつもの来店間隔がたった頃に「そろそろいかがですか」を送る（これからの予約がある人には送りません）', trigger: VISIT_CYCLE_DEFAULT_TRIGGER, resend_after_days: null },
   { id: 'reservation_cancelled', label: '予約フォームでキャンセルが出た時', description: 'お客様が予約をキャンセルして空きが出たら、ほかのお客様へ「空きが出ました」を一斉に送る', trigger: CANCEL_OPENING_DEFAULT_TRIGGER, resend_after_days: null },
   // すでにこれからの予約が入っている人には送らない（「さらに絞り込む」で外せる）
   { id: 'weekly_availability', label: '特定の曜日に1週間の空き状況', description: '選んだ曜日に、予約フォームのこれから 1 週間の空き状況（〇△✕）を一斉に送る', trigger: WEEKLY_DEFAULT_TRIGGER, resend_after_days: null, audience: { upcoming_reservation: false } },
@@ -57,6 +60,8 @@ export function normalizeAutomationTrigger(raw: unknown): AutomationTrigger | nu
       const tags = Array.isArray(o.tags) ? [...new Set(o.tags.filter((t): t is string => typeof t === 'string' && !!t.trim()).map((t) => t.trim()))].slice(0, 20) : [];
       return tags.length > 0 ? { type: 'tag_added', tags } : null;
     }
+    case 'visit_cycle':
+      return normalizeVisitCycleTrigger(o);
     case 'reservation_cancelled':
       return normalizeCancelOpeningTrigger(o);
     case 'weekly_availability':
@@ -110,6 +115,11 @@ export function evaluateAutomationTrigger(trigger: AutomationTrigger, c: Audienc
       const hit = trigger.tags.find((t) => tags.includes(t));
       return hit ? `tag:${hit}` : null;
     }
+    case 'visit_cycle': {
+      const last = toJstDate(c.last_visit_date);
+      const due = visitCycleDueDays(trigger, c);
+      return due !== null && inWindow(last, due) ? `cycle:${last}` : null;
+    }
     default:
       return null;
   }
@@ -147,6 +157,8 @@ export function describeAutomationTrigger(t: AutomationTrigger): string {
       return `来店 ${t.counts.join('・')} 回目の翌日`;
     case 'tag_added':
       return `タグ ${t.tags.map((x) => `「${x}」`).join('・')} が付いたとき`;
+    case 'visit_cycle':
+      return describeVisitCycleTrigger(t);
     case 'reservation_cancelled':
       return describeCancelOpeningTrigger(t);
     case 'weekly_availability':
@@ -168,7 +180,8 @@ export interface AutomationTarget {
 /**
  * ルールに該当し、いま送ってよい顧客を選ぶ。
  * きっかけに該当（marker あり）→ 追加の絞り込み（audience）に合う → LINE 連携済み・配信停止でない・ブロックされていない（友だちか未確認の人は含める）
- * → 同じ marker を送っていない・再送間隔を過ぎている。同じ LINE ユーザーは 1 人にまとめる
+ * → 同じ marker を送っていない・再送間隔を過ぎている。同じ LINE ユーザーは 1 人にまとめる。
+ * 「いつもの来店間隔」（visit_cycle）は、これからの予約がある人を常に除く（facts に予約を読み込んでおくこと）
  */
 export function pickAutomationTargets(input: {
   trigger: AutomationTrigger;
@@ -192,6 +205,7 @@ export function pickAutomationTargets(input: {
     if (!c.line_user_id || c.line_opt_out_at || isLineBlocked(c)) continue;
     const marker = evaluateAutomationTrigger(input.trigger, c, input.now);
     if (!marker) continue;
+    if (input.trigger.type === 'visit_cycle' && input.facts.get(c.id)?.hasUpcomingReservation) continue;
     if (!matchAudience(c, input.facts.get(c.id), input.audience, input.now)) continue;
     if (!isAutomationSendAllowed(marker, byCustomer.get(c.id) ?? [], input.resend_after_days, input.now)) continue;
     if (seen.has(c.line_user_id)) continue;
