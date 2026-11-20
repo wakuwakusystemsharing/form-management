@@ -10,6 +10,7 @@ import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
 import { getCurrentUserId } from '@/lib/auth-helper';
 import { RESERVATION_FORM_FEATURES } from '@/lib/form-deploy-features';
+import { authorizeStoreAccess } from '@/lib/store-access';
 
 // テンプレート型定義
 type FormTemplate = {
@@ -58,6 +59,9 @@ export async function GET(
 ) {
   try {
     const { storeId } = await params;
+    // フォームの一覧は、その店舗にアクセスできる人だけ（local は認証スキップ）。お客様用のフォームは GET /api/forms/{formId} を使う
+    const auth = await authorizeStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
     const env = getAppEnvironment();
 
     // ローカル環境: JSON から読み込み
@@ -125,6 +129,9 @@ export async function POST(
 ) {
   try {
     const { storeId } = await params;
+    // フォームの作成は、その店舗にアクセスできる人だけ（local は認証スキップ）
+    const auth = await authorizeStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
     const body = await request.json();
     const { form_name, form_type, liff_id, template } = body;
     const env = getAppEnvironment();

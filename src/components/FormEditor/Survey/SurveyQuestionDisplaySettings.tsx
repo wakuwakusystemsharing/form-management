@@ -14,6 +14,7 @@ import {
   isSurveyChoiceQuestion,
   listSurveyTriggerChoices,
 } from '@/lib/survey-visibility';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface Props {
   question: SurveyQuestion;
@@ -41,7 +42,7 @@ export default function SurveyQuestionDisplaySettings({ question: q, index, ques
       formData.append('storeId', storeId);
       formData.append('menuId', `survey_q_${q.id}`);
       if (q.image_url) formData.append('oldImageUrl', q.image_url);
-      const res = await fetch('/api/upload/menu-image', { method: 'POST', body: formData, credentials: 'include' });
+      const res = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: formData, credentials: 'include' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         alert(`アップロードに失敗しました: ${json.error || ''}`);

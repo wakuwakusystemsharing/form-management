@@ -18,6 +18,7 @@ import {
   Store as StoreIcon,
   Lightbulb,
 } from 'lucide-react';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 const SECTIONS = [
   { id: 'store-creation', label: '1. 店舗作成', icon: StoreIcon },
@@ -48,7 +49,7 @@ function HelpPageContent() {
     if (!storeId) return;
     const fetchStore = async () => {
       try {
-        const res = await fetch(`/api/stores/${storeId}`, { credentials: 'include' });
+        const res = await fetchWithAuth(`/api/stores/${storeId}?full=1`, { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           setStore(data);

@@ -3,6 +3,7 @@ import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient, createAuthenticatedClient, checkStoreAccess } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth-helper';
 import { createStoreCalendar, getCalendarClientForStore } from '@/lib/google-calendar';
+import { authorizeStoreAccess } from '@/lib/store-access';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,11 +14,14 @@ export const dynamic = 'force-dynamic';
  * 既に google_calendar_id が設定されている場合は何もせず既存 ID を返す。
  */
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ storeId: string }> }
 ) {
   try {
     const { storeId } = await params;
+    // カレンダーの作成は、その店舗にアクセスできる人だけ
+    const auth = await authorizeStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
     const env = getAppEnvironment();
 
     if (env === 'local') {

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/components/ui/use-toast';
 import { Plus, Trash2, Search, UserPlus, Copy, Pencil, Eye } from 'lucide-react';
 import { getBaseUrl } from '@/lib/env';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface StoreAdmin {
   id: string;
@@ -45,7 +46,7 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
   const fetchAdmins = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/stores/${storeId}/admins`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/admins`, {
         credentials: 'include',
       });
 
@@ -97,7 +98,7 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
 
     try {
       setIsAdding(true);
-      const response = await fetch(`/api/stores/${storeId}/admins`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/admins`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -164,7 +165,7 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
   const handleViewCredentials = async (admin: StoreAdmin) => {
     try {
       setLoadingCredentialsId(admin.user_id);
-      const response = await fetch(`/api/stores/${storeId}/admins/${admin.user_id}/credentials`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/admins/${admin.user_id}/credentials`, {
         credentials: 'include',
       });
       if (response.ok) {
@@ -234,7 +235,7 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
 
     try {
       setIsSaving(true);
-      const response = await fetch(`/api/stores/${storeId}/admins/${editingAdmin.user_id}`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/admins/${editingAdmin.user_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -283,7 +284,7 @@ export default function StoreAdminManager({ storeId }: StoreAdminManagerProps) {
 
     try {
       setDeletingId(userId);
-      const response = await fetch(`/api/stores/${storeId}/admins/${userId}`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/admins/${userId}`, {
         method: 'DELETE',
         credentials: 'include',
       });

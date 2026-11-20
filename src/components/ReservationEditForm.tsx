@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/use-toast';
 import type { FormConfig } from '@/types/form';
 import { isStayReservation } from '@/lib/stay-display';
 import { sanitizeStaySettings } from '@/lib/stay-pricing';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 // 予約詳細モーダル内の「予約内容を編集」フォーム。
 // 予約日時（開始〜終了）・メニュー・オプション・担当スタッフを変更し、PATCH /api/reservations/{id} で
@@ -208,7 +209,7 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
       try {
         const payload: Record<string, unknown> = { reservation_date: date, checkout_date: checkout, guest_counts: guestCounts };
         if (staffList.length > 0 && (staffId || '') !== (reservation.staff_id || '')) payload.staff_id = staffId || null;
-        const res = await fetch(`/api/reservations/${reservation.id}`, {
+        const res = await fetchWithAuth(`/api/reservations/${reservation.id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload),
         });
         const data = await res.json().catch(() => ({}));
@@ -248,7 +249,7 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
       if (staffList.length > 0 && (staffId || '') !== (reservation.staff_id || '')) {
         payload.staff_id = staffId || null;
       }
-      const res = await fetch(`/api/reservations/${reservation.id}`, {
+      const res = await fetchWithAuth(`/api/reservations/${reservation.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

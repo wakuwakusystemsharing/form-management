@@ -16,6 +16,7 @@ import LineFlexAnswerSummary from './LineFlexAnswerSummary';
 import { describeFlexContents, formLiffUrl, LINE_FLEX_TEMPLATES, resolveFlexContents } from '@/lib/line-flex-templates';
 import { describeLineFlexItems } from '@/lib/line-flex-items';
 import type { LineFlexMessage } from '@/types/line-flex';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 export default function LineFlexPanel({ storeId }: { storeId: string }) {
   const { toast } = useToast();
@@ -59,8 +60,8 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
     (async () => {
       try {
         const [storeRes, formsRes] = await Promise.all([
-          fetch(`/api/stores/${encodeURIComponent(storeId)}`, { credentials: 'include', cache: 'no-store' }),
-          fetch(`/api/stores/${encodeURIComponent(storeId)}/forms`, { credentials: 'include', cache: 'no-store' }),
+          fetchWithAuth(`/api/stores/${encodeURIComponent(storeId)}?full=1`, { credentials: 'include', cache: 'no-store' }),
+          fetchWithAuth(`/api/stores/${encodeURIComponent(storeId)}/forms`, { credentials: 'include', cache: 'no-store' }),
         ]);
         if (cancelled) return;
         if (storeRes.ok) {

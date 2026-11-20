@@ -21,6 +21,7 @@ import { Copy, Eye, History, Save, Upload } from 'lucide-react';
 
 import { getReservationFormName } from '@/lib/form-display-name';
 import { validateFormExtraMessages } from '@/lib/extra-messages';
+import { fetchWithAuth } from '@/lib/client-auth';
 export type EditableForm = Form | SurveyForm | LotteryForm;
 
 interface FormEditModalProps {
@@ -132,7 +133,7 @@ const FormEditModal: React.FC<FormEditModalProps> = ({
           ? `/api/surveys/${editingForm.id}/deploy`
           : `/api/forms/${editingForm.id}/deploy`;
 
-      const deployResponse = await fetch(endpoint, {
+      const deployResponse = await fetchWithAuth(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
