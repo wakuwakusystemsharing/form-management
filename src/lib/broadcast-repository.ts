@@ -12,6 +12,7 @@ import { createAdminClient } from '@/lib/supabase';
 import { fetchAllRows } from '@/lib/supabase-fetch-all';
 import { normalizeAudience, type FactReservation, type FactSurvey, type FactVisit } from '@/lib/broadcast-audience';
 import { normalizeBroadcastItems } from '@/lib/broadcast-items';
+import { isBuiltinStickerId, listBuiltinStickers } from '@/lib/broadcast-builtin-stickers';
 import { jstMonthRange, normalizeBroadcastSettings } from '@/lib/broadcast-quota';
 import { normalizeAutomationTrigger, normalizeResendAfterDays } from '@/lib/broadcast-automation';
 import type { ResultRecipient, ResultReservation } from '@/lib/broadcast-results';
@@ -336,7 +337,7 @@ export async function deleteBroadcastAutomation(storeId: string, id: string): Pr
 // スタンプ
 // ---------------------------------------------------------------------------
 
-/** 共通（store_id NULL）+ その店舗のスタンプ。共通が先 */
+/** 最初から入っているスタンプ + 共通（store_id NULL）+ その店舗のスタンプ。この順 */
 export async function listBroadcastStickers(storeId: string): Promise<BroadcastSticker[]> {
   let rows: BroadcastSticker[];
   if (isLocal()) {
@@ -346,7 +347,8 @@ export async function listBroadcastStickers(storeId: string): Promise<BroadcastS
     if (error) throw new Error(`スタンプの取得に失敗しました: ${error.message}`);
     rows = ((data ?? []) as Record<string, unknown>[]).map(normalizeStickerRow);
   }
-  return rows.sort((a, b) => (a.store_id === null ? 0 : 1) - (b.store_id === null ? 0 : 1) || a.sort - b.sort || a.label.localeCompare(b.label, 'ja'));
+  rows.sort((a, b) => (a.store_id === null ? 0 : 1) - (b.store_id === null ? 0 : 1) || a.sort - b.sort || a.label.localeCompare(b.label, 'ja'));
+  return [...listBuiltinStickers(), ...rows];
 }
 
 export async function insertBroadcastSticker(input: { store_id: string; label: string; url: string; preview_url?: string; sort?: number }): Promise<BroadcastSticker> {
@@ -364,6 +366,8 @@ export async function insertBroadcastSticker(input: { store_id: string; label: s
 
 /** 店舗が追加したスタンプだけ削除できる（共通分は消せない） */
 export async function deleteBroadcastSticker(storeId: string, id: string): Promise<boolean> {
+  // 最初から入っているスタンプは DB に無い（削除できない）
+  if (isBuiltinStickerId(id)) return false;
   if (isLocal()) {
     const data = readLocal();
     const before = data.stickers.length;

@@ -105,8 +105,13 @@ describe('店舗設定・スタンプ・自動配信（local）', () => {
   it('スタンプは自店舗の分だけ削除できる', async () => {
     const s = await repo.insertBroadcastSticker({ store_id: 'st0001', label: 'ありがとう', url: 'https://cdn/a.png' });
     expect(s.preview_url).toBe('https://cdn/a.png');
-    expect((await repo.listBroadcastStickers('st0001')).map((x) => x.id)).toEqual([s.id]);
-    expect(await repo.listBroadcastStickers('st0002')).toEqual([]);
+    // 最初から入っているスタンプ（共通 10 個）が先、店舗の画像はその後ろ
+    const mine = await repo.listBroadcastStickers('st0001');
+    expect(mine.filter((x) => x.store_id).map((x) => x.id)).toEqual([s.id]);
+    expect(mine.slice(0, 10).every((x) => x.id.startsWith('builtin:'))).toBe(true);
+    expect((await repo.listBroadcastStickers('st0002')).filter((x) => x.store_id)).toEqual([]);
+    // 最初から入っているスタンプは削除できない
+    expect(await repo.deleteBroadcastSticker('st0001', 'builtin:thanks')).toBe(false);
     expect(await repo.deleteBroadcastSticker('st0002', s.id)).toBe(false);
     expect(await repo.deleteBroadcastSticker('st0001', s.id)).toBe(true);
   });

@@ -9,6 +9,7 @@
  */
 import type { BroadcastItem } from '@/types/broadcast';
 import type { FlexContainer } from '@/types/line-flex';
+import { resolveStickerUrl } from '@/lib/broadcast-builtin-stickers';
 import { LINE_TEXT_MESSAGE_MAX, validateLineFlexItem, type PreviewMessage } from '@/lib/line-flex-items';
 import { instrumentFlexLinks, LINE_FLEX_ALT_TEXT_MAX, LINE_FLEX_MAX_JSON_BYTES, payloadBytes, validateFlexContents } from '@/lib/line-flex-templates';
 
@@ -127,8 +128,11 @@ export function buildBroadcastPayloads(args: BuildBroadcastPayloadsArgs): { payl
         break;
       case 'sticker': {
         const s = args.stickers[item.sticker_id];
-        if (!s || !/^https:\/\//i.test(s.url)) return fail(`${at}（スタンプ）の画像が見つかりません`);
-        payloads.push({ type: 'image', originalContentUrl: s.url, previewImageUrl: s.preview_url && /^https:\/\//i.test(s.preview_url) ? s.preview_url : s.url });
+        // 最初から入っているスタンプはサイト内のパスなので、絶対 URL にしてから渡す
+        const url = resolveStickerUrl(s?.url, args.origin);
+        const preview = resolveStickerUrl(s?.preview_url, args.origin);
+        if (!s || !/^https:\/\//i.test(url)) return fail(`${at}（スタンプ）の画像が見つかりません`);
+        payloads.push({ type: 'image', originalContentUrl: url, previewImageUrl: /^https:\/\//i.test(preview) ? preview : url });
         break;
       }
       case 'flex': {
