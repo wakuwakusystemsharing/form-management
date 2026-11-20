@@ -189,8 +189,8 @@ export interface BroadcastSticker {
   url: string;
   preview_url: string;
   sort: number;
-  /** 最初から入っているスタンプのジャンル（あいさつ / お知らせ / 季節・お祝い）。店舗が追加した画像には無い */
-  genre?: 'greeting' | 'notice' | 'season';
+  /** 最初から入っているスタンプのジャンル（あいさつ / お知らせ / 季節・お祝い / 業種別）。店舗が追加した画像には無い */
+  genre?: import('@/lib/broadcast-builtin-stickers').StickerGenreId;
 }
 
 /** 店舗ごとの配信設定（stores の列） */
