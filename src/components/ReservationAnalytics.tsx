@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChipFilter, ChipTabsList } from '@/components/customers/ChipTabs';
+import ReservationSourcesPanel from '@/components/ReservationSourcesPanel';
 import { StatGrid, StatTile } from '@/components/customers/StatTile';
 import {
   ANALYTICS_PERIOD_OPTIONS,
@@ -330,8 +331,14 @@ export default function ReservationAnalytics({ storeId, defaultPeriod = 'last_12
             { value: 'time', label: '時間帯分析' },
             { value: 'customers', label: '顧客属性' },
             { value: 'revenue', label: '売上分析' },
+            { value: 'sources', label: '流入経路' },
           ]}
         />
+
+        {/* 流入経路（置き場所ごとの URL / QR コード） */}
+        <TabsContent value="sources" className="mt-3">
+          <ReservationSourcesPanel storeId={storeId} />
+        </TabsContent>
 
         {/* 概要 */}
         <TabsContent value="overview" className="space-y-3 md:space-y-4 mt-3">

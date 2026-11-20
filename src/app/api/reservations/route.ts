@@ -14,6 +14,7 @@ import { sendReservationEmails } from '@/lib/reservation-email';
 import { scheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
 import { onReservationCreatedForWaitlist } from '@/lib/waitlist-service';
 import { applyReservationCustomFieldTags } from '@/lib/reservation-tags-apply';
+import { attachReservationSource, resolveActiveSourceCode } from '@/lib/reservation-source-repository';
 import { applyNominationFeeToCustomerInfo } from '@/lib/nomination-fee';
 import { isStayMode, prepareStayReservation, type StayPrepared } from '@/lib/stay-reservation';
 import { sanitizeStaySettings } from '@/lib/stay-pricing';
@@ -674,6 +675,10 @@ export async function POST(request: Request) {
         });
       }
 
+      // 流入経路: フォームが送ってきた合言葉が、この店舗の有効な経路のものなら記録する（手動予約では記録しない）
+      const localSourceCode = isManualEntry ? null : await resolveActiveSourceCode(body.store_id, (body as { source_code?: unknown }).source_code);
+      if (localSourceCode) (newReservation as any).source_code = localSourceCode;
+
       reservations.push(newReservation);
       writeReservations(reservations);
 
@@ -1284,6 +1289,13 @@ export async function POST(request: Request) {
     // 空き待ち: この人の同じ日時の空き待ちを「予約済み」にし、同じ枠を待っていたほかの人へのおわびを見回る
     // （有効な空き待ちが無い店舗では何もしない。失敗しても予約は成功扱い）
     await onReservationCreatedForWaitlist({ storeId: body.store_id, lineUserId: body.line_user_id, date: body.reservation_date, time: body.reservation_time });
+
+    // 流入経路: 予約を保存した「あと」に別の更新として記録する（列が未適用の環境でも予約の保存を止めないため）。
+    // 合言葉がこの店舗の有効な経路のものでなければ何もしない。失敗しても予約は成功扱い。手動予約では記録しない
+    if (!isManualEntry && (body as { source_code?: unknown }).source_code) {
+      const sourceCode = await resolveActiveSourceCode(body.store_id, (body as { source_code?: unknown }).source_code);
+      await attachReservationSource(body.store_id, reservation.id, sourceCode);
+    }
 
     return NextResponse.json(reservation, { status: 201 });
   } catch (error) {
