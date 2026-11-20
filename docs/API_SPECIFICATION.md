@@ -716,12 +716,12 @@ Supabase StorageからフォームHTMLをプロキシ配信
 ### `POST /api/webhooks/line`
 LINE Messaging API からの Webhook イベントを受信
 
-**認証**: 不要（署名検証を実施）
+**認証**: 不要（店舗の指定はクエリ `storeId`）
 
 **リクエストヘッダー**:
 - `x-line-signature`: LINE が付与する HMAC-SHA256 署名
 
-**署名検証**: `LINE_CHANNEL_SECRET` で HMAC-SHA256 署名を検証（不正リクエストを拒否）
+**署名チェック**: チャネルシークレットを登録した店舗だけ確認する（合わなければ `401 { error: '署名が正しくありません' }`）。**未登録の店舗は確認せずに受け付ける**。登録は下の `line-webhook` API
 
 **処理内容**:
 - 予約確認・キャンセルメッセージの受信と処理
@@ -731,6 +731,38 @@ LINE Messaging API からの Webhook イベントを受信
 ```json
 { "success": true }
 ```
+
+### `GET / PUT / DELETE /api/stores/{storeId}/line-webhook`
+LINE Webhook の署名チェックの設定（チャネルシークレット）
+
+**認証**: 運営（マスター管理者・システム管理者）だけ。店舗管理者は 403。local は認証スキップ
+
+- `GET`: 状態を返す
+- `PUT`: `{ "channel_secret": "英数字 32 文字" }` を登録 / 上書き（形式が違えば 400）
+- `DELETE`: 削除（署名のチェックをやめる）
+
+**レスポンス**（3 つとも同じ。シークレットそのものは返さない）:
+```json
+{ "secret_set": true, "updated_at": "2026-11-20T00:00:00.000Z", "webhook_url": "https://…/api/webhooks/line?storeId=abc123" }
+```
+
+### `POST /api/stores/{storeId}/line-webhook/test`
+接続を確認（LINE に登録されている Webhook URL がこの店舗のものか + LINE からテストの通知を受け取れるか）。local では 400
+
+**認証**: 運営だけ
+
+**レスポンス**:
+```json
+{
+  "ok": true,
+  "endpoint": "https://…/api/webhooks/line?storeId=abc123",
+  "active": true,
+  "endpoint_status": "same",
+  "test_success": true,
+  "messages": ["LINE からの通知を受け取れました。署名のチェックも通っています。"]
+}
+```
+`endpoint_status`: `same`（この店舗）/ `other_store`（このシステムの別の店舗）/ `other`（別の URL）/ `none`（未登録）/ `unknown`（取得できない）
 
 ---
 

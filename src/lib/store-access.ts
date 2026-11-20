@@ -10,7 +10,7 @@
 import { NextResponse } from 'next/server';
 import { getAppEnvironment } from '@/lib/env';
 import { checkStoreAccess, createAuthenticatedClient } from '@/lib/supabase';
-import { getCurrentUser } from '@/lib/auth-helper';
+import { getCurrentUser, getCurrentUserRole } from '@/lib/auth-helper';
 
 export interface StoreAccessResult {
   response: NextResponse | null;
@@ -54,4 +54,19 @@ export async function authorizeStoreAccess(request: Request, storeId: string): P
   }
 
   return { response: null, user };
+}
+
+/**
+ * 弊社（マスター管理者・システム管理者）だけが行える操作の認可チェック。
+ * 店舗へのアクセス権に加えて、役割が master / system であることを確認する（店舗管理者は 403）。
+ * 画面でボタンを隠すだけにせず、API 側でも必ずこれを通す。local 環境は認証スキップ
+ */
+export async function authorizeUpperAdminStoreAccess(request: Request, storeId: string): Promise<StoreAccessResult> {
+  const auth = await authorizeStoreAccess(request, storeId);
+  if (auth.response || getAppEnvironment() === 'local') return auth;
+  const role = await getCurrentUserRole(request);
+  if (role?.role !== 'master' && role?.role !== 'system') {
+    return { response: NextResponse.json({ error: 'この操作は管理者（運営）だけが行えます' }, { status: 403 }), user: auth.user };
+  }
+  return auth;
 }
