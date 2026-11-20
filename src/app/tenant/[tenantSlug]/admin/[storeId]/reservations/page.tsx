@@ -86,7 +86,7 @@ export default function AdminStoreReservationsPage() {
         params.append('search', debouncedSearch);
       }
 
-      const response = await fetch(`/api/stores/${storeId}/reservations?${params.toString()}`);
+      const response = await fetchWithAuth(`/api/stores/${storeId}/reservations?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
         setReservations(data);

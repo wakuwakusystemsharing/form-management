@@ -560,6 +560,17 @@ export async function GET(req, { params }) {
 - 運営だけの操作は `authorizeUpperAdminStoreAccess(request, storeId)`（店舗管理者は 403）。画面でボタンを隠すだけにしない
 - Vitest: `store-view.test.ts` / `store-api-auth.test.ts`
 
+**管理用の API は必ず認可チェックを通す（`src/lib/store-access.ts`）:**
+- 以前は、次の API がログインなしで呼べた（お客様の名前・電話番号・アンケートの回答が読める、フォームを書き換え・削除できる、店舗管理者を追加できる、画像置き場のファイルを消せる）。**新しい管理用の API を作るときは、ハンドラの最初で下のどれかを必ず呼ぶ**。`getCurrentUserId` は「誰が変更したか」の記録用で、認可にはならない
+  - `authorizeStoreAccess(request, storeId)` … URL に店舗 ID がある API（マスター / 同じテナントのシステム管理者 / その店舗の店舗管理者）: `GET /api/stores/{storeId}/reservations`・`forms`（GET / POST）・`surveys`（GET / POST）・`surveys/responses`・`POST .../calendar`・`POST / DELETE /api/upload/menu-image`
+  - `authorizeRecordStoreAccess(request, 'reservation_form' | 'survey_form' | 'reservation', id)` … フォーム ID・アンケート ID・予約 ID で呼ぶ API。行の店舗を調べてから確認する（行が無ければ 404）: `PUT / DELETE /api/forms/{formId}`・`.../deploy`・`.../duplicate`、`PUT / DELETE /api/surveys/{id}`・`.../deploy`・`.../duplicate`、`PATCH /api/reservations/{reservationId}`
+  - `authorizeUpperAdminStoreAccess(request, storeId)` … 運営だけ（店舗管理者は自分の店舗でも 403）: `GET / POST /api/stores/{storeId}/admins`・`DELETE .../admins/{userId}`、店舗の更新・削除
+  - どれも local 環境は認証スキップ。未ログイン = 401 / 別の店舗 = 403
+- **ログインなしで呼べるままにしている API（お客様のフォームが使う）**: `GET /api/forms/{formId}`・`GET /api/surveys/{id}`・`GET /api/lotteries/{id}`・`POST /api/reservations`・`POST /api/surveys/submit`・空き状況（`calendar/availability`・`stay/availability`）・`change-source` / `change-menu` / `waitlist`（LINE ユーザー ID で本人確認）・抽選 / 寄せ書き（LIFF の ID トークン）・Webhook・`POST /api/preview/generate`
+- **画面からは `fetchWithAuth`（`src/lib/client-auth.ts`）で呼ぶ**: Cookie のログイン情報は約 1 時間で切れる。`fetchWithAuth` は 401 のとき Cookie を取り直して 1 回だけ再試行する。素の `fetch` だと、画面を開いたまましばらく置いたあとの操作が失敗する
+- 画像のアップロードは、店舗 ID と画像の名前（`menuId` / `submenuId`）に英数字・`_`・`.`・`-` だけを通す。削除できるのは `menu_images/{storeId}/` と `submenu_images/{storeId}/` の下だけ（フォームの HTML などは消せない）
+- Vitest: `admin-api-auth.test.ts`（各 API の 未ログイン 401 / 別の店舗 403 / 運営だけの操作 403）
+
 ### フォーム固有の API:
 - `GET /api/forms/{formId}` - 公開エンドポイント（顧客アクセス）
 - `PUT /api/forms/{formId}` - 保護（店舗管理者）

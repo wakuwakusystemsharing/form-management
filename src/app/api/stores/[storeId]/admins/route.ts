@@ -4,6 +4,7 @@ import { isServiceAdmin } from '@/lib/supabase';
 import { getAppEnvironment } from '@/lib/env';
 import fs from 'fs';
 import path from 'path';
+import { authorizeUpperAdminStoreAccess } from '@/lib/store-access';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -14,6 +15,9 @@ export async function GET(
 ) {
   try {
     const { storeId } = await params;
+    // 店舗管理者の一覧は運営だけ（local は認証スキップ）
+    const auth = await authorizeUpperAdminStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
     
     // 認証チェック（サービス管理者のみ）
     const authHeader = request.headers.get('authorization');
@@ -120,6 +124,9 @@ export async function POST(
 ) {
   try {
     const { storeId } = await params;
+    // 店舗管理者の追加（ログインできる人を増やす操作）は運営だけ（local は認証スキップ）
+    const auth = await authorizeUpperAdminStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
     const body = await request.json();
     const { email, password, createUser = false } = body;
 

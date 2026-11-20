@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { ArrowLeft, Calendar, BarChart3 } from 'lucide-react';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface Reservation {
   id: string;
@@ -50,7 +51,7 @@ export default function StoreReservationsPage() {
         params.append('status', filterStatus);
       }
 
-      const response = await fetch(`/api/stores/${storeId}/reservations?${params.toString()}`);
+      const response = await fetchWithAuth(`/api/stores/${storeId}/reservations?${params.toString()}`);
       if (response.ok) {
         const data = await response.json();
         setReservations(data);

@@ -5,6 +5,7 @@ import { SurveyForm } from '@/types/survey';
 import { getAppEnvironment } from '@/lib/env';
 import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
+import { authorizeRecordStoreAccess } from '@/lib/store-access';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -23,6 +24,9 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    // 複製は、その店舗にアクセスできる人だけ（local は認証スキップ）
+    const auth = await authorizeRecordStoreAccess(request, 'survey_form', id);
+    if (auth.response) return auth.response;
     const env = getAppEnvironment();
     const now = new Date().toISOString();
 

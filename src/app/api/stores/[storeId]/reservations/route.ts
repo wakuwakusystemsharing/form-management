@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { authorizeStoreAccess } from '@/lib/store-access';
 
 // 予約データの型定義（簡易版）
 interface Reservation {
@@ -60,6 +61,9 @@ export async function GET(
 ) {
   try {
     const { storeId } = await params;
+    // 予約の一覧（お客様の名前・電話番号を含む）は、その店舗にアクセスできる人だけ（local は認証スキップ）
+    const auth = await authorizeStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const dateFrom = searchParams.get('date_from');

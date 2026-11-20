@@ -9,7 +9,7 @@
  */
 import { NextResponse } from 'next/server';
 import { getAppEnvironment } from '@/lib/env';
-import { checkStoreAccess, createAuthenticatedClient, isServiceAdmin } from '@/lib/supabase';
+import { checkStoreAccess, createAuthenticatedClient, getSupabaseAdminClient, isServiceAdmin } from '@/lib/supabase';
 import { getCurrentUser, getCurrentUserRole } from '@/lib/auth-helper';
 
 export interface StoreAccessResult {
@@ -99,4 +99,36 @@ export async function resolveStoreViewer(request: Request, storeId: string): Pro
   } catch {
     return { viewer: 'public', master: false };
   }
+}
+
+/** ID から店舗をたどって認可するときの対象（テーブル名と、見つからないときの文言） */
+const RECORD_TABLES = {
+  reservation_form: { table: 'reservation_forms', notFound: 'フォームが見つかりません' },
+  survey_form: { table: 'survey_forms', notFound: 'フォームが見つかりません' },
+  reservation: { table: 'reservations', notFound: '予約が見つかりません' },
+} as const;
+export type StoreRecordKind = keyof typeof RECORD_TABLES;
+
+/**
+ * フォーム ID・アンケート ID・予約 ID で呼ばれる管理 API の認可チェック。
+ * その行が属する店舗を調べてから、店舗へのアクセス権（マスター / システム管理者 / 店舗管理者）を確認する。
+ * - local 環境: 認証スキップ
+ * - 行が無い: 404 / 未ログイン: 401 / 別の店舗: 403
+ * 成功時は storeId（その行の店舗）も返す
+ */
+export async function authorizeRecordStoreAccess(request: Request, kind: StoreRecordKind, id: string): Promise<StoreAccessResult & { storeId: string | null }> {
+  if (getAppEnvironment() === 'local') return { response: null, user: null, storeId: null };
+  const def = RECORD_TABLES[kind];
+  const adminClient = getSupabaseAdminClient();
+  if (!adminClient) return { response: NextResponse.json({ error: 'Supabase 接続エラー' }, { status: 500 }), user: null, storeId: null };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (adminClient as any).from(def.table).select('store_id').eq('id', id).maybeSingle();
+  if (error) {
+    console.error('[authorizeRecordStoreAccess] lookup error:', error.message);
+    return { response: NextResponse.json({ error: '権限の確認に失敗しました' }, { status: 500 }), user: null, storeId: null };
+  }
+  const storeId = typeof data?.store_id === 'string' ? data.store_id : null;
+  if (!storeId) return { response: NextResponse.json({ error: def.notFound }, { status: 404 }), user: null, storeId: null };
+  const auth = await authorizeStoreAccess(request, storeId);
+  return { ...auth, storeId };
 }

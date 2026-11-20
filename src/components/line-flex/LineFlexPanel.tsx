@@ -61,7 +61,7 @@ export default function LineFlexPanel({ storeId }: { storeId: string }) {
       try {
         const [storeRes, formsRes] = await Promise.all([
           fetchWithAuth(`/api/stores/${encodeURIComponent(storeId)}?full=1`, { credentials: 'include', cache: 'no-store' }),
-          fetch(`/api/stores/${encodeURIComponent(storeId)}/forms`, { credentials: 'include', cache: 'no-store' }),
+          fetchWithAuth(`/api/stores/${encodeURIComponent(storeId)}/forms`, { credentials: 'include', cache: 'no-store' }),
         ]);
         if (cancelled) return;
         if (storeRes.ok) {
