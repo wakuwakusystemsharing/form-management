@@ -546,11 +546,19 @@ export async function GET(req, { params }) {
 ## API 規約
 
 ### RESTful パターン:
-- `GET /api/stores` - 全店舗一覧
-- `POST /api/stores` - 店舗作成
-- `GET /api/stores/{storeId}` - 店舗詳細取得
-- `PUT /api/stores/{storeId}` - 店舗更新
-- `DELETE /api/stores/{storeId}` - 店舗削除（フォームもカスケード削除）
+- `GET /api/stores` - 店舗一覧（**運営だけ**。マスター = 全店舗 / システム管理者 = 同じテナント / 店舗管理者 = 403 / 未ログイン = 401）
+- `POST /api/stores` - 店舗作成（運営だけ）
+- `GET /api/stores/{storeId}` - 店舗詳細取得（**見ている人で内容が変わる**。下の「店舗情報の出し分け」）
+- `PUT /api/stores/{storeId}` - 店舗更新（運営だけ）
+- `DELETE /api/stores/{storeId}` - 店舗削除（運営だけ。フォームもカスケード削除）
+
+**店舗情報の出し分け（`src/lib/store-view.ts` の `toStoreView(store, viewer)`）:**
+- 店舗の行には外に出してはいけない値（`line_channel_access_token` = 公式 LINE を操作できる鍵、`google_calendar_refresh_token`）が入っているので、**`stores` を `select('*')` した結果をそのまま返さない**。以前は `GET /api/stores` / `GET・PUT・DELETE /api/stores/{storeId}` がログインなしで呼べて、全店舗の LINE のトークンが読める・店舗を書き換えられる状態だった
+- `viewer`（`src/lib/store-access.ts` の `resolveStoreViewer`）: `public`（未ログイン / その店舗にアクセスできない）= `id` / `name` / `logo_url` / `theme_color` だけ（店舗管理者ページのログイン画面が使う）、`store`（店舗管理者）= 鍵を除いた店舗情報 + `line_channel_access_token_set`、`upper`（運営。移行期間中の旧サービス管理者 = `isServiceAdmin` を含む）= LINE のトークンを含む（店舗編集の入力欄で使う）。`google_calendar_refresh_token` は誰にも返さない
+- **管理画面からは `fetchWithAuth(`/api/stores/${storeId}?full=1`)` で呼ぶ**: `?full=1` はログインが切れていると 401（その店舗にアクセスできなければ 403）を返すので、`fetchWithAuth` が Cookie を取り直して再試行する。付けないと、ログインが切れたときに「店舗名だけ」が 200 で返り、画面が設定の無い店舗として動いてしまう（店舗管理者に表示するメニューの設定が効かず全タブが出る、など）。ログイン前の画面だけ `?full=1` なしで呼ぶ
+- 更新は `sanitizeStoreUpdate(body, { isMaster })` を通す（`id` / `created_at` / `google_calendar_refresh_token` / 表示用の `*_set` を取り除く。`org_id` = テナントの付け替えはマスター管理者だけ）
+- 運営だけの操作は `authorizeUpperAdminStoreAccess(request, storeId)`（店舗管理者は 403）。画面でボタンを隠すだけにしない
+- Vitest: `store-view.test.ts` / `store-api-auth.test.ts`
 
 ### フォーム固有の API:
 - `GET /api/forms/{formId}` - 公開エンドポイント（顧客アクセス）

@@ -8,6 +8,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/ca
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import ExternalMailIntegrationSettings from '@/components/ExternalMailIntegrationSettings';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 export default function MailIntegrationPage() {
   const params = useParams();
@@ -20,7 +21,7 @@ export default function MailIntegrationPage() {
   useEffect(() => {
     const fetchStore = async () => {
       try {
-        const res = await fetch(`/api/stores/${storeId}`, { credentials: 'include' });
+        const res = await fetchWithAuth(`/api/stores/${storeId}?full=1`, { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
           setStore({ id: data.id, name: data.name });

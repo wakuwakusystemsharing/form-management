@@ -60,6 +60,7 @@ import type { AdminReservationInput } from '@/lib/reservation-detail-items';
 import Link from 'next/link';
 
 import { getReservationFormName } from '@/lib/form-display-name';
+import { fetchWithAuth } from '@/lib/client-auth';
 function InfoTooltip({ text }: { text: string }) {
   return (
     <span className="relative group inline-flex items-center">
@@ -692,7 +693,7 @@ export default function StoreDetailPage() {
       try {
         setLoading(true);
         
-        const storeResponse = await fetch(`/api/stores/${storeId}`, {
+        const storeResponse = await fetchWithAuth(`/api/stores/${storeId}?full=1`, {
           credentials: 'include',
         });
         if (!storeResponse.ok) {
@@ -1096,7 +1097,7 @@ export default function StoreDetailPage() {
     if (!editingStore) return;
     
     try {
-      const response = await fetch(`/api/stores/${storeId}`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -1318,7 +1319,7 @@ export default function StoreDetailPage() {
 
   const handleDeleteStore = async () => {
     try {
-      const response = await fetch(`/api/stores/${storeId}`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}`, {
         method: 'DELETE',
         credentials: 'include',
       });

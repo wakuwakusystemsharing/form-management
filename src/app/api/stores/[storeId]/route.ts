@@ -6,6 +6,8 @@ import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { FOLLOW_DAYS_AFTER_OPTIONS, REMINDER_BEFORE_TIME_OPTIONS } from '@/lib/follow-message-scheduler';
 import { applyFollowSettingsToScheduledRows, backfillFollowMessagesForStore } from '@/lib/follow-message-repository';
+import { authorizeStoreAccess, authorizeUpperAdminStoreAccess, resolveStoreViewer } from '@/lib/store-access';
+import { sanitizeStoreUpdate, toStoreView } from '@/lib/store-view';
 
 const TIME_HH00_RE = /^([01]\d|2[0-3]):00$/;
 
@@ -147,6 +149,9 @@ function writeStores(stores: Store[]) {
 }
 
 // GET /api/stores/[storeId] - 個別店舗取得
+// 見ている人で返す内容を変える（src/lib/store-view.ts）:
+//   ログインしていない人 = 店舗名・ロゴ・テーマカラーだけ（店舗管理者ページのログイン画面用）
+//   店舗管理者 = 鍵（LINE のトークンなど）を除いた店舗情報 / 運営 = 店舗編集に必要な全項目
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ storeId: string }> }
@@ -167,8 +172,7 @@ export async function GET(
         );
       }
 
-      const { google_calendar_refresh_token: _t, ...storeSafe } = store as Store & { google_calendar_refresh_token?: string };
-      return NextResponse.json(storeSafe);
+      return NextResponse.json(toStoreView(store as unknown as Record<string, unknown>, 'upper'));
     }
 
     // staging/production: Supabase から取得
@@ -195,8 +199,14 @@ export async function GET(
       );
     }
 
-    const { google_calendar_refresh_token: _token, ...storeSafe } = store;
-    return NextResponse.json(storeSafe);
+    // ?full=1 = 管理画面からの呼び出し。ログインが切れているときに「店舗名だけ」を返してしまうと、
+    // 画面が設定の無い店舗として動いてしまうので、401 / 403 を返して取り直してもらう
+    if (new URL(request.url).searchParams.get('full') === '1') {
+      const auth = await authorizeStoreAccess(request, storeId);
+      if (auth.response) return auth.response;
+    }
+    const { viewer } = await resolveStoreViewer(request, storeId);
+    return NextResponse.json(toStoreView(store, viewer), { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     console.error('Store fetch error:', error);
     return NextResponse.json(
@@ -213,7 +223,12 @@ export async function PUT(
 ) {
   try {
     const { storeId } = await params;
-    const body = await request.json();
+    // 店舗情報の変更は運営（マスター管理者・システム管理者）だけ。店舗管理者・未ログインは受け付けない
+    const auth = await authorizeUpperAdminStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
+    const { master } = await resolveStoreViewer(request, storeId);
+    // 変えてはいけない項目（ID・連携の鍵・マスター以外によるテナントの付け替え）は、送られてきても反映しない
+    const body = sanitizeStoreUpdate(await request.json(), { isMaster: master });
     const env = getAppEnvironment();
 
     const followError = validateFollowSettings(body || {});
@@ -254,7 +269,7 @@ export async function PUT(
         await syncFollowSettingsChange(storeId, beforeStore, updatedStore as unknown as Record<string, unknown>);
       }
 
-      return NextResponse.json(updatedStore);
+      return NextResponse.json(toStoreView(updatedStore as unknown as Record<string, unknown>, 'upper'));
     }
 
     // staging/production: Supabase を更新
@@ -271,9 +286,7 @@ export async function PUT(
       updated_at: new Date().toISOString()
     };
 
-    // id, created_atは変更不可なので削除
-    delete updateData.id;
-    delete updateData.created_at;
+    // id, created_at などの変更不可の項目は sanitizeStoreUpdate で取り除いてある
 
     // フォロー設定の変更検知用に変更前の値を取っておく
     let beforeFollow: Record<string, unknown> | null = null;
@@ -306,7 +319,7 @@ export async function PUT(
       await syncFollowSettingsChange(storeId, beforeFollow, updatedStore);
     }
 
-    return NextResponse.json(updatedStore);
+    return NextResponse.json(toStoreView(updatedStore, 'upper'));
   } catch (error) {
     console.error('Store update error:', error);
     return NextResponse.json(
@@ -323,6 +336,9 @@ export async function DELETE(
 ) {
   try {
     const { storeId } = await params;
+    // 店舗の削除は運営だけ
+    const auth = await authorizeUpperAdminStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
     const env = getAppEnvironment();
 
     // ローカル環境: JSON から削除

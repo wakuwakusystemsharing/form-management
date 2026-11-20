@@ -43,7 +43,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { ToastAction } from '@/components/ui/toast';
-import { AUTH_REQUIRED_EVENT, syncAuthCookie } from '@/lib/client-auth';
+import { AUTH_REQUIRED_EVENT, syncAuthCookie, fetchWithAuth } from '@/lib/client-auth';
 import { SearchBar } from '@/components/ui/search-bar';
 import { useDebounce } from '@/hooks/use-debounce';
 import { getReservationFormName } from '@/lib/form-display-name';
@@ -487,7 +487,7 @@ export default function StoreAdminPage() {
           }
         }
         
-        const storeResponse = await fetch(`/api/stores/${storeId}`);
+        const storeResponse = await fetchWithAuth(`/api/stores/${storeId}?full=1`);
         if (!storeResponse.ok) {
           setError('店舗が見つかりません');
           return;

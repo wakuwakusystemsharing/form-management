@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { SearchBar } from '@/components/ui/search-bar';
 import { useDebounce } from '@/hooks/use-debounce';
 import { ArrowLeft, Calendar, BarChart3 } from 'lucide-react';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface Reservation {
   id: string;
@@ -63,7 +64,7 @@ export default function AdminStoreReservationsPage() {
 
   const fetchStore = async () => {
     try {
-      const response = await fetch(`/api/stores/${storeId}`);
+      const response = await fetchWithAuth(`/api/stores/${storeId}?full=1`);
       if (response.ok) {
         const data = await response.json();
         setStore(data);
