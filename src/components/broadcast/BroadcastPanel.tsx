@@ -21,6 +21,8 @@ import { describeBroadcastItems } from '@/lib/broadcast-items';
 import { formOptionsFromForms, menuNamesFromForms, surveyChoicesFromForms } from '@/lib/broadcast-options';
 import { RESULT_WINDOW_DEFAULT, RESULT_WINDOW_OPTIONS, type BroadcastResult, type BroadcastResultSummary } from '@/lib/broadcast-results';
 import type { Broadcast, BroadcastSettings, BroadcastSticker, BroadcastStatus } from '@/types/broadcast';
+import { matchesStickerFilter, type StickerFilterId } from '@/lib/broadcast-builtin-stickers';
+import StickerFilterChips from '@/components/broadcast/StickerFilterChips';
 import type { LineFlexMessage } from '@/types/line-flex';
 
 interface Overview {
@@ -75,6 +77,7 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
   const [detailResultState, setDetailResultState] = useState<{ key: string; result: BroadcastResult } | null>(null);
   const [stickerLabel, setStickerLabel] = useState('');
   const [stickerUploading, setStickerUploading] = useState(false);
+  const [stickerFilter, setStickerFilter] = useState<StickerFilterId>('all');
 
   const load = useCallback(async () => {
     try {
@@ -242,6 +245,7 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
       if (!res.ok) throw new Error(json.error || 'スタンプの保存に失敗しました');
       toast({ title: 'スタンプを追加しました' });
       setStickerLabel('');
+      setStickerFilter('store');
       loadStickers();
     } catch (e) {
       toast({ title: e instanceof Error ? e.message : 'スタンプの追加に失敗しました', variant: 'destructive' });
@@ -255,6 +259,8 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
       const res = await fetch(`${base}/broadcast-stickers?id=${encodeURIComponent(s.id)}`, { method: 'DELETE', credentials: 'include' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || '削除に失敗しました');
+      // 最後の 1 枚を消すと「店舗で追加」の切り替えが無くなるので、すべてに戻す
+      if (stickers.filter((x) => x.store_id).length <= 1) setStickerFilter('all');
       loadStickers();
     } catch (e) {
       toast({ title: e instanceof Error ? e.message : '削除に失敗しました', variant: 'destructive' });
@@ -474,7 +480,7 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
           <CardContent className="space-y-3 p-4">
             <div>
               <h3 className="text-sm font-semibold">スタンプ・素材</h3>
-              <p className="text-xs text-muted-foreground">配信のメッセージで「＋ スタンプ」から選べます。スタンプは画像メッセージとして届きます（正方形の JPEG / PNG がおすすめ。5MB まで）。</p>
+              <p className="text-xs text-muted-foreground">配信のメッセージで「＋ スタンプ」から選べます。スタンプは画像メッセージとして届きます。最初から入っているスタンプのほか、お店の画像も追加できます（正方形の JPEG / PNG がおすすめ。5MB まで）。</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Input value={stickerLabel} maxLength={30} onChange={(e) => setStickerLabel(e.target.value)} placeholder="名前（例: ありがとう）" className="h-8 w-48 text-xs" />
@@ -483,11 +489,12 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
                 <input type="file" accept="image/jpeg,image/png" className="hidden" disabled={stickerUploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadSticker(f); e.target.value = ''; }} />
               </label>
             </div>
+            <StickerFilterChips stickers={stickers} value={stickerFilter} onChange={setStickerFilter} />
             {stickers.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">スタンプがまだありません。画像を追加してください。</p>
             ) : (
               <div className="grid grid-cols-3 gap-3 sm:grid-cols-5 lg:grid-cols-6">
-                {stickers.map((s) => (
+                {stickers.filter((s) => matchesStickerFilter(s, stickerFilter)).map((s) => (
                   <div key={s.id} className="space-y-1 text-center">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={s.preview_url || s.url} alt={s.label} className="aspect-square w-full rounded-lg border object-cover" />

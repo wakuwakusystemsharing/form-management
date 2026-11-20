@@ -12,6 +12,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BROADCAST_ITEM_LABELS, BROADCAST_ITEMS_MAX, BROADCAST_NAME_TOKEN } from '@/lib/broadcast-items';
 import { LINE_TEXT_MESSAGE_MAX } from '@/lib/line-flex-items';
+import { matchesStickerFilter, type StickerFilterId } from '@/lib/broadcast-builtin-stickers';
+import StickerFilterChips from '@/components/broadcast/StickerFilterChips';
 import type { BroadcastItem, BroadcastSticker } from '@/types/broadcast';
 import type { LineFlexMessage } from '@/types/line-flex';
 
@@ -107,6 +109,7 @@ export default function BroadcastItemsEditor({
   onJsonChange: (key: string, text: string) => void;
   disabled?: boolean;
 }) {
+  const [stickerFilter, setStickerFilter] = React.useState<StickerFilterId>('all');
   const update = (key: string, patch: Partial<BroadcastItem>) => onChange(items.map((x) => (x.key === key ? ({ ...x, ...patch } as BroadcastItem) : x)));
   const insertName = (key: string, text: string) => update(key, { text: `${text}${BROADCAST_NAME_TOKEN}` } as Partial<BroadcastItem>);
 
@@ -178,8 +181,10 @@ export default function BroadcastItemsEditor({
               {stickers.length === 0 ? (
                 <p className="text-xs text-muted-foreground">スタンプがまだありません。「スタンプ・素材」タブで画像を追加できます</p>
               ) : (
+                <>
+                <StickerFilterChips stickers={stickers} value={stickerFilter} onChange={setStickerFilter} />
                 <div className="flex max-h-44 flex-wrap gap-2 overflow-y-auto">
-                  {stickers.map((s) => (
+                  {stickers.filter((s) => matchesStickerFilter(s, stickerFilter) || s.id === item.sticker_id).map((s) => (
                     <button
                       key={s.id}
                       type="button"
@@ -193,6 +198,7 @@ export default function BroadcastItemsEditor({
                     </button>
                   ))}
                 </div>
+                </>
               )}
               <p className="text-[11px] text-muted-foreground">スタンプは画像メッセージとして届きます</p>
             </div>
