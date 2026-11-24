@@ -87,6 +87,7 @@ const CASES: Case[] = [
   { name: 'アンケートの複製', load: () => import('@/app/api/surveys/[id]/duplicate/route'), method: 'POST', url: '/api/surveys/survey1/duplicate', params: { id: 'survey1' }, body: {} },
   { name: '予約の変更・キャンセル', load: () => import('@/app/api/reservations/[reservationId]/route'), method: 'PATCH', url: '/api/reservations/resv1', params: { reservationId: 'resv1' }, body: { status: 'cancelled' } },
   { name: '予約の一覧', load: () => import('@/app/api/stores/[storeId]/reservations/route'), method: 'GET', url: '/api/stores/storea/reservations', params: { storeId: 'storea' } },
+  { name: '予約カレンダー', load: () => import('@/app/api/stores/[storeId]/reservations/calendar/route'), method: 'GET', url: '/api/stores/storea/reservations/calendar?from=2026-11-01&to=2026-11-30', params: { storeId: 'storea' } },
   { name: 'フォームの一覧', load: () => import('@/app/api/stores/[storeId]/forms/route'), method: 'GET', url: '/api/stores/storea/forms', params: { storeId: 'storea' } },
   { name: 'フォームの作成', load: () => import('@/app/api/stores/[storeId]/forms/route'), method: 'POST', url: '/api/stores/storea/forms', params: { storeId: 'storea' }, body: {} },
   { name: 'アンケートの一覧', load: () => import('@/app/api/stores/[storeId]/surveys/route'), method: 'GET', url: '/api/stores/storea/surveys', params: { storeId: 'storea' } },

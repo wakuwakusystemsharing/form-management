@@ -696,6 +696,27 @@ QR コードの PNG（中身は `entry_url`）。`?download=1` で保存用の�
 
 ## 📊 予約分析（Reservation Analytics）API
 
+### `GET /api/stores/{storeId}/reservations/calendar`
+予約カレンダー用のデータ（期間に掛かる予約 + 予約以外の予定の時間）
+
+**認証**: 必要（店舗へのアクセス権。local はスキップ）
+
+**クエリ**: `from` / `to`（YYYY-MM-DD。必須。最大 62 日。形がおかしい・逆順・長すぎると `400`）
+
+**レスポンス**:
+```json
+{
+  "from": "2026-11-22",
+  "to": "2026-11-28",
+  "reservations": [ { "id": "…", "reservation_date": "2026-11-24", "reservation_time": "10:00", "status": "confirmed", "…": "予約一覧と同じ行" } ],
+  "busy": [ { "date": "2026-11-25", "startMin": 600, "endMin": 690, "allDay": false } ],
+  "google": "ok"
+}
+```
+- `reservations`: その期間に掛かる予約（キャンセル済みを含む。宿泊はチェックイン日 〜 チェックアウト日が期間に掛かるもの）。日付 → 時刻の順
+- `busy`: 予約以外の予定（店舗の Google カレンダー）。日本時間の日付と「0 時からの分」。このシステムの予約から作った予定と「営業日」の予定は含まない。**タイトルなどの中身は返さない**
+- `google`: `ok` = 予定を読めた / `none` = カレンダー未設定（local を含む）/ `error` = 読み込みに失敗（予約だけ返す）
+
 ### `GET /api/stores/{storeId}/reservations/analytics`
 店舗の予約分析データを取得
 
