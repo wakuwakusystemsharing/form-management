@@ -259,7 +259,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - 月の基準: 予約数・キャンセル数 = 予約日の月、アンケート回答数 = 回答日時の**日本時間**の月（`src/lib/survey-month-stats.ts` の `countSurveysByStoreMonth`）。ステータス・テスト用顧客の絞り込みは予約だけに効く。アンケート件数を取得できないときはダウンロードを止める（0 件のシートを出さない）
 - 画面の一覧は 300 件ずつ表示（「さらに表示」）。集計は全件が対象。Vitest: `survey-month-stats.test.ts`
 
-**流入経路の計測（予約管理 → 分析 → 「流入経路」。設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 5 章。第 1 弾 = 発行と記録。経路ごとの予約数・売上の集計は未実装）:**
+**流入経路の計測（予約管理 → 分析 → 「流入経路」。設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 5 章。第 1 弾 = 発行と記録、第 2 弾 = 経路ごとの集計。どちらも実装済み）:**
 - 店頭ポップ・チラシ・Instagram など、置き場所ごとに別々の URL / QR コードを発行し、どこから予約が入ったかを予約に記録する。流れ: 発行する URL `/s/{code}`（`src/app/s/[code]/route.ts`。認証なし）→ 「読まれた数」を 1 増やして予約フォームを `?src={code}` 付きで開く（LINE フォーム = `https://liff.line.me/{liffId}?src=`、Web フォーム = 公開 URL + `?src=`）→ フォームが `source_code` を付けて予約を送る → `POST /api/reservations` が**その店舗の有効な経路の合言葉か**を確かめてから予約に記録
 - 既存の `reservations.source_medium`（Web フォームで開いた元サイトから自動推測する 8 種類の固定値）は別物で、そのまま残す
 - **予約の保存そのものには列を足さない**: Supabase では予約を保存した**あと**に別の更新（`attachReservationSource`）で `reservations.source_code` を入れる。列・テーブルが未適用の環境でも予約の受付を止めないため（local は JSON に直接入れる）。`resolveActiveSourceCode` / `attachReservationSource` は例外を投げない。手動予約（`manual_entry`）・停止中の経路・他の店舗の経路・形のおかしい値は記録しない（予約は成功する）。「予約を変更」「メニューを変更」では経路を触らない
@@ -268,6 +268,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - **経路は削除しない**（過去の記録を残すため）。使わなくなったら「停止」（`active = false`）: URL は `?src=` を付けずに通常のフォームを開き、読まれた数も数えない。検索ロボット・リンクの下見・User-Agent なしのアクセスは数えない（`isBotUserAgent`）。読まれた数は DB 関数 `reservation_source_increment_click` で足す（同時に開かれても数がずれない）
 - 純粋ロジック `src/lib/reservation-sources.ts`（`generateSourceCode` = 紛らわしい文字 0 o 1 l i を使わない / `pickSourceCode` / `normalizeSourceName`（40 文字まで）/ `buildSourceEntryUrl` / `appendSourceParam` / `resolveFormBaseUrl` / `resolveSourceRedirect` / `sourceFormStatus` / `validateSourceInput`。1 店舗 `SOURCE_MAX_PER_STORE` = 100 件まで）、保存 `src/lib/reservation-source-repository.ts`（local は `data/reservation_sources.json`）、業務ロジック `src/lib/reservation-source-service.ts`（作成・変更のとき、選んだフォームがその店舗のものかを確かめる）
 - API（`authorizeStoreAccess`）: `GET/POST /api/stores/{storeId}/reservation-sources`、`PUT .../{id}`（名前 / 開くフォーム / 有効・停止。DELETE は無い）、`GET .../{id}/qr`（QR コードの PNG。`?download=1` で保存用）。画面 `src/components/ReservationSourcesPanel.tsx`（`ReservationAnalytics` の「流入経路」タブ。店舗管理者ページとテナント側 店舗ページで共用）
+- **経路ごとの集計（第 2 弾）**: 「流入経路」タブの先頭の「経路ごとの予約」（経路が 1 つも無い店舗では出さない）。純粋ロジック `src/lib/reservation-source-stats.ts` の `computeSourceStats(reservations, sources, { dateFrom, dateTo, formId })` → `rows`（経路ごとの 予約数 = キャンセル除く / キャンセル数 / 売上 = `reservationAmount` / 読まれた数 / `total_bookings` / `booking_rate`。予約数の多い順。**停止した経路・予約 0 件の経路も残す**）+ `none`（経路なし = 合言葉が無い・一覧に無い予約）+ `summary`（`with_source` = 経路の分かる予約数）。**期間は予約日**（分析のほかのタブと同じ。上の期間チップとフォームのプルダウンを `ReservationAnalytics` から props で受け取る）、フォームは予約の `form_id` で絞り込む（絞り込んだときは、そのフォームを開く経路と、そのフォームで予約が入った経路だけを出す）。**読まれた数は累計しか持っていないので、予約率 = これまでの予約（キャンセルを含む・期間とフォームに依らない）÷ 読まれた数**（読まれた数 0 は null、100% まで。目安）。保存 `listReservationsForSourceStats`（経路のある予約 = 全期間、経路の無い予約 = 指定した期間・フォームだけを 1000 件ずつ全件。列が未適用なら空）、サーバー `getSourceStats`、API `GET /api/stores/{storeId}/reservation-sources/stats?date_from&date_to&form_id`（`authorizeStoreAccess`。件数・金額だけを返し、お客様の情報は返さない）。DB の変更なし。Vitest: `reservation-source-stats.test.ts`
 - マイグレーション `20261122000000_add_reservation_sources.sql`（`reservation_sources` テーブル = RLS ポリシー無し・service_role のみ、`reservations.source_code` 列、DB 関数）。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも予約の受付は今までどおり動く（経路の一覧が空になり、作成すると「マイグレーションがまだ適用されていません」と出る）
 - Vitest: `reservation-sources.test.ts` / `reservation-sources.local.test.ts`（経路の API・`/s/{code}`・予約への記録）/ `reservation-source-static-form.test.ts`
 
@@ -617,6 +618,7 @@ export async function GET(req, { params }) {
 - `GET/POST /api/stores/{storeId}/reservation-sources` - 経路の一覧（+ 選べる予約フォーム）/ 作成（`{ name, form_id }`）
 - `PUT /api/stores/{storeId}/reservation-sources/{id}` - 名前 / 開くフォーム / 有効・停止（`{ name?, form_id?, active? }`。削除は無い）
 - `GET /api/stores/{storeId}/reservation-sources/{id}/qr` - QR コードの PNG
+- `GET /api/stores/{storeId}/reservation-sources/stats` - 経路ごとの 予約数 / キャンセル数 / 売上 / 読まれた数 / 予約率（`date_from` / `date_to` = 予約日 YYYY-MM-DD、`form_id`）
 - `GET /s/{code}` - 経路の URL（公開。読まれた数を数えて予約フォームへ移動）
 - `POST /api/reservations` に `source_code`（フォームが `?src=` から読んで送る。店舗の有効な経路のものだけ記録）
 
