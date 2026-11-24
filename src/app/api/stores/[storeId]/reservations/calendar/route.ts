@@ -10,6 +10,7 @@ import {
   STAY_LOOKBACK_DAYS,
   addDays,
   busyBlocksFromGoogle,
+  collectStaffCalendars,
   reservationOverlapsRange,
   validateCalendarRange,
   type BusyBlock,
@@ -49,6 +50,8 @@ function sortRows(rows: Row[]): Row[] {
  *
  * - google: 'ok' = 予定を読めた / 'none' = カレンダー未設定（local を含む）/ 'error' = 読み込みに失敗（予約だけ返す）
  * - 予約以外の予定は時間だけを返す（タイトルなどの中身は返さない）
+ * - staff=1（日表示のスタッフごとの列）: スタッフの Google カレンダーの予定を staff_busy（スタッフ名 → 帯）で返す。
+ *   staff_google は 'ok' / 'none'（スタッフのカレンダーが無い）/ 'error'（1 つでも読めなかった）
  */
 export async function GET(request: Request, { params }: { params: Promise<{ storeId: string }> }) {
   try {
@@ -69,7 +72,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ stor
 
     if (getAppEnvironment() === 'local') {
       const reservations = sortRows(readLocalReservations().filter((r) => r.store_id === storeId && reservationOverlapsRange(r, from, to)));
-      return NextResponse.json({ from, to, reservations, busy: [], google: 'none' }, { headers });
+      return NextResponse.json({ from, to, reservations, busy: [], google: 'none', staff_busy: {}, staff_google: 'none' }, { headers });
     }
 
     const adminClient = createAdminClient();
@@ -108,7 +111,31 @@ export async function GET(request: Request, { params }: { params: Promise<{ stor
       }
     }
 
-    return NextResponse.json({ from, to, reservations, busy, google }, { headers });
+    // スタッフごとの Google カレンダーの予定（日表示のスタッフごとの列で使う。頼まれたときだけ読む）
+    const staffBusy: Record<string, BusyBlock[]> = {};
+    let staffGoogle: 'ok' | 'none' | 'error' = 'none';
+    if (searchParams.get('staff') === '1') {
+      const { data: forms } = await (adminClient as any).from('reservation_forms').select('config').eq('store_id', storeId);
+      const calendars = collectStaffCalendars((forms || []).map((f: { config: unknown }) => f.config), { skipCalendarId: calendarId || null });
+      if (calendars.length > 0) {
+        const reservationEventIds = rows.map((r) => r.google_calendar_event_id).filter((id): id is string => typeof id === 'string' && id.length > 0);
+        const results = await Promise.allSettled(
+          calendars.map((c) => listCalendarEventsAll(c.calendarId, `${from}T00:00:00+09:00`, `${addDays(to, 1)}T00:00:00+09:00`, storeId))
+        );
+        staffGoogle = 'ok';
+        results.forEach((result, i) => {
+          if (result.status !== 'fulfilled') {
+            console.error('[API] reservations calendar: スタッフのカレンダーの取得に失敗:', result.reason instanceof Error ? result.reason.message : result.reason);
+            staffGoogle = 'error';
+            return;
+          }
+          const blocks = busyBlocksFromGoogle(result.value as GoogleEventInput[], { from, to, reservationEventIds });
+          for (const name of calendars[i].names) staffBusy[name] = [...(staffBusy[name] || []), ...blocks];
+        });
+      }
+    }
+
+    return NextResponse.json({ from, to, reservations, busy, google, staff_busy: staffBusy, staff_google: staffGoogle }, { headers });
   } catch (error) {
     console.error('[API] reservations calendar error:', error);
     return NextResponse.json({ error: '予約カレンダーの取得に失敗しました' }, { status: 500 });

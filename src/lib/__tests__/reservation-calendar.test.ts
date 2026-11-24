@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  STAFF_NONE_KEY,
   addDays,
   addMonths,
   buildMonthGrid,
+  buildStaffColumns,
   busyBlocksFromGoogle,
   countOverlappingEvents,
   describeSlot,
@@ -15,15 +17,19 @@ import {
   slotAtPointer,
   calendarRange,
   calendarTitle,
+  collectStaffCalendars,
   diffDays,
   eventsForDate,
+  hasUnassignedEvents,
   isValidYmd,
   jstNowMinutes,
   jstToday,
   layoutDayEvents,
   monthCellEvents,
   reservationDurationMinutes,
+  resolveStaffIdForForm,
   shiftAnchor,
+  staffColumnKeyOf,
   timeToMinutes,
   toCalendarEvent,
   toCalendarEvents,
@@ -388,5 +394,94 @@ describe('ドラッグで移動・空いている所から手動予約', () => {
     expect(isReservationStale(undefined, '2026-11-24T05:03:00.000Z')).toBe(false);
     expect(isReservationStale('2026-11-24T05:00:00.000Z', null)).toBe(false);
     expect(isReservationStale('こわれた値', '2026-11-24T05:03:00.000Z')).toBe(false);
+  });
+});
+
+describe('スタッフごとの列', () => {
+  const formA = { staff: [{ id: 'a1', name: '佐藤' }, { id: 'a2', name: '鈴木' }] };
+  const formB = { staff: [{ id: 'b1', name: '鈴木 ' }, { id: 'b2', name: '高橋' }] }; // 鈴木は別の ID・前後に空白
+  const formCopy = { staff: [{ id: 'a1', name: '佐藤' }] }; // コピーしたフォーム（ID も同じ）
+  const columns = buildStaffColumns([formA, formB, formCopy, { staff: null }, {}]);
+
+  it('同じ名前のスタッフは 1 つの列にまとめる（ID はフォームごとに持つ）', () => {
+    expect(columns).toEqual([
+      { key: 's:佐藤', name: '佐藤', ids: ['a1'] },
+      { key: 's:鈴木', name: '鈴木', ids: ['a2', 'b1'] },
+      { key: 's:高橋', name: '高橋', ids: ['b2'] },
+    ]);
+  });
+
+  it('名前・ID の無いスタッフは列にしない。スタッフがいなければ列は無い', () => {
+    expect(buildStaffColumns([{ staff: [{ id: '', name: '名無し' }, { id: 'x', name: ' ' }] }])).toEqual([]);
+    expect(buildStaffColumns([])).toEqual([]);
+  });
+
+  it('予約を置く列: スタッフ ID → 名前 → 担当なし', () => {
+    expect(staffColumnKeyOf({ staffId: 'b1', staffName: '鈴木' }, columns)).toBe('s:鈴木');
+    // フォームからスタッフを消したあとの予約（ID は一覧に無いが、名前は残っている）
+    expect(staffColumnKeyOf({ staffId: 'old', staffName: '高橋' }, columns)).toBe('s:高橋');
+    expect(staffColumnKeyOf({ staffId: null, staffName: null }, columns)).toBe(STAFF_NONE_KEY);
+    expect(staffColumnKeyOf({ staffId: 'old', staffName: '退職した人' }, columns)).toBe(STAFF_NONE_KEY);
+  });
+
+  it('予約から作った帯は、担当のスタッフ ID とフォーム ID を持つ', () => {
+    const ev = toCalendarEvent({ id: 'r1', form_id: 'formA', reservation_date: '2026-11-24', reservation_time: '10:00', staff_id: 'a2', staff_name: '鈴木' });
+    expect(ev).toMatchObject({ staffId: 'a2', staffName: '鈴木', formId: 'formA' });
+    expect(staffColumnKeyOf(ev as CalendarEvent, columns)).toBe('s:鈴木');
+  });
+
+  it('担当の変更先の ID は、その予約のフォームのスタッフから探す', () => {
+    const suzuki = columns[1];
+    expect(resolveStaffIdForForm(suzuki, formA.staff)).toBe('a2');
+    expect(resolveStaffIdForForm(suzuki, formB.staff)).toBe('b1');
+    // そのフォームに居ないスタッフには変えられない
+    expect(resolveStaffIdForForm(columns[2], formA.staff)).toBeNull();
+    expect(resolveStaffIdForForm(suzuki, [])).toBeNull();
+    expect(resolveStaffIdForForm(null, formA.staff)).toBeNull();
+  });
+
+  it('「担当なし」の列は、担当の決まっていない予約がその日にあるときだけ出す', () => {
+    const events = toCalendarEvents([
+      { id: 'r1', reservation_date: '2026-11-24', reservation_time: '10:00', staff_id: 'a1', staff_name: '佐藤' },
+      { id: 'r2', reservation_date: '2026-11-25', reservation_time: '10:00' },
+    ]);
+    expect(hasUnassignedEvents(events, columns, '2026-11-24')).toBe(false);
+    expect(hasUnassignedEvents(events, columns, '2026-11-25')).toBe(true);
+  });
+});
+
+describe('collectStaffCalendars（スタッフの Google カレンダーの一覧）', () => {
+  const staffForm = (staff: unknown[], enabled = true) => ({ staff_selection: { enabled, staff } });
+
+  it('スタッフ選択が ON のフォームのカレンダーを、同じものは 1 回にまとめる', () => {
+    const list = collectStaffCalendars([
+      staffForm([{ id: 'a1', name: '佐藤', calendar_id: 'sato@example.com' }, { id: 'a2', name: '鈴木', calendar_id: 'suzuki@example.com' }]),
+      staffForm([{ id: 'b1', name: '佐藤', calendar_id: 'sato@example.com' }, { id: 'b2', name: '高橋', calendar_id: 'suzuki@example.com' }]),
+    ]);
+    expect(list).toEqual([
+      { calendarId: 'sato@example.com', names: ['佐藤'] },
+      { calendarId: 'suzuki@example.com', names: ['鈴木', '高橋'] },
+    ]);
+  });
+
+  it('スタッフ選択が OFF のフォーム・カレンダーの無いスタッフ・店舗と同じカレンダーは読まない', () => {
+    const list = collectStaffCalendars(
+      [
+        staffForm([{ id: 'x', name: 'OFF の人', calendar_id: 'off@example.com' }], false),
+        staffForm([{ id: 'a1', name: '佐藤', calendar_id: '' }, { id: 'a2', name: '鈴木', calendar_id: 'store@example.com' }, { id: 'a3', name: '高橋', calendar_id: 'takahashi@example.com' }]),
+      ],
+      { skipCalendarId: 'store@example.com' }
+    );
+    expect(list).toEqual([{ calendarId: 'takahashi@example.com', names: ['高橋'] }]);
+  });
+
+  it('設定が文字列（JSON）でも読める。こわれた設定は飛ばす', () => {
+    const json = JSON.stringify(staffForm([{ id: 'a1', name: '佐藤', calendar_id: 'sato@example.com' }]));
+    expect(collectStaffCalendars([json, '{こわれた', null, 123])).toEqual([{ calendarId: 'sato@example.com', names: ['佐藤'] }]);
+  });
+
+  it('読むカレンダーは 30 個まで', () => {
+    const staff = Array.from({ length: 40 }, (_, i) => ({ id: `s${i}`, name: `スタッフ${i}`, calendar_id: `c${i}@example.com` }));
+    expect(collectStaffCalendars([staffForm(staff)])).toHaveLength(30);
   });
 });

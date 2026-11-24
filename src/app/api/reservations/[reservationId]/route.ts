@@ -362,7 +362,21 @@ export async function PATCH(
       if (hasContentEdit) {
         const parsed = parseContentEdit(body, existing);
         if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
-        applyContentEdit(existing, parsed.edit, null);
+        // 担当スタッフの変更は、その予約のフォームのスタッフから名前を引く
+        let localStaff: { staff_id: string | null; staff_name: string | null; staff_calendar_id: string | null } | null = null;
+        if (parsed.edit.hasStaffChange) {
+          if (parsed.edit.staff_id) {
+            const staffConfig = localFormConfig ?? (await loadLocalFormConfig(existing.form_id));
+            const member = (staffConfig?.staff_selection?.staff || []).find((m: any) => m && m.id === parsed.edit.staff_id);
+            if (!member) {
+              return NextResponse.json({ error: '指定された担当スタッフがフォームに存在しません' }, { status: 400 });
+            }
+            localStaff = { staff_id: member.id, staff_name: member.name || null, staff_calendar_id: member.calendar_id || null };
+          } else {
+            localStaff = { staff_id: null, staff_name: null, staff_calendar_id: null };
+          }
+        }
+        applyContentEdit(existing, parsed.edit, localStaff);
         // 宿泊予約: 日程・人数の変更は料金を再計算し、同じ夜の空きを確認する
         if (existing.checkout_date && STAY_EDIT_KEYS.some((k) => parsed.edit[k] !== undefined)) {
           const applied = applyStayEdit(existing, parsed.edit, localFormConfig);

@@ -1594,6 +1594,8 @@ export default function StoreAdminPage() {
                 timeInterval: f.config?.calendar_settings?.time_interval ?? null,
                 // 店舗側手動予約フォームは LINE タイプのフォームだけ
                 manual: (f.config?.form_type ?? 'line') === 'line',
+                // スタッフ選択を使っているフォームのスタッフ（スタッフごとの列と、担当の変更に使う）
+                staff: f.config?.staff_selection?.enabled ? (f.config.staff_selection.staff || []).map((m: any) => ({ id: m.id, name: m.name })) : [],
               }))}
               onReservationChanged={(updated) => setReservations((prev) => prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)))}
               onSelectReservation={(reservation) => {
