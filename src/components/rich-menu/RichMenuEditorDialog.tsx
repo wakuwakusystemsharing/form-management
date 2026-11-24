@@ -33,6 +33,9 @@ import type { RichMenuFormOption } from '@/lib/line-rich-menu-service';
 import RichMenuAreaCanvas from './RichMenuAreaCanvas';
 import RichMenuImagePicker from './RichMenuImagePicker';
 import RichMenuPhonePreview from './RichMenuPhonePreview';
+import AudienceEditor, { type AudienceOptions } from '@/components/broadcast/AudienceEditor';
+import { describeAudience } from '@/lib/broadcast-audience';
+import { isRuleEmpty } from '@/lib/line-rich-menu-rules';
 
 export interface RichMenuEditorDialogProps {
   open: boolean;
@@ -42,11 +45,16 @@ export interface RichMenuEditorDialogProps {
   forms: RichMenuFormOption[];
   /** その店舗のメニュー（「別のメニューに切り替える」の切り替え先と、プレビューでの切り替えに使う） */
   menus?: LineRichMenu[];
+  /** 「条件に合うお客様だけ」の条件に使う選択肢（タグ・メニュー・フォーム・アンケート） */
+  audienceOptions?: AudienceOptions;
+  /** お客様ごとのメニューを使えないときの理由（使えるときは null） */
+  ruleUnavailable?: string | null;
   onClose: () => void;
   onSaved: (menu: LineRichMenu) => void;
 }
 
-const emptyInput = (): RichMenuInput => ({ name: '', size: 'large', image_url: '', areas: [], chat_bar_text: DEFAULT_CHAT_BAR_TEXT, open_by_default: true });
+const emptyInput = (): RichMenuInput => ({ name: '', size: 'large', image_url: '', areas: [], chat_bar_text: DEFAULT_CHAT_BAR_TEXT, open_by_default: true, rule: null });
+const EMPTY_OPTIONS: AudienceOptions = { tags: [], menus: [], forms: [], surveys: [] };
 const ACTION_TYPES: RichMenuAction['type'][] = ['form', 'message', 'uri', 'switch', 'none'];
 
 function defaultAction(type: RichMenuAction['type'], forms: RichMenuFormOption[], others: LineRichMenu[] = []): RichMenuAction {
@@ -57,7 +65,7 @@ function defaultAction(type: RichMenuAction['type'], forms: RichMenuFormOption[]
   return { type: 'none' };
 }
 
-export default function RichMenuEditorDialog({ open, storeId, menu, forms, menus = [], onClose, onSaved }: RichMenuEditorDialogProps) {
+export default function RichMenuEditorDialog({ open, storeId, menu, forms, menus = [], audienceOptions = EMPTY_OPTIONS, ruleUnavailable = null, onClose, onSaved }: RichMenuEditorDialogProps) {
   const [input, setInput] = useState<RichMenuInput>(emptyInput);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -71,7 +79,7 @@ export default function RichMenuEditorDialog({ open, storeId, menu, forms, menus
   const wasOpen = useRef(false);
   useEffect(() => {
     if (open && !wasOpen.current) {
-      setInput(menu ? { name: menu.name, size: menu.size, image_url: menu.image_url, areas: menu.areas, chat_bar_text: menu.chat_bar_text, open_by_default: menu.open_by_default } : emptyInput());
+      setInput(menu ? { name: menu.name, size: menu.size, image_url: menu.image_url, areas: menu.areas, chat_bar_text: menu.chat_bar_text, open_by_default: menu.open_by_default, rule: menu.rule } : emptyInput());
       setSelectedId(null);
       setError(null);
       setChanged(false);
@@ -91,7 +99,12 @@ export default function RichMenuEditorDialog({ open, storeId, menu, forms, menus
   const setAction = (action: RichMenuAction) => patch({ areas: input.areas.map((a) => (a.id === selectedId ? { ...a, action } : a)) });
   const formName = (id: string) => forms.find((f) => f.id === id)?.name ?? null;
   // 切り替え先に選べるのは、このメニュー以外
-  const others = menus.filter((m) => m.id !== menu?.id);
+  const others = menus.filter((m) => m.id !== menu?.id && !m.rule);
+  const isRule = !!input.rule;
+  // 公式 LINE に出しているあいだは、「全員」と「条件に合うお客様だけ」を入れ替えられない
+  const kindLocked = menu?.status === 'published';
+  // お客様ごとのメニューでは、切り替えは使えない
+  const actionTypes = isRule ? ACTION_TYPES.filter((t) => t !== 'switch') : ACTION_TYPES;
   const menuName = (id: string) => menus.find((m) => m.id === id)?.name ?? null;
   const describe = (action: RichMenuAction) => describeRichMenuAction(action, formName, menuName);
   const layouts = layoutsForSize(input.size);
@@ -167,6 +180,50 @@ export default function RichMenuEditorDialog({ open, storeId, menu, forms, menus
               <Input id="rich-menu-name" value={input.name} maxLength={RICH_MENU_LIMITS.nameMax} placeholder="例: いつものメニュー" onChange={(e) => patch({ name: e.target.value })} />
             </div>
 
+            <div className="space-y-2 rounded-md border p-3" data-slot="rich-menu-audience">
+              <span className="text-sm font-medium">だれに出すか</span>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="だれに出すか">
+                {(
+                  [
+                    [false, '全員', '友だち全員に出すメニュー'],
+                    [true, '条件に合うお客様だけ', 'タグ・来店回数などで出し分ける'],
+                  ] as const
+                ).map(([rule, label, description]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    role="radio"
+                    aria-checked={isRule === rule}
+                    disabled={kindLocked && isRule !== rule}
+                    onClick={() => {
+                      if (isRule === rule) return;
+                      patch({ rule: rule ? { audience: {}, order: 0 } : null });
+                    }}
+                    className={cn(
+                      'rounded-md border p-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                      isRule === rule ? 'border-primary bg-primary/5' : 'hover:bg-accent'
+                    )}
+                  >
+                    <span className="block font-medium">{label}</span>
+                    <span className="block text-xs text-muted-foreground">{description}</span>
+                  </button>
+                ))}
+              </div>
+              {kindLocked && <p className="text-xs text-muted-foreground">公式 LINE に出しているあいだは、ここは変えられません（先に反映をやめてください）。</p>}
+              {input.rule && (
+                <div className="space-y-2">
+                  {ruleUnavailable && <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{ruleUnavailable}（保存はできます）</p>}
+                  <AudienceEditor value={input.rule.audience} onChange={(audience) => patch({ rule: { ...(input.rule as NonNullable<RichMenuInput['rule']>), audience } })} options={audienceOptions} />
+                  <p className="rounded-md bg-muted/50 px-3 py-2 text-xs" data-slot="rich-menu-audience-text">
+                    {isRuleEmpty(input.rule) ? '条件を 1 つ以上選んでください。' : `出す相手: ${describeAudience(input.rule.audience, { formName: (id) => forms.find((f) => f.id === id)?.name ?? id })}`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    条件に合うお客様には、全員向けのメニューの代わりに、このメニューが出ます。条件に合わなくなると、全員向けのメニューに戻ります。LINE と連携しているお客様だけが対象です。
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <span className="text-sm font-medium">大きさ</span>
               <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="大きさ">
@@ -227,7 +284,7 @@ export default function RichMenuEditorDialog({ open, storeId, menu, forms, menus
                     onChange={(e) => setAction(defaultAction(e.target.value as RichMenuAction['type'], forms, others))}
                     className="h-10 w-full rounded-md border bg-background px-2 text-base md:text-sm"
                   >
-                    {ACTION_TYPES.map((t) => (
+                    {(selected.action.type === 'switch' ? ACTION_TYPES : actionTypes).map((t) => (
                       <option key={t} value={t}>
                         {RICH_MENU_ACTION_LABELS[t]}
                       </option>

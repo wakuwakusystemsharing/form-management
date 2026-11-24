@@ -275,7 +275,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - 部品への渡し方: `forms[].staff`（`CalendarStaffMember { id, name }[]`。スタッフ選択が OFF のフォームは空）
 - Vitest: `reservation-calendar.test.ts` / `reservation-calendar-api.local.test.ts` / `reservation-manual-prefill.test.ts` / `reservation-patch-stale.local.test.ts` / `reservation-patch-staff.local.test.ts` / `store-admin-tabs.test.ts` / `admin-api-auth.test.ts`
 
-**リッチメニュー作成（「リッチメニュー」タブ。設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 7 章。③-1 = 作成と反映、③-2 = 分割の型・スマホ枠のプレビュー・タブ切り替え まで実装済み。お客様ごとの切り替え（③-3）は未実装）:**
+**リッチメニュー作成（「リッチメニュー」タブ。設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 7 章。リリース手順: `docs/リッチメニュー_リリース手順.md`。③-1 = 作成と反映、③-2 = 分割の型・スマホ枠のプレビュー・タブ切り替え、③-3 = お客様ごとの切り替え。すべて実装済み）:**
 - 公式 LINE のトーク画面の下に出るメニュー（画像 + ボタン）を管理画面で作り、**全員向けのメニュー**として公式 LINE に反映する。店舗管理者ページ `/{storeId}/admin?tab=richmenu` とテナント側 店舗ページの「リッチメニュー」タブで、同じ部品 `src/components/rich-menu/RichMenuPanel.tsx`（一覧・反映・反映をやめる・削除）+ `RichMenuEditorDialog.tsx`（名前・大きさ・バーの文言・画像・ボタン）を使う
 - **LINE の決まり（2026-11 に公式ドキュメントで確認）**: 画像 = JPEG / PNG・1MB まで・幅 800〜2500px・高さ 250px 以上・横 ÷ 縦 1.45 以上 / ボタン（areas）20 個まで / バーの文言 14 文字まで / メニューは 1 アカウント 1000 個まで / **作ったメニューは書き換えられず、画像の差し替えもできない** → 変えるときは作り直して差し替える。表示の優先順位は お客様ごと（API）> 全員向け（API）> 公式 LINE の管理画面で設定したもの
 - 大きさは 大（2500×1686）/ 小（2500×843）の 2 つ（`RICH_MENU_SIZES`）。**画像の加工はブラウザで行う**（`RichMenuImagePicker.tsx`: `react-easy-crop` でメニューの形に切り抜く → canvas でその大きさの JPEG にし、1MB 以下になるまで画質を下げる → `/api/upload/menu-image`（`menuId = richmenu_{stamp}`）。サーバーに `sharp` は足していない）。反映のときサーバーは画像の先頭を読んで 形式・大きさ・1MB 以下 を確かめる（`readImageInfo` / `checkRichMenuImage`）
@@ -289,7 +289,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - 純粋ロジック `src/lib/line-rich-menu.ts`、保存 `src/lib/line-rich-menu-repository.ts`（local は `data/line_rich_menus.json`）。**local は LINE と通信せず、記録だけ更新する**
 - API（`authorizeStoreAccess`）: `GET/POST /api/stores/{storeId}/rich-menus`、`PUT/DELETE .../{id}`、`POST .../{id}/publish`、`POST .../{id}/unpublish`
 - **表示設定**: `admin_visible_options.rich_menu`（「店舗管理者に表示するメニュー」の「配信」の下の「リッチメニューを表示」）。**未設定は非表示**（`defaultHidden: true`。公式 LINE の全員向けメニューを差し替える機能なので、運営がチェックを入れた店舗だけに出す。タブには連動しない）。運営が開いたときは常に表示。メニューの項目 ID は `richmenu`（`buildStoreAdminNav(visibleTabs, { calendar, richMenu })`）
-- マイグレーション `20261125000000_add_line_rich_menus.sql`（`line_rich_menus`。RLS ポリシー無し = service_role のみ。`rule` 列は ③-3 用で、いまは使わない）。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも既存の機能は動く（一覧が空になり、作成すると「マイグレーションがまだ適用されていません」と出る）。**staging は LINE のチャネルが本番と別なら反映まで確認できる**（LINE への通信はこのシステムから出るだけなので、ログイン保護は関係ない）
+- マイグレーション `20261125000000_add_line_rich_menus.sql`（`line_rich_menus`。RLS ポリシー無し = service_role のみ。`rule` 列 = お客様ごとの切り替えの条件）と `20261126000000_add_line_rich_menu_links.sql`（お客様ごとの切り替えの記録）。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも既存の機能は動く（一覧が空になり、作成すると「マイグレーションがまだ適用されていません」と出る）。**staging は LINE のチャネルが本番と別なら反映まで確認できる**（LINE への通信はこのシステムから出るだけなので、ログイン保護は関係ない）
 - **分割の型（③-2）**: 編集画面の「型から作る」。`RICH_MENU_LAYOUTS`（大 = 6 分割・4 分割・上 1 + 下 3・上 1 + 下 2・左大 + 右 2・上下 2 / 小 = 3 分割・左 1/3 + 右 2/3・左 2/3 + 右 1/3 / 共通 = 2 分割・全体。公式 LINE の管理画面と同じ並び。`layoutsForSize`）。`applyRichMenuLayout(layoutId, size, いまの範囲)` が範囲を作り直し、**いまのボタンの動きは上から順に引き継ぐ**（数が減ってあふれるぶんは捨てる。動きの入ったボタンが消えるときは確認を出す = `layoutDropsActions`）。型を選んだあとも、範囲は自由に動かせる
 - **スマホ枠のプレビュー（③-2）**: 編集画面の右側の「ボタンを編集 / スマホでの見え方」。`RichMenuPhonePreview.tsx`（iPhone の LINE = 幅 390px を模した枠。欄の幅に合わせて縮小。メニューバーを押すと開閉、ボタンを押すと動きを吹き出しで知らせる = 実際には何も送らない。切り替えのボタンを押すと、切り替え先の**保存済みの**メニューを見せる。近似の表示）
 - **タブ切り替え（③-2。ボタンの動き `{ type: 'switch', menu_id }` = 別のメニューに切り替える）**: LINE の `richmenuswitch`。**LINE の決まり**: 切り替え先のメニューに名札（エイリアス。32 文字まで・英小文字 / 数字 / _ / -。1 アカウント 1000 個まで）を付け、ボタンにはその名札を書く。名札は**画像を入れたメニューにしか付けられない**。名札を外す API は 1 時間に 100 回まで
@@ -299,7 +299,16 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - 削除: 反映中は不可。ほかのメニューの切り替え先になっている下書きも不可（`menusSwitchingTo`。先にそのボタンの動きを変える）
   - 検証（反映のとき）: 切り替え先が 未選択 / 自分自身 / 消えたメニュー は不可。複数のメニューを出すとき、エラーの先頭に「「メニュー名」— 」を付けて、どのメニューが原因かを知らせる
   - **実機で確かめていないこと**: お客様が切り替え先のメニューを見ている最中に反映し直すと、そのお客様は古いメニュー（消されたもの）に個別にひも付いている。LINE の文書には「消したメニューは、次にトークを開いたとき表示されなくなる」とだけあり、全員向けのメニューに戻るかは書かれていない（戻る想定で作ってある）
-- Vitest: `line-rich-menu.test.ts` / `line-rich-menu-layouts.test.ts` / `line-rich-menu-service.local.test.ts` / `store-admin-tabs.test.ts` / `admin-api-auth.test.ts`
+- **お客様ごとの切り替え（③-3）**: メニューに「だれに出すか」の条件を付けると、条件に合うお客様にだけ、全員向けのメニューの代わりにそのメニューを出す。条件は配信の「配信先の条件」と同じ形（`BroadcastAudience`）で、編集画面の「だれに出すか」→「条件に合うお客様だけ」に `AudienceEditor` を出す。保存先は `line_rich_menus.rule` = `RichMenuRule { audience, order }`（null = 全員向け / 切り替え先）
+  - **LINE には「この人にはこのメニュー」と 1 人ずつ設定する**（`POST /v2/bot/richmenu/bulk/link` / `bulk/unlink`。500 人ずつ。202 = 受け付けだけで、LINE があとから反映する）。メニューは条件ごとに 1 個（人数ぶんは作らない。`RICH_MENU_RULES_MAX` = 5 個まで）。表示の優先順位は お客様ごと > 全員向け なので、全員向けのメニューと両方出しておける
+  - 純粋ロジック `src/lib/line-rich-menu-rules.ts`: `planRichMenuAssignments({ menus, customers, facts, now })`（優先順位の順に `matchAudience` で見て、**最初に合ったメニュー**。LINE 未連携・ブロックされている人は対象外。**配信停止の人には出す**（メニューは配信ではない）。どの条件にも合わない人は入らない = 全員向けを見る）/ `diffRichMenuAssignments(いまの記録, あるべき設定)` → 設定する人（メニューごと）・外す人・変わらない人 / `sortRuleMenus` / `reorderRuleMenus` / `isRuleEmpty`（条件が 1 つも無いと出せない = 全員に出すなら全員向けにする）
+  - **見直し** `syncRichMenuAssignments(storeId, { deadlineMs })`（`line-rich-menu-service.ts`）: 公式 LINE に出ているお客様ごとのメニュー → 顧客・予約・来店・アンケートを全件読む（`loadAudienceSource`。配信と同じ）→ あるべき設定を作る → いまの記録との差だけを LINE に送る → **送れたぶんだけ記録を更新**（途中で止まっても、次の見直しで続きから合う）。呼ばれるのは ① メニューを出す・出すのをやめる・優先順位を変える とき ② 予約が入ったとき（`POST /api/reservations`）・顧客情報を変えたとき（`PATCH /customers/{id}`）= `scheduleRichMenuSync(storeId)`（`after()` でレスポンス後。お客様ごとのメニューを出していない店舗では何もしない。10 秒待ってから）③ 1 日 1 回 = pg_cron `run_rich_menu_sync`（**本番のみ登録。マイグレーションに含めない**）→ `POST /api/cron/rich-menu-sync`（Service Role Key の Bearer。22 秒で切り上げ）④ 画面の「いま見直す」= `POST /api/stores/{storeId}/rich-menus/sync`（staging の確認用）。**アンケートの選択肢タグ・LINE の分岐で付いたタグは ③ で拾う**（その場では見直さない）
+  - **記録** `line_rich_menu_links`（店舗 × LINE ユーザー ID = 1 行。`20261126000000_add_line_rich_menu_links.sql`。RLS ポリシー無し）: **このシステムが設定した人だけ**を持つ。条件に合わなくなった人の設定を外すため。タブ切り替えで LINE が自動で付けた設定は入らない = このシステムは外さない。local は `data/line_rich_menu_links.json`
+  - 出す `publishRuleMenu`（`publishRichMenu` が `menu.rule` を見て振り分ける）: LINE にメニューを作って画像を入れる（`publishToLine({ ..., setDefault: false })` = 全員向けにはしない）→ 記録（`status: published` + `is_default: false` + `rule` あり）→ 見直し（作り直したときは LINE 側の ID が変わるので、いまの人を全員付け替える）→ 古いメニューを消す（付け替えが全部終わったときだけ）。出すのをやめる `stopRuleMenu`: 先に記録を下書きにする → 見直し（その人たちは次に条件が合うメニューか、全員向けに戻る）→ メニューを消す
+  - **使える条件**: チャネルシークレットを登録した店舗だけ（`ruleUnavailableReason`。未登録・マイグレーション未適用のときは理由を返し、画面に出す。保存はできる）。local は制限なし
+  - **全員向けの反映・反映をやめるは、お客様ごとのメニューに触らない**（下書きに戻さない・LINE から消さない = `cleanupLineRichMenus` の keep に入れる）。お客様ごとのメニューでは「別のメニューに切り替える」は使えず、切り替え先にもできない（切り替えも 1 人ずつの設定なので両立しない）。公式 LINE に出しているあいだは「全員」と「条件に合うお客様だけ」を入れ替えられない
+  - 優先順位: 一覧の ↑↓（`POST /api/stores/{storeId}/rich-menus/rule-order` に `{ ids }`）。保存では変えない（新しいお客様ごとのメニューは、いちばん下）。一覧には「出す相手」と「いま N 人に設定中」（`link_counts`）を出す
+- Vitest: `line-rich-menu.test.ts` / `line-rich-menu-layouts.test.ts` / `line-rich-menu-rules.test.ts` / `line-rich-menu-service.local.test.ts` / `line-rich-menu-rules-service.local.test.ts` / `store-admin-tabs.test.ts` / `admin-api-auth.test.ts`
 
 **全予約一覧の「集計ダウンロード」（`/tenant/{slug}/admin/reservations` → 予約一覧タブ。Excel = 予約数 / キャンセル数 / アンケート回答数 / 出力条件 の 4 シート。店舗 × 月）:**
 - 予約は `GET /api/reservations`、アンケート回答数は `GET /api/surveys/stats`。どちらも **ログイン必須 + 見てよい店舗だけ**（`src/lib/admin-store-scope.ts` の `getAccessibleStoreIds` = マスター: 全店舗 / システム管理者: 同じテナント / 店舗管理者: 自分の店舗。`resolveStoreScope` で `store_id` の指定を確認し、範囲外は 403。local は認証スキップ）、**`fetchAllRows` で 1000 件ずつ全件取得**（以前は 1 回の取得 = 1000 件までで、件数が欠けていた）
@@ -662,7 +671,10 @@ export async function GET(req, { params }) {
 ### リッチメニュー API:
 - `GET/POST /api/stores/{storeId}/rich-menus` - 一覧（+ 選べる予約フォーム・LINE のいまの設定との食い違い）/ 下書きを作る
 - `PUT/DELETE /api/stores/{storeId}/rich-menus/{id}` - 内容を保存 / 削除（反映中は不可）
-- `POST /api/stores/{storeId}/rich-menus/{id}/publish` / `.../unpublish` - 全員向けのメニューとして公式 LINE に反映 / 反映をやめる
+- `POST /api/stores/{storeId}/rich-menus/{id}/publish` / `.../unpublish` - 全員向けのメニューとして公式 LINE に反映 / 反映をやめる（お客様ごとのメニューは、条件に合うお客様に出す / 出すのをやめる）
+- `POST /api/stores/{storeId}/rich-menus/sync` - お客様ごとのメニューの設定を、いまの条件に合わせて見直す
+- `POST /api/stores/{storeId}/rich-menus/rule-order` - お客様ごとのメニューの優先順位（`{ ids }`）
+- `POST /api/cron/rich-menu-sync` - 1 日 1 回の見直し（pg_cron から。Service Role Key の Bearer）
 
 ### 予約カレンダー API:
 - `GET /api/stores/{storeId}/reservations/calendar` - 期間に掛かる予約と、予約以外の予定の時間（`from` / `to` = YYYY-MM-DD。最大 62 日。認証必須）
@@ -811,6 +823,7 @@ export async function GET(req, { params }) {
 - `20261101000000_add_stay_reservation.sql` - 宿泊モード: reservations に checkout_date / stay_nights / guest_counts / guest_count / stay_price_total / cancel_fee_percent / cancel_fee_amount / cancelled_at、DB 関数 `stay_insert_reservation_checked`
 - `20261120000000_add_store_digest.sql` - 朝のまとめ・月次レポート: store_digest_settings / store_digest_staff / store_digest_logs
 - `20261125000000_add_line_rich_menus.sql` - リッチメニュー: line_rich_menus
+- `20261126000000_add_line_rich_menu_links.sql` - リッチメニューのお客様ごとの切り替え: line_rich_menu_links
 - `20261009000000_add_wall.sql` - 寄せ書きウォールの 5 テーブル・RLS・DB 関数 `wall_insert_post_checked` / `wall_add_report`
 - `20261010000000_add_wall_daily_max.sql` - wall_boards.daily_max
 - `20261011000000_add_wall_engagement.sql` - 寄せ書きの追加機能（wall_topics / wall_empathies、wall_posts の reaction / topic_id / note_color / note_deco / empathy_count、wall_boards の empathy_* / customer_pick_enabled、DB 関数 `wall_toggle_empathy`）
