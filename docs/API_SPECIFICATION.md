@@ -624,6 +624,48 @@ Supabase StorageからフォームHTMLをプロキシ配信
 
 ---
 
+## 🧭 流入経路（Reservation Sources）API
+
+店頭ポップ・チラシ・Instagram など、置き場所ごとの URL / QR コードを発行し、どこから予約が入ったかを記録する。
+
+### `GET /api/stores/{storeId}/reservation-sources`
+経路の一覧と、選べる予約フォーム
+
+**認証**: 必要（店舗へのアクセス権。local はスキップ）
+
+**レスポンス**:
+```json
+{
+  "sources": [
+    {
+      "id": "uuid", "store_id": "abc123", "form_id": "g3v71mxst30e", "name": "店頭ポップ", "code": "fr5sfvkz",
+      "active": true, "click_count": 12,
+      "entry_url": "https://…/s/fr5sfvkz", "form_name": "予約フォーム", "form_status": "ok"
+    }
+  ],
+  "forms": [{ "id": "g3v71mxst30e", "name": "予約フォーム", "status": "ok" }],
+  "max": 100
+}
+```
+`form_status` / `status`: `ok` / `needs_deploy`（古い HTML のまま。フォームを更新すると経路が記録されるようになる）/ `no_url`（開く URL が無い）/ `missing`（フォームが削除されている）
+
+### `POST /api/stores/{storeId}/reservation-sources`
+経路を作る。`{ "name": "店頭ポップ", "form_id": "g3v71mxst30e" }`（名前は 40 文字まで。フォームはその店舗のものだけ。1 店舗 100 件まで）。`201` で経路を返す
+
+### `PUT /api/stores/{storeId}/reservation-sources/{id}`
+`{ "name"?, "form_id"?, "active"? }`。経路は削除できない（`active: false` で停止）。他の店舗の経路は `404`
+
+### `GET /api/stores/{storeId}/reservation-sources/{id}/qr`
+QR コードの PNG（中身は `entry_url`）。`?download=1` で保存用のヘッダーを付ける
+
+### `GET /s/{code}`
+経路の URL（公開）。「読まれた数」を 1 増やして、予約フォームへ `302` で移動する（`?src={code}` 付き）。停止中の経路は `?src=` を付けず、数えない。検索ロボットらしいアクセスは数えない。存在しない合言葉は `404`
+
+### 予約への記録
+`POST /api/reservations` の `source_code`（フォームが URL の `?src=` から読んで送る）。その店舗の有効な経路の合言葉だけ `reservations.source_code` に記録する。それ以外（でたらめ・他の店舗・停止中・手動予約）は記録せず、予約は成功する
+
+---
+
 ## 📊 予約分析（Reservation Analytics）API
 
 ### `GET /api/stores/{storeId}/reservations/analytics`
