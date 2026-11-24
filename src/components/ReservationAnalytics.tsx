@@ -337,7 +337,7 @@ export default function ReservationAnalytics({ storeId, defaultPeriod = 'last_12
 
         {/* 流入経路（置き場所ごとの URL / QR コード） */}
         <TabsContent value="sources" className="mt-3">
-          <ReservationSourcesPanel storeId={storeId} />
+          <ReservationSourcesPanel storeId={storeId} dateFrom={range.date_from} dateTo={range.date_to} formId={formId !== ALL_FORMS ? formId : null} scopeLabel={scopeLabel} />
         </TabsContent>
 
         {/* 概要 */}

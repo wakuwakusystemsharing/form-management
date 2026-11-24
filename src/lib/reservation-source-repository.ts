@@ -15,6 +15,8 @@ import { normalizeForm } from '@/lib/form-normalizer';
 import { getReservationFormName } from '@/lib/form-display-name';
 import type { FormConfig, StaticDeploy } from '@/types/form';
 import { generateSourceCode, pickSourceCode, type ReservationSource, type SourceForm } from '@/lib/reservation-sources';
+import { fetchAllRows } from '@/lib/supabase-fetch-all';
+import type { SourceStatsOptions, SourceStatsReservation } from '@/lib/reservation-source-stats';
 
 const TABLE = 'reservation_sources';
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -214,6 +216,49 @@ export async function getStoreForm(storeId: string, formId: string): Promise<Sto
     return toFormSummary(data);
   } catch {
     return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 集計用の予約
+// ---------------------------------------------------------------------------
+
+const STATS_COLUMNS = 'id, form_id, status, reservation_date, selected_menus, selected_options, customer_info, stay_price_total, source_code';
+
+/**
+ * 流入経路の集計に使う予約を返す。
+ * - 経路のある予約: 全期間（予約率を累計で出すため。経路のある予約だけなので件数は少ない）
+ * - 経路の無い予約: 指定した期間・フォームのものだけ（「経路なし」の件数用）
+ * 絞り込みそのものは computeSourceStats が行う（ここでは読む量を減らすだけ）。
+ * 列が未適用の環境では空を返す
+ */
+export async function listReservationsForSourceStats(storeId: string, opts: SourceStatsOptions = {}): Promise<SourceStatsReservation[]> {
+  if (isLocal()) {
+    try {
+      const file = path.join(DATA_DIR, 'reservations.json');
+      if (!fs.existsSync(file)) return [];
+      const rows = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      return Array.isArray(rows) ? rows.filter((r: any) => r && r.store_id === storeId) : [];
+    } catch {
+      return [];
+    }
+  }
+  const c = client();
+  try {
+    const sourced = await fetchAllRows<SourceStatsReservation>((from, to) =>
+      c.from('reservations').select(STATS_COLUMNS).eq('store_id', storeId).not('source_code', 'is', null).order('id', { ascending: true }).range(from, to)
+    );
+    const unsourced = await fetchAllRows<SourceStatsReservation>((from, to) => {
+      let q = c.from('reservations').select(STATS_COLUMNS).eq('store_id', storeId).is('source_code', null);
+      if (opts.dateFrom) q = q.gte('reservation_date', opts.dateFrom);
+      if (opts.dateTo) q = q.lte('reservation_date', opts.dateTo);
+      if (opts.formId) q = q.eq('form_id', opts.formId);
+      return q.order('id', { ascending: true }).range(from, to);
+    });
+    return [...sourced, ...unsourced];
+  } catch (e) {
+    if (isMissingSourceSchema({ message: e instanceof Error ? e.message : String(e) })) return [];
+    throw e;
   }
 }
 

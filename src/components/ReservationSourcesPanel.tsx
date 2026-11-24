@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * 流入経路（置き場所ごとの URL / QR コード）の発行と一覧
+ * 流入経路（置き場所ごとの URL / QR コード）の発行・一覧と、経路ごとの予約数・売上の集計
  * 予約管理 → 分析 → 「流入経路」。店舗管理者ページとテナント側 店舗ページで共用。
  * 設計: docs/店舗管理者ページ_追加4機能_実装設計.md の 5 章
  */
@@ -14,6 +14,11 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { SOURCE_FORM_STATUS_MESSAGES, SOURCE_NAME_MAX, type SourceFormStatus } from '@/lib/reservation-sources';
+import type { SourceStats } from '@/lib/reservation-source-stats';
+
+const yen = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' });
+const num = (n: number) => n.toLocaleString('ja-JP');
+const rateLabel = (rate: number | null) => (rate === null ? '—' : `${Math.round(rate * 100)}%`);
 
 interface SourceView {
   id: string;
@@ -33,7 +38,18 @@ interface FormOption {
   status: SourceFormStatus;
 }
 
-export default function ReservationSourcesPanel({ storeId }: { storeId: string }) {
+interface ReservationSourcesPanelProps {
+  storeId: string;
+  /** 集計の期間（予約日。分析の上の期間チップと同じ）。null = 指定なし */
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  /** 集計するフォーム。null = すべて */
+  formId?: string | null;
+  /** 「集計対象: …」に出す文言 */
+  scopeLabel?: string;
+}
+
+export default function ReservationSourcesPanel({ storeId, dateFrom = null, dateTo = null, formId: statsFormId = null, scopeLabel }: ReservationSourcesPanelProps) {
   const { toast } = useToast();
   const base = `/api/stores/${encodeURIComponent(storeId)}/reservation-sources`;
   const [sources, setSources] = useState<SourceView[]>([]);
@@ -47,6 +63,11 @@ export default function ReservationSourcesPanel({ storeId }: { storeId: string }
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [qrOpenId, setQrOpenId] = useState<string | null>(null);
+  const [stats, setStats] = useState<SourceStats | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  // 経路を作った・名前を変えた・停止したあとに、集計を取り直すための番号
+  const [statsVersion, setStatsVersion] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -73,6 +94,33 @@ export default function ReservationSourcesPanel({ storeId }: { storeId: string }
     void load();
   }, [load]);
 
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo) params.set('date_to', dateTo);
+      if (statsFormId) params.set('form_id', statsFormId);
+      const qs = params.toString();
+      const res = await fetchWithAuth(`${base}/stats${qs ? `?${qs}` : ''}`, { cache: 'no-store' });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json) {
+        setStatsError(json?.error || '流入経路の集計に失敗しました');
+        return;
+      }
+      setStats(json);
+      setStatsError(null);
+    } catch {
+      setStatsError('流入経路の集計に失敗しました');
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [base, dateFrom, dateTo, statsFormId]);
+
+  useEffect(() => {
+    void loadStats();
+  }, [loadStats, statsVersion]);
+
   const create = async () => {
     if (creating) return;
     setCreating(true);
@@ -84,6 +132,7 @@ export default function ReservationSourcesPanel({ storeId }: { storeId: string }
         return;
       }
       setSources((cur) => [...cur, json]);
+      setStatsVersion((v) => v + 1);
       setName('');
       setQrOpenId(json.id);
       toast({ title: `「${json.name}」を作成しました`, description: 'URL か QR コードを、置き場所に貼ってください' });
@@ -105,6 +154,7 @@ export default function ReservationSourcesPanel({ storeId }: { storeId: string }
         return;
       }
       setSources((cur) => cur.map((s) => (s.id === id ? json : s)));
+      setStatsVersion((v) => v + 1);
       setEditing(null);
       toast({ title: done });
     } catch {
@@ -125,9 +175,75 @@ export default function ReservationSourcesPanel({ storeId }: { storeId: string }
 
   const selectedForm = forms.find((f) => f.id === formId);
   const reachedMax = sources.length >= max;
+  const hasStats = !!stats && stats.rows.length > 0;
+  const share = stats && stats.summary.count > 0 ? Math.round((stats.summary.with_source / stats.summary.count) * 100) : null;
 
   return (
     <div className="space-y-3 md:space-y-4" data-slot="reservation-sources">
+      {(hasStats || statsError) && (
+        <Card data-slot="reservation-source-stats">
+          <CardHeader>
+            <CardTitle className="text-base">経路ごとの予約</CardTitle>
+            <CardDescription>
+              {scopeLabel ? `集計対象: ${scopeLabel}。` : ''}
+              期間は予約日で数えます。キャンセル済みの予約は予約数・売上に含めません。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className={`space-y-3 text-sm ${statsLoading ? 'opacity-60 transition-opacity' : ''}`} aria-busy={statsLoading || undefined}>
+            {statsError && <p className="rounded-md border border-red-200 bg-red-50 p-3 text-red-700">{statsError}</p>}
+            {stats && hasStats && (
+              <>
+                <p className="text-muted-foreground">
+                  予約 {num(stats.summary.count)} 件のうち、経路が分かるものは <span className="font-medium text-foreground">{num(stats.summary.with_source)} 件</span>
+                  {share !== null ? `（${share}%）` : ''}です。
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[34rem] text-sm">
+                    <thead>
+                      <tr className="border-b text-xs text-muted-foreground">
+                        <th className="py-2 pr-2 text-left font-medium">経路</th>
+                        <th className="px-2 py-2 text-right font-medium">予約数</th>
+                        <th className="px-2 py-2 text-right font-medium">キャンセル</th>
+                        <th className="px-2 py-2 text-right font-medium">売上</th>
+                        <th className="px-2 py-2 text-right font-medium">読まれた数</th>
+                        <th className="py-2 pl-2 text-right font-medium">予約率</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats.rows.map((row) => (
+                        <tr key={row.source_id} className="border-b last:border-b-0" data-slot="reservation-source-stat">
+                          <td className="py-2 pr-2">
+                            <span className="break-words font-medium">{row.name}</span>
+                            {!row.active && <span className="ml-1 text-xs text-muted-foreground">（停止中）</span>}
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">{num(row.count)} 件</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">{num(row.cancelled)} 件</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{yen.format(row.revenue)}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">{num(row.click_count)}</td>
+                          <td className="py-2 pl-2 text-right tabular-nums text-muted-foreground">{rateLabel(row.booking_rate)}</td>
+                        </tr>
+                      ))}
+                      <tr className="text-muted-foreground" data-slot="reservation-source-stat-none">
+                        <td className="py-2 pr-2">経路なし</td>
+                        <td className="px-2 py-2 text-right tabular-nums">{num(stats.none.count)} 件</td>
+                        <td className="px-2 py-2 text-right tabular-nums">{num(stats.none.cancelled)} 件</td>
+                        <td className="px-2 py-2 text-right tabular-nums">{yen.format(stats.none.revenue)}</td>
+                        <td className="px-2 py-2 text-right">—</td>
+                        <td className="py-2 pl-2 text-right">—</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  「経路なし」は、経路の URL を通らずに入った予約です（公式 LINE のメニューから開いた予約、経路を作る前の予約、店舗側で入力した予約など）。
+                  「読まれた数」と「予約率」は、選んだ期間に関係なくこれまでの累計です。予約率は 読まれた数のうち予約まで進んだ割合の目安で、キャンセルになった予約も数えます。
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">流入経路を作る</CardTitle>
@@ -177,7 +293,7 @@ export default function ReservationSourcesPanel({ storeId }: { storeId: string }
         <CardHeader>
           <CardTitle className="text-base">流入経路の一覧</CardTitle>
           <CardDescription>
-            「読まれた数」は URL や QR コードが開かれた回数の目安です（開いただけで予約しなかった人も数えます）。経路ごとの予約数・売上は、このあと追加する予定です。
+            「読まれた数」は URL や QR コードが開かれた回数の目安です（開いただけで予約しなかった人も数えます）。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">

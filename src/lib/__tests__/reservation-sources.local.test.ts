@@ -202,3 +202,45 @@ describe('予約への記録（POST /api/reservations）', () => {
     }
   });
 });
+
+describe('経路ごとの集計（GET /api/stores/{storeId}/reservation-sources/stats）', () => {
+  const stats = async (storeId: string, qs = '') => {
+    const route = await import('@/app/api/stores/[storeId]/reservation-sources/stats/route');
+    return route.GET(new Request(`${ORIGIN}/api/stores/${storeId}/reservation-sources/stats${qs}`), { params: Promise.resolve({ storeId }) });
+  };
+
+  it('経路ごとの予約数・読まれた数と、「経路なし」の件数を返す（停止した経路も残る）', async () => {
+    const [first] = await repo.listSources(STORE);
+    const res = await stats(STORE);
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    const row = json.rows.find((r: { code: string }) => r.code === first.code);
+    expect(row).toMatchObject({ name: '店頭ポップ（レジ横）', count: 1, cancelled: 0, click_count: 1, total_bookings: 1, booking_rate: 1 });
+    expect(json.rows.map((r: { name: string }) => r.name)).toContain('停止する経路');
+    expect(json.rows[0].code).toBe(first.code);
+    expect(json.none.count).toBe(7);
+    expect(json.summary).toMatchObject({ count: 8, with_source: 1 });
+    expect(JSON.stringify(json)).not.toContain('090-0000-0000');
+  });
+
+  it('期間（予約日）とフォームで絞り込める。日付の形がおかしいと 400', async () => {
+    const out = await (await stats(STORE, '?date_from=2027-01-01')).json();
+    expect(out.summary.count).toBe(0);
+    // 予約率は期間に依らない累計
+    expect(out.rows.find((r: { total_bookings: number }) => r.total_bookings === 1)).toMatchObject({ count: 0, booking_rate: 1 });
+    const inRange = await (await stats(STORE, '?date_from=2026-12-01&date_to=2026-12-31&form_id=formaaaa0001')).json();
+    expect(inRange.summary.count).toBe(8);
+    const otherForm = await (await stats(STORE, '?form_id=formaaaa0002')).json();
+    expect(otherForm.summary.count).toBe(0);
+    expect(otherForm.rows.map((r: { name: string }) => r.name)).toEqual(['チラシ']);
+    expect((await stats(STORE, '?date_from=2026/12/01')).status).toBe(400);
+  });
+
+  it('他の店舗の経路・予約は入らない。経路が無い店舗は空', async () => {
+    const other = await (await stats(OTHER)).json();
+    expect(other.rows.map((r: { name: string }) => r.name)).toEqual(['他店の経路']);
+    expect(other.summary.count).toBe(0);
+    const empty = await (await stats('st9999')).json();
+    expect(empty).toMatchObject({ rows: [], none: { count: 0 } });
+  });
+});
