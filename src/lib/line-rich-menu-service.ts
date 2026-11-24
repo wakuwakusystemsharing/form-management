@@ -3,11 +3,15 @@
  * 設計: docs/店舗管理者ページ_追加4機能_実装設計.md の 7 章
  *
  * 反映の順番（新しいメニューが表示される状態になってから、古いものを消す）:
- *   1. LINE に新しいメニューを作る     → 失敗したら何も変えずに終了
- *   2. 画像を送る                      → 失敗したら 1 で作ったものを消して終了
- *   3. 全員向けに設定する              → 失敗したら 1 で作ったものを消して終了
+ *   1. LINE に新しいメニューを作り、画像を送る（切り替えでつながっているメニューも一緒に）
+ *                                        → 失敗したら、作ったものを消して終了（何も変わらない）
+ *   2. 切り替え先のメニューに名札を付ける  → 失敗したら、作ったものを消して終了
+ *   3. 全員向けに設定する                  → 失敗したら、作ったものを消して終了
  *   4. このシステムの記録を「反映中」にする
- *   5. 古いメニューを LINE から消す    → 失敗しても反映は成功扱い（次の反映のときに掃除）
+ *   5. 古いメニューと名札を LINE から消す  → 失敗しても反映は成功扱い（次の反映のときに掃除）
+ *
+ * 名札（エイリアス）は反映のたびに新しく付ける。古い名札を書き換えないので、
+ * 途中で失敗しても、いま出ているメニューのタブ切り替えは壊れない
  */
 import fs from 'fs';
 import path from 'path';
@@ -17,12 +21,16 @@ import { listStoreForms } from '@/lib/reservation-source-repository';
 import { resolveFormBaseUrl } from '@/lib/reservation-sources';
 import {
   EXTERNAL_CHANGE_MESSAGES,
+  RICH_MENU_ALIAS_PREFIX,
   RICH_MENU_LIMITS,
+  buildRichMenuAliasId,
   buildRichMenuObject,
   canStartPublish,
   checkRichMenuImage,
+  collectSwitchGroup,
   describeLineRichMenuError,
   detectExternalChange,
+  menusSwitchingTo,
   normalizeRichMenuInput,
   readImageInfo,
   validateRichMenu,
@@ -67,6 +75,8 @@ async function formOptions(storeId: string, origin: string): Promise<{ options: 
   const urls = new Map(forms.map((f) => [f.id, resolveFormBaseUrl(f, origin)]));
   return { options: forms.map((f) => ({ id: f.id, name: f.name, openable: !!urls.get(f.id) })), urlOf: (id) => urls.get(id) ?? null };
 }
+
+const inputOf = (menu: LineRichMenu): RichMenuInput => ({ name: menu.name, size: menu.size, image_url: menu.image_url, areas: menu.areas, chat_bar_text: menu.chat_bar_text, open_by_default: menu.open_by_default });
 
 export async function getRichMenuOverview(storeId: string, origin: string, deps: { api?: RichMenuLineApi } = {}): Promise<RichMenuOverview> {
   const [menus, forms, token] = await Promise.all([listRichMenus(storeId), formOptions(storeId, origin), getStoreLineToken(storeId).catch(() => null)]);
@@ -116,46 +126,96 @@ export async function saveRichMenu(storeId: string, id: string, body: unknown): 
 // LINE への反映（順番が大事）
 // ---------------------------------------------------------------------------
 
-export type PublishToLineResult = { ok: true; richMenuId: string } | { ok: false; step: 'create' | 'image' | 'default'; error: string };
+/** LINE に作るメニュー 1 つ。key はこのシステムのメニュー ID、aliasId は付ける名札（切り替え先になるときだけ） */
+export interface PublishItem {
+  key: string;
+  object: Record<string, unknown>;
+  image: { bytes: Uint8Array; contentType: 'image/jpeg' | 'image/png' };
+  aliasId: string | null;
+}
+
+export type PublishToLineResult = { ok: true; richMenuId: string; ids: Record<string, string> } | { ok: false; step: 'create' | 'image' | 'alias' | 'default'; error: string };
 
 /**
- * LINE に新しいメニューを作って全員向けにする（上の 1〜3）。
- * 画像・全員向けの設定に失敗したら、作ったメニューを消してから失敗を返す（作りかけを残さない）
+ * LINE に新しいメニューを作って全員向けにする（上の 1〜3）。最初の 1 つが全員向けになる。
+ * 途中で失敗したら、作ったメニューと名札を消してから失敗を返す（作りかけを残さない。いま出ているメニューは変わらない）
  */
-export async function publishToLine(p: { api: RichMenuLineApi; object: Record<string, unknown>; image: { bytes: Uint8Array; contentType: 'image/jpeg' | 'image/png' } }): Promise<PublishToLineResult> {
-  const created = await p.api.create(p.object);
-  if (!created.ok || !created.richMenuId) return { ok: false, step: 'create', error: describeLineRichMenuError(created.status, created.body) };
-  const richMenuId = created.richMenuId;
-  const upload = await p.api.uploadImage(richMenuId, p.image.bytes, p.image.contentType);
-  if (!upload.ok) {
-    await p.api.remove(richMenuId);
-    return { ok: false, step: 'image', error: `画像を送れませんでした。${describeLineRichMenuError(upload.status, upload.body)}` };
+export async function publishToLine(p: { api: RichMenuLineApi; items: PublishItem[] }): Promise<PublishToLineResult> {
+  const created: string[] = [];
+  const aliases: string[] = [];
+  const ids: Record<string, string> = {};
+  const rollback = async () => {
+    for (const alias of aliases) await p.api.removeAlias(alias).catch(() => null);
+    for (const id of created) await p.api.remove(id).catch(() => null);
+  };
+  const many = p.items.length > 1;
+  const label = (item: PublishItem) => (many ? `（${String(item.object.name || '').replace(LINE_MENU_NAME_PREFIX, '')}）` : '');
+
+  // 1. メニューを作り、画像を送る
+  for (const item of p.items) {
+    const res = await p.api.create(item.object);
+    if (!res.ok || !res.richMenuId) {
+      await rollback();
+      return { ok: false, step: 'create', error: `${describeLineRichMenuError(res.status, res.body)}${label(item)}` };
+    }
+    created.push(res.richMenuId);
+    ids[item.key] = res.richMenuId;
+    const upload = await p.api.uploadImage(res.richMenuId, item.image.bytes, item.image.contentType);
+    if (!upload.ok) {
+      await rollback();
+      return { ok: false, step: 'image', error: `画像を送れませんでした${label(item)}。${describeLineRichMenuError(upload.status, upload.body)}` };
+    }
   }
-  const setDefault = await p.api.setDefault(richMenuId);
+  // 2. 切り替え先のメニューに名札を付ける（名札は、画像を入れたメニューにしか付けられない）
+  for (const item of p.items) {
+    if (!item.aliasId) continue;
+    const res = await p.api.createAlias(item.aliasId, ids[item.key]);
+    if (!res.ok) {
+      await rollback();
+      return { ok: false, step: 'alias', error: `メニューの切り替えを設定できませんでした${label(item)}。${describeLineRichMenuError(res.status, res.body)}` };
+    }
+    aliases.push(item.aliasId);
+  }
+  // 3. 全員向けにする
+  const rootId = ids[p.items[0].key];
+  const setDefault = await p.api.setDefault(rootId);
   if (!setDefault.ok) {
-    await p.api.remove(richMenuId);
+    await rollback();
     return { ok: false, step: 'default', error: `全員向けに設定できませんでした。${describeLineRichMenuError(setDefault.status, setDefault.body)}` };
   }
-  return { ok: true, richMenuId };
+  return { ok: true, richMenuId: rootId, ids };
 }
 
 /**
- * 古いメニューを LINE から消す（上の 5）。
- * 渡された ID に加えて、このシステムの印が付いた消し残りも消す。いま表示しているもの（keepId）は消さない。
+ * 古いメニューと名札を LINE から消す（上の 5）。
+ * 渡された ID に加えて、このシステムの印が付いた消し残りも消す。いま出しているもの（keep）は消さない。
  * 失敗しても例外にしない（反映は成功扱い。次の反映のときにまた掃除する）
  */
-export async function cleanupLineRichMenus(api: RichMenuLineApi, keepId: string | null, oldIds: string[]): Promise<{ removed: string[]; failed: string[] }> {
-  const targets = new Set(oldIds.filter((id) => id && id !== keepId));
+export async function cleanupLineRichMenus(api: RichMenuLineApi, keep: { menuIds: string[]; aliasIds?: string[] }, oldIds: string[]): Promise<{ removed: string[]; failed: string[] }> {
+  const keepMenus = new Set(keep.menuIds);
+  const keepAliases = new Set(keep.aliasIds || []);
+  const removed: string[] = [];
+  const failed: string[] = [];
+
+  // 名札: このシステムの印が付いていて、いま使っていないもの
   try {
-    const list = await api.list();
-    for (const m of list || []) {
-      if (m.richMenuId !== keepId && m.name.startsWith(LINE_MENU_NAME_PREFIX)) targets.add(m.richMenuId);
+    for (const a of (await api.listAliases()) || []) {
+      if (!a.richMenuAliasId.startsWith(RICH_MENU_ALIAS_PREFIX) || keepAliases.has(a.richMenuAliasId)) continue;
+      const res = await api.removeAlias(a.richMenuAliasId);
+      if (!res.ok && res.status !== 404) failed.push(a.richMenuAliasId);
+    }
+  } catch {
+    /* 名札の掃除に失敗しても、メニューの掃除は続ける */
+  }
+
+  const targets = new Set(oldIds.filter((id) => id && !keepMenus.has(id)));
+  try {
+    for (const m of (await api.list()) || []) {
+      if (!keepMenus.has(m.richMenuId) && m.name.startsWith(LINE_MENU_NAME_PREFIX)) targets.add(m.richMenuId);
     }
   } catch {
     /* 一覧を読めなくても、分かっている ID は消す */
   }
-  const removed: string[] = [];
-  const failed: string[] = [];
   for (const id of targets) {
     try {
       const res = await api.remove(id);
@@ -193,25 +253,48 @@ export interface PublishDeps {
   now?: Date;
 }
 
-/** 全員向けのメニューとして公式 LINE に反映する */
+/**
+ * 全員向けのメニューとして公式 LINE に反映する。
+ * 切り替えのボタンでつながっているメニューも、一緒に LINE に作る（全員向けになるのは、このメニューだけ）
+ */
 export async function publishRichMenu(storeId: string, id: string, origin: string, deps: PublishDeps = {}): Promise<ServiceResult<LineRichMenu>> {
-  const menu = await getRichMenu(storeId, id);
+  const all = await listRichMenus(storeId);
+  const menu = all.find((m) => m.id === id);
   if (!menu) return fail(404, 'リッチメニューが見つかりません');
   if (!canStartPublish(menu, deps.now)) return fail(409, '反映の途中です。少し待ってから、もう一度お試しください');
 
-  const input: RichMenuInput = { name: menu.name, size: menu.size, image_url: menu.image_url, areas: menu.areas, chat_bar_text: menu.chat_bar_text, open_by_default: menu.open_by_default };
-  const forms = await formOptions(storeId, origin);
-  const errors = validateRichMenu(input, { forPublish: true, formIds: forms.options.map((f) => f.id) });
-  if (errors.length > 0) return fail(400, errors[0]);
-  const built = buildRichMenuObject({ ...input, name: `${LINE_MENU_NAME_PREFIX}${input.name}` }, forms.urlOf);
-  if (!built.ok) return fail(400, built.error);
+  const collected = collectSwitchGroup(id, all);
+  if (!collected.ok) return fail(400, collected.error);
+  const group = collected.group;
+  const many = group.length > 1;
+  const now = deps.now ?? new Date();
+  const stamp = now.getTime().toString(36);
+  // 切り替えでつながっているときは、全部のメニューに名札を付ける（最初のメニューへ戻るボタンもあるため）
+  const aliasOf = new Map(many ? group.map((m) => [m.id, buildRichMenuAliasId(m.id, stamp)]) : []);
 
-  const others = (await listRichMenus(storeId)).filter((m) => m.id !== id && (m.is_default || m.line_rich_menu_id));
-  const publishedAt = (deps.now ?? new Date()).toISOString();
+  const forms = await formOptions(storeId, origin);
+  const formIds = forms.options.map((f) => f.id);
+  const menuIds = all.map((m) => m.id);
+  const objects: Array<{ menu: LineRichMenu; object: Record<string, unknown> }> = [];
+  for (const m of group) {
+    const input = inputOf(m);
+    const prefix = many ? `「${m.name}」— ` : '';
+    const errors = validateRichMenu(input, { forPublish: true, formIds, menuIds, selfId: m.id });
+    if (errors.length > 0) return fail(400, `${prefix}${errors[0]}`);
+    const built = buildRichMenuObject({ ...input, name: `${LINE_MENU_NAME_PREFIX}${input.name}` }, forms.urlOf, (menuId) => aliasOf.get(menuId) ?? null);
+    if (!built.ok) return fail(400, `${prefix}${built.error}`);
+    objects.push({ menu: m, object: built.object });
+  }
+
+  const groupIds = new Set(group.map((m) => m.id));
+  const others = all.filter((m) => !groupIds.has(m.id) && (m.is_default || m.line_rich_menu_id || m.status === 'published'));
+  const publishedAt = now.toISOString();
+  const offPatch = { is_default: false, status: 'draft' as const, line_rich_menu_id: null, dirty: false };
 
   // local: LINE とは通信せず、記録だけ更新する
   if (isLocal()) {
-    for (const other of others) await updateRichMenu(storeId, other.id, { is_default: false, status: 'draft', line_rich_menu_id: null, dirty: false });
+    for (const other of others) await updateRichMenu(storeId, other.id, offPatch);
+    for (const m of group.slice(1)) await updateRichMenu(storeId, m.id, { status: 'published', is_default: false, dirty: false, last_error: null, published_at: publishedAt });
     const res = await updateRichMenu(storeId, id, { status: 'published', is_default: true, dirty: false, last_error: null, published_at: publishedAt });
     if (res.error !== undefined || !res.data) return fail(500, res.error || '保存に失敗しました');
     return { ok: true, data: res.data, notice: 'local では LINE に反映しません（記録だけ更新しました）' };
@@ -220,11 +303,15 @@ export async function publishRichMenu(storeId: string, id: string, origin: strin
   const token = await getStoreLineToken(storeId);
   if (!token) return fail(400, 'LINE のチャネルアクセストークンが登録されていません。店舗の設定で登録してください');
 
-  const bytes = await (deps.loadImage ?? loadImageBytes)(menu.image_url);
-  if (!bytes) return fail(400, '画像を読み込めませんでした。画像を選び直してください');
-  const imageError = checkRichMenuImage(bytes, menu.size);
-  if (imageError) return fail(400, imageError);
-  const contentType = readImageInfo(bytes)?.type === 'png' ? 'image/png' : 'image/jpeg';
+  const items: PublishItem[] = [];
+  for (const { menu: m, object } of objects) {
+    const prefix = many ? `「${m.name}」— ` : '';
+    const bytes = await (deps.loadImage ?? loadImageBytes)(m.image_url);
+    if (!bytes) return fail(400, `${prefix}画像を読み込めませんでした。画像を選び直してください`);
+    const imageError = checkRichMenuImage(bytes, m.size);
+    if (imageError) return fail(400, `${prefix}${imageError}`);
+    items.push({ key: m.id, object, image: { bytes, contentType: readImageInfo(bytes)?.type === 'png' ? 'image/png' : 'image/jpeg' }, aliasId: aliasOf.get(m.id) ?? null });
+  }
 
   // 反映ボタンを 2 回押してもメニューが 2 つできないように、先に「反映の途中」にして確保する
   const claimed = await updateRichMenu(storeId, id, { status: 'publishing' }, { onlyIfStatus: [menu.status], onlyIfUpdatedAt: menu.updated_at });
@@ -235,7 +322,7 @@ export async function publishRichMenu(storeId: string, id: string, origin: strin
   const wasPublished = menu.status === 'published';
   let result: PublishToLineResult;
   try {
-    result = await publishToLine({ api, object: built.object, image: { bytes, contentType } });
+    result = await publishToLine({ api, items });
   } catch (e) {
     result = { ok: false, step: 'create', error: `LINE と通信できませんでした（${e instanceof Error ? e.message : String(e)}）` };
   }
@@ -246,13 +333,16 @@ export async function publishRichMenu(storeId: string, id: string, origin: strin
   }
 
   // 4. 記録を更新する。全員向けは 1 店舗に 1 つなので、先にほかのメニューの印を外す
-  const oldIds = [menu.line_rich_menu_id, ...others.map((m) => m.line_rich_menu_id)].filter((v): v is string => !!v);
-  for (const other of others) await updateRichMenu(storeId, other.id, { is_default: false, status: 'draft', line_rich_menu_id: null, dirty: false });
+  const oldIds = all.map((m) => m.line_rich_menu_id).filter((v): v is string => !!v);
+  for (const other of others) await updateRichMenu(storeId, other.id, offPatch);
+  for (const m of group.slice(1)) {
+    await updateRichMenu(storeId, m.id, { status: 'published', is_default: false, line_rich_menu_id: result.ids[m.id] ?? null, dirty: false, last_error: null, published_at: publishedAt });
+  }
   const saved = await updateRichMenu(storeId, id, { status: 'published', is_default: true, line_rich_menu_id: result.richMenuId, dirty: false, last_error: null, published_at: publishedAt });
 
-  // 5. 古いメニューを消す（失敗しても反映は成功）
-  const cleanup = await cleanupLineRichMenus(api, result.richMenuId, oldIds);
-  if (cleanup.failed.length > 0) console.warn('[rich-menu] 古いメニューを消せませんでした（次の反映のときに掃除します）:', cleanup.failed.join(', '));
+  // 5. 古いメニューと名札を消す（失敗しても反映は成功）
+  const cleanup = await cleanupLineRichMenus(api, { menuIds: Object.values(result.ids), aliasIds: [...aliasOf.values()] }, oldIds);
+  if (cleanup.failed.length > 0) console.warn('[rich-menu] 古いメニュー・名札を消せませんでした（次の反映のときに掃除します）:', cleanup.failed.join(', '));
 
   if (saved.error !== undefined || !saved.data) {
     // LINE には出ているが記録に失敗した。次に開いたとき「ほかの場所で変更されています」と出るので、もう一度反映すれば直る
@@ -261,15 +351,25 @@ export async function publishRichMenu(storeId: string, id: string, origin: strin
   return { ok: true, data: saved.data };
 }
 
-/** 反映をやめる（全員向けの設定を外す。公式 LINE の管理画面で設定したメニューに戻る） */
+/**
+ * 反映をやめる（全員向けの設定を外す。公式 LINE の管理画面で設定したメニューに戻る）。
+ * 切り替え先として一緒に出していたメニューも、下書きに戻す
+ */
 export async function unpublishRichMenu(storeId: string, id: string, deps: { api?: RichMenuLineApi } = {}): Promise<ServiceResult<LineRichMenu>> {
-  const menu = await getRichMenu(storeId, id);
+  const all = await listRichMenus(storeId);
+  const menu = all.find((m) => m.id === id);
   if (!menu) return fail(404, 'リッチメニューが見つかりません');
   if (!canStartPublish(menu)) return fail(409, '反映の途中です。少し待ってから、もう一度お試しください');
-  if (!menu.is_default && !menu.line_rich_menu_id) return fail(400, 'このメニューは反映されていません');
+  if (!menu.is_default && !menu.line_rich_menu_id && menu.status !== 'published') return fail(400, 'このメニューは反映されていません');
+  // 切り替え先として出ているだけのメニューは、元のメニューの反映をやめる
+  const root = all.find((m) => m.is_default);
+  if (!menu.is_default && root && root.id !== id) return fail(409, `このメニューは「${root.name}」の切り替え先として出ています。「${root.name}」の「反映をやめる」を押してください`);
+
   const patch = { is_default: false, status: 'draft' as const, line_rich_menu_id: null, dirty: false, last_error: null };
+  const linked = all.filter((m) => m.id !== id && (m.status === 'published' || m.line_rich_menu_id));
 
   if (isLocal()) {
+    for (const m of linked) await updateRichMenu(storeId, m.id, patch);
     const res = await updateRichMenu(storeId, id, patch);
     if (res.error !== undefined || !res.data) return fail(500, res.error || '保存に失敗しました');
     return { ok: true, data: res.data, notice: 'local では LINE に反映しません（記録だけ更新しました）' };
@@ -286,17 +386,23 @@ export async function unpublishRichMenu(storeId: string, id: string, deps: { api
       if (!cleared.ok && cleared.status !== 404) return fail(502, `反映をやめられませんでした。${describeLineRichMenuError(cleared.status, cleared.body)}`);
     }
   }
+  for (const m of linked) await updateRichMenu(storeId, m.id, patch);
   const res = await updateRichMenu(storeId, id, patch);
-  if (menu.line_rich_menu_id) await cleanupLineRichMenus(api, null, [menu.line_rich_menu_id]).catch(() => null);
+  const oldIds = all.map((m) => m.line_rich_menu_id).filter((v): v is string => !!v);
+  await cleanupLineRichMenus(api, { menuIds: [] }, oldIds).catch(() => null);
   if (res.error !== undefined || !res.data) return fail(500, res.error || '保存に失敗しました');
   return { ok: true, data: res.data };
 }
 
 /** 削除する（反映中のメニューは、先に反映をやめてから） */
 export async function removeRichMenu(storeId: string, id: string): Promise<ServiceResult<{ id: string }>> {
-  const menu = await getRichMenu(storeId, id);
+  const all = await listRichMenus(storeId);
+  const menu = all.find((m) => m.id === id);
   if (!menu) return fail(404, 'リッチメニューが見つかりません');
   if (menu.is_default || menu.status === 'published' || menu.status === 'publishing') return fail(409, '反映中のメニューは削除できません。先に「反映をやめる」を押してください');
+  // ほかのメニューの切り替え先になっているときは、先にそのボタンを直してもらう（消すと、そのメニューが反映できなくなる）
+  const sources = menusSwitchingTo(id, all);
+  if (sources.length > 0) return fail(409, `このメニューは「${sources[0].name}」の切り替え先になっています。先に「${sources[0].name}」のボタンの動きを変えてください`);
   const res = await deleteRichMenuRow(storeId, id);
   if (res.error !== undefined) return fail(500, res.error);
   return { ok: true, data: { id } };

@@ -18,7 +18,10 @@ import {
   RICH_MENU_KEYWORDS,
   RICH_MENU_LIMITS,
   RICH_MENU_SIZES,
+  applyRichMenuLayout,
   describeRichMenuAction,
+  layoutDropsActions,
+  layoutsForSize,
   validateRichMenu,
   type LineRichMenu,
   type RichMenuAction,
@@ -29,6 +32,7 @@ import {
 import type { RichMenuFormOption } from '@/lib/line-rich-menu-service';
 import RichMenuAreaCanvas from './RichMenuAreaCanvas';
 import RichMenuImagePicker from './RichMenuImagePicker';
+import RichMenuPhonePreview from './RichMenuPhonePreview';
 
 export interface RichMenuEditorDialogProps {
   open: boolean;
@@ -36,26 +40,33 @@ export interface RichMenuEditorDialogProps {
   /** null = 新しく作る */
   menu: LineRichMenu | null;
   forms: RichMenuFormOption[];
+  /** その店舗のメニュー（「別のメニューに切り替える」の切り替え先と、プレビューでの切り替えに使う） */
+  menus?: LineRichMenu[];
   onClose: () => void;
   onSaved: (menu: LineRichMenu) => void;
 }
 
 const emptyInput = (): RichMenuInput => ({ name: '', size: 'large', image_url: '', areas: [], chat_bar_text: DEFAULT_CHAT_BAR_TEXT, open_by_default: true });
-const ACTION_TYPES: RichMenuAction['type'][] = ['form', 'message', 'uri', 'none'];
+const ACTION_TYPES: RichMenuAction['type'][] = ['form', 'message', 'uri', 'switch', 'none'];
 
-function defaultAction(type: RichMenuAction['type'], forms: RichMenuFormOption[]): RichMenuAction {
+function defaultAction(type: RichMenuAction['type'], forms: RichMenuFormOption[], others: LineRichMenu[] = []): RichMenuAction {
+  if (type === 'switch') return { type: 'switch', menu_id: others[0]?.id || '' };
   if (type === 'form') return { type: 'form', form_id: forms.find((f) => f.openable)?.id || forms[0]?.id || '' };
   if (type === 'message') return { type: 'message', text: RICH_MENU_KEYWORDS[0].text };
   if (type === 'uri') return { type: 'uri', uri: '' };
   return { type: 'none' };
 }
 
-export default function RichMenuEditorDialog({ open, storeId, menu, forms, onClose, onSaved }: RichMenuEditorDialogProps) {
+export default function RichMenuEditorDialog({ open, storeId, menu, forms, menus = [], onClose, onSaved }: RichMenuEditorDialogProps) {
   const [input, setInput] = useState<RichMenuInput>(emptyInput);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [changed, setChanged] = useState(false);
+  // 右側の表示: ボタンの範囲を編集する / スマホでの見え方を確かめる
+  const [mode, setMode] = useState<'edit' | 'preview'>('edit');
+  // プレビューで切り替えのボタンを押したとき、切り替え先のメニューを見せる（null = いま編集しているメニュー）
+  const [previewMenuId, setPreviewMenuId] = useState<string | null>(null);
   // 開いたときだけ初期化する（開いている間に親が渡し直しても、入力中の内容を消さない）
   const wasOpen = useRef(false);
   useEffect(() => {
@@ -64,6 +75,8 @@ export default function RichMenuEditorDialog({ open, storeId, menu, forms, onClo
       setSelectedId(null);
       setError(null);
       setChanged(false);
+      setMode('edit');
+      setPreviewMenuId(null);
     }
     wasOpen.current = open;
   }, [open, menu]);
@@ -77,6 +90,22 @@ export default function RichMenuEditorDialog({ open, storeId, menu, forms, onClo
   const selected: RichMenuArea | null = selectedIndex >= 0 ? input.areas[selectedIndex] : null;
   const setAction = (action: RichMenuAction) => patch({ areas: input.areas.map((a) => (a.id === selectedId ? { ...a, action } : a)) });
   const formName = (id: string) => forms.find((f) => f.id === id)?.name ?? null;
+  // 切り替え先に選べるのは、このメニュー以外
+  const others = menus.filter((m) => m.id !== menu?.id);
+  const menuName = (id: string) => menus.find((m) => m.id === id)?.name ?? null;
+  const describe = (action: RichMenuAction) => describeRichMenuAction(action, formName, menuName);
+  const layouts = layoutsForSize(input.size);
+
+  const applyLayout = (layoutId: string) => {
+    const dropped = layoutDropsActions(layoutId, input.size, input.areas);
+    if (dropped > 0 && !window.confirm(`この型にすると、ボタンが減ります。動きを設定したボタン ${dropped} 個が消えますが、よろしいですか？`)) return;
+    const areas = applyRichMenuLayout(layoutId, input.size, input.areas);
+    if (!areas) return;
+    patch({ areas });
+    setSelectedId(areas[0]?.id ?? null);
+  };
+  // プレビューに出すメニュー（切り替え先を見ているときは、保存済みのそのメニュー）
+  const previewMenu = previewMenuId ? menus.find((m) => m.id === previewMenuId) ?? null : null;
 
   const changeSize = (size: RichMenuSize) => {
     if (size === input.size) return;
@@ -119,7 +148,7 @@ export default function RichMenuEditorDialog({ open, storeId, menu, forms, onClo
   };
 
   // 反映するまでに直す所（保存はできる）
-  const publishHints = validateRichMenu(input, { forPublish: true, formIds: forms.map((f) => f.id) }).filter((e) => !validateRichMenu(input).includes(e));
+  const publishHints = validateRichMenu(input, { forPublish: true, formIds: forms.map((f) => f.id), menuIds: menus.map((m) => m.id), selfId: menu?.id ?? null }).filter((e) => !validateRichMenu(input).includes(e));
   const dims = RICH_MENU_SIZES[input.size];
 
   return (
@@ -195,7 +224,7 @@ export default function RichMenuEditorDialog({ open, storeId, menu, forms, onClo
                   <select
                     aria-label="動きの種類"
                     value={selected.action.type}
-                    onChange={(e) => setAction(defaultAction(e.target.value as RichMenuAction['type'], forms))}
+                    onChange={(e) => setAction(defaultAction(e.target.value as RichMenuAction['type'], forms, others))}
                     className="h-10 w-full rounded-md border bg-background px-2 text-base md:text-sm"
                   >
                     {ACTION_TYPES.map((t) => (
@@ -250,6 +279,25 @@ export default function RichMenuEditorDialog({ open, storeId, menu, forms, onClo
                     </div>
                   )}
 
+                  {selected.action.type === 'switch' &&
+                    (others.length === 0 ? (
+                      <p className="text-xs text-amber-700">切り替え先にできるメニューが、まだありません。先にもう 1 つメニューを作って保存してください。</p>
+                    ) : (
+                      <div className="space-y-1">
+                        <select aria-label="切り替え先のメニュー" value={selected.action.menu_id} onChange={(e) => setAction({ type: 'switch', menu_id: e.target.value })} className="h-10 w-full rounded-md border bg-background px-2 text-base md:text-sm">
+                          {!others.some((m) => m.id === (selected.action as { menu_id: string }).menu_id) && <option value={selected.action.menu_id}>（選んでください）</option>}
+                          {others.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-muted-foreground">
+                          押すと、メニューがその場で切り替わります（タブのように使えます）。切り替え先のメニューにも、このメニューへ戻るボタンを作っておくと行き来できます。反映するときは、切り替え先のメニューも一緒に公式 LINE に出ます。
+                        </p>
+                      </div>
+                    ))}
+
                   {selected.action.type === 'none' && <p className="text-xs text-muted-foreground">押しても何も起きません（飾りの部分に使います）。</p>}
                 </>
               ) : (
@@ -269,20 +317,94 @@ export default function RichMenuEditorDialog({ open, storeId, menu, forms, onClo
               </div>
               <RichMenuImagePicker storeId={storeId} size={input.size} hasImage={!!input.image_url} disabled={saving} onUploaded={(url) => patch({ image_url: url })} onError={(m) => setError(m)} />
             </div>
-            <RichMenuAreaCanvas
-              size={input.size}
-              imageUrl={input.image_url}
-              areas={input.areas}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              onChange={(areas, id) => {
-                patch({ areas });
-                setSelectedId(id);
-              }}
-            />
-            <p className="text-xs text-muted-foreground">
-              何も無い所をなぞると、ボタンの範囲ができます。範囲はつかんで動かせます。選んだ範囲の右下の角を引くと、大きさを変えられます（{RICH_MENU_LIMITS.areasMax} 個まで）。
-            </p>
+            <div className="inline-flex rounded-md border bg-background p-0.5" role="group" aria-label="右側の表示" data-slot="rich-menu-mode">
+              {(
+                [
+                  ['edit', 'ボタンを編集'],
+                  ['preview', 'スマホでの見え方'],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={mode === value}
+                  onClick={() => {
+                    setMode(value);
+                    setPreviewMenuId(null);
+                  }}
+                  className={cn('rounded px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', mode === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent')}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {mode === 'edit' ? (
+              <>
+                <div className="space-y-1.5" data-slot="rich-menu-layouts">
+                  <p className="text-xs font-medium">型から作る（押すと、ボタンの範囲がきれいに並びます）</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {layouts.map((layout) => (
+                      <button
+                        key={layout.id}
+                        type="button"
+                        onClick={() => applyLayout(layout.id)}
+                        title={layout.label}
+                        aria-label={`型: ${layout.label}`}
+                        data-layout={layout.id}
+                        className="group rounded-md border p-1 transition-colors hover:border-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <span className="relative block w-14 overflow-hidden rounded-sm bg-muted" style={{ aspectRatio: `${dims.width} / ${dims.height}` }} aria-hidden="true">
+                          {layout.rects.map((r, i) => (
+                            <span key={i} className="absolute border border-background bg-slate-400 group-hover:bg-primary/60" style={{ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` }} />
+                          ))}
+                        </span>
+                        <span className="mt-0.5 block text-center text-[10px] leading-3 text-muted-foreground">{layout.rects.length}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <RichMenuAreaCanvas
+                  size={input.size}
+                  imageUrl={input.image_url}
+                  areas={input.areas}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                  onChange={(areas, id) => {
+                    patch({ areas });
+                    setSelectedId(id);
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  何も無い所をなぞると、ボタンの範囲ができます。範囲はつかんで動かせます。選んだ範囲の右下の角を引くと、大きさを変えられます（{RICH_MENU_LIMITS.areasMax} 個まで）。
+                </p>
+              </>
+            ) : (
+              <div className="mx-auto w-full max-w-[402px]">
+                {previewMenu && (
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900" data-slot="rich-menu-preview-switched">
+                    <span>切り替え先の「{previewMenu.name}」を表示しています（保存済みの内容）。</span>
+                    <button type="button" className="underline underline-offset-2" onClick={() => setPreviewMenuId(null)}>
+                      編集中のメニューに戻る
+                    </button>
+                  </div>
+                )}
+                <RichMenuPhonePreview
+                  key={previewMenu?.id ?? 'editing'}
+                  size={previewMenu ? previewMenu.size : input.size}
+                  imageUrl={previewMenu ? previewMenu.image_url : input.image_url}
+                  areas={previewMenu ? previewMenu.areas : input.areas}
+                  chatBarText={previewMenu ? previewMenu.chat_bar_text : input.chat_bar_text}
+                  openByDefault={previewMenu ? true : input.open_by_default}
+                  describe={describe}
+                  onSwitch={(id) => {
+                    // このメニューへ戻る切り替えなら、編集中の内容を見せる
+                    if (id === menu?.id) setPreviewMenuId(null);
+                    else if (menus.some((m) => m.id === id)) setPreviewMenuId(id);
+                  }}
+                />
+              </div>
+            )}
 
             {input.areas.length > 0 && (
               <ul className="space-y-1" data-slot="rich-menu-area-list">
@@ -295,7 +417,7 @@ export default function RichMenuEditorDialog({ open, storeId, menu, forms, onClo
                       className={cn('flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm transition-colors', a.id === selectedId ? 'border-primary bg-primary/5' : 'hover:bg-accent')}
                     >
                       <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-sm bg-black/70 px-1 text-[11px] font-bold text-white">{i + 1}</span>
-                      <span className="min-w-0 truncate">{describeRichMenuAction(a.action, formName)}</span>
+                      <span className="min-w-0 truncate">{describe(a.action)}</span>
                     </button>
                   </li>
                 ))}
