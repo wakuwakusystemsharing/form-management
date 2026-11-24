@@ -9,6 +9,9 @@
  *   全員向けを見る  GET    https://api.line.me/v2/bot/user/all/richmenu              → { richMenuId } / 無ければ 404 / ほかの場所で設定されていれば 403
  *   全員向けを外す  DELETE https://api.line.me/v2/bot/user/all/richmenu
  *   消す            DELETE https://api.line.me/v2/bot/richmenu/{id}
+ *   名札を付ける    POST   https://api.line.me/v2/bot/richmenu/alias                 { richMenuAliasId, richMenuId }（画像を入れたメニューにだけ付けられる）
+ *   名札の一覧      GET    https://api.line.me/v2/bot/richmenu/alias/list            → { aliases: [{ richMenuAliasId, richMenuId }] }
+ *   名札を外す      DELETE https://api.line.me/v2/bot/richmenu/alias/{aliasId}       （1 時間に 100 回まで）
  */
 
 const API = 'https://api.line.me/v2/bot';
@@ -103,6 +106,30 @@ export async function listLineRichMenus(token: string, fetchImpl: FetchImpl = fe
   }
 }
 
+/** メニューに名札（エイリアス）を付ける。タブ切り替えのボタンは、この名札で切り替え先を指す */
+export function createLineRichMenuAlias(token: string, aliasId: string, richMenuId: string, fetchImpl: FetchImpl = fetch): Promise<LineApiResult> {
+  return call(fetchImpl, `${API}/richmenu/alias`, { method: 'POST', headers: { ...auth(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ richMenuAliasId: aliasId, richMenuId }) });
+}
+
+export function deleteLineRichMenuAlias(token: string, aliasId: string, fetchImpl: FetchImpl = fetch): Promise<LineApiResult> {
+  return call(fetchImpl, `${API}/richmenu/alias/${idPath(aliasId)}`, { method: 'DELETE', headers: auth(token) });
+}
+
+/** LINE にある名札の一覧。取得できなければ null */
+export async function listLineRichMenuAliases(token: string, fetchImpl: FetchImpl = fetch): Promise<Array<{ richMenuAliasId: string; richMenuId: string }> | null> {
+  const res = await call(fetchImpl, `${API}/richmenu/alias/list`, { method: 'GET', headers: auth(token) });
+  if (!res.ok) return null;
+  try {
+    const list = (JSON.parse(res.body) as { aliases?: unknown }).aliases;
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((a) => ({ richMenuAliasId: typeof a?.richMenuAliasId === 'string' ? a.richMenuAliasId : '', richMenuId: typeof a?.richMenuId === 'string' ? a.richMenuId : '' }))
+      .filter((a) => a.richMenuAliasId);
+  } catch {
+    return null;
+  }
+}
+
 /** 反映の処理が使う LINE の呼び出し（テストでは差し替える） */
 export interface RichMenuLineApi {
   create: (object: Record<string, unknown>) => Promise<LineApiResult & { richMenuId: string | null }>;
@@ -112,6 +139,9 @@ export interface RichMenuLineApi {
   remove: (richMenuId: string) => Promise<LineApiResult>;
   getDefault: () => Promise<string | null | 'other' | 'unknown'>;
   list: () => Promise<Array<{ richMenuId: string; name: string }> | null>;
+  createAlias: (aliasId: string, richMenuId: string) => Promise<LineApiResult>;
+  removeAlias: (aliasId: string) => Promise<LineApiResult>;
+  listAliases: () => Promise<Array<{ richMenuAliasId: string; richMenuId: string }> | null>;
 }
 
 export function createRichMenuLineApi(token: string, fetchImpl: FetchImpl = fetch): RichMenuLineApi {
@@ -123,5 +153,8 @@ export function createRichMenuLineApi(token: string, fetchImpl: FetchImpl = fetc
     remove: (id) => deleteLineRichMenu(token, id, fetchImpl),
     getDefault: () => getDefaultLineRichMenu(token, fetchImpl),
     list: () => listLineRichMenus(token, fetchImpl),
+    createAlias: (aliasId, id) => createLineRichMenuAlias(token, aliasId, id, fetchImpl),
+    removeAlias: (aliasId) => deleteLineRichMenuAlias(token, aliasId, fetchImpl),
+    listAliases: () => listLineRichMenuAliases(token, fetchImpl),
   };
 }
