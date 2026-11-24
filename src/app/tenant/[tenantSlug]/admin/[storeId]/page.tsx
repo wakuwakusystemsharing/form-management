@@ -2480,6 +2480,13 @@ export default function StoreDetailPage() {
           <TabsContent value="calendar" className="space-y-6">
             <ReservationCalendar
               storeId={storeId}
+              forms={forms.map((f: any) => ({
+                id: f.id,
+                name: getReservationFormName(f),
+                timeInterval: f.config?.calendar_settings?.time_interval ?? null,
+                // 店舗側手動予約フォームは LINE タイプのフォームだけ
+                manual: (f.config?.form_type ?? 'line') === 'line',
+              }))}
               onSelectReservation={(reservation) => {
                 setSelectedReservation(reservation);
                 setShowReservationDetail(true);

@@ -522,3 +522,84 @@ export function reservationOverlapsRange(r: CalendarReservationInput, from: stri
   const end = isValidYmd(r.checkout_date) && r.checkout_date > start ? r.checkout_date : start;
   return start <= to && end >= from;
 }
+
+// ---------------------------------------------------------------------------
+// ドラッグで移動・空いている所から手動予約（②-2）
+// ---------------------------------------------------------------------------
+
+/** これより動かしてからドラッグを始める（px）。押しただけのときは予約詳細を開く */
+export const DRAG_THRESHOLD_PX = 5;
+/** 空いている所を押したときの時刻の刻み（分） */
+export const SLOT_CLICK_SNAP_MINUTES = 30;
+
+/**
+ * ドラッグで落とすときの時刻の刻み（分）。
+ * フォームの時間間隔が 10 分・20 分なら 10 分、それ以外（15 / 30 / 45 / 60 / 120 分・不明）は 15 分
+ * （45 分間隔の 9:45 や、「追加で表示する分」の時刻にも合わせられるように、間隔そのものより細かくする）
+ */
+export function dragSnapMinutes(timeInterval?: number | null): number {
+  return timeInterval === 10 || timeInterval === 20 ? 10 : 15;
+}
+
+/**
+ * 落とした位置 → 開始時刻（0 時からの分）。
+ * つかんだ位置（帯の上端からの分）を引いてから刻みに丸める。その日のうち（最後の刻みまで）に収める
+ */
+export function moveTarget(input: { pointerMin: number; grabOffsetMin: number; snapMinutes: number }): number {
+  const snap = input.snapMinutes > 0 ? input.snapMinutes : 15;
+  const raw = input.pointerMin - input.grabOffsetMin;
+  const snapped = Math.round(raw / snap) * snap;
+  return Math.max(0, Math.min(1440 - snap, snapped));
+}
+
+/** 空いている所を押した位置 → その枠の開始時刻（切り捨て） */
+export function slotAtPointer(pointerMin: number, snapMinutes: number = SLOT_CLICK_SNAP_MINUTES): number {
+  const snap = snapMinutes > 0 ? snapMinutes : SLOT_CLICK_SNAP_MINUTES;
+  return Math.max(0, Math.min(1440 - snap, Math.floor(pointerMin / snap) * snap));
+}
+
+/** ドラッグで動かせる予約か（時間の決まっている、キャンセルしていない予約だけ。宿泊・時間未定は編集フォームで変える） */
+export function isDraggableEvent(ev: CalendarEvent): boolean {
+  return ev.kind === 'timed' && !ev.cancelled && ev.startMin !== null;
+}
+
+/** 動かした先が元と同じか */
+export function isSameSlot(ev: CalendarEvent, date: string, startMin: number): boolean {
+  return ev.date === date && ev.startMin === startMin;
+}
+
+/** 動かした先の時間に重なる、ほかの予約の数（キャンセル済み・時間未定・宿泊は数えない） */
+export function countOverlappingEvents(events: CalendarEvent[], target: { excludeId: string; date: string; startMin: number; endMin: number }): number {
+  let n = 0;
+  for (const ev of events) {
+    if (ev.id === target.excludeId || ev.kind !== 'timed' || ev.cancelled || ev.date !== target.date) continue;
+    if (ev.startMin === null || ev.endMin === null) continue;
+    if (ev.startMin < target.endMin && ev.endMin > target.startMin) n++;
+  }
+  return n;
+}
+
+/** 動かした先の時間に、予約以外の予定（Google カレンダー）が重なっているか */
+export function overlapsBusy(busy: BusyBlock[], target: { date: string; startMin: number; endMin: number }): boolean {
+  return busy.some((b) => b.date === target.date && b.startMin < target.endMin && b.endMin > target.startMin);
+}
+
+/** 「11/25(水) 14:00〜15:00」（終わりが日をまたぐときは 24:00 まで） */
+export function describeSlot(date: string, startMin: number, durationMinutes: number): string {
+  const p = parseYmd(date);
+  const end = Math.min(1440, startMin + Math.max(0, durationMinutes));
+  return `${p.month}/${p.day}(${WEEKDAY_LABELS[weekdayOf(date)]}) ${minutesToTime(startMin)}〜${minutesToTime(end)}`;
+}
+
+/**
+ * 画面を開いたあとに、ほかの人がその予約を変更したか。
+ * 画面が持っている更新日時（expected）と、いまの更新日時（current）を比べる。
+ * どちらかが無い・読めないときは「変更なし」として通す（古い行で保存できなくならないように）
+ */
+export function isReservationStale(expected: unknown, current: unknown): boolean {
+  if (typeof expected !== 'string' || !expected || typeof current !== 'string' || !current) return false;
+  const a = Date.parse(expected);
+  const b = Date.parse(current);
+  if (Number.isNaN(a) || Number.isNaN(b)) return false;
+  return a !== b;
+}

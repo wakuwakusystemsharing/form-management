@@ -478,6 +478,7 @@ class BookingForm {
             // 手動モード: お客様選択（LINE友だち一覧）の読み込み
             if (MANUAL_MODE) {
                 this.initManualCustomerPicker();
+                this.applyManualPrefill();
             }
             // 空き待ち: 登録中の空き待ちの取得と、空きのお知らせから開いたとき（?waitlist=）の入力済み表示
             if (!MANUAL_MODE && !PREVIEW_MODE && !this.state.changeRequested) {
@@ -970,6 +971,52 @@ class BookingForm {
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // 手動モード: 予約カレンダーの空いている所から開いたとき（URL に ?date=YYYY-MM-DD&time=HH:MM）、その日時を選んだ状態にする。
+    // カレンダー表示モードのフォームだけ。このフォームで選べない時間（営業時間外・時間間隔に合わない・埋まっている）なら、選ばずに案内だけ出す
+    applyManualPrefill() {
+        try {
+            if ((this.config.calendar_settings?.booking_mode || 'calendar') !== 'calendar') return;
+            const params = new URLSearchParams(window.location.search || '');
+            const date = params.get('date') || '';
+            const time = params.get('time') || '';
+            if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date) || !/^[0-9]{2}:[0-9]{2}$/.test(time)) return;
+            const p = date.split('-');
+            const day = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+            const label = parseInt(p[1], 10) + '/' + parseInt(p[2], 10) + '（' + ['日', '月', '火', '水', '木', '金', '土'][day.getDay()] + '）' + time;
+            const form = this;
+            const showNote = function(ok) {
+                const old = document.getElementById('manual-prefill-note');
+                if (old && old.parentNode) old.parentNode.removeChild(old);
+                const note = document.createElement('div');
+                note.id = 'manual-prefill-note';
+                note.setAttribute('role', 'status');
+                note.style.cssText = 'margin:0 0 1rem;padding:0.75rem 0.9rem;border-radius:8px;font-size:0.9rem;line-height:1.6;' + (ok ? 'background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;' : 'background:#fffbeb;border:1px solid #fde68a;color:#92400e;');
+                note.textContent = ok
+                    ? 'カレンダーで選んだ日時（' + label + '）を選択しています。お客様とメニューを選んで登録してください。'
+                    : label + ' は、このフォームでは選べない時間でした。日時の欄から選び直してください。';
+                const field = document.getElementById('manual-customer-field');
+                if (field && field.parentNode) field.parentNode.insertBefore(note, field);
+            };
+            setTimeout(async function() {
+                try {
+                    form.state.currentWeekStart = form.getWeekStart(day);
+                    form.availabilityCache = {};
+                    form.state.selectedDate = date;
+                    form.state.selectedTime = time;
+                    await form.fetchAvailability(form.state.currentWeekStart);
+                    const cell = document.querySelector('.calendar-cell[data-date="' + date + '"][data-time="' + time + '"]');
+                    const open = !!cell && !cell.classList.contains('unavailable') && form.state.selectedDate === date && form.state.selectedTime === time;
+                    if (!open) {
+                        form.state.selectedDate = '';
+                        form.state.selectedTime = '';
+                    }
+                    form.updateSummary();
+                    showNote(open);
+                } catch (e) {}
+            }, 500);
+        } catch (e) {}
     }
 
     async initManualCustomerPicker() {
