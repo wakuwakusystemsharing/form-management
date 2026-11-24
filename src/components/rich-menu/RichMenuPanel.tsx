@@ -61,6 +61,9 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
   const forms: RichMenuFormOption[] = overview?.forms || [];
   const menus = overview?.menus || [];
   const formName = (id: string) => forms.find((f) => f.id === id)?.name ?? null;
+  const menuName = (id: string) => menus.find((m) => m.id === id)?.name ?? null;
+  // 全員向けに出しているメニュー（切り替え先のメニューは、このメニューと一緒に出ている）
+  const mainMenu = menus.find((m) => m.is_default) ?? null;
   const reachedMax = !!overview && menus.length >= overview.max;
 
   const run = async () => {
@@ -132,15 +135,19 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
           {menus.map((menu) => {
             const busy = busyId === menu.id;
             const live = menu.status === 'published' && menu.is_default;
+            // 全員向けではないが、切り替え先として公式 LINE に出ているメニュー
+            const linked = menu.status === 'published' && !menu.is_default;
+            // このメニューから切り替えで行けるメニューに、未反映の変更があるか
+            const linkedDirty = live && menus.some((m) => m.id !== menu.id && m.status === 'published' && !m.is_default && m.dirty);
             return (
               <Card key={menu.id} data-slot="rich-menu-card">
                 <CardContent className="space-y-3 p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="min-w-0 flex-1 break-words text-sm font-semibold">{menu.name}</h3>
                     <Badge variant="outline" className={statusBadge(menu)}>
-                      {RICH_MENU_STATUS_LABELS[menu.status]}
+                      {linked ? '切り替え先として反映中' : RICH_MENU_STATUS_LABELS[menu.status]}
                     </Badge>
-                    {live && menu.dirty && (
+                    {(live || linked) && menu.dirty && (
                       <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
                         未反映の変更あり
                       </Badge>
@@ -154,12 +161,19 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
                     <ol className="space-y-0.5 text-xs text-muted-foreground">
                       {menu.areas.map((a, i) => (
                         <li key={a.id} className="truncate">
-                          {i + 1}. {describeRichMenuAction(a.action, formName)}
+                          {i + 1}. {describeRichMenuAction(a.action, formName, menuName)}
                         </li>
                       ))}
                     </ol>
                   )}
                   {live && menu.dirty && <p className="text-xs text-amber-700">保存した変更は、まだ公式 LINE に出ていません。「もう一度反映する」を押すと出ます。</p>}
+                  {linkedDirty && !menu.dirty && <p className="text-xs text-amber-700">切り替え先のメニューに、まだ公式 LINE に出ていない変更があります。「もう一度反映する」を押すと出ます。</p>}
+                  {linked && (
+                    <p className="text-xs text-muted-foreground" data-slot="rich-menu-linked">
+                      {mainMenu ? `「${mainMenu.name}」の切り替え先として、一緒に公式 LINE に出ています。` : '切り替え先として公式 LINE に出ています。'}
+                      {menu.dirty && mainMenu ? `保存した変更は、「${mainMenu.name}」をもう一度反映すると出ます。` : ''}
+                    </p>
+                  )}
                   {menu.last_error && (
                     <p className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700" data-slot="rich-menu-error">
                       前回の反映に失敗しました: {menu.last_error}
@@ -170,14 +184,14 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
                       編集
                     </Button>
                     <Button type="button" size="sm" disabled={busy || menu.status === 'publishing'} onClick={() => setConfirm({ kind: 'publish', menu })}>
-                      {busy ? '通信中…' : live ? 'もう一度反映する' : '反映する'}
+                      {busy ? '通信中…' : live ? 'もう一度反映する' : linked ? 'このメニューを最初に出す' : '反映する'}
                     </Button>
-                    {(menu.is_default || menu.line_rich_menu_id) && (
+                    {!linked && (menu.is_default || menu.line_rich_menu_id) && (
                       <Button type="button" variant="outline" size="sm" disabled={busy || menu.status === 'publishing'} onClick={() => setConfirm({ kind: 'unpublish', menu })}>
                         反映をやめる
                       </Button>
                     )}
-                    {!live && menu.status !== 'publishing' && (
+                    {!live && !linked && menu.status !== 'publishing' && (
                       <Button type="button" variant="ghost" size="sm" className="text-red-600 hover:text-red-700" disabled={busy} onClick={() => setConfirm({ kind: 'delete', menu })}>
                         削除
                       </Button>
@@ -196,6 +210,7 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
         storeId={storeId}
         menu={editing?.menu ?? null}
         forms={forms}
+        menus={menus}
         onClose={() => setEditing(null)}
         onSaved={(saved) => {
           setEditing(null);
@@ -217,6 +232,7 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
                   <>
                     <p>友だち全員のトーク画面に、このメニューが表示されます。公式 LINE の管理画面で設定したメニューや、いま反映しているメニューは、このメニューに置き換わります。</p>
                     <p>新しいメニューが出てから古いものを消すので、メニューが出ない時間はありません。</p>
+                    <p>切り替えのボタンがあるときは、切り替え先のメニューも一緒に公式 LINE に出ます（最初に出るのは、このメニューです）。</p>
                   </>
                 )}
                 {confirm?.kind === 'unpublish' && <p>友だちのトーク画面からこのメニューが消え、公式 LINE の管理画面で設定したメニューに戻ります（設定していなければ、メニューは出なくなります）。メニューの内容は下書きとして残ります。</p>}

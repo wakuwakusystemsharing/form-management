@@ -720,7 +720,8 @@ QR コードの PNG（中身は `entry_url`）。`?download=1` で保存用の�
   "external_notice": null
 }
 ```
-- `areas[].x / y / w / h`: 画像全体に対する割合（0〜1）。`action.type`: `form`（`form_id`）/ `uri`（`uri`）/ `message`（`text`）/ `none`
+- `areas[].x / y / w / h`: 画像全体に対する割合（0〜1）。`action.type`: `form`（`form_id`）/ `uri`（`uri`）/ `message`（`text`）/ `switch`（`menu_id` = 別のメニューに切り替える）/ `none`
+- 全員向けのメニュー = `status: "published"` + `is_default: true`。切り替え先として一緒に出ているメニュー = `status: "published"` + `is_default: false`
 - `status`: `draft` = 下書き / `publishing` = 反映の途中 / `published` = 反映中 / `failed` = 反映に失敗（理由は `last_error`）。`dirty` = 反映したあとに内容を変えた
 - `external_notice`: ほかの場所（公式 LINE の管理画面など）で全員向けのメニューが変えられているときの文言。無ければ `null`
 
@@ -738,15 +739,16 @@ QR コードの PNG（中身は `entry_url`）。`?download=1` で保存用の�
 
 **レスポンス**: `{ "menu": { … }, "notice": null }`（local は LINE と通信せず、`notice` に理由が入る）
 
-- `400`: 画像が無い・大きさが合わない・1MB を超える / 動きのあるボタンが無い / 消えたフォームを指すボタンがある / LINE のトークンが未登録
+- 「別のメニューに切り替える」のボタンがあるときは、切り替えでつながっているメニュー（5 個まで）も一緒に LINE に作る。全員向けになるのは、このメニューだけ
+- `400`: 画像が無い・大きさが合わない・1MB を超える / 動きのあるボタンが無い / 消えたフォームを指すボタンがある / 切り替え先が未選択・自分自身・消えている・多すぎる / LINE のトークンが未登録（複数のメニューを出すときは、文言の先頭に「「メニュー名」— 」が付く）
 - `409`: 反映の途中（2 回押したとき）
 - `502`: LINE に断られた・通信できなかった（何も変わらない。反映中だったメニューは、古いものがそのまま出ている）
 
 ### `POST /api/stores/{storeId}/rich-menus/{id}/unpublish`
-反映をやめる（全員向けの設定を外す。公式 LINE の管理画面で設定したメニューに戻る）。メニューは下書きに戻る
+反映をやめる（全員向けの設定を外す。公式 LINE の管理画面で設定したメニューに戻る）。メニューは下書きに戻る。切り替え先として一緒に出していたメニューも下書きに戻る。切り替え先だけのメニューに対して呼ぶと `409`（元のメニューの反映をやめる）
 
 ### `DELETE /api/stores/{storeId}/rich-menus/{id}`
-削除する。反映中のメニューは `409`（先に反映をやめる）
+削除する。反映中のメニュー・ほかのメニューの切り替え先になっているメニューは `409`
 
 ### `GET /api/stores/{storeId}/reservations/calendar`
 予約カレンダー用のデータ（期間に掛かる予約 + 予約以外の予定の時間）
