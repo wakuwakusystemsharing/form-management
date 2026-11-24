@@ -44,6 +44,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useToast } from '@/components/ui/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import { AUTH_REQUIRED_EVENT, syncAuthCookie, fetchWithAuth } from '@/lib/client-auth';
+import { storeAdminAccessCheckUrl, storeAdminAccessError } from '@/lib/store-admin-access';
 import { SearchBar } from '@/components/ui/search-bar';
 import { useDebounce } from '@/hooks/use-debounce';
 import { getReservationFormName } from '@/lib/form-display-name';
@@ -463,33 +464,13 @@ export default function StoreAdminPage() {
         } catch {}
         setIsUpperAdminUser(isUpperAdmin);
 
-        if (!isUpperAdmin) {
-          // 店舗管理者の場合、アクセス権限をチェック
-          const accessCheckResponse = await fetchWithAuth(`/api/stores/${storeId}/admins`, {
-            credentials: 'include',
-          });
-          
-          if (!accessCheckResponse.ok) {
-            // アクセス権限なし
-            setError('この店舗へのアクセス権限がありません');
-            setLoading(false);
-            return;
-          }
-          
-          // 自分の店舗管理者レコードが存在するか確認
-          const admins = await accessCheckResponse.json();
-          const hasAccess = Array.isArray(admins) && admins.some((admin: any) => admin.email === user.email);
-          
-          if (!hasAccess) {
-            setError('この店舗へのアクセス権限がありません');
-            setLoading(false);
-            return;
-          }
-        }
-        
-        const storeResponse = await fetchWithAuth(`/api/stores/${storeId}?full=1`);
-        if (!storeResponse.ok) {
-          setError('店舗が見つかりません');
+        // アクセス権限の確認を兼ねて店舗情報を取る。
+        // ?full=1 は、マスター / 同じテナントのシステム管理者 / この店舗の店舗管理者なら 200、別の店舗は 403、未ログインは 401。
+        // （店舗管理者の一覧の API は運営だけが呼べるので、ここの確認には使わない）
+        const storeResponse = await fetchWithAuth(storeAdminAccessCheckUrl(storeId));
+        const accessError = storeAdminAccessError(storeResponse.status);
+        if (accessError) {
+          setError(accessError);
           return;
         }
         const storeData = await storeResponse.json();
