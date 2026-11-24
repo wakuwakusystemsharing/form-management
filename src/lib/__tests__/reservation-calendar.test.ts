@@ -4,6 +4,15 @@ import {
   addMonths,
   buildMonthGrid,
   busyBlocksFromGoogle,
+  countOverlappingEvents,
+  describeSlot,
+  dragSnapMinutes,
+  isDraggableEvent,
+  isReservationStale,
+  isSameSlot,
+  moveTarget,
+  overlapsBusy,
+  slotAtPointer,
   calendarRange,
   calendarTitle,
   diffDays,
@@ -297,5 +306,87 @@ describe('visibleHourRange', () => {
       { id: 'c', reservation_date: '2026-11-25', reservation_time: '05:00' }, // 表示していない日
     ]);
     expect(visibleHourRange(events, [], ['2026-11-24'])).toEqual({ startHour: 7, endHour: 23 });
+  });
+});
+
+describe('ドラッグで移動・空いている所から手動予約', () => {
+  const ev = (id: string, date: string, start: string | null, minutes = 60, extra: Record<string, unknown> = {}): CalendarEvent =>
+    toCalendarEvent({ id, reservation_date: date, reservation_time: start, customer_info: { total_duration: minutes }, ...extra }) as CalendarEvent;
+
+  it('時刻の刻み: 10 分・20 分間隔のフォームは 10 分、それ以外は 15 分', () => {
+    expect(dragSnapMinutes(10)).toBe(10);
+    expect(dragSnapMinutes(20)).toBe(10);
+    expect(dragSnapMinutes(30)).toBe(15);
+    expect(dragSnapMinutes(45)).toBe(15);
+    expect(dragSnapMinutes(undefined)).toBe(15);
+  });
+
+  it('moveTarget: つかんだ位置を引いてから、刻みに丸める', () => {
+    // 14:20 の位置に落とした。帯の上から 20 分の所をつかんでいた → 14:00 開始
+    expect(moveTarget({ pointerMin: 860, grabOffsetMin: 20, snapMinutes: 15 })).toBe(840);
+    // 近いほうの刻みに丸める
+    expect(moveTarget({ pointerMin: 848, grabOffsetMin: 0, snapMinutes: 15 })).toBe(855);
+    expect(moveTarget({ pointerMin: 847, grabOffsetMin: 0, snapMinutes: 15 })).toBe(840);
+    expect(moveTarget({ pointerMin: 846, grabOffsetMin: 0, snapMinutes: 10 })).toBe(850);
+  });
+
+  it('moveTarget: その日の外には出ない', () => {
+    expect(moveTarget({ pointerMin: 5, grabOffsetMin: 40, snapMinutes: 15 })).toBe(0);
+    expect(moveTarget({ pointerMin: 1500, grabOffsetMin: 0, snapMinutes: 15 })).toBe(1425); // 23:45
+  });
+
+  it('slotAtPointer: 押した枠の開始時刻（切り捨て）', () => {
+    expect(slotAtPointer(869)).toBe(840); // 14:29 → 14:00
+    expect(slotAtPointer(870)).toBe(870); // 14:30
+    expect(slotAtPointer(-10)).toBe(0);
+    expect(slotAtPointer(1439)).toBe(1410); // 23:30
+  });
+
+  it('動かせるのは、時間の決まっている・キャンセルしていない予約だけ', () => {
+    expect(isDraggableEvent(ev('a', '2026-11-24', '10:00'))).toBe(true);
+    expect(isDraggableEvent(ev('b', '2026-11-24', null))).toBe(false);
+    expect(isDraggableEvent(ev('c', '2026-11-24', '10:00', 60, { status: 'cancelled' }))).toBe(false);
+    expect(isDraggableEvent(ev('d', '2026-11-24', '15:00', 60, { checkout_date: '2026-11-26' }))).toBe(false);
+  });
+
+  it('同じ場所に落としたかどうか', () => {
+    const a = ev('a', '2026-11-24', '10:00');
+    expect(isSameSlot(a, '2026-11-24', 600)).toBe(true);
+    expect(isSameSlot(a, '2026-11-24', 615)).toBe(false);
+    expect(isSameSlot(a, '2026-11-25', 600)).toBe(false);
+  });
+
+  it('動かした先に重なる予約の数（自分・キャンセル・別の日・隣り合うだけの予約は数えない）', () => {
+    const events = [
+      ev('self', '2026-11-25', '14:00'),
+      ev('hit1', '2026-11-25', '14:30'),
+      ev('hit2', '2026-11-25', '13:30', 60),
+      ev('touch', '2026-11-25', '15:00'), // ちょうど終わりに始まる
+      ev('cancel', '2026-11-25', '14:00', 60, { status: 'cancelled' }),
+      ev('other', '2026-11-26', '14:00'),
+      ev('untimed', '2026-11-25', null),
+    ];
+    expect(countOverlappingEvents(events, { excludeId: 'self', date: '2026-11-25', startMin: 840, endMin: 900 })).toBe(2);
+    expect(countOverlappingEvents(events, { excludeId: 'self', date: '2026-11-27', startMin: 840, endMin: 900 })).toBe(0);
+  });
+
+  it('予約以外の予定との重なり', () => {
+    const busy = [{ date: '2026-11-25', startMin: 600, endMin: 690, allDay: false }];
+    expect(overlapsBusy(busy, { date: '2026-11-25', startMin: 660, endMin: 720 })).toBe(true);
+    expect(overlapsBusy(busy, { date: '2026-11-25', startMin: 690, endMin: 750 })).toBe(false);
+    expect(overlapsBusy(busy, { date: '2026-11-26', startMin: 600, endMin: 660 })).toBe(false);
+  });
+
+  it('確認の文に出す日時', () => {
+    expect(describeSlot('2026-11-25', 840, 60)).toBe('11/25(水) 14:00〜15:00');
+    expect(describeSlot('2026-11-30', 1410, 90)).toBe('11/30(月) 23:30〜24:00');
+  });
+
+  it('ほかの人が先に変更したかどうか（更新日時の比較）', () => {
+    expect(isReservationStale('2026-11-24T05:00:00.000Z', '2026-11-24T05:00:00+00:00')).toBe(false); // 書き方が違うだけ
+    expect(isReservationStale('2026-11-24T05:00:00.000Z', '2026-11-24T05:03:00.000Z')).toBe(true);
+    expect(isReservationStale(undefined, '2026-11-24T05:03:00.000Z')).toBe(false);
+    expect(isReservationStale('2026-11-24T05:00:00.000Z', null)).toBe(false);
+    expect(isReservationStale('こわれた値', '2026-11-24T05:03:00.000Z')).toBe(false);
   });
 });
