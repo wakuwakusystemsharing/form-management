@@ -204,7 +204,7 @@ export default function StoreAdminMenuSettings({ storeId }: StoreAdminMenuSettin
                                 {isLinked ? (
                                   <span className="inline-flex items-center gap-1">
                                     <Link2 className="h-3 w-3" aria-hidden="true" />
-                                    「{TAB_LABEL.get(opt.followsTab)}」に連動（現在: {value ? '表示' : '非表示'}）
+                                    {opt.defaultHidden ? '未設定（非表示）。チェックを入れた店舗だけに出ます' : `「${TAB_LABEL.get(opt.followsTab)}」に連動（現在: ${value ? '表示' : '非表示'}）`}
                                   </span>
                                 ) : (
                                   <>
