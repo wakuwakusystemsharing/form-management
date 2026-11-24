@@ -14,6 +14,7 @@ import type { LotteryFormWithStats } from '@/types/lottery';
 import StoreAdminManager from '@/components/StoreAdminManager';
 import StoreAdminMenuSettings from '@/components/StoreAdminMenuSettings';
 import StoreDigestSettings from '@/components/StoreDigestSettings';
+import LineWebhookSecretSettings from '@/components/LineWebhookSecretSettings';
 import FormHistoryDialog from '@/components/FormHistoryDialog';
 import ReminderTemplateEditor from '@/components/ReminderTemplateEditor';
 import { REMINDER_BEFORE_TIME_OPTIONS, formatMinutesJa } from '@/lib/follow-message-scheduler';
@@ -2492,6 +2493,9 @@ export default function StoreDetailPage() {
 
             {/* 今日の予約まとめ・月次レポート（スタッフへメール / LINE で自動送信） */}
             <StoreDigestSettings storeId={storeId} />
+
+            {/* LINE 通知の署名チェック（チャネルシークレットの登録。運営だけ） */}
+            <LineWebhookSecretSettings storeId={storeId} />
 
             {/* 危険ゾーン */}
             <Card className="border-destructive/50">
