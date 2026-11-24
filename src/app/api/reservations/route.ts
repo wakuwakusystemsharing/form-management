@@ -13,6 +13,7 @@ import { normalizeForm } from '@/lib/form-normalizer';
 import { sendReservationEmails } from '@/lib/reservation-email';
 import { scheduleFollowMessageForReservation } from '@/lib/follow-message-repository';
 import { onReservationCreatedForWaitlist } from '@/lib/waitlist-service';
+import { scheduleRichMenuSync } from '@/lib/line-rich-menu-service';
 import { applyReservationCustomFieldTags } from '@/lib/reservation-tags-apply';
 import { attachReservationSource, resolveActiveSourceCode } from '@/lib/reservation-source-repository';
 import { applyNominationFeeToCustomerInfo } from '@/lib/nomination-fee';
@@ -754,6 +755,8 @@ export async function POST(request: Request) {
 
       // 空き待ち: この人の同じ日時の空き待ちを「予約済み」にする（失敗しても予約は成功扱い）
       await onReservationCreatedForWaitlist({ storeId: body.store_id, lineUserId: body.line_user_id, date: body.reservation_date, time: body.reservation_time });
+      // リッチメニューのお客様ごとの切り替え: 予約で条件（来店回数・予約したメニューなど）が変わるので見直す（出していない店舗では何もしない）
+      scheduleRichMenuSync(body.store_id);
 
       return NextResponse.json(newReservation, { status: 201 });
     }
@@ -1289,6 +1292,8 @@ export async function POST(request: Request) {
     // 空き待ち: この人の同じ日時の空き待ちを「予約済み」にし、同じ枠を待っていたほかの人へのおわびを見回る
     // （有効な空き待ちが無い店舗では何もしない。失敗しても予約は成功扱い）
     await onReservationCreatedForWaitlist({ storeId: body.store_id, lineUserId: body.line_user_id, date: body.reservation_date, time: body.reservation_time });
+      // リッチメニューのお客様ごとの切り替え: 予約で条件（来店回数・予約したメニューなど）が変わるので見直す（出していない店舗では何もしない）
+      scheduleRichMenuSync(body.store_id);
 
     // 流入経路: 予約を保存した「あと」に別の更新として記録する（列が未適用の環境でも予約の保存を止めないため）。
     // 合言葉がこの店舗の有効な経路のものでなければ何もしない。失敗しても予約は成功扱い。手動予約では記録しない

@@ -724,6 +724,8 @@ QR コードの PNG（中身は `entry_url`）。`?download=1` で保存用の�
 - 全員向けのメニュー = `status: "published"` + `is_default: true`。切り替え先として一緒に出ているメニュー = `status: "published"` + `is_default: false`
 - `status`: `draft` = 下書き / `publishing` = 反映の途中 / `published` = 反映中 / `failed` = 反映に失敗（理由は `last_error`）。`dirty` = 反映したあとに内容を変えた
 - `external_notice`: ほかの場所（公式 LINE の管理画面など）で全員向けのメニューが変えられているときの文言。無ければ `null`
+- `menus[].rule`: お客様ごとのメニューの条件 `{ "audience": { 配信の「配信先の条件」と同じ形 }, "order": 0 }`。全員向け・切り替え先のメニューは `null`。お客様ごとのメニューを出しているときは `status: "published"` + `is_default: false`
+- `rule_unavailable`: お客様ごとのメニューを使えないときの理由（チャネルシークレットが未登録・マイグレーションが未適用）。使えるときは `null`。`rules_max`: 出せる数（5）。`link_counts`: メニュー ID → いま設定している人数
 
 ### `POST /api/stores/{storeId}/rich-menus` / `PUT /api/stores/{storeId}/rich-menus/{id}`
 下書きを作る / 内容を保存する（保存しただけでは公式 LINE には出ない）
@@ -743,6 +745,24 @@ QR コードの PNG（中身は `entry_url`）。`?download=1` で保存用の�
 - `400`: 画像が無い・大きさが合わない・1MB を超える / 動きのあるボタンが無い / 消えたフォームを指すボタンがある / 切り替え先が未選択・自分自身・消えている・多すぎる / LINE のトークンが未登録（複数のメニューを出すときは、文言の先頭に「「メニュー名」— 」が付く）
 - `409`: 反映の途中（2 回押したとき）
 - `502`: LINE に断られた・通信できなかった（何も変わらない。反映中だったメニューは、古いものがそのまま出ている）
+
+**お客様ごとのメニュー**（`rule` があるメニュー）に対して呼ぶと、全員向けにはせず、条件に合うお客様にだけ設定する。レスポンスに `summary`（「設定 3 人 / 解除 0 人 / 変更なし 12 人」）が入る
+- `400`: チャネルシークレットが未登録 / 条件が 1 つも無い / 「別のメニューに切り替える」のボタンがある / 5 個を超える
+
+### `POST /api/stores/{storeId}/rich-menus/sync`
+お客様ごとのメニューの設定を、いまの条件に合わせて見直す（条件に合うようになった人に設定し、合わなくなった人は外す）
+
+**レスポンス**: `{ "linked": 1, "unlinked": 1, "unchanged": 12, "failed": 0, "deferred": 0, "menus": 2, "summary": "設定 1 人 / 解除 1 人 / 変更なし 12 人" }`
+
+- `failed`: LINE に断られて設定できなかった人数 / `deferred`: 時間切れで次の回に回した人数（どちらも次の見直しでもう一度行う）
+
+### `POST /api/stores/{storeId}/rich-menus/rule-order`
+お客様ごとのメニューの優先順位を変える（条件が重なるお客様には、上にあるメニューが出る）
+
+**リクエスト**: `{ "ids": ["上から順のメニュー ID", "…"] }`
+
+### `POST /api/cron/rich-menu-sync`
+お客様ごとのメニューを出している全店舗の見直し（pg_cron から 1 日 1 回。`Authorization: Bearer <Service Role Key>`。違えば `401`）
 
 ### `POST /api/stores/{storeId}/rich-menus/{id}/unpublish`
 反映をやめる（全員向けの設定を外す。公式 LINE の管理画面で設定したメニューに戻る）。メニューは下書きに戻る。切り替え先として一緒に出していたメニューも下書きに戻る。切り替え先だけのメニューに対して呼ぶと `409`（元のメニューの反映をやめる）
