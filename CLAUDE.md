@@ -153,7 +153,11 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 
 **LINE Webhook:**
 - `POST /api/webhooks/line` - LINE Messaging API からのイベントを受信
-- LINE チャネルシークレット（`LINE_CHANNEL_SECRET`）で署名検証
+- **署名チェック（店舗ごと。設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 4 章）**: チャネルシークレットを登録した店舗だけ、ヘッダー `x-line-signature` を確認する（合わなければ 401）。**未登録の店舗は確認せずに通す = 今までどおり**（以前は全店舗で確認していなかった。環境変数 `LINE_CHANNEL_SECRET` は Webhook では使っていない）。シークレットは `store_line_secrets`（RLS ポリシー無し = service_role のみ。`20261121000000_add_store_line_secrets.sql`。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも Webhook は今までどおり動く）に保存し、画面・API・ログには出さない。Webhook は届いた内容を `req.text()` で**文字列のまま**読んでから確認する（JSON にしてから戻すと署名が合わない）。シークレットの読み取りに失敗したときは、既存の応答を止めないよう確認せずに通す（ログに残す）
+  - 純粋ロジック `src/lib/line-signature.ts`（`computeLineSignature` / `verifyLineSignature` = `timingSafeEqual` / `decideWebhookSignature` → `unverified` / `verified` / `rejected` / `normalizeChannelSecret` / `buildLineWebhookUrl` / `classifyWebhookEndpoint`）、保存 `src/lib/line-secret-repository.ts`（local は `data/store_line_secrets.json`）
+  - 登録はテナント側 店舗ページ → 設定タブ → 「LINE 通知の署名チェック」（`LineWebhookSecretSettings.tsx`）。API `GET/PUT/DELETE /api/stores/{storeId}/line-webhook`、`POST .../line-webhook/test`。**運営（マスター管理者・システム管理者）だけが呼べる**（`src/lib/store-access.ts` の `authorizeUpperAdminStoreAccess`。店舗管理者は 403）
+  - 「接続を確認」（`src/lib/line-webhook-check.ts` の `checkLineWebhook`）: LINE に登録されている Webhook URL がこの店舗のものか（`same` / `other_store` = 別の店舗 / `other` / `none`）を見て、LINE にテストの通知を送ってもらう。**シークレットが間違っているとその店舗の LINE の自動応答が止まる**ので、登録の直後に自動で確認する。運用は「使うと決まった店舗に運営が手動で登録 → 接続を確認」。全店舗の必須にはしない
+  - Vitest: `line-signature.test.ts` / `line-secret-repository.local.test.ts` / `line-webhook-signature-route.test.ts`
 - 受信イベントに基づき予約確認メッセージ等を送信
 - 同一ユーザー同時予約数上限（`max_concurrent_reservations_per_user`）を防御的に再チェック
 
@@ -630,7 +634,8 @@ export async function GET(req, { params }) {
 - `GET /api/stores/{storeId}/lotteries/redeem/{qrToken}` - QR トークン or 6 桁コードで当選内容を照会
 
 ### Webhook:
-- `POST /api/webhooks/line` - LINE Messaging API Webhook（署名検証あり）
+- `POST /api/webhooks/line` - LINE Messaging API Webhook（チャネルシークレットを登録した店舗だけ署名を確認。未登録の店舗は確認しない）
+- `GET/PUT/DELETE /api/stores/{storeId}/line-webhook` / `POST .../line-webhook/test` - 署名チェックの状態・チャネルシークレットの登録と削除・接続の確認（運営だけ）
 
 ### エラーレスポンス形式:
 ```json
