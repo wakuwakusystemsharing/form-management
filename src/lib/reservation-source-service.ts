@@ -9,7 +9,8 @@ import {
   type ReservationSource,
   type SourceFormStatus,
 } from '@/lib/reservation-sources';
-import { getSourceById, insertSource, listSources, listStoreForms, updateSource, type StoreFormSummary } from '@/lib/reservation-source-repository';
+import { getSourceById, insertSource, listReservationsForSourceStats, listSources, listStoreForms, updateSource, type StoreFormSummary } from '@/lib/reservation-source-repository';
+import { computeSourceStats, type SourceStats, type SourceStatsOptions } from '@/lib/reservation-source-stats';
 
 /** 画面に返す経路（開く先のフォームの名前と状態を添える） */
 export interface SourceView extends ReservationSource {
@@ -68,4 +69,13 @@ export async function editSource(storeId: string, id: string, input: { name?: un
   const updated = await updateSource(storeId, id, { name: v.name, form_id: v.form_id, active: input.active as boolean | undefined });
   if (!updated) return { ok: false, status: 404, error: '経路が見つかりません' };
   return { ok: true, data: toView(updated, forms, origin) };
+}
+
+/** 経路ごとの 予約数 / キャンセル数 / 売上 / 予約率（期間 = 予約日、フォームで絞り込める） */
+export async function getSourceStats(storeId: string, opts: SourceStatsOptions): Promise<SourceStats> {
+  const sources = await listSources(storeId);
+  // 経路が 1 つも無い店舗では予約を読まない（集計の画面も出さない）
+  if (sources.length === 0) return computeSourceStats([], []);
+  const reservations = await listReservationsForSourceStats(storeId, opts);
+  return computeSourceStats(reservations, sources, opts);
 }

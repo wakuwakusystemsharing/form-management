@@ -658,6 +658,34 @@ Supabase StorageからフォームHTMLをプロキシ配信
 ### `GET /api/stores/{storeId}/reservation-sources/{id}/qr`
 QR コードの PNG（中身は `entry_url`）。`?download=1` で保存用のヘッダーを付ける
 
+### `GET /api/stores/{storeId}/reservation-sources/stats`
+経路ごとの集計
+
+**認証**: 必要（店舗へのアクセス権。local はスキップ）
+
+**クエリ**: `date_from` / `date_to`（予約日。YYYY-MM-DD。形がおかしいと `400`）、`form_id`（予約のフォームで絞り込む）
+
+**レスポンス**:
+```json
+{
+  "rows": [
+    {
+      "source_id": "uuid", "code": "fr5sfvkz", "name": "店頭ポップ", "active": true, "form_id": "g3v71mxst30e",
+      "click_count": 12, "count": 3, "cancelled": 1, "revenue": 15000, "total_bookings": 5, "booking_rate": 0.4167
+    }
+  ],
+  "none": { "count": 20, "cancelled": 2, "revenue": 98000 },
+  "summary": { "count": 23, "with_source": 3, "cancelled": 3, "revenue": 113000 },
+  "period": { "date_from": "2026-11-01", "date_to": "2026-11-30" },
+  "form_id": null
+}
+```
+- `count` / `revenue`: 期間内の予約（キャンセル済みを除く）。`cancelled`: 期間内のキャンセル数。売上はメニュー + オプション + 宿泊料金 + 指名料
+- `rows` は予約数の多い順。停止した経路・予約が 0 件の経路も含む。`form_id` で絞り込んだときは、そのフォームを開く経路と、そのフォームで予約が入った経路だけ
+- `none`: 経路の無い予約（経路の URL を通らずに入った予約）
+- `click_count` / `total_bookings` / `booking_rate`: **期間・フォームに依らない累計**。`booking_rate` = `total_bookings`（キャンセルを含む）÷ `click_count`（0〜1。読まれた数が 0 なら `null`）。目安
+- 経路が 1 つも無い店舗は `rows: []`（予約は読まない）。件数・金額だけを返し、お客様の情報は返さない
+
 ### `GET /s/{code}`
 経路の URL（公開）。「読まれた数」を 1 増やして、予約フォームへ `302` で移動する（`?src={code}` 付き）。停止中の経路は `?src=` を付けず、数えない。検索ロボットらしいアクセスは数えない。存在しない合言葉は `404`
 
