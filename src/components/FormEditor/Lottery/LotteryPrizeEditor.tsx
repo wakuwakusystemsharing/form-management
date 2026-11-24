@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ArrowDown, ArrowUp, ImagePlus, Plus, Trash2 } from 'lucide-react';
 import { computeEffectiveOdds, generateLotteryId, getLoseProbability, validatePrizes } from '@/lib/lottery-engine';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface LotteryPrizeEditorProps {
   lotteryType: LotteryType;
@@ -48,7 +49,7 @@ function PrizeImageField({ prizeId, value, storeId, onChange }: { prizeId: strin
       fd.append('menuId', `lottery_prize_${prizeId}`);
       // 同じ場所にアップロード済みの画像は差し替える（外部の URL を入れていた場合は消さない）
       if (value && value.includes(`lottery_prize_${prizeId}_`)) fd.append('oldImageUrl', value);
-      const res = await fetch('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
+      const res = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.url) throw new Error(json.error || '画像のアップロードに失敗しました');
       onChange(json.url as string);

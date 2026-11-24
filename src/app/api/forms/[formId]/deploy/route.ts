@@ -10,6 +10,7 @@ import { createAdminClient } from '@/lib/supabase';
 import { Form, StaticDeploy } from '@/types/form';
 import { logFormAudit } from '@/lib/form-audit';
 import { RESERVATION_FORM_FEATURES } from '@/lib/form-deploy-features';
+import { authorizeRecordStoreAccess } from '@/lib/store-access';
 
 export async function POST(
   request: NextRequest,
@@ -17,6 +18,9 @@ export async function POST(
 ) {
   try {
     const { formId } = await params;
+    // デプロイは、その店舗にアクセスできる人だけ（local は認証スキップ）
+    const auth = await authorizeRecordStoreAccess(request, 'reservation_form', formId);
+    if (auth.response) return auth.response;
     const body = await request.json();
     const { storeId, formData } = body;
     const env = getAppEnvironment();

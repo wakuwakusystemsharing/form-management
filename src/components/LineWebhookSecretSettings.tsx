@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface Status {
   secret_set: boolean;
@@ -48,7 +49,7 @@ export default function LineWebhookSecretSettings({ storeId }: { storeId: string
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(base, { credentials: 'include', cache: 'no-store' });
+      const res = await fetchWithAuth(base, { credentials: 'include', cache: 'no-store' });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
         setLoadError(json?.error || '状態の取得に失敗しました');
@@ -69,7 +70,7 @@ export default function LineWebhookSecretSettings({ storeId }: { storeId: string
     setBusy('check');
     setCheck(null);
     try {
-      const res = await fetch(`${base}/test`, { method: 'POST', credentials: 'include' });
+      const res = await fetchWithAuth(`${base}/test`, { method: 'POST', credentials: 'include' });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
         setCheck({ endpoint: null, ok: false, messages: [json?.error || '接続の確認に失敗しました'] });
@@ -87,7 +88,7 @@ export default function LineWebhookSecretSettings({ storeId }: { storeId: string
     if (busy) return;
     setBusy('save');
     try {
-      const res = await fetch(base, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel_secret: secret }) });
+      const res = await fetchWithAuth(base, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel_secret: secret }) });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
         toast({ title: '保存できませんでした', description: json?.error || 'もう一度お試しください', variant: 'destructive' });
@@ -110,7 +111,7 @@ export default function LineWebhookSecretSettings({ storeId }: { storeId: string
     if (busy) return;
     setBusy('delete');
     try {
-      const res = await fetch(base, { method: 'DELETE', credentials: 'include' });
+      const res = await fetchWithAuth(base, { method: 'DELETE', credentials: 'include' });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
         toast({ title: '削除できませんでした', description: json?.error || 'もう一度お試しください', variant: 'destructive' });

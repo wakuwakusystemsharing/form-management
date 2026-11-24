@@ -4,6 +4,7 @@ import { getAppEnvironment } from '@/lib/env';
 import { getCurrentUser } from '@/lib/auth-helper';
 import fs from 'fs';
 import path from 'path';
+import { authorizeUpperAdminStoreAccess } from '@/lib/store-access';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -14,6 +15,9 @@ export async function DELETE(
 ) {
   try {
     const { storeId, userId } = await params;
+    // 店舗管理者の削除は運営だけ（local は認証スキップ）
+    const auth = await authorizeUpperAdminStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
 
     const env = getAppEnvironment();
     

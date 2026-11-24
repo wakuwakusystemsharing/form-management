@@ -13,6 +13,7 @@ import {
   stripColorTags,
   wrapSelectionWithColor,
 } from '@/lib/colored-text';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 /**
  * 文字色ツールバー（テキストの選択範囲を [color=#xxxxxx]…[/color] で囲む）
@@ -105,7 +106,7 @@ export function SurveyContentBlockCard({ block, storeId, onChange, onDelete }: S
       formData.append('storeId', storeId);
       formData.append('menuId', `survey_block_${block.id}`);
       if (block.image_url) formData.append('oldImageUrl', block.image_url);
-      const res = await fetch('/api/upload/menu-image', { method: 'POST', body: formData, credentials: 'include' });
+      const res = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: formData, credentials: 'include' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         alert(`アップロードに失敗しました: ${json.error || ''}`);

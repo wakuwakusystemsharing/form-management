@@ -57,6 +57,7 @@ import {
   storeCardFromStore,
   validateFlexContents,
 } from '@/lib/line-flex-templates';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 export interface FlexFormOption {
   id: string;
@@ -655,7 +656,7 @@ export default function LineFlexEditorDialog({ storeId, store, forms, others = [
       fd.append('storeId', storeId);
       fd.append('menuId', `flex_${id}_${slot}`);
       if (current) fd.append('oldImageUrl', current);
-      const res = await fetch('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
+      const res = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'アップロードに失敗しました');
       apply(json.url);

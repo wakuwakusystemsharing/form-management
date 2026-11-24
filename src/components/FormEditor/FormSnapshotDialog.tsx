@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { Form } from '@/types/form';
 import { diffConfigSections } from '@/lib/form-sync';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface SnapshotSummary {
   id: string;
@@ -45,7 +46,7 @@ export async function restoreFormFromSnapshot(storeId: string, formId: string, s
   if (!getRes.ok) throw new Error((await getRes.json().catch(() => ({}))).error || 'スナップショットの取得に失敗しました');
   const { snapshot } = (await getRes.json()) as { snapshot: { config: Form['config'] } };
 
-  const curRes = await fetch(`/api/forms/${formId}`, { credentials: 'include', cache: 'no-store' });
+  const curRes = await fetchWithAuth(`/api/forms/${formId}`, { credentials: 'include', cache: 'no-store' });
   if (!curRes.ok) throw new Error('フォームの取得に失敗しました');
   const current = (await curRes.json()) as Form;
   if (current.store_id !== storeId) throw new Error('同じ店舗のフォームではありません');
@@ -58,14 +59,14 @@ export async function restoreFormFromSnapshot(storeId: string, formId: string, s
 
   // フォーム種別は現在のまま（スナップショットは同じフォームのものなので通常は一致する）
   const config = { ...snapshot.config, form_type: current.config.form_type };
-  const putRes = await fetch(`/api/forms/${formId}`, {
+  const putRes = await fetchWithAuth(`/api/forms/${formId}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
     body: JSON.stringify({ ...current, config }),
   });
   if (!putRes.ok) throw new Error((await putRes.json().catch(() => ({}))).error || '保存に失敗しました');
   const restored = (await putRes.json()) as Form;
 
-  const deployRes = await fetch(`/api/forms/${formId}/deploy`, {
+  const deployRes = await fetchWithAuth(`/api/forms/${formId}/deploy`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
     body: JSON.stringify({ storeId, formId }),
   });

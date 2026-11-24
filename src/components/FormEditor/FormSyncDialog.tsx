@@ -16,6 +16,7 @@ import {
   type SyncSectionId,
   type SyncTargetSummary,
 } from '@/lib/form-sync';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface FormSyncDialogProps {
   open: boolean;
@@ -53,7 +54,7 @@ export default function FormSyncDialog({ open, onOpenChange, storeId, sourceForm
     setTargets(null);
     setLoadError(null);
     setResults(null);
-    fetch(`/api/stores/${storeId}/forms`, { credentials: 'include', cache: 'no-store' })
+    fetchWithAuth(`/api/stores/${storeId}/forms`, { credentials: 'include', cache: 'no-store' })
       .then(async (res) => {
         if (!res.ok) throw new Error('フォーム一覧の取得に失敗しました');
         const list = (await res.json()) as Array<Form & { form_name?: string }>;
@@ -95,7 +96,7 @@ export default function FormSyncDialog({ open, onOpenChange, storeId, sourceForm
       let snapshotId: string | null = null;
       try {
         // 1) 反映先の最新を取得
-        const getRes = await fetch(`/api/forms/${id}`, { credentials: 'include', cache: 'no-store' });
+        const getRes = await fetchWithAuth(`/api/forms/${id}`, { credentials: 'include', cache: 'no-store' });
         if (!getRes.ok) throw new Error('フォームの取得に失敗しました');
         const target = (await getRes.json()) as Form;
         if (target.store_id !== storeId) throw new Error('同じ店舗のフォームではありません');
@@ -110,7 +111,7 @@ export default function FormSyncDialog({ open, onOpenChange, storeId, sourceForm
         // 2) 選択したセクションだけ差し替え（種別固有の項目・送信時の項目編集は反映先のまま）
         const config = buildSyncedConfig(sourceForm.config, target.config, sections);
         // 3) 保存
-        const putRes = await fetch(`/api/forms/${id}`, {
+        const putRes = await fetchWithAuth(`/api/forms/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -121,7 +122,7 @@ export default function FormSyncDialog({ open, onOpenChange, storeId, sourceForm
           throw new Error(err.error || '保存に失敗しました');
         }
         // 4) 再デプロイ
-        const deployRes = await fetch(`/api/forms/${id}/deploy`, {
+        const deployRes = await fetchWithAuth(`/api/forms/${id}/deploy`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',

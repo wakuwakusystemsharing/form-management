@@ -25,6 +25,7 @@ import { buildEventParamsFromReservation } from '@/lib/reservation-event-params'
 import { checkStayNightsFree } from '@/lib/stay-service';
 import { scheduleWaitlistCheck } from '@/lib/waitlist-service';
 import { scheduleCancelOpeningBroadcast } from '@/lib/broadcast-automation-service';
+import { authorizeRecordStoreAccess } from '@/lib/store-access';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
@@ -314,6 +315,9 @@ export async function PATCH(
 ) {
   try {
     const { reservationId } = await params;
+    // 予約の変更・キャンセルは、その店舗にアクセスできる人だけ（local は認証スキップ）。お客様自身の変更は LINE の Webhook と change-menu API が別に行う
+    const auth = await authorizeRecordStoreAccess(request, 'reservation', reservationId);
+    if (auth.response) return auth.response;
     const body = await request.json();
     const { status } = body;
 

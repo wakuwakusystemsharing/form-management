@@ -12,6 +12,7 @@ import { createAdminClient } from '@/lib/supabase';
 import { getCurrentUserId } from '@/lib/auth-helper';
 
 import { getReservationFormName } from '@/lib/form-display-name';
+import { authorizeRecordStoreAccess } from '@/lib/store-access';
 // 一時的なJSONファイルでのデータ保存（開発用）
 const DATA_DIR = path.join(process.cwd(), 'data');
 const FORMS_FILE = path.join(DATA_DIR, 'forms.json');
@@ -145,6 +146,9 @@ export async function PUT(
 ) {
   try {
     const { formId } = await params;
+    // フォームの更新は、その店舗にアクセスできる人だけ（local は認証スキップ）
+    const auth = await authorizeRecordStoreAccess(request, 'reservation_form', formId);
+    if (auth.response) return auth.response;
     const updatedFormData = await request.json();
     const env = getAppEnvironment();
 
@@ -316,6 +320,9 @@ export async function DELETE(
 ) {
   try {
     const { formId } = await params;
+    // フォームの削除は、その店舗にアクセスできる人だけ（local は認証スキップ）
+    const auth = await authorizeRecordStoreAccess(request, 'reservation_form', formId);
+    if (auth.response) return auth.response;
     const env = getAppEnvironment();
 
     // ローカル環境: JSON から削除
