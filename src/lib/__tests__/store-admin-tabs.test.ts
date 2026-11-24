@@ -32,9 +32,12 @@ describe('resolveAdminVisibleOptions', () => {
       customer_survey_history: false,      // アンケート管理 OFF に連動
       store_digest: true,                  // 設定 ON に連動
       calendar: false,                     // 予約管理 OFF に連動
+      rich_menu: false,                    // 未設定は非表示
     });
+    // 何も設定していない店舗: リッチメニュー以外はすべて表示
     const all = resolveAdminVisibleOptions(null, null);
-    expect(Object.values(all).every(Boolean)).toBe(true);
+    expect(all.rich_menu).toBe(false);
+    expect(Object.entries(all).filter(([k]) => k !== 'rich_menu').every(([, v]) => v)).toBe(true);
   });
   it('今日の予約まとめ・月次レポートは「設定」に連動し、個別に隠せる', () => {
     expect(resolveAdminVisibleOptions(['dashboard', 'settings'], null).store_digest).toBe(true);
@@ -55,9 +58,22 @@ describe('resolveAdminVisibleOptions', () => {
     expect(resolveAdminVisibleOptions(['dashboard', 'reservations'], { calendar: false }).calendar).toBe(false);
   });
   it('メニューの並び: カレンダーは予約管理のすぐ後ろ', () => {
-    expect(buildStoreAdminNav(resolveVisibleTabs(null), true)).toEqual(['dashboard', 'reservations', 'calendar', 'customers', 'surveys', 'lotteries', 'walls', 'broadcasts', 'settings']);
-    expect(buildStoreAdminNav(resolveVisibleTabs(null), false)).not.toContain('calendar');
-    expect(buildStoreAdminNav(['dashboard', 'customers'], true)).toEqual(['dashboard', 'calendar', 'customers']);
+    expect(buildStoreAdminNav(resolveVisibleTabs(null), { calendar: true })).toEqual(['dashboard', 'reservations', 'calendar', 'customers', 'surveys', 'lotteries', 'walls', 'broadcasts', 'settings']);
+    expect(buildStoreAdminNav(resolveVisibleTabs(null), { calendar: false })).not.toContain('calendar');
+    expect(buildStoreAdminNav(['dashboard', 'customers'], { calendar: true })).toEqual(['dashboard', 'calendar', 'customers']);
+  });
+  it('リッチメニューは、チェックを入れた店舗だけに出る（未設定は、どのタブを出していても非表示）', () => {
+    expect(resolveAdminVisibleOptions(null, null).rich_menu).toBe(false);
+    expect(resolveAdminVisibleOptions(['dashboard', 'broadcasts'], null).rich_menu).toBe(false);
+    expect(resolveAdminVisibleOptions(['dashboard'], { rich_menu: true }).rich_menu).toBe(true);
+    // 運営が開いたときは常に表示
+    expect(resolveAdminVisibleOptions(null, null, true).rich_menu).toBe(true);
+    expect(normalizeAdminVisibleOptions({ rich_menu: true })).toEqual({ rich_menu: true });
+  });
+  it('メニューの並び: リッチメニューは配信のすぐ後ろ', () => {
+    expect(buildStoreAdminNav(resolveVisibleTabs(null), { calendar: false, richMenu: true })).toEqual(['dashboard', 'reservations', 'customers', 'surveys', 'lotteries', 'walls', 'broadcasts', 'richmenu', 'settings']);
+    expect(buildStoreAdminNav(['dashboard'], { calendar: false, richMenu: true })).toEqual(['dashboard', 'richmenu']);
+    expect(buildStoreAdminNav(resolveVisibleTabs(null), { calendar: true })).not.toContain('richmenu');
   });
   it('明示的な設定が連動より優先される', () => {
     const r = resolveAdminVisibleOptions(['dashboard', 'customers', 'reservations'], {

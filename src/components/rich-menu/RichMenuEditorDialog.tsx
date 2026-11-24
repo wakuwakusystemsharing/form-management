@@ -1,0 +1,335 @@
+'use client';
+
+/**
+ * リッチメニューの作成・編集（名前・大きさ・画像・ボタンの範囲と動き）
+ * 保存しただけでは公式 LINE には出ない（一覧の「反映する」で出す）
+ */
+import { useEffect, useRef, useState } from 'react';
+import { Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { fetchWithAuth } from '@/lib/client-auth';
+import { cn } from '@/lib/utils';
+import {
+  DEFAULT_CHAT_BAR_TEXT,
+  RICH_MENU_ACTION_LABELS,
+  RICH_MENU_KEYWORDS,
+  RICH_MENU_LIMITS,
+  RICH_MENU_SIZES,
+  describeRichMenuAction,
+  validateRichMenu,
+  type LineRichMenu,
+  type RichMenuAction,
+  type RichMenuArea,
+  type RichMenuInput,
+  type RichMenuSize,
+} from '@/lib/line-rich-menu';
+import type { RichMenuFormOption } from '@/lib/line-rich-menu-service';
+import RichMenuAreaCanvas from './RichMenuAreaCanvas';
+import RichMenuImagePicker from './RichMenuImagePicker';
+
+export interface RichMenuEditorDialogProps {
+  open: boolean;
+  storeId: string;
+  /** null = 新しく作る */
+  menu: LineRichMenu | null;
+  forms: RichMenuFormOption[];
+  onClose: () => void;
+  onSaved: (menu: LineRichMenu) => void;
+}
+
+const emptyInput = (): RichMenuInput => ({ name: '', size: 'large', image_url: '', areas: [], chat_bar_text: DEFAULT_CHAT_BAR_TEXT, open_by_default: true });
+const ACTION_TYPES: RichMenuAction['type'][] = ['form', 'message', 'uri', 'none'];
+
+function defaultAction(type: RichMenuAction['type'], forms: RichMenuFormOption[]): RichMenuAction {
+  if (type === 'form') return { type: 'form', form_id: forms.find((f) => f.openable)?.id || forms[0]?.id || '' };
+  if (type === 'message') return { type: 'message', text: RICH_MENU_KEYWORDS[0].text };
+  if (type === 'uri') return { type: 'uri', uri: '' };
+  return { type: 'none' };
+}
+
+export default function RichMenuEditorDialog({ open, storeId, menu, forms, onClose, onSaved }: RichMenuEditorDialogProps) {
+  const [input, setInput] = useState<RichMenuInput>(emptyInput);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [changed, setChanged] = useState(false);
+  // 開いたときだけ初期化する（開いている間に親が渡し直しても、入力中の内容を消さない）
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpen.current) {
+      setInput(menu ? { name: menu.name, size: menu.size, image_url: menu.image_url, areas: menu.areas, chat_bar_text: menu.chat_bar_text, open_by_default: menu.open_by_default } : emptyInput());
+      setSelectedId(null);
+      setError(null);
+      setChanged(false);
+    }
+    wasOpen.current = open;
+  }, [open, menu]);
+
+  const patch = (p: Partial<RichMenuInput>) => {
+    setInput((cur) => ({ ...cur, ...p }));
+    setChanged(true);
+    setError(null);
+  };
+  const selectedIndex = input.areas.findIndex((a) => a.id === selectedId);
+  const selected: RichMenuArea | null = selectedIndex >= 0 ? input.areas[selectedIndex] : null;
+  const setAction = (action: RichMenuAction) => patch({ areas: input.areas.map((a) => (a.id === selectedId ? { ...a, action } : a)) });
+  const formName = (id: string) => forms.find((f) => f.id === id)?.name ?? null;
+
+  const changeSize = (size: RichMenuSize) => {
+    if (size === input.size) return;
+    // 形が変わるので、画像は選び直してもらう（ボタンの範囲は割合で持っているのでそのまま）
+    patch({ size, image_url: '' });
+  };
+
+  const requestClose = () => {
+    if (saving) return;
+    if (changed && !window.confirm('保存していない変更があります。閉じてよろしいですか？')) return;
+    onClose();
+  };
+
+  const save = async () => {
+    if (saving) return;
+    const errors = validateRichMenu(input);
+    if (errors.length > 0) {
+      setError(errors[0]);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetchWithAuth(menu ? `/api/stores/${storeId}/rich-menus/${menu.id}` : `/api/stores/${storeId}/rich-menus`, {
+        method: menu ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json) {
+        setError(json?.error || '保存に失敗しました');
+        return;
+      }
+      setChanged(false);
+      onSaved(json as LineRichMenu);
+    } catch {
+      setError('保存に失敗しました。通信の状態を確認して、もう一度お試しください');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 反映するまでに直す所（保存はできる）
+  const publishHints = validateRichMenu(input, { forPublish: true, formIds: forms.map((f) => f.id) }).filter((e) => !validateRichMenu(input).includes(e));
+  const dims = RICH_MENU_SIZES[input.size];
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && requestClose()}>
+      <DialogContent className="max-h-[92dvh] max-w-5xl overflow-y-auto [scrollbar-gutter:stable]" data-slot="rich-menu-editor">
+        <DialogHeader>
+          <DialogTitle>{menu ? 'リッチメニューを編集' : 'リッチメニューを作る'}</DialogTitle>
+          <DialogDescription>保存しただけでは、公式 LINE には出ません。保存したあと、一覧の「反映する」を押すと出ます。</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+          {/* 左: 基本の設定 */}
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="rich-menu-name">名前（管理用。お客様には見えません）</Label>
+              <Input id="rich-menu-name" value={input.name} maxLength={RICH_MENU_LIMITS.nameMax} placeholder="例: いつものメニュー" onChange={(e) => patch({ name: e.target.value })} />
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="text-sm font-medium">大きさ</span>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="大きさ">
+                {(Object.keys(RICH_MENU_SIZES) as RichMenuSize[]).map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    role="radio"
+                    aria-checked={input.size === size}
+                    onClick={() => changeSize(size)}
+                    className={cn('rounded-md border p-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', input.size === size ? 'border-primary bg-primary/5' : 'hover:bg-accent')}
+                  >
+                    <span className="block font-medium">{RICH_MENU_SIZES[size].label}</span>
+                    <span className="block text-xs text-muted-foreground">{RICH_MENU_SIZES[size].description}</span>
+                  </button>
+                ))}
+              </div>
+              {menu && input.size !== menu.size && <p className="text-xs text-amber-700">大きさを変えたので、画像を選び直してください。</p>}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="rich-menu-bar">メニューバーの文言（{RICH_MENU_LIMITS.chatBarTextMax} 文字まで）</Label>
+              <Input id="rich-menu-bar" value={input.chat_bar_text} maxLength={RICH_MENU_LIMITS.chatBarTextMax} placeholder={DEFAULT_CHAT_BAR_TEXT} onChange={(e) => patch({ chat_bar_text: e.target.value })} />
+              <p className="text-xs text-muted-foreground">トーク画面のいちばん下に出る、メニューを開け閉めするバーの文字です。</p>
+            </div>
+
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[rgb(244,144,49)]" checked={input.open_by_default} onChange={(e) => patch({ open_by_default: e.target.checked })} />
+              <span>
+                トーク画面を開いたとき、最初からメニューを開いておく
+                <span className="block text-xs text-muted-foreground">外すと、お客様がバーを押したときにメニューが開きます。</span>
+              </span>
+            </label>
+
+            {/* 選んだボタンの動き */}
+            <div className="space-y-3 rounded-md border p-3" data-slot="rich-menu-area-editor">
+              {selected ? (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">ボタン {selectedIndex + 1} を押したときの動き</p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700"
+                      onClick={() => {
+                        patch({ areas: input.areas.filter((a) => a.id !== selected.id) });
+                        setSelectedId(null);
+                      }}
+                    >
+                      <Trash2 className="mr-1 h-4 w-4" aria-hidden="true" />
+                      このボタンを消す
+                    </Button>
+                  </div>
+                  <select
+                    aria-label="動きの種類"
+                    value={selected.action.type}
+                    onChange={(e) => setAction(defaultAction(e.target.value as RichMenuAction['type'], forms))}
+                    className="h-10 w-full rounded-md border bg-background px-2 text-base md:text-sm"
+                  >
+                    {ACTION_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {RICH_MENU_ACTION_LABELS[t]}
+                      </option>
+                    ))}
+                  </select>
+
+                  {selected.action.type === 'form' &&
+                    (forms.length === 0 ? (
+                      <p className="text-xs text-amber-700">予約フォームがまだありません。先に予約フォームを作ってください。</p>
+                    ) : (
+                      <div className="space-y-1">
+                        <select aria-label="開く予約フォーム" value={selected.action.form_id} onChange={(e) => setAction({ type: 'form', form_id: e.target.value })} className="h-10 w-full rounded-md border bg-background px-2 text-base md:text-sm">
+                          {!forms.some((f) => f.id === (selected.action as { form_id: string }).form_id) && <option value={selected.action.form_id}>（選んでください）</option>}
+                          {forms.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.name}
+                              {f.openable ? '' : '（開く URL がありません）'}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-muted-foreground">フォームの URL は、反映するときに自動で入ります。</p>
+                      </div>
+                    ))}
+
+                  {selected.action.type === 'message' && (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {RICH_MENU_KEYWORDS.map((k) => (
+                          <button
+                            key={k.text}
+                            type="button"
+                            title={k.description}
+                            onClick={() => setAction({ type: 'message', text: k.text })}
+                            className={cn('rounded-full border px-3 py-1 text-xs transition-colors', (selected.action as { text: string }).text === k.text ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-accent')}
+                          >
+                            {k.label}
+                          </button>
+                        ))}
+                      </div>
+                      <Input aria-label="送る文字" value={selected.action.text} maxLength={RICH_MENU_LIMITS.messageTextMax} placeholder="お客様のトークに送られる文字" onChange={(e) => setAction({ type: 'message', text: e.target.value })} />
+                      <p className="text-xs text-muted-foreground">押すと、お客様のトークにこの文字が送られます。上の言葉は、このシステムが自動で返事をする言葉です。キーワード自動応答に登録した言葉も入れられます。</p>
+                    </div>
+                  )}
+
+                  {selected.action.type === 'uri' && (
+                    <div className="space-y-1">
+                      <Input aria-label="開く URL" value={selected.action.uri} maxLength={RICH_MENU_LIMITS.uriMax} placeholder="https://… / 電話は tel:0312345678" inputMode="url" onChange={(e) => setAction({ type: 'uri', uri: e.target.value })} />
+                      <p className="text-xs text-muted-foreground">ホームページ・地図・Instagram などの URL を入れます。</p>
+                    </div>
+                  )}
+
+                  {selected.action.type === 'none' && <p className="text-xs text-muted-foreground">押しても何も起きません（飾りの部分に使います）。</p>}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">右の画像の上でボタンを選ぶと、押したときの動きを設定できます。</p>
+              )}
+            </div>
+          </div>
+
+          {/* 右: 画像とボタンの範囲 */}
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium">画像とボタン</p>
+                <p className="text-xs text-muted-foreground">
+                  {dims.width}×{dims.height} に切り抜いて保存します。
+                </p>
+              </div>
+              <RichMenuImagePicker storeId={storeId} size={input.size} hasImage={!!input.image_url} disabled={saving} onUploaded={(url) => patch({ image_url: url })} onError={(m) => setError(m)} />
+            </div>
+            <RichMenuAreaCanvas
+              size={input.size}
+              imageUrl={input.image_url}
+              areas={input.areas}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onChange={(areas, id) => {
+                patch({ areas });
+                setSelectedId(id);
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              何も無い所をなぞると、ボタンの範囲ができます。範囲はつかんで動かせます。選んだ範囲の右下の角を引くと、大きさを変えられます（{RICH_MENU_LIMITS.areasMax} 個まで）。
+            </p>
+
+            {input.areas.length > 0 && (
+              <ul className="space-y-1" data-slot="rich-menu-area-list">
+                {input.areas.map((a, i) => (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(a.id)}
+                      aria-pressed={a.id === selectedId}
+                      className={cn('flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-sm transition-colors', a.id === selectedId ? 'border-primary bg-primary/5' : 'hover:bg-accent')}
+                    >
+                      <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-sm bg-black/70 px-1 text-[11px] font-bold text-white">{i + 1}</span>
+                      <span className="min-w-0 truncate">{describeRichMenuAction(a.action, formName)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {publishHints.length > 0 && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" data-slot="rich-menu-hints">
+                <p className="font-medium">反映するまでに、次の所を直してください（保存はできます）</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  {publishHints.slice(0, 5).map((h) => (
+                    <li key={h}>{h}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {error && (
+          <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+            {error}
+          </p>
+        )}
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={requestClose} disabled={saving}>
+            閉じる
+          </Button>
+          <Button type="button" onClick={() => void save()} disabled={saving}>
+            {saving ? '保存中…' : '保存する'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -28,6 +28,7 @@ describe('store-admin-guide（店舗管理者ページの使い方の文言）',
     expect(titles('walls')).toEqual(expect.arrayContaining(['付箋の確認', 'ボード', '見た目', 'NGワード']));
     expect(titles('broadcasts')).toEqual(expect.arrayContaining(['新しい配信', '配信先', 'メッセージ', 'テスト送信', '配信一覧', '自動配信', 'スタンプ・素材', '設定']));
     expect(titles('settings')).toEqual(expect.arrayContaining(['表示設定', 'アカウント情報']));
+    expect(titles('richmenu')).toEqual(expect.arrayContaining(['新しく作る', '画像とボタン', '押したときの動き', '反映する', '反映をやめる']));
     expect(titles('calendar')).toEqual(expect.arrayContaining(['月 / 週 / 日', 'キャンセルも表示', '予約以外の予定', '終日']));
   });
 

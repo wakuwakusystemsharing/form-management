@@ -8,6 +8,7 @@ import {
   FileText,
   Calendar,
   CalendarDays,
+  PanelBottom,
   ClipboardList,
   Gift,
   StickyNote,
@@ -38,6 +39,8 @@ interface StoreAdminLayoutProps {
   visibleTabs?: StoreAdminTabId[] | null;
   /** 「カレンダー」をメニューに出すか（admin_visible_options.calendar の判定結果） */
   showCalendar?: boolean;
+  /** 「リッチメニュー」をメニューに出すか（admin_visible_options.rich_menu の判定結果） */
+  showRichMenu?: boolean;
 }
 
 const allMenuItems: { id: StoreAdminNavId; label: string; icon: typeof LayoutDashboard }[] = [
@@ -49,6 +52,7 @@ const allMenuItems: { id: StoreAdminNavId; label: string; icon: typeof LayoutDas
   { id: 'lotteries', label: '抽選管理', icon: Gift },
   { id: 'walls', label: '寄せ書き', icon: StickyNote },
   { id: 'broadcasts', label: '配信', icon: Send },
+  { id: 'richmenu', label: 'リッチメニュー', icon: PanelBottom },
   { id: 'settings', label: '設定', icon: Settings },
 ];
 
@@ -143,6 +147,7 @@ export default function StoreAdminLayout({
   themeColor,
   visibleTabs,
   showCalendar = false,
+  showRichMenu = false,
 }: StoreAdminLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -150,7 +155,7 @@ export default function StoreAdminLayout({
   const router = useRouter();
 
   // 店舗設定で非表示にされたタブを除外（null = すべて表示）
-  const visibleIds = buildStoreAdminNav(resolveVisibleTabs(visibleTabs), showCalendar);
+  const visibleIds = buildStoreAdminNav(resolveVisibleTabs(visibleTabs), { calendar: showCalendar, richMenu: showRichMenu });
   const menuItems = allMenuItems.filter((item) => visibleIds.includes(item.id));
 
   // 表示スタイル（標準 / Material）を <html data-ui> に反映。画面幅の変化・設定変更にも追従し、離脱時に解除

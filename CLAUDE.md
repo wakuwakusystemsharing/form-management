@@ -275,6 +275,23 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - 部品への渡し方: `forms[].staff`（`CalendarStaffMember { id, name }[]`。スタッフ選択が OFF のフォームは空）
 - Vitest: `reservation-calendar.test.ts` / `reservation-calendar-api.local.test.ts` / `reservation-manual-prefill.test.ts` / `reservation-patch-stale.local.test.ts` / `reservation-patch-staff.local.test.ts` / `store-admin-tabs.test.ts` / `admin-api-auth.test.ts`
 
+**リッチメニュー作成（「リッチメニュー」タブ。設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 7 章。③-1 = 作成と反映まで実装済み。分割の型・スマホ枠のプレビュー・タブ切り替え（③-2）、お客様ごとの切り替え（③-3）は未実装）:**
+- 公式 LINE のトーク画面の下に出るメニュー（画像 + ボタン）を管理画面で作り、**全員向けのメニュー**として公式 LINE に反映する。店舗管理者ページ `/{storeId}/admin?tab=richmenu` とテナント側 店舗ページの「リッチメニュー」タブで、同じ部品 `src/components/rich-menu/RichMenuPanel.tsx`（一覧・反映・反映をやめる・削除）+ `RichMenuEditorDialog.tsx`（名前・大きさ・バーの文言・画像・ボタン）を使う
+- **LINE の決まり（2026-11 に公式ドキュメントで確認）**: 画像 = JPEG / PNG・1MB まで・幅 800〜2500px・高さ 250px 以上・横 ÷ 縦 1.45 以上 / ボタン（areas）20 個まで / バーの文言 14 文字まで / メニューは 1 アカウント 1000 個まで / **作ったメニューは書き換えられず、画像の差し替えもできない** → 変えるときは作り直して差し替える。表示の優先順位は お客様ごと（API）> 全員向け（API）> 公式 LINE の管理画面で設定したもの
+- 大きさは 大（2500×1686）/ 小（2500×843）の 2 つ（`RICH_MENU_SIZES`）。**画像の加工はブラウザで行う**（`RichMenuImagePicker.tsx`: `react-easy-crop` でメニューの形に切り抜く → canvas でその大きさの JPEG にし、1MB 以下になるまで画質を下げる → `/api/upload/menu-image`（`menuId = richmenu_{stamp}`）。サーバーに `sharp` は足していない）。反映のときサーバーは画像の先頭を読んで 形式・大きさ・1MB 以下 を確かめる（`readImageInfo` / `checkRichMenuImage`）
+- **ボタンの範囲は「画像全体に対する割合」（0〜1）で持つ**（`RichMenuArea { id, x, y, w, h, action }`）。LINE に送るとき `areaToBounds` で実寸（px）にする（右端・下端は「開始 + 大きさ」を先に丸めてから引くので、隣り合うボタンのあいだにすき間も重なりもできない）。画面の編集は `RichMenuAreaCanvas.tsx`（何も無い所をなぞる = 作る / つかむ = 動かす / 右下の角 = 大きさ。Pointer Events。1% 刻み = `AREA_SNAP`。計算は `rectFromDrag` / `moveRect` / `resizeRect`。**離した瞬間の位置は ref でも持つ**（状態だけだと、すばやく離したとき 1 つ前の位置で確定する）。重なっている範囲は赤く見せ、保存はできない）
+- ボタンの動き `RichMenuAction`: `form`（予約フォームを開く。**フォーム ID で持ち、反映のときに URL にする** = `resolveFormBaseUrl`。消えたフォーム・開く URL の無いフォームは反映できない）/ `uri`（https / http / tel:）/ `message`（文字を送る。予約語は一覧 `RICH_MENU_KEYWORDS` = 予約確認・予約を変更・キャンセル・空き待ち確認 から選べる）/ `none`（何もしない。LINE には送らない）
+- **反映の順番**（`src/lib/line-rich-menu-service.ts` の `publishRichMenu`）: ① LINE に新しいメニューを作る（失敗したら何も変えない）→ ② 画像を送る（失敗したら ① を消す）→ ③ 全員向けにする（失敗したら ① を消す）→ ④ 記録を「反映中」にする → ⑤ 古いメニューを LINE から消す（失敗しても成功扱い）。**新しいメニューが出てから古いものを消す**（先に消すと、途中で失敗したときメニューが出ない時間ができる）。①〜③ は `publishToLine`、⑤ は `cleanupLineRichMenus`（LINE 側の名前の先頭に印 `LINE_MENU_NAME_PREFIX` = `[nas-rsv] ` を付けておき、**その印の付いた消し残りだけ**を次の反映のときに掃除する。ほかのツールで作ったメニューは消さない。**③-3 でお客様ごとのメニューを作るときは、この掃除で消さないようにすること**）
+- 2 回押し対策: LINE と通信する前に、記録を `publishing` に条件付きで書き換えて確保する（`updateRichMenu(..., { onlyIfStatus, onlyIfUpdatedAt })`）。`publishing` のまま 2 分（`PUBLISHING_STALE_MS`）たてば、もう一度反映できる。失敗したら 元が反映中なら `published`（古いメニューが出たまま）/ それ以外は `failed` に戻し、理由を `last_error` に入れて画面に出す
+- 状態 `status`: draft / publishing / published / failed。全員向けは 1 店舗に 1 つ（`is_default`。部分一意インデックス）。別のメニューを反映すると前のメニューは下書きに戻る。反映中のメニューを保存すると `dirty = true`（「未反映の変更あり」。保存しただけでは公式 LINE に出ない → 「もう一度反映する」）。「反映をやめる」= 全員向けの設定を外す（公式 LINE の管理画面のメニューに戻る。ほかの場所で別のメニューに変えられていたら外さない）。反映中のメニューは削除できない
+- **ほかの場所で変更されたとき**: 一覧を開くと LINE のいまの全員向けメニュー（`GET /v2/bot/user/all/richmenu`。無ければ 404、ほかの場所で設定されていれば 403）を読み、記録と違えば知らせる（`detectExternalChange`）
+- LINE の呼び出し `src/lib/line-rich-menu-api.ts`（例外を投げず `{ ok, status, body }` を返す。**画像の送信だけホストが `api-data.line.me`**。`RichMenuLineApi` にまとめてあり、テストでは差し替える）。エラーの文言は `describeLineRichMenuError`（401 / 403 = 「チャネルアクセストークンを確認してください」）
+- 純粋ロジック `src/lib/line-rich-menu.ts`、保存 `src/lib/line-rich-menu-repository.ts`（local は `data/line_rich_menus.json`）。**local は LINE と通信せず、記録だけ更新する**
+- API（`authorizeStoreAccess`）: `GET/POST /api/stores/{storeId}/rich-menus`、`PUT/DELETE .../{id}`、`POST .../{id}/publish`、`POST .../{id}/unpublish`
+- **表示設定**: `admin_visible_options.rich_menu`（「店舗管理者に表示するメニュー」の「配信」の下の「リッチメニューを表示」）。**未設定は非表示**（`defaultHidden: true`。公式 LINE の全員向けメニューを差し替える機能なので、運営がチェックを入れた店舗だけに出す。タブには連動しない）。運営が開いたときは常に表示。メニューの項目 ID は `richmenu`（`buildStoreAdminNav(visibleTabs, { calendar, richMenu })`）
+- マイグレーション `20261125000000_add_line_rich_menus.sql`（`line_rich_menus`。RLS ポリシー無し = service_role のみ。`rule` 列は ③-3 用で、いまは使わない）。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも既存の機能は動く（一覧が空になり、作成すると「マイグレーションがまだ適用されていません」と出る）。**staging は LINE のチャネルが本番と別なら反映まで確認できる**（LINE への通信はこのシステムから出るだけなので、ログイン保護は関係ない）
+- Vitest: `line-rich-menu.test.ts` / `line-rich-menu-service.local.test.ts` / `store-admin-tabs.test.ts` / `admin-api-auth.test.ts`
+
 **全予約一覧の「集計ダウンロード」（`/tenant/{slug}/admin/reservations` → 予約一覧タブ。Excel = 予約数 / キャンセル数 / アンケート回答数 / 出力条件 の 4 シート。店舗 × 月）:**
 - 予約は `GET /api/reservations`、アンケート回答数は `GET /api/surveys/stats`。どちらも **ログイン必須 + 見てよい店舗だけ**（`src/lib/admin-store-scope.ts` の `getAccessibleStoreIds` = マスター: 全店舗 / システム管理者: 同じテナント / 店舗管理者: 自分の店舗。`resolveStoreScope` で `store_id` の指定を確認し、範囲外は 403。local は認証スキップ）、**`fetchAllRows` で 1000 件ずつ全件取得**（以前は 1 回の取得 = 1000 件までで、件数が欠けていた）
 - 月の基準: 予約数・キャンセル数 = 予約日の月、アンケート回答数 = 回答日時の**日本時間**の月（`src/lib/survey-month-stats.ts` の `countSurveysByStoreMonth`）。ステータス・テスト用顧客の絞り込みは予約だけに効く。アンケート件数を取得できないときはダウンロードを止める（0 件のシートを出さない）
@@ -332,7 +349,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - マスター管理者・システム管理者が開いた場合は常に全表示（`/api/auth/role` の判定を `isUpperAdminUser` に保持）。**同じブラウザにテナント管理者のセッションが残っていると店舗管理者ページは自動的にそのセッションで開く**ため、全表示になる。ページ上部に「〜として閲覧中」のバナーを出し、「店舗管理者の見え方で確認」（`previewAsStoreAdmin`、sessionStorage `store_admin_preview_{storeId}`）で店舗設定を適用した表示に切り替えられる
 - 定義・正規化は `src/lib/store-admin-tabs.ts`（`STORE_ADMIN_TABS` / `resolveVisibleTabs()`）
 - マイグレーション: `20260902000000_add_admin_visible_tabs.sql`
-- **項目単位の表示**: `stores.admin_visible_options` JSONB（`reservation_forms` / `survey_forms` / `lottery_forms` = 各タブの「フォーム管理」、`customer_reservation_history` = 顧客詳細の予約履歴・来店履歴・統計情報、`customer_lottery_history` = 顧客詳細の抽選履歴、`customer_survey_history` = 顧客詳細のアンケートの回答、`calendar` = 「カレンダー」タブ（「予約管理」に連動。予約管理が非表示でも個別に表示できる）、`store_digest` = 設定タブの「今日の予約まとめ・月次レポート」の欄（「設定」に連動。隠すのは設定の欄だけで、すでに ON の送信は止めない。ダッシュボードの「月次レポートを見る」はそのまま））。**未設定キーは親タブに連動**（予約管理 OFF → 顧客詳細の予約・来店・統計も非表示、抽選管理 OFF → 抽選履歴も非表示）。明示的に true/false を保存すると連動より優先。判定は `resolveAdminVisibleOptions(tabs, options, upperAdmin)`。設定 UI は `StoreAdminMenuSettings.tsx` の各タブ配下のチェック（「連動に戻す」で未設定へ）。マイグレーション: `20260904000000_add_admin_visible_options.sql`
+- **項目単位の表示**: `stores.admin_visible_options` JSONB（`reservation_forms` / `survey_forms` / `lottery_forms` = 各タブの「フォーム管理」、`customer_reservation_history` = 顧客詳細の予約履歴・来店履歴・統計情報、`customer_lottery_history` = 顧客詳細の抽選履歴、`customer_survey_history` = 顧客詳細のアンケートの回答、`calendar` = 「カレンダー」タブ（「予約管理」に連動。予約管理が非表示でも個別に表示できる）、`rich_menu` = 「リッチメニュー」タブ（**未設定は非表示**。チェックを入れた店舗だけ）、`store_digest` = 設定タブの「今日の予約まとめ・月次レポート」の欄（「設定」に連動。隠すのは設定の欄だけで、すでに ON の送信は止めない。ダッシュボードの「月次レポートを見る」はそのまま））。**未設定キーは親タブに連動**（予約管理 OFF → 顧客詳細の予約・来店・統計も非表示、抽選管理 OFF → 抽選履歴も非表示）。明示的に true/false を保存すると連動より優先。判定は `resolveAdminVisibleOptions(tabs, options, upperAdmin)`。設定 UI は `StoreAdminMenuSettings.tsx` の各タブ配下のチェック（「連動に戻す」で未設定へ）。マイグレーション: `20260904000000_add_admin_visible_options.sql`
 
 **公式 LINE 向け Flex Message（テナント側 店舗ページ → 「LINE メッセージ」タブ。設計: `docs/LINE Flexメッセージ_実装設計.md`）:**
 - 公式 LINE 管理画面では作れない Flex Message をテンプレート（予約導線カード / メニュー・料金カルーセル / 料金表（リスト）/ 店舗紹介カード / クーポン・キャンペーン / お知らせ・営業案内 / スタッフ紹介カルーセル / ご利用の流れ。上級者は JSON 直接編集・`custom` = プルダウンの一番上）から作り、**キーワード自動応答**（Webhook。完全一致。「予約確認」「キャンセル」は予約不可、同店舗で重複不可）/ **【ご予約確認】・リマインダー・フォローへの差し込み** / **テスト送信**（LINE 連携済み顧客へ push）に使う。ボタンの URL は計測リンク `/go/{id}/{key}` に置き換えてタップ数を数える（`track_taps`）
@@ -633,6 +650,11 @@ export async function GET(req, { params }) {
 - `DELETE /api/stores/{storeId}/customers/{customerId}` - 顧客削除（`customer_visits` は CASCADE、`reservations.customer_id` は SET NULL）
 - `GET /api/stores/{storeId}/customers/analytics` - 顧客分析データ（セグメント分布、月別新規、性別/年齢、`line_friend_rate` + `line_friend_connected` + `line_linked_customers`、平均来店間隔、リピート率、売上ランキング）
 
+### リッチメニュー API:
+- `GET/POST /api/stores/{storeId}/rich-menus` - 一覧（+ 選べる予約フォーム・LINE のいまの設定との食い違い）/ 下書きを作る
+- `PUT/DELETE /api/stores/{storeId}/rich-menus/{id}` - 内容を保存 / 削除（反映中は不可）
+- `POST /api/stores/{storeId}/rich-menus/{id}/publish` / `.../unpublish` - 全員向けのメニューとして公式 LINE に反映 / 反映をやめる
+
 ### 予約カレンダー API:
 - `GET /api/stores/{storeId}/reservations/calendar` - 期間に掛かる予約と、予約以外の予定の時間（`from` / `to` = YYYY-MM-DD。最大 62 日。認証必須）
 
@@ -779,6 +801,7 @@ export async function GET(req, { params }) {
 - `20261014000000_add_before_time_reminder.sql` - stores.reminder_before_time_enabled / reminder_before_time_minutes（直前リマインダー）、reminder_logs.kind に before_time
 - `20261101000000_add_stay_reservation.sql` - 宿泊モード: reservations に checkout_date / stay_nights / guest_counts / guest_count / stay_price_total / cancel_fee_percent / cancel_fee_amount / cancelled_at、DB 関数 `stay_insert_reservation_checked`
 - `20261120000000_add_store_digest.sql` - 朝のまとめ・月次レポート: store_digest_settings / store_digest_staff / store_digest_logs
+- `20261125000000_add_line_rich_menus.sql` - リッチメニュー: line_rich_menus
 - `20261009000000_add_wall.sql` - 寄せ書きウォールの 5 テーブル・RLS・DB 関数 `wall_insert_post_checked` / `wall_add_report`
 - `20261010000000_add_wall_daily_max.sql` - wall_boards.daily_max
 - `20261011000000_add_wall_engagement.sql` - 寄せ書きの追加機能（wall_topics / wall_empathies、wall_posts の reaction / topic_id / note_color / note_deco / empathy_count、wall_boards の empathy_* / customer_pick_enabled、DB 関数 `wall_toggle_empathy`）

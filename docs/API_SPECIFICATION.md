@@ -697,6 +697,57 @@ QR コードの PNG（中身は `entry_url`）。`?download=1` で保存用の�
 
 ## 📊 予約分析（Reservation Analytics）API
 
+### `GET /api/stores/{storeId}/rich-menus`
+リッチメニュー（公式 LINE のトーク画面の下に出るメニュー）の一覧
+
+**認証**: 必要（店舗へのアクセス権。local はスキップ）
+
+**レスポンス**:
+```json
+{
+  "menus": [
+    {
+      "id": "uuid", "name": "いつものメニュー", "size": "small", "image_url": "https://…/richmenu_xxx.jpg",
+      "areas": [ { "id": "a1", "x": 0, "y": 0, "w": 0.5, "h": 1, "action": { "type": "message", "text": "予約確認" } } ],
+      "chat_bar_text": "メニュー", "open_by_default": true,
+      "status": "published", "is_default": true, "dirty": false, "line_rich_menu_id": "richmenu-…", "last_error": null, "published_at": "…"
+    }
+  ],
+  "forms": [ { "id": "g3v71mxst30e", "name": "カット予約", "openable": true } ],
+  "max": 20,
+  "has_token": true,
+  "local": false,
+  "external_notice": null
+}
+```
+- `areas[].x / y / w / h`: 画像全体に対する割合（0〜1）。`action.type`: `form`（`form_id`）/ `uri`（`uri`）/ `message`（`text`）/ `none`
+- `status`: `draft` = 下書き / `publishing` = 反映の途中 / `published` = 反映中 / `failed` = 反映に失敗（理由は `last_error`）。`dirty` = 反映したあとに内容を変えた
+- `external_notice`: ほかの場所（公式 LINE の管理画面など）で全員向けのメニューが変えられているときの文言。無ければ `null`
+
+### `POST /api/stores/{storeId}/rich-menus` / `PUT /api/stores/{storeId}/rich-menus/{id}`
+下書きを作る / 内容を保存する（保存しただけでは公式 LINE には出ない）
+
+**リクエスト**: `{ name, size: "large" | "small", image_url, areas, chat_bar_text, open_by_default }`
+
+- 名前は必須・40 文字まで、バーの文言は 14 文字まで、ボタンは 20 個まで。範囲が重なっている・小さすぎると `400`
+- 画像・ボタンの動きは、保存のときは未設定でもよい（反映のときに確かめる）
+- 反映の途中は `409`。ほかの店舗のメニューは `404`
+
+### `POST /api/stores/{storeId}/rich-menus/{id}/publish`
+全員向けのメニューとして公式 LINE に反映する（LINE に新しいメニューを作る → 画像を送る → 全員向けにする → 古いメニューを消す）
+
+**レスポンス**: `{ "menu": { … }, "notice": null }`（local は LINE と通信せず、`notice` に理由が入る）
+
+- `400`: 画像が無い・大きさが合わない・1MB を超える / 動きのあるボタンが無い / 消えたフォームを指すボタンがある / LINE のトークンが未登録
+- `409`: 反映の途中（2 回押したとき）
+- `502`: LINE に断られた・通信できなかった（何も変わらない。反映中だったメニューは、古いものがそのまま出ている）
+
+### `POST /api/stores/{storeId}/rich-menus/{id}/unpublish`
+反映をやめる（全員向けの設定を外す。公式 LINE の管理画面で設定したメニューに戻る）。メニューは下書きに戻る
+
+### `DELETE /api/stores/{storeId}/rich-menus/{id}`
+削除する。反映中のメニューは `409`（先に反映をやめる）
+
 ### `GET /api/stores/{storeId}/reservations/calendar`
 予約カレンダー用のデータ（期間に掛かる予約 + 予約以外の予定の時間）
 
