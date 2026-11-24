@@ -586,6 +586,7 @@ export async function GET(req, { params }) {
 - **ログインなしで呼べるままにしている API（お客様のフォームが使う）**: `GET /api/forms/{formId}`・`GET /api/surveys/{id}`・`GET /api/lotteries/{id}`・`POST /api/reservations`・`POST /api/surveys/submit`・空き状況（`calendar/availability`・`stay/availability`）・`change-source` / `change-menu` / `waitlist`（LINE ユーザー ID で本人確認）・抽選 / 寄せ書き（LIFF の ID トークン）・Webhook・`POST /api/preview/generate`
 - **画面からは `fetchWithAuth`（`src/lib/client-auth.ts`）で呼ぶ**: Cookie のログイン情報は約 1 時間で切れる。`fetchWithAuth` は 401 のとき Cookie を取り直して 1 回だけ再試行する。素の `fetch` だと、画面を開いたまましばらく置いたあとの操作が失敗する
 - 画像のアップロードは、店舗 ID と画像の名前（`menuId` / `submenuId`）に英数字・`_`・`.`・`-` だけを通す。削除できるのは `menu_images/{storeId}/` と `submenu_images/{storeId}/` の下だけ（フォームの HTML などは消せない）
+- **店舗管理者ページ（`/{storeId}/admin`）を開いたときのアクセス確認は `GET /api/stores/{storeId}?full=1`**（`src/lib/store-admin-access.ts` の `storeAdminAccessCheckUrl` / `storeAdminAccessError` = 401 / 403 / 404 の文言）。以前は店舗管理者の一覧（`/admins`）で確認していたため、その API を運営だけにしたとき、店舗管理者の全員が「この店舗へのアクセス権限がありません」で入れなくなった。**API を運営だけにするときは、店舗管理者の画面がその API を呼んでいないかを先に調べる**。Vitest: `store-admin-access.test.ts`
 - Vitest: `admin-api-auth.test.ts`（各 API の 未ログイン 401 / 別の店舗 403 / 運営だけの操作 403）
 
 ### フォーム固有の API:
