@@ -1593,7 +1593,7 @@ export default function StoreAdminPage() {
           <div className="space-y-4 p-4 lg:p-6">
             <StoreAdminGuide tab="settings" />
             <UiStyleSettings />
-            <StoreDigestSettings storeId={storeId} />
+            {adminOptions.store_digest && <StoreDigestSettings storeId={storeId} />}
             <Card className="shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle className="text-base">店舗設定</CardTitle>
