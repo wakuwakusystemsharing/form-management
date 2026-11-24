@@ -26,6 +26,7 @@ import { checkStayNightsFree } from '@/lib/stay-service';
 import { scheduleWaitlistCheck } from '@/lib/waitlist-service';
 import { scheduleCancelOpeningBroadcast } from '@/lib/broadcast-automation-service';
 import { authorizeRecordStoreAccess } from '@/lib/store-access';
+import { isReservationStale } from '@/lib/reservation-calendar';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const RESERVATIONS_FILE = path.join(DATA_DIR, 'reservations.json');
@@ -350,6 +351,10 @@ export async function PATCH(
       }
 
       const existing = reservations[index];
+      // カレンダーのドラッグなど: 画面を開いたあとに他の人が変更していたら保存しない
+      if (isReservationStale(body.expected_updated_at, existing.updated_at)) {
+        return NextResponse.json({ error: '他の人がこの予約を変更しました。画面を読み込み直してから、もう一度お試しください', code: 'stale' }, { status: 409 });
+      }
       const previousStatus = existing.status;
       const previousDate = existing.reservation_date;
 
@@ -415,6 +420,10 @@ export async function PATCH(
       .maybeSingle();
     if (!existing) {
       return NextResponse.json({ error: '予約が見つかりません' }, { status: 404 });
+    }
+    // カレンダーのドラッグなど: 画面を開いたあとに他の人が変更していたら保存しない
+    if (isReservationStale(body.expected_updated_at, existing.updated_at)) {
+      return NextResponse.json({ error: '他の人がこの予約を変更しました。画面を読み込み直してから、もう一度お試しください', code: 'stale' }, { status: 409 });
     }
     const previousStatus = existing.status as string | undefined;
 

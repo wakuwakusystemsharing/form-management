@@ -1588,6 +1588,14 @@ export default function StoreAdminPage() {
             <ReservationCalendar
               storeId={storeId}
               reloadSignal={reservations}
+              forms={forms.map((f: any) => ({
+                id: f.id,
+                name: getReservationFormName(f),
+                timeInterval: f.config?.calendar_settings?.time_interval ?? null,
+                // 店舗側手動予約フォームは LINE タイプのフォームだけ
+                manual: (f.config?.form_type ?? 'line') === 'line',
+              }))}
+              onReservationChanged={(updated) => setReservations((prev) => prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)))}
               onSelectReservation={(reservation) => {
                 setSelectedReservation(reservation as Reservation);
                 setIsEditingReservation(false);
