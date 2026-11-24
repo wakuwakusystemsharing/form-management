@@ -235,6 +235,10 @@ export interface CalendarEvent {
   /** メニュー名（「カット、カラー」） */
   subtitle: string;
   staffName: string | null;
+  /** 担当スタッフの ID（スタッフごとの列で使う） */
+  staffId: string | null;
+  /** 予約のフォーム ID */
+  formId: string | null;
   status: string;
   cancelled: boolean;
 }
@@ -289,6 +293,8 @@ export function toCalendarEvent(r: CalendarReservationInput): CalendarEvent | nu
     title: (typeof r.customer_name === 'string' && r.customer_name.trim()) || 'お客様',
     subtitle: reservationMenuLabel(r),
     staffName: typeof r.staff_name === 'string' && r.staff_name.trim() ? r.staff_name.trim() : null,
+    staffId: typeof r.staff_id === 'string' && r.staff_id ? r.staff_id : null,
+    formId: typeof r.form_id === 'string' && r.form_id ? r.form_id : null,
     status,
     cancelled: status === 'cancelled',
   };
@@ -602,4 +608,118 @@ export function isReservationStale(expected: unknown, current: unknown): boolean
   const b = Date.parse(current);
   if (Number.isNaN(a) || Number.isNaN(b)) return false;
   return a !== b;
+}
+
+// ---------------------------------------------------------------------------
+// スタッフごとの列（②-3。日表示だけ）
+// ---------------------------------------------------------------------------
+
+/** 列を作るのに使う、フォームごとのスタッフ */
+export interface CalendarStaffMember {
+  id: string;
+  name: string;
+}
+
+/** スタッフ 1 人ぶんの列。同じ名前のスタッフは、フォームごとに ID が違っていても 1 つの列にまとめる */
+export interface StaffColumn {
+  key: string;
+  name: string;
+  /** その名前のスタッフの ID（フォームごとに違うことがある） */
+  ids: string[];
+}
+
+/** 担当の決まっていない予約を置く列のキー */
+export const STAFF_NONE_KEY = 'none';
+export const STAFF_NONE_LABEL = '担当なし';
+
+function staffNameOf(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * フォームのスタッフ一覧 → 列。
+ * 名前でまとめる（「更新して他のフォームにも反映」でコピーしたフォームは ID も同じだが、
+ * 別々に登録したフォームは ID が違うため）。並びは最初に出てきた順
+ */
+export function buildStaffColumns(forms: Array<{ staff?: CalendarStaffMember[] | null }>): StaffColumn[] {
+  const byName = new Map<string, StaffColumn>();
+  for (const form of Array.isArray(forms) ? forms : []) {
+    for (const member of Array.isArray(form?.staff) ? form.staff : []) {
+      const name = staffNameOf(member?.name);
+      const id = typeof member?.id === 'string' ? member.id : '';
+      if (!name || !id) continue;
+      const col = byName.get(name);
+      if (col) {
+        if (!col.ids.includes(id)) col.ids.push(id);
+      } else {
+        byName.set(name, { key: `s:${name}`, name, ids: [id] });
+      }
+    }
+  }
+  return [...byName.values()];
+}
+
+/** その予約をどの列に置くか。スタッフ ID → 名前 の順に探し、見つからなければ「担当なし」 */
+export function staffColumnKeyOf(ev: { staffId?: string | null; staffName?: string | null }, columns: StaffColumn[]): string {
+  if (ev.staffId) {
+    const byId = columns.find((c) => c.ids.includes(ev.staffId as string));
+    if (byId) return byId.key;
+  }
+  const name = staffNameOf(ev.staffName);
+  if (name) {
+    const byName = columns.find((c) => c.name === name);
+    if (byName) return byName.key;
+  }
+  return STAFF_NONE_KEY;
+}
+
+/**
+ * その列のスタッフの、あるフォームでの ID。
+ * 担当の変更は「その予約のフォームに登録されているスタッフ」にしかできないので、フォームに居なければ null
+ */
+export function resolveStaffIdForForm(column: StaffColumn | null | undefined, formStaff: CalendarStaffMember[] | null | undefined): string | null {
+  if (!column) return null;
+  const list = Array.isArray(formStaff) ? formStaff : [];
+  const byId = list.find((m) => m && column.ids.includes(m.id));
+  if (byId) return byId.id;
+  const byName = list.find((m) => m && staffNameOf(m.name) === column.name);
+  return byName ? byName.id : null;
+}
+
+/** 「担当なし」の列を出すか（担当の決まっていない予約がその日にあるときだけ） */
+export function hasUnassignedEvents(events: CalendarEvent[], columns: StaffColumn[], date: string): boolean {
+  return events.some((ev) => eventCoversDate(ev, date) && staffColumnKeyOf(ev, columns) === STAFF_NONE_KEY);
+}
+
+/** 1 回に読むスタッフのカレンダーの数の上限 */
+export const STAFF_CALENDAR_MAX = 30;
+
+/**
+ * フォームの設定 → スタッフの Google カレンダーの一覧（同じカレンダーは 1 回だけ読む）。
+ * スタッフ選択が ON のフォームだけ。店舗のカレンダーと同じもの（skipCalendarId）は除く
+ */
+export function collectStaffCalendars(configs: unknown[], opts: { skipCalendarId?: string | null } = {}): Array<{ calendarId: string; names: string[] }> {
+  const byCalendar = new Map<string, string[]>();
+  for (const raw of Array.isArray(configs) ? configs : []) {
+    let config: unknown = raw;
+    if (typeof raw === 'string') {
+      try {
+        config = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+    }
+    const selection = asRecord(asRecord(config).staff_selection);
+    if (selection.enabled !== true || !Array.isArray(selection.staff)) continue;
+    for (const member of selection.staff) {
+      const rec = asRecord(member);
+      const calendarId = typeof rec.calendar_id === 'string' ? rec.calendar_id.trim() : '';
+      const name = staffNameOf(rec.name);
+      if (!calendarId || !name || calendarId === opts.skipCalendarId) continue;
+      const names = byCalendar.get(calendarId);
+      if (!names) byCalendar.set(calendarId, [name]);
+      else if (!names.includes(name)) names.push(name);
+    }
+  }
+  return [...byCalendar.entries()].slice(0, STAFF_CALENDAR_MAX).map(([calendarId, names]) => ({ calendarId, names }));
 }

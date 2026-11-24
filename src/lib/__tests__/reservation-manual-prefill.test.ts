@@ -57,6 +57,30 @@ describe('手動予約フォームの日時の入力済み表示', () => {
     dom.window.close();
   });
 
+  it('?staff= があると、そのフォームに居るスタッフを選んだ状態にする', async () => {
+    const form = normalizeForm({
+      id: 'form_test',
+      store_id: 'st0001',
+      form_type: 'line',
+      config: {
+        basic_info: { form_name: 'テスト予約', store_name: 'テスト店', liff_id: '', theme_color: '#3B82F6' },
+        calendar_settings: { booking_mode: 'calendar' },
+        staff_selection: { enabled: true, staff: [{ id: 'stf_sato', name: '佐藤', calendar_id: 'sato@example.com' }, { id: 'stf_suzuki', name: '鈴木', calendar_id: 'suzuki@example.com' }] },
+      },
+    });
+    const html = new StaticReservationGenerator().generateHTML(form.config, 'form_test', 'st0001', 'manual');
+    const selected = async (query: string) => {
+      const dom = await loadDom(html, 'https://example.com/manual-form' + query);
+      const ids = Array.from(dom.window.document.querySelectorAll('.staff-button.selected')).map((b) => (b as HTMLElement).dataset.staffId);
+      dom.window.close();
+      return ids;
+    };
+    expect(await selected('?date=2026-12-01&time=10:00&staff=stf_suzuki')).toEqual(['stf_suzuki']);
+    // そのフォームに居ないスタッフ・形のおかしい値では選ばない
+    expect(await selected('?date=2026-12-01&time=10:00&staff=stf_unknown')).not.toContain('stf_unknown');
+    expect(await selected('?date=2026-12-01&time=10:00&staff=' + encodeURIComponent('"><x'))).not.toContain('"><x');
+  }, 30000);
+
   it('日時の指定が無い・形がおかしいときは何もしない', async () => {
     for (const query of ['', '?date=2026-12-01', '?date=2026/12/01&time=10:00', '?date=2026-12-01&time=10時']) {
       const dom = await loadDom(manualHtml(), `https://example.com/manual-form${query}`);
