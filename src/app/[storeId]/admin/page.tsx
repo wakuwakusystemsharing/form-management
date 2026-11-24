@@ -27,6 +27,7 @@ import StoreDigestSettings from '@/components/StoreDigestSettings';
 import MonthlyReportView from '@/components/MonthlyReportView';
 import { buildStoreAdminNav, resolveAdminVisibleOptions, resolveVisibleTabs } from '@/lib/store-admin-tabs';
 import ReservationCalendar from '@/components/ReservationCalendar';
+import RichMenuPanel from '@/components/rich-menu/RichMenuPanel';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
 import WaitlistPanel from '@/components/WaitlistPanel';
 import CustomerList from '@/components/CustomerList';
@@ -191,7 +192,7 @@ export default function StoreAdminPage() {
   // タブ内の項目単位の表示（フォーム管理 / 顧客詳細の履歴）。上位管理者はすべて表示
   const adminOptions = resolveAdminVisibleOptions(visibleTabsForUser, store?.admin_visible_options ?? null, !applyStoreSettings);
   // メニューに出す項目（タブ + カレンダー。カレンダーは未設定なら「予約管理」に連動）
-  const navIds = buildStoreAdminNav(visibleTabIds, adminOptions.calendar);
+  const navIds = buildStoreAdminNav(visibleTabIds, { calendar: adminOptions.calendar, richMenu: adminOptions.rich_menu });
   const activeTab = navIds.includes(requestedTab as (typeof navIds)[number]) ? requestedTab : navIds[0];
   const wallTabVisible = visibleTabIds.includes('walls');
 
@@ -1607,6 +1608,14 @@ export default function StoreAdminPage() {
           </div>
         );
 
+      case 'richmenu':
+        return (
+          <div className="space-y-5 p-4 lg:p-6">
+            <StoreAdminGuide tab="richmenu" />
+            <RichMenuPanel storeId={storeId} />
+          </div>
+        );
+
       case 'walls':
         return (
           <div className="space-y-5 p-4 lg:p-6">
@@ -1776,6 +1785,7 @@ export default function StoreAdminPage() {
         themeColor={store?.theme_color}
         visibleTabs={visibleTabsForUser}
         showCalendar={adminOptions.calendar}
+        showRichMenu={adminOptions.rich_menu}
       >
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
@@ -1798,6 +1808,7 @@ export default function StoreAdminPage() {
         themeColor={store?.theme_color}
         visibleTabs={visibleTabsForUser}
         showCalendar={adminOptions.calendar}
+        showRichMenu={adminOptions.rich_menu}
       >
         <div className="flex items-center justify-center h-full p-4">
           <Card className="w-full max-w-md">
@@ -1821,6 +1832,7 @@ export default function StoreAdminPage() {
       themeColor={store.theme_color}
       visibleTabs={visibleTabsForUser}
       showCalendar={adminOptions.calendar}
+      showRichMenu={adminOptions.rich_menu}
     >
       {isUpperAdminUser && (
         <div className={`px-4 lg:px-6 pt-3 ${previewAsStoreAdmin ? '' : ''}`}>

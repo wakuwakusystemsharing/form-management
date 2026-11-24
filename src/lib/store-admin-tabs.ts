@@ -48,6 +48,7 @@ export const STORE_ADMIN_OPTION_KEYS = [
   'customer_survey_history',
   'store_digest',
   'calendar',
+  'rich_menu',
 ] as const;
 export type StoreAdminOptionKey = (typeof STORE_ADMIN_OPTION_KEYS)[number];
 
@@ -67,6 +68,8 @@ export interface StoreAdminOptionDef {
   followsTab: StoreAdminTabId;
   /** true = 親のタブを非表示にしていても、この項目だけ表示できる（独立したタブとして出る項目） */
   independent?: boolean;
+  /** true = 未設定のときは非表示（運営がチェックを入れた店舗だけに出す項目。タブには連動しない） */
+  defaultHidden?: boolean;
 }
 
 export const STORE_ADMIN_OPTIONS: StoreAdminOptionDef[] = [
@@ -77,6 +80,7 @@ export const STORE_ADMIN_OPTIONS: StoreAdminOptionDef[] = [
   { key: 'customer_lottery_history', tab: 'customers', label: '顧客詳細に抽選履歴を表示', description: '未設定のときは「抽選管理」の表示に連動します', followsTab: 'lotteries' },
   { key: 'customer_survey_history', tab: 'customers', label: '顧客詳細にアンケートの回答を表示', description: '未設定のときは「アンケート管理」の表示に連動します', followsTab: 'surveys' },
   { key: 'calendar', tab: 'reservations', label: 'カレンダーを表示', description: '予約を 日 / 週 / 月 のカレンダーで見るタブ。予約管理を非表示にしていても、ここだけ表示にできます', followsTab: 'reservations', independent: true },
+  { key: 'rich_menu', tab: 'broadcasts', label: 'リッチメニューを表示', description: '公式 LINE のトーク画面の下に出るメニューを、店舗管理者が作って反映できるタブ。チェックを入れた店舗だけに出ます', followsTab: 'broadcasts', independent: true, defaultHidden: true },
   { key: 'store_digest', tab: 'settings', label: '今日の予約まとめ・月次レポートを表示', description: '朝の「今日の予約まとめ」と月次レポートを、メールや LINE で受け取る設定の欄', followsTab: 'settings' },
 ];
 
@@ -115,7 +119,7 @@ export function resolveAdminVisibleOptions(
       continue;
     }
     const explicit = opts[def.key];
-    result[def.key] = typeof explicit === 'boolean' ? explicit : tabs.includes(def.followsTab);
+    result[def.key] = typeof explicit === 'boolean' ? explicit : def.defaultHidden ? false : tabs.includes(def.followsTab);
   }
   return result;
 }
@@ -126,15 +130,15 @@ export function resolveAdminVisibleOptions(
 
 /**
  * メニューに出す項目の ID。
- * 「カレンダー」は独立したタブとして出すが、表示するかどうかは admin_visible_options.calendar で決める
+ * 「カレンダー」「リッチメニュー」は独立したタブとして出すが、表示するかどうかは admin_visible_options（calendar / rich_menu）で決める
  * （未設定は「予約管理」に連動。admin_visible_tabs に足すと、タブを絞り込んでいる既存の店舗で
  *  「予約管理は出ているのにカレンダーだけ出ない」になるため、タブの一覧には入れない）
  */
-export type StoreAdminNavId = StoreAdminTabId | 'calendar';
+export type StoreAdminNavId = StoreAdminTabId | 'calendar' | 'richmenu';
 
-const STORE_ADMIN_NAV_ORDER: StoreAdminNavId[] = ['dashboard', 'reservations', 'calendar', 'customers', 'surveys', 'lotteries', 'walls', 'broadcasts', 'settings'];
+const STORE_ADMIN_NAV_ORDER: StoreAdminNavId[] = ['dashboard', 'reservations', 'calendar', 'customers', 'surveys', 'lotteries', 'walls', 'broadcasts', 'richmenu', 'settings'];
 
-/** 表示するタブ + カレンダー（表示するとき）を、メニューの並び順で返す */
-export function buildStoreAdminNav(visibleTabs: StoreAdminTabId[], showCalendar: boolean): StoreAdminNavId[] {
-  return STORE_ADMIN_NAV_ORDER.filter((id) => (id === 'calendar' ? showCalendar : visibleTabs.includes(id)));
+/** 表示するタブ + カレンダー・リッチメニュー（表示するとき）を、メニューの並び順で返す */
+export function buildStoreAdminNav(visibleTabs: StoreAdminTabId[], show: { calendar: boolean; richMenu?: boolean }): StoreAdminNavId[] {
+  return STORE_ADMIN_NAV_ORDER.filter((id) => (id === 'calendar' ? show.calendar : id === 'richmenu' ? !!show.richMenu : visibleTabs.includes(id)));
 }
