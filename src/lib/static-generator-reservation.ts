@@ -384,6 +384,8 @@ class BookingForm {
         this.availabilityCache = {}; // カレンダー空き状況のキャッシュ
         this.availabilityData = null; // 現在の空き状況データ
         this.businessDays = []; // 営業日の情報
+        // 流入経路の合言葉は、開いた直後に読んでおく（LIFF の初期化で URL が書き換わる前に）
+        this.sourceCode = (MANUAL_MODE || PREVIEW_MODE) ? '' : this.getSourceCode();
         this.init();
     }
     
@@ -494,6 +496,25 @@ class BookingForm {
             const pick = (search) => {
                 const v = new URLSearchParams(search || '').get('change');
                 return v && /^[A-Za-z0-9_-]{1,64}$/.test(v) ? v : '';
+            };
+            const direct = pick(window.location.search);
+            if (direct) return direct;
+            const st = new URLSearchParams(window.location.search || '').get('liff.state');
+            if (st) {
+                const q = st.indexOf('?');
+                return pick(q >= 0 ? st.slice(q) : st);
+            }
+        } catch (e) {}
+        return '';
+    }
+
+    // 流入経路の合言葉（URL の ?src=。LIFF の liff.state 経由も含む）。英小文字と数字 8 文字だけを通す
+    // （src/lib/reservation-sources.ts の SOURCE_CODE_PATTERN と同じ規則。直すときは両方）
+    getSourceCode() {
+        try {
+            const pick = (search) => {
+                const v = new URLSearchParams(search || '').get('src');
+                return v && /^[a-z0-9]{8}$/.test(v) ? v : '';
             };
             const direct = pick(window.location.search);
             if (direct) return direct;
@@ -3416,6 +3437,8 @@ class BookingForm {
                 // null = 不明（サーバ側で既存値を上書きしない）
                 line_friend_flag: this.state.lineFriendFlag, // 友だち追加状態 (true/false/null)
                 source_medium: sourceMedium,
+                // 流入経路（店舗が発行した URL / QR コードから開いたとき。サーバーが店舗の経路かを確かめてから記録する）
+                source_code: this.sourceCode || this.getSourceCode() || null,
                 booking_mode: this.config.calendar_settings?.booking_mode || 'calendar',
                 // 宿泊モード: チェックアウト日・人数・参考値の料金（料金はサーバーで再計算される）
                 checkout_date: this.state.stayCheckout || null,
