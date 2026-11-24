@@ -9,6 +9,7 @@
  * - 予約の帯はマウスでつかんで別の日時に落とせる（パソコンのみ。保存は PATCH /api/reservations/{id}）
  * - 空いている所を押すと、その日時で店舗側手動予約フォームを開く（forms に手動予約できるフォームがあるとき）
  * - 予約以外の予定（Google カレンダー）は灰色で「予定あり」とだけ出す
+ * - 日表示は、スタッフ選択を使っている店舗ではスタッフごとの列にできる（列をまたいで落とすと担当を変更）
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -21,14 +22,18 @@ import { cn } from '@/lib/utils';
 import {
   CALENDAR_VIEWS,
   DRAG_THRESHOLD_PX,
+  STAFF_NONE_KEY,
+  STAFF_NONE_LABEL,
   WEEKDAY_LABELS,
   buildMonthGrid,
+  buildStaffColumns,
   calendarRange,
   calendarTitle,
   countOverlappingEvents,
   describeSlot,
   dragSnapMinutes,
   eventsForDate,
+  hasUnassignedEvents,
   isDraggableEvent,
   isSameSlot,
   jstNowMinutes,
@@ -39,8 +44,10 @@ import {
   moveTarget,
   overlapsBusy,
   parseYmd,
+  resolveStaffIdForForm,
   shiftAnchor,
   slotAtPointer,
+  staffColumnKeyOf,
   timeToMinutes,
   toCalendarEvents,
   visibleHourRange,
@@ -49,10 +56,12 @@ import {
   type BusyBlock,
   type CalendarEvent,
   type CalendarReservationInput,
+  type CalendarStaffMember,
   type CalendarView,
 } from '@/lib/reservation-calendar';
 
 const VIEW_STORAGE_KEY = 'reservation_calendar_view';
+const STAFF_VIEW_STORAGE_KEY = 'reservation_calendar_staff_view';
 const HOUR_HEIGHT = 48; // 1 時間の高さ（px）
 const FOCUS_RELOAD_MS = 5000; // 画面に戻ってきたときの読み込み直しの間隔（これより短い間は読み込まない）
 
@@ -60,6 +69,9 @@ interface CalendarData {
   reservations: CalendarReservationInput[];
   busy: BusyBlock[];
   google: 'ok' | 'none' | 'error';
+  /** スタッフ名 → そのスタッフの Google カレンダーの予定（スタッフごとの列のときだけ読む） */
+  staffBusy: Record<string, BusyBlock[]>;
+  staffGoogle: 'ok' | 'none' | 'error';
 }
 
 /** カレンダーが使うフォームの情報 */
@@ -70,6 +82,8 @@ export interface CalendarFormInfo {
   timeInterval?: number | null;
   /** 店舗側手動予約フォームを開けるフォームか（LINE タイプのフォーム） */
   manual?: boolean;
+  /** スタッフ選択を使っているフォームのスタッフ（スタッフごとの列と、担当の変更に使う） */
+  staff?: CalendarStaffMember[];
 }
 
 export interface ReservationCalendarProps {
@@ -91,9 +105,26 @@ interface DragTarget {
   date: string;
   startMin: number;
   durationMinutes: number;
+  /** スタッフごとの列に落とすときの列 */
+  staffKey?: string;
+}
+
+/** 担当の変更先 */
+interface StaffChange {
+  id: string;
+  name: string;
 }
 
 type PointerDownHandler = (e: React.PointerEvent<HTMLElement>, ev: CalendarEvent, mode: 'grid' | 'month') => void;
+
+function initialStaffView(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    return window.localStorage.getItem(STAFF_VIEW_STORAGE_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
 
 function initialView(): CalendarView {
   if (typeof window === 'undefined') return 'week';
@@ -141,10 +172,12 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
   // ドラッグ
   const [drag, setDrag] = useState<DragTarget | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [confirmMove, setConfirmMove] = useState<{ event: CalendarEvent; date: string; startMin: number } | null>(null);
-  const [saving, setSaving] = useState<{ id: string; date: string; startMin: number } | null>(null);
+  const [confirmMove, setConfirmMove] = useState<{ event: CalendarEvent; date: string; startMin: number; staff: StaffChange | null; staffKey?: string } | null>(null);
+  const [saving, setSaving] = useState<{ id: string; date: string; startMin: number; staff: StaffChange | null } | null>(null);
+  // スタッフごとの列（日表示だけ）
+  const [staffView, setStaffView] = useState<boolean>(initialStaffView);
   // 空いている所から手動予約
-  const [manualSlot, setManualSlot] = useState<{ date: string; time: string; formId: string } | null>(null);
+  const [manualSlot, setManualSlot] = useState<{ date: string; time: string; formId: string; staffKey?: string } | null>(null);
 
   const suppressClickRef = useRef(false);
   const lastLoadedRef = useRef(0);
@@ -153,6 +186,10 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
   const range = useMemo(() => calendarRange(view, anchor), [view, anchor]);
   const manualForms = useMemo(() => (forms || []).filter((f) => f.manual), [forms]);
   const intervalByForm = useMemo(() => new Map((forms || []).map((f) => [f.id, f.timeInterval ?? null])), [forms]);
+  const staffByForm = useMemo(() => new Map((forms || []).map((f) => [f.id, f.staff || []])), [forms]);
+  const staffColumns = useMemo(() => buildStaffColumns(forms || []), [forms]);
+  // スタッフごとの列で出すか（スタッフ選択を使っている店舗の、日表示だけ）
+  const staffMode = view === 'day' && staffColumns.length > 0 && staffView;
 
   const changeView = useCallback((next: CalendarView) => {
     setView(next);
@@ -166,7 +203,7 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
     setLoading(true);
     (async () => {
       try {
-        const res = await fetchWithAuth(`/api/stores/${storeId}/reservations/calendar?from=${range.from}&to=${range.to}`, { cache: 'no-store' });
+        const res = await fetchWithAuth(`/api/stores/${storeId}/reservations/calendar?from=${range.from}&to=${range.to}${staffMode ? '&staff=1' : ''}`, { cache: 'no-store' });
         const json = await res.json().catch(() => null);
         if (cancelled) return;
         if (!res.ok || !json) {
@@ -177,6 +214,8 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
           reservations: Array.isArray(json.reservations) ? json.reservations : [],
           busy: Array.isArray(json.busy) ? json.busy : [],
           google: json.google === 'ok' || json.google === 'error' ? json.google : 'none',
+          staffBusy: json.staff_busy && typeof json.staff_busy === 'object' ? json.staff_busy : {},
+          staffGoogle: json.staff_google === 'ok' || json.staff_google === 'error' ? json.staff_google : 'none',
         });
         setError(null);
         lastLoadedRef.current = Date.now();
@@ -189,7 +228,7 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
     return () => {
       cancelled = true;
     };
-  }, [storeId, range.from, range.to, reloadSignal, reloadCount]);
+  }, [storeId, range.from, range.to, reloadSignal, reloadCount, staffMode]);
 
   // 「いま」の線を 1 分ごとに動かす
   useEffect(() => {
@@ -219,11 +258,21 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
   // 保存中の予約は、動かした先に置いて見せる（失敗したら元の位置に戻る）
   const events = useMemo(() => {
     if (!saving) return baseEvents;
-    return baseEvents.map((ev) => (ev.id === saving.id && ev.kind === 'timed' ? { ...ev, date: saving.date, endDate: saving.date, startMin: saving.startMin, endMin: Math.min(1440, saving.startMin + ev.durationMinutes) } : ev));
+    return baseEvents.map((ev) =>
+      ev.id === saving.id && ev.kind === 'timed'
+        ? { ...ev, date: saving.date, endDate: saving.date, startMin: saving.startMin, endMin: Math.min(1440, saving.startMin + ev.durationMinutes), ...(saving.staff ? { staffId: saving.staff.id, staffName: saving.staff.name } : {}) }
+        : ev
+    );
   }, [baseEvents, saving]);
   const busy = useMemo(() => data?.busy || [], [data]);
   const rowsById = useMemo(() => new Map((data?.reservations || []).map((r) => [r.id, r])), [data]);
   const cancelledCount = useMemo(() => (data?.reservations || []).filter((r) => r.status === 'cancelled').length, [data]);
+  // 列のキー → そのスタッフの Google カレンダーの予定
+  const staffBusyByKey = useMemo(() => {
+    const out: Record<string, BusyBlock[]> = {};
+    for (const c of staffColumns) out[c.key] = data?.staffBusy?.[c.name] || [];
+    return out;
+  }, [data, staffColumns]);
 
   const openEvent = (ev: CalendarEvent) => {
     if (suppressClickRef.current) return;
@@ -255,7 +304,7 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
         if (el.dataset.calCol !== undefined) {
           const colRect = el.getBoundingClientRect();
           const pointerMin = Number(el.dataset.gridStart || 0) + ((y - colRect.top) / HOUR_HEIGHT) * 60;
-          return { id: ev.id, date, startMin: moveTarget({ pointerMin, grabOffsetMin, snapMinutes }), durationMinutes: ev.durationMinutes };
+          return { id: ev.id, date, startMin: moveTarget({ pointerMin, grabOffsetMin, snapMinutes }), durationMinutes: ev.durationMinutes, staffKey: el.dataset.staffKey };
         }
         // 月表示: 日だけ変える（時刻はそのまま）
         if (el.dataset.calCell !== undefined && ev.startMin !== null) return { id: ev.id, date, startMin: ev.startMin, durationMinutes: ev.durationMinutes };
@@ -293,7 +342,26 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
         }, 80);
       }
       cleanup();
-      if (dropped && !isSameSlot(ev, dropped.date, dropped.startMin)) setConfirmMove({ event: ev, date: dropped.date, startMin: dropped.startMin });
+      if (!dropped) return;
+      // スタッフごとの列: 別の列に落としたら担当も変える
+      const fromKey = staffColumnKeyOf(ev, staffColumns);
+      const toKey = dropped.staffKey;
+      let staff: StaffChange | null = null;
+      if (toKey !== undefined && toKey !== fromKey) {
+        if (toKey === STAFF_NONE_KEY) {
+          toast({ title: '「担当なし」には動かせません', description: '担当を外すときは、予約を押して「予約内容を編集」から変更してください', variant: 'destructive' });
+          return;
+        }
+        const column = staffColumns.find((c) => c.key === toKey);
+        const staffId = resolveStaffIdForForm(column, staffByForm.get(ev.formId || ''));
+        if (!column || !staffId) {
+          toast({ title: '担当を変更できません', description: `この予約のフォームには「${column?.name || 'このスタッフ'}」が登録されていません`, variant: 'destructive' });
+          return;
+        }
+        staff = { id: staffId, name: column.name };
+      }
+      if (!staff && isSameSlot(ev, dropped.date, dropped.startMin)) return;
+      setConfirmMove({ event: ev, date: dropped.date, startMin: dropped.startMin, staff, staffKey: toKey });
     };
     const onCancel = () => cleanup();
     const onKey = (ke: KeyboardEvent) => {
@@ -315,17 +383,17 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
     const row = rowsById.get(move.event.id) as (CalendarReservationInput & { updated_at?: string }) | undefined;
     setConfirmMove(null);
     savingRef.current = true;
-    setSaving({ id: move.event.id, date: move.date, startMin: move.startMin });
+    setSaving({ id: move.event.id, date: move.date, startMin: move.startMin, staff: move.staff });
     const time = minutesToTime(move.startMin);
     try {
       const res = await fetchWithAuth(`/api/reservations/${move.event.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reservation_date: move.date, reservation_time: time, expected_updated_at: row?.updated_at }),
+        body: JSON.stringify({ reservation_date: move.date, reservation_time: time, ...(move.staff ? { staff_id: move.staff.id } : {}), expected_updated_at: row?.updated_at }),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json) {
-        toast({ title: '日時を変更できませんでした', description: json?.error || `エラーコード: ${res.status}`, variant: 'destructive' });
+        toast({ title: '予約を変更できませんでした', description: json?.error || `エラーコード: ${res.status}`, variant: 'destructive' });
         // ほかの人が先に変更していたときは、最新の内容を読み込み直す
         if (json?.code === 'stale') setReloadCount((n) => n + 1);
         return;
@@ -335,12 +403,12 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
       onReservationChanged?.(json);
       const sync = json.calendar_sync;
       toast({
-        title: '日時を変更しました',
-        description: `${move.event.title} さん: ${describeSlot(move.date, move.startMin, move.event.durationMinutes)}${sync && sync.ok === false ? '（Google カレンダーの予定は変更できませんでした）' : ''}`,
+        title: move.staff ? '予約を変更しました' : '日時を変更しました',
+        description: `${move.event.title} さん: ${describeSlot(move.date, move.startMin, move.event.durationMinutes)}${move.staff ? `（担当: ${move.staff.name}）` : ''}${sync && sync.ok === false ? '（Google カレンダーの予定は変更できませんでした）' : ''}`,
       });
       setReloadCount((n) => n + 1);
     } catch {
-      toast({ title: '日時を変更できませんでした', description: '通信に失敗しました。もう一度お試しください', variant: 'destructive' });
+      toast({ title: '予約を変更できませんでした', description: '通信に失敗しました。もう一度お試しください', variant: 'destructive' });
     } finally {
       savingRef.current = false;
       setSaving(null);
@@ -348,14 +416,19 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
   };
 
   // ---- 空いている所から手動予約
-  const openManualSlot = (date: string, startMin: number) => {
+  const manualStaffColumn = (staffKey?: string) => (staffKey && staffKey !== STAFF_NONE_KEY ? staffColumns.find((c) => c.key === staffKey) || null : null);
+  const openManualSlot = (date: string, startMin: number, staffKey?: string) => {
     if (suppressClickRef.current || manualForms.length === 0) return;
-    setManualSlot({ date, time: minutesToTime(startMin), formId: manualForms[0].id });
+    // そのスタッフが登録されているフォームを先に選ぶ
+    const column = manualStaffColumn(staffKey);
+    const preferred = column ? manualForms.find((f) => resolveStaffIdForForm(column, f.staff)) : undefined;
+    setManualSlot({ date, time: minutesToTime(startMin), formId: (preferred || manualForms[0]).id, staffKey });
   };
   const openManualForm = () => {
     if (!manualSlot) return;
     const minutes = timeToMinutes(manualSlot.time);
-    const query = minutes === null ? '' : `?date=${manualSlot.date}&time=${encodeURIComponent(minutesToTime(minutes))}`;
+    const staffId = resolveStaffIdForForm(manualStaffColumn(manualSlot.staffKey), staffByForm.get(manualSlot.formId));
+    const query = minutes === null ? '' : `?date=${manualSlot.date}&time=${encodeURIComponent(minutesToTime(minutes))}${staffId ? `&staff=${encodeURIComponent(staffId)}` : ''}`;
     window.open(`/api/stores/${storeId}/forms/${manualSlot.formId}/manual-form${query}`, '_blank', 'noopener');
     setManualSlot(null);
   };
@@ -367,14 +440,25 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
         return {
           from: ev.startMin === null ? '' : describeSlot(ev.date, ev.startMin, ev.durationMinutes),
           to: describeSlot(confirmMove.date, confirmMove.startMin, ev.durationMinutes),
-          conflicts: countOverlappingEvents(baseEvents, { excludeId: ev.id, date: confirmMove.date, startMin: confirmMove.startMin, endMin }),
-          busy: overlapsBusy(busy, { date: confirmMove.date, startMin: confirmMove.startMin, endMin }),
-          past: confirmMove.date < today || (confirmMove.date === today && confirmMove.startMin < nowMinutes),
+          // スタッフごとの列では、落とした先のスタッフの予約・予定だけを見る
+          conflicts: countOverlappingEvents(confirmMove.staffKey !== undefined ? baseEvents.filter((e) => staffColumnKeyOf(e, staffColumns) === confirmMove.staffKey) : baseEvents, { excludeId: ev.id, date: confirmMove.date, startMin: confirmMove.startMin, endMin }),
+          busy: overlapsBusy([...busy, ...(confirmMove.staffKey !== undefined ? staffBusyByKey[confirmMove.staffKey] || [] : [])], { date: confirmMove.date, startMin: confirmMove.startMin, endMin }),
+          timeChanged: !isSameSlot(ev, confirmMove.date, confirmMove.startMin),
+          // 担当だけを変えるとき（日時はそのまま）は、過ぎた日時の注意を出さない
+          past: !isSameSlot(ev, confirmMove.date, confirmMove.startMin) && (confirmMove.date < today || (confirmMove.date === today && confirmMove.startMin < nowMinutes)),
         };
       })()
     : null;
 
   const canManual = manualForms.length > 0;
+  // 「担当なし」の列は、担当の決まっていない予約がその日にあるときだけ出す
+  const gridStaff = staffMode
+    ? {
+        columns: [...staffColumns.map((c) => ({ key: c.key, name: c.name })), ...(hasUnassignedEvents(events, staffColumns, anchor) ? [{ key: STAFF_NONE_KEY, name: STAFF_NONE_LABEL }] : [])],
+        keyOf: (ev: CalendarEvent) => staffColumnKeyOf(ev, staffColumns),
+        busyByKey: staffBusyByKey,
+      }
+    : undefined;
   const shared = { events, busy, onOpenEvent: openEvent, onEventPointerDown, drag, draggingId, savingId: saving?.id ?? null };
 
   return (
@@ -418,6 +502,22 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
           <input type="checkbox" className="h-4 w-4 accent-[rgb(244,144,49)]" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
           キャンセルも表示{cancelledCount > 0 ? `（${cancelledCount} 件）` : ''}
         </label>
+        {view === 'day' && staffColumns.length > 0 && (
+          <label className="inline-flex cursor-pointer items-center gap-1.5" data-slot="reservation-calendar-staff-toggle">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[rgb(244,144,49)]"
+              checked={staffView}
+              onChange={(e) => {
+                setStaffView(e.target.checked);
+                try {
+                  window.localStorage.setItem(STAFF_VIEW_STORAGE_KEY, e.target.checked ? '1' : '0');
+                } catch {}
+              }}
+            />
+            スタッフごとに表示
+          </label>
+        )}
         <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-emerald-300 bg-emerald-50" aria-hidden="true" />確認済み</span>
         <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-amber-300 bg-amber-50" aria-hidden="true" />保留中</span>
         <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-sm border border-slate-300 bg-slate-100" aria-hidden="true" />完了</span>
@@ -426,13 +526,18 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
         )}
       </div>
       <p className="hidden text-xs text-muted-foreground lg:block" data-slot="reservation-calendar-hint">
-        予約の帯はドラッグで別の日時に動かせます。{canManual && view !== 'month' ? '空いている所を押すと、その日時で手動予約フォームを開けます。' : ''}
+        予約の帯はドラッグで別の日時に動かせます。{staffMode ? '別のスタッフの列に落とすと、担当も変わります。' : ''}{canManual && view !== 'month' ? '空いている所を押すと、その日時で手動予約フォームを開けます。' : ''}
       </p>
       {canManual && view !== 'month' && <p className="text-xs text-muted-foreground lg:hidden">空いている所を押すと、その日時で手動予約フォームを開けます。</p>}
 
       {data?.google === 'error' && (
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
           Google カレンダーの予定を読み込めませんでした。予約だけを表示しています。
+        </p>
+      )}
+      {staffMode && data?.staffGoogle === 'error' && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+          一部のスタッフの Google カレンダーの予定を読み込めませんでした。
         </p>
       )}
       {error && (
@@ -451,6 +556,7 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
             nowMinutes={nowMinutes}
             onOpenDay={view === 'week' ? openDay : undefined}
             onSlotClick={canManual ? openManualSlot : undefined}
+            staff={gridStaff}
             {...shared}
           />
         )}
@@ -462,7 +568,7 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
       <AlertDialog open={!!confirmMove} onOpenChange={(open) => !open && setConfirmMove(null)}>
         <AlertDialogContent data-slot="reservation-calendar-move-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>予約の日時を変更しますか？</AlertDialogTitle>
+            <AlertDialogTitle>{confirmMove?.staff ? (moveInfo?.timeChanged ? '予約の日時と担当を変更しますか？' : '予約の担当を変更しますか？') : '予約の日時を変更しますか？'}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-sm text-muted-foreground">
                 {confirmMove && moveInfo && (
@@ -475,11 +581,19 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
                       <dd className="tabular-nums">{moveInfo.from}</dd>
                       <dt className="font-medium text-foreground">変更後</dt>
                       <dd className="font-medium tabular-nums text-foreground">{moveInfo.to}</dd>
+                      {confirmMove.staff && (
+                        <>
+                          <dt>担当</dt>
+                          <dd>
+                            {confirmMove.event.staffName || '担当なし'} → <span className="font-medium text-foreground">{confirmMove.staff.name}</span>
+                          </dd>
+                        </>
+                      )}
                     </dl>
-                    {moveInfo.conflicts > 0 && <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-900">この時間には、ほかの予約が {moveInfo.conflicts} 件あります。</p>}
+                    {moveInfo.conflicts > 0 && <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-900">この時間には、{confirmMove.staffKey !== undefined ? 'このスタッフの' : ''}ほかの予約が {moveInfo.conflicts} 件あります。</p>}
                     {moveInfo.busy && <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-900">この時間には、予約以外の予定（Google カレンダー）があります。</p>}
                     {moveInfo.past && <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-900">過ぎた日時です。</p>}
-                    <p>Google カレンダーの予定も一緒に変わります。お客様への通知は送られません。</p>
+                    <p>Google カレンダーの予定も一緒に変わります。お客様への通知は送られません。{confirmMove.staff ? '指名料は変わりません。' : ''}</p>
                   </>
                 )}
               </div>
@@ -506,6 +620,15 @@ export default function ReservationCalendar({ storeId, onSelectReservation, onRe
                 <span className="font-medium">
                   {shortDate(manualSlot.date)}({WEEKDAY_LABELS[weekdayOf(manualSlot.date)]})
                 </span>
+                {manualStaffColumn(manualSlot.staffKey) && (
+                  <>
+                    <span className="text-muted-foreground">担当</span>
+                    <span className="font-medium">
+                      {manualStaffColumn(manualSlot.staffKey)?.name}
+                      {!resolveStaffIdForForm(manualStaffColumn(manualSlot.staffKey), staffByForm.get(manualSlot.formId)) && <span className="ml-2 text-xs font-normal text-amber-700">（このフォームには登録されていないため、フォームの中で選んでください）</span>}
+                    </span>
+                  </>
+                )}
                 <label htmlFor="calendar-manual-time" className="text-muted-foreground">
                   時刻
                 </label>
@@ -653,6 +776,15 @@ function MonthView({ anchor, today, events, busy, onOpenEvent, onOpenDay, onEven
 // 週・日表示
 // ---------------------------------------------------------------------------
 
+/** 週・日表示の 1 列（日ごと、またはスタッフごと） */
+interface GridColumn {
+  id: string;
+  date: string;
+  /** スタッフごとの列のときだけ */
+  staffKey?: string;
+  staffName?: string;
+}
+
 function TimeGridView({
   dates,
   today,
@@ -666,46 +798,64 @@ function TimeGridView({
   drag,
   draggingId,
   savingId,
+  staff,
 }: SharedViewProps & {
   dates: string[];
   today: string;
   nowMinutes: number;
   onOpenDay?: (date: string) => void;
   /** 空いている所を押したとき（手動予約できるフォームがあるときだけ渡す） */
-  onSlotClick?: (date: string, startMin: number) => void;
+  onSlotClick?: (date: string, startMin: number, staffKey?: string) => void;
+  /** スタッフごとの列で出すとき（日表示だけ）。列・予約の振り分け・スタッフごとの予約以外の予定 */
+  staff?: { columns: Array<{ key: string; name: string }>; keyOf: (ev: CalendarEvent) => string; busyByKey: Record<string, BusyBlock[]> };
 }) {
-  const { startHour, endHour } = useMemo(() => visibleHourRange(events, busy, dates), [events, busy, dates]);
+  const { startHour, endHour } = useMemo(() => {
+    const staffBusy = staff ? Object.values(staff.busyByKey).flat() : [];
+    return visibleHourRange(events, staffBusy.length > 0 ? [...busy, ...staffBusy] : busy, dates);
+  }, [events, busy, dates, staff]);
   const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i);
   const gridStart = startHour * 60;
   const gridEnd = endHour * 60;
   const top = (min: number) => ((Math.max(gridStart, Math.min(gridEnd, min)) - gridStart) / 60) * HOUR_HEIGHT;
-  const single = dates.length === 1;
-  const perDay = dates.map((date) => {
-    const day = eventsForDate(events, date);
-    const dayBusy = busy.filter((b) => b.date === date);
-    return { date, allDay: day.allDay, positioned: layoutDayEvents(day.timed), busyAllDay: dayBusy.some((b) => b.allDay), busyTimed: dayBusy.filter((b) => !b.allDay) };
-  });
-  const hasAllDayRow = perDay.some((d) => d.allDay.length > 0 || d.busyAllDay);
-  const columns = { gridTemplateColumns: `3rem repeat(${dates.length}, minmax(0, 1fr))` };
 
-  const handleColumnClick = (e: React.MouseEvent<HTMLDivElement>, date: string) => {
+  const cols: GridColumn[] = staff ? staff.columns.map((c) => ({ id: c.key, date: dates[0], staffKey: c.key, staffName: c.name })) : dates.map((date) => ({ id: date, date }));
+  const perCol = cols.map((col) => {
+    const day = eventsForDate(events, col.date);
+    const mine = (ev: CalendarEvent) => !staff || staff.keyOf(ev) === col.staffKey;
+    // 店舗のカレンダーの予定は全員に関わるので、どのスタッフの列にも出す
+    const colBusy = [...busy.filter((b) => b.date === col.date), ...(staff && col.staffKey ? (staff.busyByKey[col.staffKey] || []).filter((b) => b.date === col.date) : [])];
+    return { col, allDay: day.allDay.filter(mine), positioned: layoutDayEvents(day.timed.filter(mine)), busyAllDay: colBusy.some((b) => b.allDay), busyTimed: colBusy.filter((b) => !b.allDay) };
+  });
+  const hasAllDayRow = perCol.some((d) => d.allDay.length > 0 || d.busyAllDay);
+  const columns = { gridTemplateColumns: `3rem repeat(${cols.length}, minmax(0, 1fr))` };
+  // 列が多いときは横にスクロールする（1 列が狭くなりすぎないように）
+  const minWidth = staff ? `${3 + cols.length * 8}rem` : cols.length > 1 ? '44rem' : undefined;
+
+  const handleColumnClick = (e: React.MouseEvent<HTMLDivElement>, col: GridColumn) => {
     if (!onSlotClick) return;
     // 予約の帯を押したときは、予約詳細を開くほうを優先する
     if ((e.target as HTMLElement).closest('button')) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    onSlotClick(date, slotAtPointer(gridStart + ((e.clientY - rect.top) / HOUR_HEIGHT) * 60));
+    onSlotClick(col.date, slotAtPointer(gridStart + ((e.clientY - rect.top) / HOUR_HEIGHT) * 60), col.staffKey);
   };
 
   return (
     <div className="overflow-x-auto" data-slot="reservation-calendar-grid">
-      <div className={cn(!single && 'min-w-[44rem]')}>
-        {/* 日付の見出し */}
+      <div style={{ minWidth }}>
+        {/* 列の見出し（日付、またはスタッフ名） */}
         <div className="grid border-b" style={columns}>
           <div />
-          {dates.map((date) => {
-            const p = parseYmd(date);
-            const wd = weekdayOf(date);
-            const isToday = date === today;
+          {cols.map((col) => {
+            if (staff) {
+              return (
+                <div key={col.id} className="min-w-0 border-l px-1 py-2 text-center text-sm font-semibold" data-slot="reservation-calendar-staff-head">
+                  <span className={cn('block truncate', col.staffKey === STAFF_NONE_KEY && 'font-normal text-muted-foreground')}>{col.staffName}</span>
+                </div>
+              );
+            }
+            const p = parseYmd(col.date);
+            const wd = weekdayOf(col.date);
+            const isToday = col.date === today;
             const label = (
               <>
                 <span className={cn('text-xs', wd === 0 && 'text-red-500', wd === 6 && 'text-blue-600')}>{WEEKDAY_LABELS[wd]}</span>
@@ -713,9 +863,9 @@ function TimeGridView({
               </>
             );
             return (
-              <div key={date} className="border-l py-1.5 text-center">
+              <div key={col.id} className="border-l py-1.5 text-center">
                 {onOpenDay ? (
-                  <button type="button" onClick={() => onOpenDay(date)} aria-label={`${shortDate(date)} を日表示で開く`} className="inline-flex flex-col items-center rounded px-2 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <button type="button" onClick={() => onOpenDay(col.date)} aria-label={`${shortDate(col.date)} を日表示で開く`} className="inline-flex flex-col items-center rounded px-2 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     {label}
                   </button>
                 ) : (
@@ -730,8 +880,8 @@ function TimeGridView({
         {hasAllDayRow && (
           <div className="grid border-b bg-muted/30" style={columns}>
             <div className="px-1 py-1 text-right text-[10px] leading-4 text-muted-foreground">終日</div>
-            {perDay.map((d) => (
-              <div key={d.date} className="min-w-0 space-y-0.5 border-l p-1">
+            {perCol.map((d) => (
+              <div key={d.col.id} className="min-w-0 space-y-0.5 border-l p-1">
                 {d.busyAllDay && <div className="truncate rounded bg-slate-300 px-1 py-0.5 text-[11px] leading-4 text-slate-700">予定あり</div>}
                 {d.allDay.map((ev) => (
                   <button
@@ -758,15 +908,16 @@ function TimeGridView({
               </div>
             ))}
           </div>
-          {perDay.map((d) => (
+          {perCol.map((d) => (
             <div
-              key={d.date}
+              key={d.col.id}
               className={cn('relative border-l', onSlotClick && 'cursor-cell hover:bg-accent/30')}
               style={{ height: hours.length * HOUR_HEIGHT }}
-              data-date={d.date}
+              data-date={d.col.date}
               data-cal-col=""
               data-grid-start={gridStart}
-              onClick={(e) => handleColumnClick(e, d.date)}
+              data-staff-key={d.col.staffKey}
+              onClick={(e) => handleColumnClick(e, d.col)}
             >
               {hours.map((h, i) => (
                 <div key={h} className="pointer-events-none absolute inset-x-0 border-t border-border/60" style={{ top: i * HOUR_HEIGHT }} aria-hidden="true" />
@@ -784,7 +935,7 @@ function TimeGridView({
               ))}
               {d.busyAllDay && <div className="pointer-events-none absolute inset-0 bg-slate-200/50" aria-hidden="true" />}
               {/* いまの線 */}
-              {d.date === today && nowMinutes >= gridStart && nowMinutes <= gridEnd && (
+              {d.col.date === today && nowMinutes >= gridStart && nowMinutes <= gridEnd && (
                 <div className="pointer-events-none absolute inset-x-0 z-20 h-0.5 -translate-y-px bg-red-500" style={{ top: top(nowMinutes) }} aria-hidden="true" data-slot="reservation-calendar-now" />
               )}
               {/* 予約 */}
@@ -812,12 +963,12 @@ function TimeGridView({
                       <span className="tabular-nums">{eventTimeLabel(ev)}</span> {ev.title}
                     </span>
                     {height >= 34 && ev.subtitle && <span className="block truncate opacity-80">{ev.subtitle}</span>}
-                    {height >= 50 && ev.staffName && <span className="block truncate opacity-80">担当: {ev.staffName}</span>}
+                    {!staff && height >= 50 && ev.staffName && <span className="block truncate opacity-80">担当: {ev.staffName}</span>}
                   </button>
                 );
               })}
               {/* ドラッグ中の落とし先 */}
-              {drag && drag.date === d.date && (
+              {drag && drag.date === d.col.date && (!staff || drag.staffKey === d.col.staffKey) && (
                 <div
                   className="pointer-events-none absolute inset-x-0.5 z-40 rounded border-2 border-dashed border-primary bg-primary/15 px-1 text-[11px] font-semibold leading-4 text-primary"
                   style={{ top: top(drag.startMin), height: Math.max(18, top(drag.startMin + drag.durationMinutes) - top(drag.startMin)) }}

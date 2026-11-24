@@ -974,7 +974,8 @@ class BookingForm {
     }
 
     // 手動モード: 予約カレンダーの空いている所から開いたとき（URL に ?date=YYYY-MM-DD&time=HH:MM）、その日時を選んだ状態にする。
-    // カレンダー表示モードのフォームだけ。このフォームで選べない時間（営業時間外・時間間隔に合わない・埋まっている）なら、選ばずに案内だけ出す
+    // カレンダー表示モードのフォームだけ。このフォームで選べない時間（営業時間外・時間間隔に合わない・埋まっている）なら、選ばずに案内だけ出す。
+    // ?staff=スタッフID があれば、担当スタッフも選んだ状態にする（スタッフごとの列から開いたとき）
     applyManualPrefill() {
         try {
             if ((this.config.calendar_settings?.booking_mode || 'calendar') !== 'calendar') return;
@@ -999,8 +1000,20 @@ class BookingForm {
                 const field = document.getElementById('manual-customer-field');
                 if (field && field.parentNode) field.parentNode.insertBefore(note, field);
             };
+            const staffId = params.get('staff') || '';
             setTimeout(async function() {
                 try {
+                    // 担当スタッフ（そのフォームに居るスタッフのときだけ）
+                    if (/^[A-Za-z0-9_-]{1,64}$/.test(staffId)) {
+                        const buttons = Array.prototype.slice.call(document.querySelectorAll('.staff-button'));
+                        const target = buttons.filter(function(b) { return b.dataset.staffId === staffId; })[0];
+                        if (target) {
+                            buttons.forEach(function(b) { b.classList.remove('selected'); });
+                            target.classList.add('selected');
+                            form.state.selectedStaffId = staffId;
+                            if (form.applyStaffMenuVisibility) form.applyStaffMenuVisibility();
+                        }
+                    }
                     form.state.currentWeekStart = form.getWeekStart(day);
                     form.availabilityCache = {};
                     form.state.selectedDate = date;
