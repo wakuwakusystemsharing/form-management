@@ -17,6 +17,7 @@ import {
   type StoreAdminTabId,
   type StoreAdminVisibleOptions,
 } from '@/lib/store-admin-tabs';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface StoreAdminMenuSettingsProps {
   storeId: string;
@@ -48,7 +49,7 @@ export default function StoreAdminMenuSettings({ storeId }: StoreAdminMenuSettin
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/stores/${storeId}`, { credentials: 'include' });
+      const res = await fetchWithAuth(`/api/stores/${storeId}?full=1`, { credentials: 'include' });
       if (!res.ok) {
         toast({ title: '店舗情報の取得に失敗しました', variant: 'destructive' });
         return;
@@ -102,7 +103,7 @@ export default function StoreAdminMenuSettings({ storeId }: StoreAdminMenuSettin
     }
     setSaving(true);
     try {
-      const res = await fetch(`/api/stores/${storeId}`, {
+      const res = await fetchWithAuth(`/api/stores/${storeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

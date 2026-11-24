@@ -11,6 +11,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SupabaseStorageDeployer } from '@/lib/supabase-storage-deployer';
 import fs from 'fs';
 import path from 'path';
+import { authorizeStoreAccess } from '@/lib/store-access';
+
+/**
+ * 画像の URL / パスから、その画像が属する店舗 ID を取り出す（menu_images/{storeId}/… か submenu_images/{storeId}/…）。
+ * それ以外の場所（フォームの HTML など）や、上の階層へ出るパスは null = 削除させない
+ */
+function imageStoreId(urlOrPath: string): string | null {
+  if (!urlOrPath || urlOrPath.includes('..')) return null;
+  const m = urlOrPath.match(/(?:^|\/)(?:menu_images|submenu_images)\/([A-Za-z0-9_-]{1,64})\/[^/?#]+(?:[?#].*)?$/);
+  return m ? m[1] : null;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,6 +38,19 @@ export async function POST(request: NextRequest) {
         { error: 'ファイルと店舗IDが必要です' },
         { status: 400 }
       );
+    }
+
+    // 画像のアップロードは、その店舗にアクセスできる人だけ（local は認証スキップ）
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(storeId)) {
+      return NextResponse.json({ error: '店舗IDが正しくありません' }, { status: 400 });
+    }
+    const auth = await authorizeStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
+
+    // 保存先の名前に使うので、フォルダの区切りや上の階層へ出る文字を通さない
+    const imageKey = menuId || submenuId || '';
+    if (imageKey && (!/^[A-Za-z0-9_.-]{1,120}$/.test(imageKey) || imageKey.includes('..'))) {
+      return NextResponse.json({ error: '画像の名前が正しくありません' }, { status: 400 });
     }
 
     if (!menuId && !submenuId) {
@@ -64,7 +88,8 @@ export async function POST(request: NextRequest) {
       : `submenu_images/${storeId}/${submenuId}_${stamp}.${ext}`;
 
     // 古い画像を削除（存在する場合）
-    if (oldImageUrl) {
+    // 古い画像は、この店舗の画像置き場にあるものだけ消す（ほかの店舗の画像やフォームの HTML を消させない）
+    if (oldImageUrl && imageStoreId(oldImageUrl) === storeId) {
       const deployer = new SupabaseStorageDeployer();
       try {
         // ローカル開発環境の場合、ローカルファイルを削除
@@ -115,6 +140,14 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // 消せるのは画像置き場の画像だけ。その画像の店舗にアクセスできる人だけ（local は認証スキップ）
+    const storeId = imageStoreId(imageUrl);
+    if (!storeId) {
+      return NextResponse.json({ error: '削除できる画像ではありません' }, { status: 400 });
+    }
+    const auth = await authorizeStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
 
     const deployer = new SupabaseStorageDeployer();
     await deployer.deleteImage(imageUrl);

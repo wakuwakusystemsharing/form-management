@@ -19,6 +19,7 @@ import type { CategoryContentBlock } from '@/lib/category-content-blocks';
 import { countStaffScheduleOverrides } from '@/lib/staff-schedule';
 import { formatNominationFee, sanitizeNominationFee, NOMINATION_FEE_MAX } from '@/lib/nomination-fee';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 // テキストブロックの文字色プリセット
 const CONTENT_TEXT_COLORS: Array<{ label: string; hex: string }> = [
@@ -65,7 +66,7 @@ function HeadingContentEditor({
       formData.append('storeId', storeId);
       formData.append('menuId', `heading_${idPrefix}`);
       if (imageUrl) formData.append('oldImageUrl', imageUrl);
-      const res = await fetch('/api/upload/menu-image', { method: 'POST', body: formData, credentials: 'include' });
+      const res = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: formData, credentials: 'include' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         alert(`アップロードに失敗しました: ${json.error || ''}`);
@@ -790,7 +791,7 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
               formData.append('oldImageUrl', image);
             }
             
-            const response = await fetch('/api/upload/menu-image', {
+            const response = await fetchWithAuth('/api/upload/menu-image', {
               method: 'POST',
               body: formData,
             });
@@ -1757,7 +1758,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
               formData.append('oldImageUrl', image);
             }
             
-            const response = await fetch('/api/upload/menu-image', {
+            const response = await fetchWithAuth('/api/upload/menu-image', {
               method: 'POST',
               body: formData,
             });
@@ -1884,7 +1885,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
       formData.append('storeId', form.store_id);
       formData.append('menuId', `category_${editingCategory?.id || Date.now()}`);
       if (catImage) formData.append('oldImageUrl', catImage);
-      const response = await fetch('/api/upload/menu-image', { method: 'POST', body: formData });
+      const response = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: formData });
       if (response.ok) {
         const { url } = await response.json();
         setCatImage(url);
@@ -2320,7 +2321,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
       formData.append('storeId', form.store_id);
       formData.append('menuId', `custom_field_${field.id}`);
       if (field.image_url) formData.append('oldImageUrl', field.image_url);
-      const response = await fetch('/api/upload/menu-image', { method: 'POST', body: formData });
+      const response = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: formData });
       if (response.ok) {
         const { url } = await response.json();
         updateCustomFieldAt(index, { image_url: url });
@@ -2388,7 +2389,7 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
       formData.append('storeId', form.store_id);
       formData.append('menuId', block.id);
       if (block.image_url) formData.append('oldImageUrl', block.image_url);
-      const response = await fetch('/api/upload/menu-image', { method: 'POST', body: formData });
+      const response = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: formData });
       if (response.ok) {
         const { url } = await response.json();
         updateContentBlock(index, { image_url: url });

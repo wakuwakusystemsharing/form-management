@@ -4,6 +4,7 @@ import { getSupabaseClient, createAdminClient, isServiceAdmin, isMasterAdmin, is
 import { generateStoreId } from '../../../lib/store-id-generator'
 import { createStoreCalendar } from '../../../lib/google-calendar'
 import { Store } from '../../../types/store'
+import { toStoreView } from '../../../lib/store-view'
 import { promises as fs } from 'fs'
 import path from 'path'
 
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
   // ローカル環境: JSON から読み込み
   if (env === 'local') {
     const stores = await loadStoresFromJSON()
-    return NextResponse.json({ stores })
+    return NextResponse.json({ stores: stores.map((row) => toStoreView(row as unknown as Record<string, unknown>, 'upper')) })
   }
 
   // staging/production: Supabase から取得
@@ -62,7 +63,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // 認証ユーザーを取得してロールに応じたフィルタリング
+    // ログイン必須。運営（マスター管理者・システム管理者）だけが店舗の一覧を取得できる
+    // （以前はログインしていなくても全店舗が返り、LINE のトークンなども含まれていた）
     const authHeader = request.headers.get('authorization')
     const token = authHeader?.replace('Bearer ', '')
       || request.headers.get('cookie')
@@ -70,33 +72,37 @@ export async function GET(request: NextRequest) {
         .find(c => c.trim().startsWith('sb-access-token='))
         ?.split('=')[1]
 
-    let userId: string | null = null
-    if (token) {
-      const supabase = getSupabaseClient()
-      if (supabase) {
-        const { data: { user } } = await supabase.auth.getUser(token)
-        userId = user?.id || null
-      }
+    if (!token) {
+      return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
+    }
+    const supabase = getSupabaseClient()
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase 接続エラー' }, { status: 500 })
+    }
+    const { data: { user } } = await supabase.auth.getUser(token)
+    if (!user) {
+      return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
     }
 
     let query = (adminClient as any).from('stores').select('*').order('created_at', { ascending: false })
 
-    // システム管理者の場合は同テナントの店舗のみ
-    if (userId) {
-      const isMaster = await isMasterAdmin(userId)
-      if (!isMaster) {
-        const isSystem = await isSystemAdminById(userId)
-        if (isSystem) {
-          const { data: adminData } = await (adminClient as any)
-            .from('system_admins')
-            .select('org_id')
-            .eq('user_id', userId)
-            .maybeSingle()
-          if (adminData?.org_id) {
-            query = query.eq('org_id', adminData.org_id)
-          }
-        }
+    // マスター管理者（と移行期間中の旧サービス管理者）= 全店舗 / システム管理者 = 同じテナントの店舗だけ / それ以外 = 不可
+    const isMaster = (await isMasterAdmin(user.id)) || isServiceAdmin(user.email || '')
+    if (!isMaster) {
+      const isSystem = await isSystemAdminById(user.id)
+      if (!isSystem) {
+        return NextResponse.json({ error: '店舗の一覧を表示する権限がありません' }, { status: 403 })
       }
+      const { data: adminData } = await (adminClient as any)
+        .from('system_admins')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (!adminData?.org_id) {
+        // 所属するテナントが分からないシステム管理者には、何も返さない（全店舗を返さない）
+        return NextResponse.json({ stores: [] })
+      }
+      query = query.eq('org_id', adminData.org_id)
     }
 
     const { data: stores, error } = await query
@@ -109,7 +115,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    return NextResponse.json({ stores: stores || [] })
+    // 誰にも返さない鍵（Google カレンダー連携のトークン）を除いて返す
+    return NextResponse.json({ stores: (stores || []).map((row: Record<string, unknown>) => toStoreView(row, 'upper')) }, { headers: { 'Cache-Control': 'private, no-store' } })
   } catch (err) {
     console.error('[API] Stores GET error:', err)
     return NextResponse.json(

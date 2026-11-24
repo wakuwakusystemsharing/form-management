@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface AuditChange {
   key: string;
@@ -90,7 +91,7 @@ export default function FormHistoryDialog({ open, onOpenChange, storeId, formId,
     if (!open || !formId) return;
     const key = `${storeId}:${formType}:${formId}`;
     let cancelled = false;
-    fetch(`/api/stores/${storeId}/forms/${formId}/history?type=${formType}`, { credentials: 'include' })
+    fetchWithAuth(`/api/stores/${storeId}/forms/${formId}/history?type=${formType}`, { credentials: 'include' })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || '操作履歴の取得に失敗しました');

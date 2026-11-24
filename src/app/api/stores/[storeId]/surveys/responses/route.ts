@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth-helper';
 import fs from 'fs';
 import path from 'path';
+import { authorizeStoreAccess } from '@/lib/store-access';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const SURVEY_RESPONSES_FILE = path.join(DATA_DIR, 'survey_responses.json');
@@ -18,6 +19,9 @@ export async function GET(
 ) {
   try {
     const { storeId } = await params;
+    // アンケートの回答（お客様の回答内容を含む）は、その店舗にアクセスできる人だけ（local は認証スキップ）
+    const auth = await authorizeStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
     const env = getAppEnvironment();
     const url = new URL(request.url);
     const surveyFormId = url.searchParams.get('survey_form_id');

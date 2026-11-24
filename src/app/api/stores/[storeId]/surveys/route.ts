@@ -7,6 +7,7 @@ import { getAppEnvironment } from '@/lib/env';
 import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
 import { getCurrentUserId } from '@/lib/auth-helper';
+import { authorizeStoreAccess } from '@/lib/store-access';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -17,6 +18,9 @@ export async function GET(
 ) {
   try {
     const { storeId } = await params;
+    // アンケートの一覧は、その店舗にアクセスできる人だけ（local は認証スキップ）
+    const auth = await authorizeStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
     const env = getAppEnvironment();
 
     // ローカル環境: JSON から読み込み
@@ -117,6 +121,9 @@ export async function POST(
 ) {
   try {
     const { storeId } = await params;
+    // アンケートの作成は、その店舗にアクセスできる人だけ（local は認証スキップ）
+    const auth = await authorizeStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
     const body = await request.json();
     const { form_name, liff_id, template_config } = body;
     const env = getAppEnvironment();
