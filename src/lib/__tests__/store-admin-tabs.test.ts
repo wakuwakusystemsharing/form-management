@@ -30,9 +30,18 @@ describe('resolveAdminVisibleOptions', () => {
       customer_reservation_history: false, // 予約管理 OFF に連動
       customer_lottery_history: false,     // 抽選管理 OFF に連動
       customer_survey_history: false,      // アンケート管理 OFF に連動
+      store_digest: true,                  // 設定 ON に連動
     });
     const all = resolveAdminVisibleOptions(null, null);
     expect(Object.values(all).every(Boolean)).toBe(true);
+  });
+  it('今日の予約まとめ・月次レポートは「設定」に連動し、個別に隠せる', () => {
+    expect(resolveAdminVisibleOptions(['dashboard', 'settings'], null).store_digest).toBe(true);
+    expect(resolveAdminVisibleOptions(['dashboard'], null).store_digest).toBe(false);
+    expect(resolveAdminVisibleOptions(['dashboard', 'settings'], { store_digest: false }).store_digest).toBe(false);
+    // 運営が開いたときは常に表示
+    expect(resolveAdminVisibleOptions(['dashboard', 'settings'], { store_digest: false }, true).store_digest).toBe(true);
+    expect(normalizeAdminVisibleOptions({ store_digest: false })).toEqual({ store_digest: false });
   });
   it('明示的な設定が連動より優先される', () => {
     const r = resolveAdminVisibleOptions(['dashboard', 'customers', 'reservations'], {

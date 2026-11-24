@@ -46,6 +46,7 @@ export const STORE_ADMIN_OPTION_KEYS = [
   'customer_reservation_history',
   'customer_lottery_history',
   'customer_survey_history',
+  'store_digest',
 ] as const;
 export type StoreAdminOptionKey = (typeof STORE_ADMIN_OPTION_KEYS)[number];
 
@@ -72,6 +73,7 @@ export const STORE_ADMIN_OPTIONS: StoreAdminOptionDef[] = [
   { key: 'customer_reservation_history', tab: 'customers', label: '顧客詳細に予約履歴・来店履歴・統計情報を表示', description: '未設定のときは「予約管理」の表示に連動します', followsTab: 'reservations' },
   { key: 'customer_lottery_history', tab: 'customers', label: '顧客詳細に抽選履歴を表示', description: '未設定のときは「抽選管理」の表示に連動します', followsTab: 'lotteries' },
   { key: 'customer_survey_history', tab: 'customers', label: '顧客詳細にアンケートの回答を表示', description: '未設定のときは「アンケート管理」の表示に連動します', followsTab: 'surveys' },
+  { key: 'store_digest', tab: 'settings', label: '今日の予約まとめ・月次レポートを表示', description: '朝の「今日の予約まとめ」と月次レポートを、メールや LINE で受け取る設定の欄', followsTab: 'settings' },
 ];
 
 export function isStoreAdminOptionKey(value: unknown): value is StoreAdminOptionKey {
