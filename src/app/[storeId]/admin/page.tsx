@@ -25,7 +25,8 @@ import StoreAdminLayout from '@/components/StoreAdminLayout';
 import UiStyleSettings from '@/components/UiStyleSettings';
 import StoreDigestSettings from '@/components/StoreDigestSettings';
 import MonthlyReportView from '@/components/MonthlyReportView';
-import { resolveAdminVisibleOptions, resolveVisibleTabs } from '@/lib/store-admin-tabs';
+import { buildStoreAdminNav, resolveAdminVisibleOptions, resolveVisibleTabs } from '@/lib/store-admin-tabs';
+import ReservationCalendar from '@/components/ReservationCalendar';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
 import WaitlistPanel from '@/components/WaitlistPanel';
 import CustomerList from '@/components/CustomerList';
@@ -189,7 +190,9 @@ export default function StoreAdminPage() {
   const visibleTabIds = resolveVisibleTabs(visibleTabsForUser);
   // タブ内の項目単位の表示（フォーム管理 / 顧客詳細の履歴）。上位管理者はすべて表示
   const adminOptions = resolveAdminVisibleOptions(visibleTabsForUser, store?.admin_visible_options ?? null, !applyStoreSettings);
-  const activeTab = visibleTabIds.includes(requestedTab as (typeof visibleTabIds)[number]) ? requestedTab : visibleTabIds[0];
+  // メニューに出す項目（タブ + カレンダー。カレンダーは未設定なら「予約管理」に連動）
+  const navIds = buildStoreAdminNav(visibleTabIds, adminOptions.calendar);
+  const activeTab = navIds.includes(requestedTab as (typeof navIds)[number]) ? requestedTab : navIds[0];
   const wallTabVisible = visibleTabIds.includes('walls');
 
   // ダッシュボード用: 本日（JST）の抽選参加数
@@ -902,8 +905,17 @@ export default function StoreAdminPage() {
             <StoreAdminGuide tab="reservations" />
             <Card className="shadow-sm">
               <CardHeader className="pb-4">
-                <CardTitle className="text-base">予約管理</CardTitle>
-                <CardDescription>予約の確認・管理を行います</CardDescription>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="space-y-1.5">
+                    <CardTitle className="text-base">予約管理</CardTitle>
+                    <CardDescription>予約の確認・管理を行います</CardDescription>
+                  </div>
+                  {adminOptions.calendar && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => router.push(`/${storeId}/admin?tab=calendar`)}>
+                      カレンダーで見る
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* フォーム管理セクション */}
@@ -1565,6 +1577,26 @@ export default function StoreAdminPage() {
           </div>
         );
 
+      case 'calendar':
+        return (
+          <div className="space-y-5 p-4 lg:p-6">
+            <StoreAdminGuide tab="calendar" />
+            <div>
+              <h2 className="text-lg font-semibold">カレンダー</h2>
+              <p className="text-sm text-muted-foreground">{STORE_ADMIN_HINTS.calendar}</p>
+            </div>
+            <ReservationCalendar
+              storeId={storeId}
+              reloadSignal={reservations}
+              onSelectReservation={(reservation) => {
+                setSelectedReservation(reservation as Reservation);
+                setIsEditingReservation(false);
+                setShowReservationDetail(true);
+              }}
+            />
+          </div>
+        );
+
       case 'walls':
         return (
           <div className="space-y-5 p-4 lg:p-6">
@@ -1733,6 +1765,7 @@ export default function StoreAdminPage() {
         onLogout={handleSignOut}
         themeColor={store?.theme_color}
         visibleTabs={visibleTabsForUser}
+        showCalendar={adminOptions.calendar}
       >
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
@@ -1754,6 +1787,7 @@ export default function StoreAdminPage() {
         onLogout={handleSignOut}
         themeColor={store?.theme_color}
         visibleTabs={visibleTabsForUser}
+        showCalendar={adminOptions.calendar}
       >
         <div className="flex items-center justify-center h-full p-4">
           <Card className="w-full max-w-md">
@@ -1776,6 +1810,7 @@ export default function StoreAdminPage() {
       onLogout={handleSignOut}
       themeColor={store.theme_color}
       visibleTabs={visibleTabsForUser}
+      showCalendar={adminOptions.calendar}
     >
       {isUpperAdminUser && (
         <div className={`px-4 lg:px-6 pt-3 ${previewAsStoreAdmin ? '' : ''}`}>

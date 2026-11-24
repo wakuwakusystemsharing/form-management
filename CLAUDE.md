@@ -254,6 +254,14 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - `ReservationAnalytics.tsx` - 上部に期間チップ + フォームのプルダウン（既定は過去12か月 / すべてのフォーム）、予約数・キャンセル・売上・1件あたりのタイル、概要（フォーム別 / ステータス別 / 日別 / 月別）・メニュー分析（メニュー・オプションの人気と売上）・時間帯分析・顧客属性・売上分析（月別 / フォーム別 / メニュー別）。`fetchWithAuth` を使う。店舗管理者ページとテナント側 店舗ページで共用
 - 顧客分析 API（`/customers/analytics`）も `fetchAllRows` で全件取得。月別新規顧客数は JST の月で数える
 
+**予約カレンダー（「カレンダー」タブ。設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 6 章。②-1 = 表示まで実装済み。ドラッグで移動・空いている所から手動予約（②-2）、スタッフごとの列（②-3）は未実装）:**
+- 予約を 月 / 週 / 日 で見る画面。店舗管理者ページ `/{storeId}/admin?tab=calendar`（予約管理タブの「カレンダーで見る」からも開く）とテナント側 店舗ページの「カレンダー」タブで、同じ部品 `src/components/ReservationCalendar.tsx` を使う（既製のカレンダー部品は使わず自作）。予約を押すと、それぞれのページの予約詳細のダイアログが開く（`onSelectReservation`。店舗管理者ページでは「予約内容を編集」・キャンセルもそのまま使え、変更後は `reloadSignal` で読み込み直す）
+- **新しい保存先は無い**。API `GET /api/stores/{storeId}/reservations/calendar?from&to`（`authorizeStoreAccess`。期間は最大 `CALENDAR_MAX_RANGE_DAYS` = 62 日。その期間に掛かる予約 = キャンセルを含む・宿泊はチェックアウト日まで（期間の 31 日前から読んで絞り込む）を `fetchAllRows` で全件）+ `busy`（予約以外の予定 = 店舗の Google カレンダーの予定のうち、このシステムの予約から作った予定（`google_calendar_event_id`）と「営業日」を除いたもの。**時間だけを返し、タイトルなどの中身は返さない** = 画面は灰色で「予定あり」）+ `google`（`ok` / `none` = カレンダー未設定・local / `error` = 読み込み失敗。失敗しても予約は返し、画面に「Google カレンダーの予定を読み込めませんでした」と出す）。スタッフごとのカレンダーの予定はまだ読まない
+- 純粋ロジック `src/lib/reservation-calendar.ts`: **日付は文字列（YYYY-MM-DD）のまま、年・月・日の数字で計算する**（`addDays` / `addMonths` / `weekdayOf` / `diffDays`。`new Date('2026-11-20')` や +24 時間は使わない。「今日」は `jstToday`）。`buildMonthGrid(year, month)`（日曜始まり。4〜6 週）/ `calendarRange` / `shiftAnchor` / `calendarTitle` / `toCalendarEvents(reservations, { includeCancelled })` → 帯（`timed` / `untimed` = 時刻の無い予約 / `stay` = 宿泊。所要時間は `customer_info.total_duration` → メニュー + オプションの所要時間 → 60 分。日をまたぐ予約は 24:00 まで）/ `layoutDayEvents`（重なる予約を横に並べる。重なりでつながったかたまりごとに列を割り当てる。短い予約は 20 分ぶんの高さ）/ `monthCellEvents`（月表示は 1 日 3 件まで + 「ほか N 件」）/ `busyBlocksFromGoogle`（日本時間に直し、日をまたぐ予定は日ごとに分ける）/ `visibleHourRange`（既定 9〜20 時。はみ出すぶんだけ広げる）
+- 画面: 月 / 週 / 日 の切り替え（端末ごとに localStorage `reservation_calendar_view`。スマホの初期は日表示）、「今日」・前後の移動、「キャンセルも表示」（既定は非表示）、宿泊・時間未定は上の「終日」の欄、今日の列に「いま」の赤い線。色は予約の状態（確認済み = 緑 / 保留中 = 黄 / 完了 = 灰）。**予約の帯は `<button>` なので `flex flex-col justify-start` を付けている**（ボタンは中身を上下の中央に置くため、付けないと長い予約の文字が帯の真ん中に出る）
+- **表示設定**: `admin_visible_options.calendar`（「店舗管理者に表示するメニュー」の「予約管理」の下の「カレンダーを表示」。未設定は「予約管理」に連動 = 予約管理を非表示にしている店舗ではカレンダーも出ない。`independent: true` なので、予約管理が非表示でもカレンダーだけ表示にできる）。**`calendar` は `STORE_ADMIN_TAB_IDS`（`admin_visible_tabs`）には入れていない**（入れると、タブを絞り込んで保存している既存の店舗でカレンダーだけ出なくなるため）。メニューに出す項目は `buildStoreAdminNav(visibleTabs, showCalendar)`（型 `StoreAdminNavId`）で作り、`StoreAdminLayout` に `showCalendar` を渡す
+- Vitest: `reservation-calendar.test.ts` / `reservation-calendar-api.local.test.ts` / `store-admin-tabs.test.ts` / `admin-api-auth.test.ts`
+
 **全予約一覧の「集計ダウンロード」（`/tenant/{slug}/admin/reservations` → 予約一覧タブ。Excel = 予約数 / キャンセル数 / アンケート回答数 / 出力条件 の 4 シート。店舗 × 月）:**
 - 予約は `GET /api/reservations`、アンケート回答数は `GET /api/surveys/stats`。どちらも **ログイン必須 + 見てよい店舗だけ**（`src/lib/admin-store-scope.ts` の `getAccessibleStoreIds` = マスター: 全店舗 / システム管理者: 同じテナント / 店舗管理者: 自分の店舗。`resolveStoreScope` で `store_id` の指定を確認し、範囲外は 403。local は認証スキップ）、**`fetchAllRows` で 1000 件ずつ全件取得**（以前は 1 回の取得 = 1000 件までで、件数が欠けていた）
 - 月の基準: 予約数・キャンセル数 = 予約日の月、アンケート回答数 = 回答日時の**日本時間**の月（`src/lib/survey-month-stats.ts` の `countSurveysByStoreMonth`）。ステータス・テスト用顧客の絞り込みは予約だけに効く。アンケート件数を取得できないときはダウンロードを止める（0 件のシートを出さない）
@@ -311,7 +319,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - マスター管理者・システム管理者が開いた場合は常に全表示（`/api/auth/role` の判定を `isUpperAdminUser` に保持）。**同じブラウザにテナント管理者のセッションが残っていると店舗管理者ページは自動的にそのセッションで開く**ため、全表示になる。ページ上部に「〜として閲覧中」のバナーを出し、「店舗管理者の見え方で確認」（`previewAsStoreAdmin`、sessionStorage `store_admin_preview_{storeId}`）で店舗設定を適用した表示に切り替えられる
 - 定義・正規化は `src/lib/store-admin-tabs.ts`（`STORE_ADMIN_TABS` / `resolveVisibleTabs()`）
 - マイグレーション: `20260902000000_add_admin_visible_tabs.sql`
-- **項目単位の表示**: `stores.admin_visible_options` JSONB（`reservation_forms` / `survey_forms` / `lottery_forms` = 各タブの「フォーム管理」、`customer_reservation_history` = 顧客詳細の予約履歴・来店履歴・統計情報、`customer_lottery_history` = 顧客詳細の抽選履歴、`customer_survey_history` = 顧客詳細のアンケートの回答、`store_digest` = 設定タブの「今日の予約まとめ・月次レポート」の欄（「設定」に連動。隠すのは設定の欄だけで、すでに ON の送信は止めない。ダッシュボードの「月次レポートを見る」はそのまま））。**未設定キーは親タブに連動**（予約管理 OFF → 顧客詳細の予約・来店・統計も非表示、抽選管理 OFF → 抽選履歴も非表示）。明示的に true/false を保存すると連動より優先。判定は `resolveAdminVisibleOptions(tabs, options, upperAdmin)`。設定 UI は `StoreAdminMenuSettings.tsx` の各タブ配下のチェック（「連動に戻す」で未設定へ）。マイグレーション: `20260904000000_add_admin_visible_options.sql`
+- **項目単位の表示**: `stores.admin_visible_options` JSONB（`reservation_forms` / `survey_forms` / `lottery_forms` = 各タブの「フォーム管理」、`customer_reservation_history` = 顧客詳細の予約履歴・来店履歴・統計情報、`customer_lottery_history` = 顧客詳細の抽選履歴、`customer_survey_history` = 顧客詳細のアンケートの回答、`calendar` = 「カレンダー」タブ（「予約管理」に連動。予約管理が非表示でも個別に表示できる）、`store_digest` = 設定タブの「今日の予約まとめ・月次レポート」の欄（「設定」に連動。隠すのは設定の欄だけで、すでに ON の送信は止めない。ダッシュボードの「月次レポートを見る」はそのまま））。**未設定キーは親タブに連動**（予約管理 OFF → 顧客詳細の予約・来店・統計も非表示、抽選管理 OFF → 抽選履歴も非表示）。明示的に true/false を保存すると連動より優先。判定は `resolveAdminVisibleOptions(tabs, options, upperAdmin)`。設定 UI は `StoreAdminMenuSettings.tsx` の各タブ配下のチェック（「連動に戻す」で未設定へ）。マイグレーション: `20260904000000_add_admin_visible_options.sql`
 
 **公式 LINE 向け Flex Message（テナント側 店舗ページ → 「LINE メッセージ」タブ。設計: `docs/LINE Flexメッセージ_実装設計.md`）:**
 - 公式 LINE 管理画面では作れない Flex Message をテンプレート（予約導線カード / メニュー・料金カルーセル / 料金表（リスト）/ 店舗紹介カード / クーポン・キャンペーン / お知らせ・営業案内 / スタッフ紹介カルーセル / ご利用の流れ。上級者は JSON 直接編集・`custom` = プルダウンの一番上）から作り、**キーワード自動応答**（Webhook。完全一致。「予約確認」「キャンセル」は予約不可、同店舗で重複不可）/ **【ご予約確認】・リマインダー・フォローへの差し込み** / **テスト送信**（LINE 連携済み顧客へ push）に使う。ボタンの URL は計測リンク `/go/{id}/{key}` に置き換えてタップ数を数える（`track_taps`）
@@ -611,6 +619,9 @@ export async function GET(req, { params }) {
 - `PATCH /api/stores/{storeId}/customers/{customerId}/visits/{visitId}` - 来店記録の申し送り更新（`next_visit_note` / `next_visit_note_by` / `acknowledge: true`）
 - `DELETE /api/stores/{storeId}/customers/{customerId}` - 顧客削除（`customer_visits` は CASCADE、`reservations.customer_id` は SET NULL）
 - `GET /api/stores/{storeId}/customers/analytics` - 顧客分析データ（セグメント分布、月別新規、性別/年齢、`line_friend_rate` + `line_friend_connected` + `line_linked_customers`、平均来店間隔、リピート率、売上ランキング）
+
+### 予約カレンダー API:
+- `GET /api/stores/{storeId}/reservations/calendar` - 期間に掛かる予約と、予約以外の予定の時間（`from` / `to` = YYYY-MM-DD。最大 62 日。認証必須）
 
 ### 予約分析 API:
 - `GET /api/stores/{storeId}/reservations/analytics` - 予約統計（`date_from` / `date_to` = 予約日 YYYY-MM-DD、`form_id` = フォーム絞り込み。認証必須）

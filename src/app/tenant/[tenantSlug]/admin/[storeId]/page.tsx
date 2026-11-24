@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import WallAdminPanel from '@/components/wall/WallAdminPanel';
 import LineFlexPanel from '@/components/line-flex/LineFlexPanel';
 import BroadcastPanel from '@/components/broadcast/BroadcastPanel';
+import ReservationCalendar from '@/components/ReservationCalendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { getBaseUrl } from '@/lib/env';
@@ -1555,6 +1556,7 @@ export default function StoreDetailPage() {
         <Tabs defaultValue="overview" className="space-y-6">
           <TabsList className="h-auto sm:h-10 bg-card border border-border p-1 w-full sm:w-auto grid grid-cols-4 sm:grid-cols-8 sm:inline-grid">
             <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">概要</TabsTrigger>
+            <TabsTrigger value="calendar" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">カレンダー</TabsTrigger>
             <TabsTrigger value="forms" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">予約フォーム</TabsTrigger>
             <TabsTrigger value="surveys" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">アンケート</TabsTrigger>
             <TabsTrigger value="lotteries" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">抽選フォーム</TabsTrigger>
@@ -2472,6 +2474,17 @@ export default function StoreDetailPage() {
 
           <TabsContent value="walls" className="space-y-6">
             <WallAdminPanel storeId={storeId} showGuide={false} />
+          </TabsContent>
+
+          {/* カレンダー（予約を 月 / 週 / 日 で見る） */}
+          <TabsContent value="calendar" className="space-y-6">
+            <ReservationCalendar
+              storeId={storeId}
+              onSelectReservation={(reservation) => {
+                setSelectedReservation(reservation);
+                setShowReservationDetail(true);
+              }}
+            />
           </TabsContent>
 
           {/* LINE メッセージ（公式 LINE 向け Flex Message） */}

@@ -47,6 +47,7 @@ export const STORE_ADMIN_OPTION_KEYS = [
   'customer_lottery_history',
   'customer_survey_history',
   'store_digest',
+  'calendar',
 ] as const;
 export type StoreAdminOptionKey = (typeof STORE_ADMIN_OPTION_KEYS)[number];
 
@@ -64,6 +65,8 @@ export interface StoreAdminOptionDef {
   description: string;
   /** 未設定時に連動するタブ */
   followsTab: StoreAdminTabId;
+  /** true = 親のタブを非表示にしていても、この項目だけ表示できる（独立したタブとして出る項目） */
+  independent?: boolean;
 }
 
 export const STORE_ADMIN_OPTIONS: StoreAdminOptionDef[] = [
@@ -73,6 +76,7 @@ export const STORE_ADMIN_OPTIONS: StoreAdminOptionDef[] = [
   { key: 'customer_reservation_history', tab: 'customers', label: '顧客詳細に予約履歴・来店履歴・統計情報を表示', description: '未設定のときは「予約管理」の表示に連動します', followsTab: 'reservations' },
   { key: 'customer_lottery_history', tab: 'customers', label: '顧客詳細に抽選履歴を表示', description: '未設定のときは「抽選管理」の表示に連動します', followsTab: 'lotteries' },
   { key: 'customer_survey_history', tab: 'customers', label: '顧客詳細にアンケートの回答を表示', description: '未設定のときは「アンケート管理」の表示に連動します', followsTab: 'surveys' },
+  { key: 'calendar', tab: 'reservations', label: 'カレンダーを表示', description: '予約を 日 / 週 / 月 のカレンダーで見るタブ。予約管理を非表示にしていても、ここだけ表示にできます', followsTab: 'reservations', independent: true },
   { key: 'store_digest', tab: 'settings', label: '今日の予約まとめ・月次レポートを表示', description: '朝の「今日の予約まとめ」と月次レポートを、メールや LINE で受け取る設定の欄', followsTab: 'settings' },
 ];
 
@@ -114,4 +118,23 @@ export function resolveAdminVisibleOptions(
     result[def.key] = typeof explicit === 'boolean' ? explicit : tabs.includes(def.followsTab);
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// メニュー（サイドバー・下部ナビ）に出す項目
+// ---------------------------------------------------------------------------
+
+/**
+ * メニューに出す項目の ID。
+ * 「カレンダー」は独立したタブとして出すが、表示するかどうかは admin_visible_options.calendar で決める
+ * （未設定は「予約管理」に連動。admin_visible_tabs に足すと、タブを絞り込んでいる既存の店舗で
+ *  「予約管理は出ているのにカレンダーだけ出ない」になるため、タブの一覧には入れない）
+ */
+export type StoreAdminNavId = StoreAdminTabId | 'calendar';
+
+const STORE_ADMIN_NAV_ORDER: StoreAdminNavId[] = ['dashboard', 'reservations', 'calendar', 'customers', 'surveys', 'lotteries', 'walls', 'broadcasts', 'settings'];
+
+/** 表示するタブ + カレンダー（表示するとき）を、メニューの並び順で返す */
+export function buildStoreAdminNav(visibleTabs: StoreAdminTabId[], showCalendar: boolean): StoreAdminNavId[] {
+  return STORE_ADMIN_NAV_ORDER.filter((id) => (id === 'calendar' ? showCalendar : visibleTabs.includes(id)));
 }

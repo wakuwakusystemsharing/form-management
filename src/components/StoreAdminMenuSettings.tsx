@@ -191,7 +191,7 @@ export default function StoreAdminMenuSettings({ storeId }: StoreAdminMenuSettin
                                   id={`admin-opt-${opt.key}`}
                                   checked={value}
                                   // 親タブが OFF の項目（自タブ連動）は表示されないためグレーアウト
-                                  disabled={!checked && !followsOtherTab}
+                                  disabled={!checked && !followsOtherTab && !opt.independent}
                                   onCheckedChange={(v) => setOption(opt.key, v === true)}
                                   className="mt-0.5"
                                 />

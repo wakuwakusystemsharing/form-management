@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FileText,
   Calendar,
+  CalendarDays,
   ClipboardList,
   Gift,
   StickyNote,
@@ -23,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { applyUiStyle, applyM3Palette, clearUiStyle, UI_STYLE_CHANGE_EVENT } from '@/lib/ui-style';
-import { resolveVisibleTabs, type StoreAdminTabId } from '@/lib/store-admin-tabs';
+import { buildStoreAdminNav, resolveVisibleTabs, type StoreAdminNavId, type StoreAdminTabId } from '@/lib/store-admin-tabs';
 
 interface StoreAdminLayoutProps {
   children: React.ReactNode;
@@ -35,11 +36,14 @@ interface StoreAdminLayoutProps {
   themeColor?: string | null;
   /** 表示するタブ（stores.admin_visible_tabs）。null / 未指定 = すべて表示 */
   visibleTabs?: StoreAdminTabId[] | null;
+  /** 「カレンダー」をメニューに出すか（admin_visible_options.calendar の判定結果） */
+  showCalendar?: boolean;
 }
 
-const allMenuItems: { id: StoreAdminTabId; label: string; icon: typeof LayoutDashboard }[] = [
+const allMenuItems: { id: StoreAdminNavId; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'dashboard', label: 'ダッシュボード', icon: LayoutDashboard },
   { id: 'reservations', label: '予約管理', icon: Calendar },
+  { id: 'calendar', label: 'カレンダー', icon: CalendarDays },
   { id: 'customers', label: '顧客管理', icon: Users },
   { id: 'surveys', label: 'アンケート管理', icon: ClipboardList },
   { id: 'lotteries', label: '抽選管理', icon: Gift },
@@ -138,6 +142,7 @@ export default function StoreAdminLayout({
   onLogout,
   themeColor,
   visibleTabs,
+  showCalendar = false,
 }: StoreAdminLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -145,7 +150,7 @@ export default function StoreAdminLayout({
   const router = useRouter();
 
   // 店舗設定で非表示にされたタブを除外（null = すべて表示）
-  const visibleIds = resolveVisibleTabs(visibleTabs);
+  const visibleIds = buildStoreAdminNav(resolveVisibleTabs(visibleTabs), showCalendar);
   const menuItems = allMenuItems.filter((item) => visibleIds.includes(item.id));
 
   // 表示スタイル（標準 / Material）を <html data-ui> に反映。画面幅の変化・設定変更にも追従し、離脱時に解除

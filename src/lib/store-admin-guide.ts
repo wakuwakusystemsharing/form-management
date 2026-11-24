@@ -4,7 +4,7 @@
  * 店舗にURLだけを渡しても解説なしで使えるように、各タブの冒頭に折りたたみの説明カードを出す。
  * 文言はここだけで管理する（画面側は StoreAdminGuide.tsx が描画）。
  */
-import type { StoreAdminTabId } from './store-admin-tabs';
+import type { StoreAdminNavId } from './store-admin-tabs';
 
 export interface GuideItem {
   /** 画面上の項目名（見出し・ボタン名と同じ言葉を使う） */
@@ -22,7 +22,7 @@ export interface TabGuide {
   tips?: string[];
 }
 
-export const STORE_ADMIN_GUIDES: Record<StoreAdminTabId, TabGuide> = {
+export const STORE_ADMIN_GUIDES: Record<StoreAdminNavId, TabGuide> = {
   dashboard: {
     intro: '店舗全体の状況をひと目で確認するページです。数字をクリックする必要はなく、詳しい操作は各タブで行います。',
     items: [
@@ -122,6 +122,20 @@ export const STORE_ADMIN_GUIDES: Record<StoreAdminTabId, TabGuide> = {
       '送信は 5 分おきの処理で行うため、指定した時刻から数分遅れることがあります。',
     ],
   },
+  calendar: {
+    intro: '予約を 月 / 週 / 日 のカレンダーで確認するページです。予約の内容は「予約管理」と同じものです。',
+    items: [
+      { title: '月 / 週 / 日', text: '右上のボタンで表示を切り替えます。「今日」で今日に戻り、左右の矢印で前後の期間へ移動します。' },
+      { title: '予約の帯', text: '色は予約の状態です（緑 = 確認済み、黄 = 保留中、灰 = 完了）。押すと予約の詳細が開き、内容の変更やキャンセルができます。' },
+      { title: 'キャンセルも表示', text: 'チェックを入れると、キャンセル済みの予約も薄く表示します。' },
+      { title: '予約以外の予定', text: 'Google カレンダーに直接入れた予定（お休み・打ち合わせなど）は、灰色で「予定あり」とだけ表示します。内容は表示しません。' },
+      { title: '終日', text: '宿泊の予約と、時間がまだ決まっていない予約は、いちばん上の「終日」の欄に出ます。' },
+    ],
+    tips: [
+      '月表示は 1 日に 3 件まで表示します。「ほか N 件」か日付を押すと、その日の日表示に切り替わります。',
+      '予約の日時を変えたいときは、予約を押して「予約内容を編集」から変更してください。',
+    ],
+  },
   settings: {
     intro: 'この管理画面の見た目と、店舗の登録情報を確認するページです。',
     items: [
@@ -140,6 +154,7 @@ export function getStoreAdminGuide(tab: string): TabGuide | undefined {
 
 /** 画面の各セクション見出しの下に出す 1 行ヒント */
 export const STORE_ADMIN_HINTS = {
+  calendar: '予約を 月 / 週 / 日 で確認できます。予約を押すと詳細が開きます。',
   reservationForms: 'お客様に案内する予約フォームです。「公開中URL」を公式LINEやホームページに貼ってご利用ください。変更は「編集」→「更新」で公開に反映されます。',
   reservationList: '行をクリックすると詳細を確認・変更できます。「保留中」は受付直後の未確認、「確認済み」は店舗が内容を確認した予約です。',
   surveyForms: 'お客様に答えてもらうアンケートです。「公開中URL」を案内すると回答できます。変更は「編集」→「更新」で反映されます。',
