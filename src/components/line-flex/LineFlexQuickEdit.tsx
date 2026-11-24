@@ -15,6 +15,7 @@ import { applyFlexEdit, currentFlexContents, isTemplateLinked, validSelection, t
 import { itemsToPreview } from '@/lib/line-flex-items';
 import { resolveFlexContents } from '@/lib/line-flex-templates';
 import type { FlexContainer, LineFlexItem, LineFlexMessage, LineFlexMessageInput } from '@/types/line-flex';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface Props {
   storeId: string;
@@ -119,7 +120,7 @@ export default function LineFlexQuickEdit({ storeId, message, forms, others, onS
       fd.append('file', file, file.name);
       fd.append('storeId', storeId);
       fd.append('menuId', `flex_${message.id}_${slot}`);
-      const res = await fetch('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
+      const res = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'アップロードに失敗しました');
       apply(json.url);

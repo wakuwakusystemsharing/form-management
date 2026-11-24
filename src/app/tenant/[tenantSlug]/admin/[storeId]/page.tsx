@@ -14,6 +14,7 @@ import type { LotteryFormWithStats } from '@/types/lottery';
 import StoreAdminManager from '@/components/StoreAdminManager';
 import StoreAdminMenuSettings from '@/components/StoreAdminMenuSettings';
 import StoreDigestSettings from '@/components/StoreDigestSettings';
+import LineWebhookSecretSettings from '@/components/LineWebhookSecretSettings';
 import FormHistoryDialog from '@/components/FormHistoryDialog';
 import ReminderTemplateEditor from '@/components/ReminderTemplateEditor';
 import { REMINDER_BEFORE_TIME_OPTIONS, formatMinutesJa } from '@/lib/follow-message-scheduler';
@@ -60,6 +61,7 @@ import type { AdminReservationInput } from '@/lib/reservation-detail-items';
 import Link from 'next/link';
 
 import { getReservationFormName } from '@/lib/form-display-name';
+import { fetchWithAuth } from '@/lib/client-auth';
 function InfoTooltip({ text }: { text: string }) {
   return (
     <span className="relative group inline-flex items-center">
@@ -692,7 +694,7 @@ export default function StoreDetailPage() {
       try {
         setLoading(true);
         
-        const storeResponse = await fetch(`/api/stores/${storeId}`, {
+        const storeResponse = await fetchWithAuth(`/api/stores/${storeId}?full=1`, {
           credentials: 'include',
         });
         if (!storeResponse.ok) {
@@ -706,7 +708,7 @@ export default function StoreDetailPage() {
         const storeData = await storeResponse.json();
         setStore(storeData);
         
-        const formsResponse = await fetch(`/api/stores/${storeId}/forms`, {
+        const formsResponse = await fetchWithAuth(`/api/stores/${storeId}/forms`, {
           credentials: 'include',
         });
         if (formsResponse.ok) {
@@ -714,7 +716,7 @@ export default function StoreDetailPage() {
           setForms(formsData);
         }
 
-        const surveysResponse = await fetch(`/api/stores/${storeId}/surveys`, {
+        const surveysResponse = await fetchWithAuth(`/api/stores/${storeId}/surveys`, {
           credentials: 'include',
         });
         if (surveysResponse.ok) {
@@ -730,7 +732,7 @@ export default function StoreDetailPage() {
           setSurveyResponses(surveyResponsesData);
         }
 
-        const reservationsResponse = await fetch(`/api/stores/${storeId}/reservations`, {
+        const reservationsResponse = await fetchWithAuth(`/api/stores/${storeId}/reservations`, {
           credentials: 'include',
         });
         if (reservationsResponse.ok) {
@@ -795,7 +797,7 @@ export default function StoreDetailPage() {
     try {
       const selectedTemplate = FORM_TEMPLATES[newFormData.template as keyof typeof FORM_TEMPLATES];
       
-      const response = await fetch(`/api/stores/${storeId}/forms`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/forms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -850,7 +852,7 @@ export default function StoreDetailPage() {
     setSubmitting(true);
     try {
       const selectedTemplate = SURVEY_TEMPLATES[newSurveyData.template as keyof typeof SURVEY_TEMPLATES];
-      const response = await fetch(`/api/stores/${storeId}/surveys`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/surveys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -896,7 +898,7 @@ export default function StoreDetailPage() {
     }
 
     try {
-      const response = await fetch(`/api/surveys/${formId}`, {
+      const response = await fetchWithAuth(`/api/surveys/${formId}`, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -942,7 +944,7 @@ export default function StoreDetailPage() {
 
     setDuplicatingFormId(formId);
     try {
-      const response = await fetch(`/api/forms/${formId}/duplicate`, {
+      const response = await fetchWithAuth(`/api/forms/${formId}/duplicate`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -980,7 +982,7 @@ export default function StoreDetailPage() {
   const handleDuplicateSurveyForm = async (formId: string) => {
     setDuplicatingFormId(formId);
     try {
-      const response = await fetch(`/api/surveys/${formId}/duplicate`, {
+      const response = await fetchWithAuth(`/api/surveys/${formId}/duplicate`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -1096,7 +1098,7 @@ export default function StoreDetailPage() {
     if (!editingStore) return;
     
     try {
-      const response = await fetch(`/api/stores/${storeId}`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -1134,7 +1136,7 @@ export default function StoreDetailPage() {
     if (!store) return;
     setCreatingCalendar(true);
     try {
-      const response = await fetch(`/api/stores/${storeId}/calendar`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/calendar`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -1241,7 +1243,7 @@ export default function StoreDetailPage() {
     }
     setSavingCalendarId(true);
     try {
-      const response = await fetch(`/api/stores/${storeId}/calendar`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}/calendar`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -1280,7 +1282,7 @@ export default function StoreDetailPage() {
     if (!deletingFormId) return;
 
     try {
-      const response = await fetch(`/api/forms/${deletingFormId}`, {
+      const response = await fetchWithAuth(`/api/forms/${deletingFormId}`, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -1318,7 +1320,7 @@ export default function StoreDetailPage() {
 
   const handleDeleteStore = async () => {
     try {
-      const response = await fetch(`/api/stores/${storeId}`, {
+      const response = await fetchWithAuth(`/api/stores/${storeId}`, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -2492,6 +2494,9 @@ export default function StoreDetailPage() {
             {/* 今日の予約まとめ・月次レポート（スタッフへメール / LINE で自動送信） */}
             <StoreDigestSettings storeId={storeId} />
 
+            {/* LINE 通知の署名チェック（チャネルシークレットの登録。運営だけ） */}
+            <LineWebhookSecretSettings storeId={storeId} />
+
             {/* 危険ゾーン */}
             <Card className="border-destructive/50">
               <CardHeader>
@@ -2954,7 +2959,7 @@ export default function StoreDetailPage() {
                 ? `/api/surveys/${updatedForm.id}`
                 : `/api/forms/${updatedForm.id}`;
 
-            const response = await fetch(endpoint, {
+            const response = await fetchWithAuth(endpoint, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
@@ -3210,7 +3215,7 @@ Form「{getReservationFormName(forms.find(f => f.id === deletingFormId), '')}」
                       onClick={async () => {
                         if (!confirm('この予約を確認済みにしますか？')) return;
                         try {
-                          const res = await fetch(`/api/reservations/${selectedReservation.id}`, {
+                          const res = await fetchWithAuth(`/api/reservations/${selectedReservation.id}`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
                             credentials: 'include',
@@ -3235,7 +3240,7 @@ Form「{getReservationFormName(forms.find(f => f.id === deletingFormId), '')}」
                     onClick={async () => {
                       if (!confirm('この予約をキャンセルしますか？')) return;
                       try {
-                        const res = await fetch(`/api/reservations/${selectedReservation.id}`, {
+                        const res = await fetchWithAuth(`/api/reservations/${selectedReservation.id}`, {
                           method: 'PATCH',
                           headers: { 'Content-Type': 'application/json' },
                           credentials: 'include',

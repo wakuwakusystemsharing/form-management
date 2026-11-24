@@ -14,6 +14,8 @@ import { STAFF_REGISTER_KEYWORD } from '@/lib/store-digest';
 import { handleStaffLineCommand } from '@/lib/store-digest-service';
 import { scheduleCancelOpeningBroadcast } from '@/lib/broadcast-automation-service';
 import { ensureFriendCustomer } from '@/lib/line-friend-customers';
+import { LINE_SIGNATURE_HEADER, decideWebhookSignature } from '@/lib/line-signature';
+import { getStoreLineSecret } from '@/lib/line-secret-repository';
 import { CHANGE_KEYWORD, MENU_CHANGE_MESSAGE_HEAD, isChangePostback } from '@/lib/reservation-change';
 import { buildChangeMenuReply, buildMenuChangeDoneReply, handleChangePostback } from '@/lib/reservation-change-service';
 import { WAITLIST_KEYWORD, WAITLIST_MESSAGE_HEAD, isWaitlistPostback } from '@/lib/waitlist';
@@ -490,8 +492,31 @@ export async function POST(req: NextRequest) {
 
   const themeColor = DEFAULT_HEADER_COLOR;
 
-  const body = await req.json().catch(() => null);
-  const events: LineEvent[] = Array.isArray(body?.events) ? body.events : [];
+  // 署名チェック: 届いた内容は「文字列のまま」読む（JSON にしてから戻すと署名が合わなくなる）。
+  // チャネルシークレットを登録した店舗だけ確認し、未登録の店舗は今までどおり通す。
+  const rawBody = await req.text().catch(() => '');
+  const secretState = await getStoreLineSecret(storeId);
+  if (secretState.status === 'error') {
+    // 登録済みかどうかを読み取れなかったとき。既存の店舗の応答を止めないよう、確認せずに通す（ログに残す）
+    console.error(`[LINE Webhook] チャネルシークレットの読み取りに失敗（署名を確認せずに処理）: storeId=${storeId} ${secretState.message}`);
+  }
+  const signatureDecision = decideWebhookSignature({
+    secret: secretState.status === 'set' ? secretState.secret : null,
+    rawBody,
+    signature: req.headers.get(LINE_SIGNATURE_HEADER),
+  });
+  if (signatureDecision === 'rejected') {
+    console.warn(`[LINE Webhook] 署名が一致しないため受け付けません: storeId=${storeId}`);
+    return NextResponse.json({ error: '署名が正しくありません' }, { status: 401 });
+  }
+
+  let body: { events?: unknown } | null = null;
+  try {
+    body = rawBody ? JSON.parse(rawBody) : null;
+  } catch {
+    body = null;
+  }
+  const events: LineEvent[] = Array.isArray(body?.events) ? (body.events as LineEvent[]) : [];
 
   // follow / unfollow を全イベントについて先に反映（reply トークンに依存しない処理）。
   for (const ev of events) {

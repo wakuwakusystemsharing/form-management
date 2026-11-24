@@ -8,6 +8,7 @@ import { getAppEnvironment } from '@/lib/env';
 import { logFormAudit } from '@/lib/form-audit';
 import { createAdminClient } from '@/lib/supabase';
 import { getCurrentUserId } from '@/lib/auth-helper';
+import { authorizeRecordStoreAccess } from '@/lib/store-access';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 
@@ -89,6 +90,9 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
+    // アンケートの更新は、その店舗にアクセスできる人だけ（local は認証スキップ）
+    const auth = await authorizeRecordStoreAccess(request, 'survey_form', id);
+    if (auth.response) return auth.response;
     const body = await request.json();
     const env = getAppEnvironment();
 
@@ -182,6 +186,9 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    // アンケートの削除は、その店舗にアクセスできる人だけ（local は認証スキップ）
+    const auth = await authorizeRecordStoreAccess(request, 'survey_form', id);
+    if (auth.response) return auth.response;
     const env = getAppEnvironment();
 
     if (env === 'local') {

@@ -24,6 +24,7 @@ import type { Broadcast, BroadcastSettings, BroadcastSticker, BroadcastStatus } 
 import { matchesStickerFilter, type StickerFilterId } from '@/lib/broadcast-builtin-stickers';
 import StickerFilterChips from '@/components/broadcast/StickerFilterChips';
 import type { LineFlexMessage } from '@/types/line-flex';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface Overview {
   settings: BroadcastSettings;
@@ -237,7 +238,7 @@ export default function BroadcastPanel({ storeId, showGuide = true }: { storeId:
       fd.append('file', file, file.name);
       fd.append('storeId', storeId);
       fd.append('menuId', `sticker_${Math.random().toString(36).slice(2, 10)}`);
-      const up = await fetch('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
+      const up = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
       const upJson = await up.json().catch(() => ({}));
       if (!up.ok) throw new Error(upJson.error || 'アップロードに失敗しました');
       const res = await fetch(`${base}/broadcast-stickers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ label: stickerLabel || file.name.replace(/\.[^.]+$/, ''), url: upJson.url }) });

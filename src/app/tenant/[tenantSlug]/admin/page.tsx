@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import Image from 'next/image';
 import { Search, Plus, LogOut, Store as StoreIcon, ExternalLink, Lock, Settings, Calendar, HelpCircle } from 'lucide-react';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 // ロールチェック用ヘルパー
 async function checkAdminRole(): Promise<'master' | 'system' | null> {
@@ -64,7 +65,7 @@ export default function TenantAdminPage() {
 
   const loadStores = useCallback(async () => {
     try {
-      const response = await fetch('/api/stores');
+      const response = await fetchWithAuth('/api/stores');
       if (response.ok) {
         const data = await response.json();
         const loadedStores = data.stores || [];

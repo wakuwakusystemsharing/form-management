@@ -45,6 +45,7 @@ import { payloadsToPreview } from '@/lib/line-flex-items';
 import { validateFlexContents } from '@/lib/line-flex-templates';
 import type { AutomationTrigger, BroadcastAudience, BroadcastAutomation, BroadcastAutomationInput, BroadcastItem, BroadcastSticker } from '@/types/broadcast';
 import type { LineFlexMessage } from '@/types/line-flex';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface Props {
   storeId: string;
@@ -520,7 +521,7 @@ export default function BroadcastAutomationPanel({ storeId, options, messages, s
       fd.append('storeId', storeId);
       fd.append('menuId', `automation_${uploadId.current}_${slot}`);
       if (current) fd.append('oldImageUrl', current);
-      const res = await fetch('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
+      const res = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'アップロードに失敗しました');
       apply(json.url);

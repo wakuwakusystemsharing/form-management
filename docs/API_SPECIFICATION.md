@@ -29,9 +29,11 @@
 ## 📦 店舗（Stores）API
 
 ### `GET /api/stores`
-全店舗の一覧を取得（サービス管理者用）
+店舗の一覧を取得
 
-**認証**: 不要（ページレベルで制御）
+**認証**: 必要。**運営（マスター管理者・システム管理者）だけ**。マスター管理者 = 全店舗 / システム管理者 = 同じテナントの店舗 / 店舗管理者 = `403` / 未ログイン = `401`。local は認証スキップ
+
+Google カレンダー連携の鍵（`google_calendar_refresh_token`）は返さない
 
 **レスポンス**:
 ```json
@@ -83,17 +85,28 @@
 ```
 
 ### `GET /api/stores/{storeId}`
-個別店舗の詳細を取得
+個別店舗の詳細を取得。**見ている人で返す内容が変わる**（`src/lib/store-view.ts`）
 
 **パラメータ**:
-- `storeId` (uuid): 店舗ID
+- `storeId`: 店舗ID
+- `full=1`（任意）: 管理画面からの呼び出し用。ログインしていなければ `401`、その店舗にアクセスできなければ `403` を返す（付けないと、未ログインでも下の「最小限」が `200` で返る）
 
-**レスポンス**: 店舗オブジェクト
+**レスポンス**:
+
+| 見ている人 | 返す内容 |
+|---|---|
+| ログインしていない人 / その店舗にアクセスできない人 | `id` / `name` / `logo_url` / `theme_color` だけ（店舗管理者ページのログイン画面用） |
+| 店舗管理者 | 店舗オブジェクト。`line_channel_access_token` は返さず、代わりに `line_channel_access_token_set`（設定済みか）を返す |
+| 運営（マスター管理者・システム管理者） | 店舗オブジェクト（`line_channel_access_token` を含む。店舗編集で使う） |
+
+`google_calendar_refresh_token` は誰にも返さない
 
 ### `PUT /api/stores/{storeId}`
 店舗情報を更新
 
-**認証**: サービス管理者
+**認証**: 必要。**運営（マスター管理者・システム管理者）だけ**（店舗管理者 = `403` / 未ログイン = `401`。local は認証スキップ）
+
+送られてきても反映しない項目: `id` / `created_at` / `google_calendar_refresh_token` / `org_id`（テナントの付け替えはマスター管理者だけ）
 
 **リクエストボディ**: 更新したいフィールドのみ
 ```json
@@ -122,6 +135,8 @@
 
 ### `DELETE /api/stores/{storeId}`
 店舗を削除（関連フォーム・予約も削除）
+
+**認証**: 必要。**運営だけ**（店舗管理者 = `403` / 未ログイン = `401`）
 
 **レスポンス**:
 ```json
@@ -758,12 +773,12 @@ QR コードの PNG（中身は `entry_url`）。`?download=1` で保存用の�
 ### `POST /api/webhooks/line`
 LINE Messaging API からの Webhook イベントを受信
 
-**認証**: 不要（署名検証を実施）
+**認証**: 不要（店舗の指定はクエリ `storeId`）
 
 **リクエストヘッダー**:
 - `x-line-signature`: LINE が付与する HMAC-SHA256 署名
 
-**署名検証**: `LINE_CHANNEL_SECRET` で HMAC-SHA256 署名を検証（不正リクエストを拒否）
+**署名チェック**: チャネルシークレットを登録した店舗だけ確認する（合わなければ `401 { error: '署名が正しくありません' }`）。**未登録の店舗は確認せずに受け付ける**。登録は下の `line-webhook` API
 
 **処理内容**:
 - 予約確認・キャンセルメッセージの受信と処理
@@ -773,6 +788,38 @@ LINE Messaging API からの Webhook イベントを受信
 ```json
 { "success": true }
 ```
+
+### `GET / PUT / DELETE /api/stores/{storeId}/line-webhook`
+LINE Webhook の署名チェックの設定（チャネルシークレット）
+
+**認証**: 運営（マスター管理者・システム管理者）だけ。店舗管理者は 403。local は認証スキップ
+
+- `GET`: 状態を返す
+- `PUT`: `{ "channel_secret": "英数字 32 文字" }` を登録 / 上書き（形式が違えば 400）
+- `DELETE`: 削除（署名のチェックをやめる）
+
+**レスポンス**（3 つとも同じ。シークレットそのものは返さない）:
+```json
+{ "secret_set": true, "updated_at": "2026-11-20T00:00:00.000Z", "webhook_url": "https://…/api/webhooks/line?storeId=abc123" }
+```
+
+### `POST /api/stores/{storeId}/line-webhook/test`
+接続を確認（LINE に登録されている Webhook URL がこの店舗のものか + LINE からテストの通知を受け取れるか）。local では 400
+
+**認証**: 運営だけ
+
+**レスポンス**:
+```json
+{
+  "ok": true,
+  "endpoint": "https://…/api/webhooks/line?storeId=abc123",
+  "active": true,
+  "endpoint_status": "same",
+  "test_success": true,
+  "messages": ["LINE からの通知を受け取れました。署名のチェックも通っています。"]
+}
+```
+`endpoint_status`: `same`（この店舗）/ `other_store`（このシステムの別の店舗）/ `other`（別の URL）/ `none`（未登録）/ `unknown`（取得できない）
 
 ---
 

@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Calendar, BarChart3, Download, X, Pencil, Trophy } from 'lucide-react';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface Reservation {
   id: string;
@@ -158,7 +159,7 @@ export default function AllReservationsPage() {
 
   const fetchStores = async () => {
     try {
-      const response = await fetch('/api/stores');
+      const response = await fetchWithAuth('/api/stores');
       if (response.ok) {
         const data = await response.json();
         setStores(data.stores || []);

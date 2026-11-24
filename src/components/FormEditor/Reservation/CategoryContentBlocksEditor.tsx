@@ -20,6 +20,7 @@ import {
   type CategoryBlockTarget,
   type CategoryContentBlock,
 } from '@/lib/category-content-blocks';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface Props {
   category: MenuCategory;
@@ -65,7 +66,7 @@ export default function CategoryContentBlocksEditor({ category, target, storeId,
       formData.append('storeId', storeId);
       formData.append('menuId', block.id);
       if (block.image_url) formData.append('oldImageUrl', block.image_url);
-      const res = await fetch('/api/upload/menu-image', { method: 'POST', body: formData, credentials: 'include' });
+      const res = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: formData, credentials: 'include' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         alert(`アップロードに失敗しました: ${json.error || ''}`);

@@ -8,6 +8,7 @@ import BusinessRulesEditor from '@/components/FormEditor/Reservation/BusinessRul
 import MenuStructureEditor from '@/components/FormEditor/Reservation/MenuStructureEditor';
 
 import { getReservationFormName } from '@/lib/form-display-name';
+import { fetchWithAuth } from '@/lib/client-auth';
 // フォーム構造の互換性を保つためのヘルパー関数
 function getFormName(form: Form): string {
   return getReservationFormName(form);
@@ -65,7 +66,7 @@ export default function FormEditPage() {
     const fetchForm = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/forms/${formId}`);
+        const response = await fetchWithAuth(`/api/forms/${formId}`);
         
         if (!response.ok) {
           setError('フォームが見つかりません');
@@ -99,7 +100,7 @@ export default function FormEditPage() {
     
     setSaveStatus('saving');
     try {
-      const response = await fetch(`/api/forms/${formId}`, {
+      const response = await fetchWithAuth(`/api/forms/${formId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -141,7 +142,7 @@ export default function FormEditPage() {
     if (window.confirm('本番フォームを更新しますか？\n\n編集内容が顧客向けフォームに反映されます。')) {
       setSaveStatus('saving');
       try {
-        const response = await fetch(`/api/forms/${formId}/deploy`, {
+        const response = await fetchWithAuth(`/api/forms/${formId}/deploy`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -155,7 +156,7 @@ export default function FormEditPage() {
           
           // フォームデータを再フェッチしてstatic_deploy情報を更新
           try {
-            const refreshResponse = await fetch(`/api/forms/${formId}`);
+            const refreshResponse = await fetchWithAuth(`/api/forms/${formId}`);
             if (refreshResponse.ok) {
               const updatedForm = await response.json();
               setForm(updatedForm);

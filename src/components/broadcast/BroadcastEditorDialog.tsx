@@ -22,6 +22,7 @@ import { payloadsToPreview } from '@/lib/line-flex-items';
 import { validateFlexContents } from '@/lib/line-flex-templates';
 import type { Broadcast, BroadcastAudience, BroadcastInput, BroadcastItem, BroadcastSticker } from '@/types/broadcast';
 import type { LineFlexMessage } from '@/types/line-flex';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface Props {
   storeId: string;
@@ -203,7 +204,7 @@ export default function BroadcastEditorDialog({ storeId, open, initial, options,
       fd.append('storeId', storeId);
       fd.append('menuId', `broadcast_${uploadId.current}_${slot}`);
       if (current) fd.append('oldImageUrl', current);
-      const res = await fetch('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
+      const res = await fetchWithAuth('/api/upload/menu-image', { method: 'POST', body: fd, credentials: 'include' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'アップロードに失敗しました');
       apply(json.url);

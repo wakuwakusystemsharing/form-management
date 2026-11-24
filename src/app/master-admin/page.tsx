@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { Search, Plus, LogOut, Store as StoreIcon, Building2, Trash2, Shield, Users, ChevronLeft, Copy, ExternalLink } from 'lucide-react';
+import { fetchWithAuth } from '@/lib/client-auth';
 
 interface Organization {
   id: string;
@@ -67,7 +68,7 @@ export default function MasterAdminPage() {
   const loadData = useCallback(async () => {
     try {
       const [storesRes, orgsRes] = await Promise.all([
-        fetch('/api/stores', { credentials: 'include' }),
+        fetchWithAuth('/api/stores', { credentials: 'include' }),
         fetch('/api/master-admin/organizations', { credentials: 'include' }),
       ]);
 

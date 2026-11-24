@@ -43,7 +43,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { ToastAction } from '@/components/ui/toast';
-import { AUTH_REQUIRED_EVENT, syncAuthCookie } from '@/lib/client-auth';
+import { AUTH_REQUIRED_EVENT, syncAuthCookie, fetchWithAuth } from '@/lib/client-auth';
 import { SearchBar } from '@/components/ui/search-bar';
 import { useDebounce } from '@/hooks/use-debounce';
 import { getReservationFormName } from '@/lib/form-display-name';
@@ -465,7 +465,7 @@ export default function StoreAdminPage() {
 
         if (!isUpperAdmin) {
           // 店舗管理者の場合、アクセス権限をチェック
-          const accessCheckResponse = await fetch(`/api/stores/${storeId}/admins`, {
+          const accessCheckResponse = await fetchWithAuth(`/api/stores/${storeId}/admins`, {
             credentials: 'include',
           });
           
@@ -487,7 +487,7 @@ export default function StoreAdminPage() {
           }
         }
         
-        const storeResponse = await fetch(`/api/stores/${storeId}`);
+        const storeResponse = await fetchWithAuth(`/api/stores/${storeId}?full=1`);
         if (!storeResponse.ok) {
           setError('店舗が見つかりません');
           return;
@@ -495,13 +495,13 @@ export default function StoreAdminPage() {
         const storeData = await storeResponse.json();
         setStore(storeData);
         
-        const formsResponse = await fetch(`/api/stores/${storeId}/forms`);
+        const formsResponse = await fetchWithAuth(`/api/stores/${storeId}/forms`);
         if (formsResponse.ok) {
           const formsData = await formsResponse.json();
           setForms(formsData);
         }
         
-        const surveysResponse = await fetch(`/api/stores/${storeId}/surveys`);
+        const surveysResponse = await fetchWithAuth(`/api/stores/${storeId}/surveys`);
         if (surveysResponse.ok) {
           const surveysData = await surveysResponse.json();
           setSurveyForms(surveysData);
@@ -536,7 +536,7 @@ export default function StoreAdminPage() {
     const params = new URLSearchParams();
     if (activeSearch) params.append('search', activeSearch);
     params.append('include_external', '1'); // 外部予約メール連携の予約もマージ
-    fetch(`/api/stores/${storeId}/reservations?${params.toString()}`, { credentials: 'include' })
+    fetchWithAuth(`/api/stores/${storeId}/reservations?${params.toString()}`, { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => setReservations(data))
       .catch((err) => console.error('Reservations fetch error:', err));
@@ -1836,7 +1836,7 @@ export default function StoreAdminPage() {
                 ? `/api/surveys/${updatedForm.id}`
                 : `/api/forms/${updatedForm.id}`;
 
-            const response = await fetch(endpoint, {
+            const response = await fetchWithAuth(endpoint, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
@@ -2063,7 +2063,7 @@ export default function StoreAdminPage() {
                       onClick={async () => {
                         if (!confirm('この予約を確認済みにしますか？')) return;
                         try {
-                          const res = await fetch(`/api/reservations/${selectedReservation.id}`, {
+                          const res = await fetchWithAuth(`/api/reservations/${selectedReservation.id}`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
                             credentials: 'include',
@@ -2095,7 +2095,7 @@ export default function StoreAdminPage() {
                         const cancelUrl = isExternal
                           ? `/api/stores/${storeId}/external-reservations/${(selectedReservation as any).external_id}`
                           : `/api/reservations/${selectedReservation.id}`;
-                        const res = await fetch(cancelUrl, {
+                        const res = await fetchWithAuth(cancelUrl, {
                           method: 'PATCH',
                           headers: { 'Content-Type': 'application/json' },
                           credentials: 'include',
