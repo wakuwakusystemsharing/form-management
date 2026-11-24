@@ -12,6 +12,8 @@
  *   作ったメニューは書き換えられない（画像の差し替えも不可）→ 変えるときは作り直して差し替える
  */
 
+import { isRuleEmpty, normalizeRichMenuRule, type RichMenuRule } from '@/lib/line-rich-menu-rules';
+
 export type RichMenuSize = 'large' | 'small';
 
 export const RICH_MENU_SIZES: Record<RichMenuSize, { width: number; height: number; label: string; description: string }> = {
@@ -102,6 +104,8 @@ export interface LineRichMenu {
   is_default: boolean;
   /** 反映したあとに内容を変えたか（変えただけでは公式 LINE には出ない） */
   dirty: boolean;
+  /** お客様ごとのメニューの条件（null = 全員向け / 切り替え先のメニュー） */
+  rule: RichMenuRule | null;
   last_error: string | null;
   published_at: string | null;
   created_at: string;
@@ -116,6 +120,8 @@ export interface RichMenuInput {
   areas: RichMenuArea[];
   chat_bar_text: string;
   open_by_default: boolean;
+  /** お客様ごとのメニューの条件（null / 省略 = 全員向け） */
+  rule?: RichMenuRule | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,6 +190,7 @@ export function normalizeRichMenuInput(value: unknown): RichMenuInput {
     areas: normalizeRichMenuAreas(rec.areas),
     chat_bar_text: chat || DEFAULT_CHAT_BAR_TEXT,
     open_by_default: rec.open_by_default !== false,
+    rule: normalizeRichMenuRule(rec.rule),
   };
 }
 
@@ -256,6 +263,11 @@ export function validateRichMenu(input: RichMenuInput, opts: { forPublish?: bool
     const menuIds = opts.menuIds ? new Set(opts.menuIds) : null;
     const active = input.areas.filter((a) => a.action.type !== 'none');
     if (active.length === 0) errors.push('押したときの動きを設定したボタンを 1 つ以上作ってください');
+    if (input.rule) {
+      if (isRuleEmpty(input.rule)) errors.push('だれに出すかの条件を 1 つ以上選んでください（全員に出すときは「全員」を選びます）');
+      // 切り替えは、お客様 1 人ずつにメニューを付け替える仕組みなので、条件での出し分けと両立しない
+      if (input.areas.some((a) => a.action.type === 'switch')) errors.push('お客様ごとのメニューでは、「別のメニューに切り替える」は使えません。ほかの動きに変えてください');
+    }
     input.areas.forEach((area, i) => {
       const e = actionError(area.action, `ボタン ${i + 1}`, formIds, menuIds, opts.selfId ?? null);
       if (e) errors.push(e);

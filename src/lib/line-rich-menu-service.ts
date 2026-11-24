@@ -15,8 +15,11 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { after } from 'next/server';
 import { getAppEnvironment } from '@/lib/env';
-import { getStoreLineToken } from '@/lib/broadcast-repository';
+import { getStoreLineToken, loadAudienceSource } from '@/lib/broadcast-repository';
+import { buildCustomerFacts, jstDateOf } from '@/lib/broadcast-audience';
+import { getStoreLineSecret } from '@/lib/line-secret-repository';
 import { listStoreForms } from '@/lib/reservation-source-repository';
 import { resolveFormBaseUrl } from '@/lib/reservation-sources';
 import {
@@ -37,8 +40,31 @@ import {
   type LineRichMenu,
   type RichMenuInput,
 } from '@/lib/line-rich-menu';
+import {
+  RICH_MENU_RULES_MAX,
+  chunkUserIds,
+  diffRichMenuAssignments,
+  planRichMenuAssignments,
+  reorderRuleMenus,
+  sortRuleMenus,
+  type PublishedRuleMenu,
+  type RichMenuAssignment,
+  type RichMenuRule,
+} from '@/lib/line-rich-menu-rules';
 import { createRichMenuLineApi, type RichMenuLineApi } from '@/lib/line-rich-menu-api';
-import { deleteRichMenuRow, getRichMenu, insertRichMenu, listRichMenus, updateRichMenu } from '@/lib/line-rich-menu-repository';
+import {
+  RICH_MENU_LINKS_SCHEMA_MISSING_MESSAGE,
+  deleteRichMenuLinks,
+  deleteRichMenuRow,
+  getRichMenu,
+  hasRichMenuLinksTable,
+  insertRichMenu,
+  listRichMenuLinks,
+  listRichMenus,
+  listStoresWithRuleMenus,
+  updateRichMenu,
+  upsertRichMenuLinks,
+} from '@/lib/line-rich-menu-repository';
 
 const isLocal = () => getAppEnvironment() === 'local';
 
@@ -48,7 +74,7 @@ const isLocal = () => getAppEnvironment() === 'local';
  */
 export const LINE_MENU_NAME_PREFIX = '[nas-rsv] ';
 
-export type ServiceResult<T> = { ok: true; data: T; notice?: string } | { ok: false; status: number; error: string };
+export type ServiceResult<T> = { ok: true; data: T; notice?: string; /** お客様ごとのメニューの設定の結果（1 行） */ summary?: string } | { ok: false; status: number; error: string };
 const fail = (status: number, error: string): { ok: false; status: number; error: string } => ({ ok: false, status, error });
 
 export interface RichMenuFormOption {
@@ -68,6 +94,12 @@ export interface RichMenuOverview {
   local: boolean;
   /** ほかの場所（公式 LINE の管理画面など）で全員向けのメニューが変えられているときの文言 */
   external_notice: string | null;
+  /** お客様ごとのメニューを使えないときの理由（使えるときは null） */
+  rule_unavailable: string | null;
+  /** お客様ごとのメニューの数の上限 */
+  rules_max: number;
+  /** メニュー ID → いま設定している人数 */
+  link_counts: Record<string, number>;
 }
 
 async function formOptions(storeId: string, origin: string): Promise<{ options: RichMenuFormOption[]; urlOf: (id: string) => string | null }> {
@@ -76,7 +108,7 @@ async function formOptions(storeId: string, origin: string): Promise<{ options: 
   return { options: forms.map((f) => ({ id: f.id, name: f.name, openable: !!urls.get(f.id) })), urlOf: (id) => urls.get(id) ?? null };
 }
 
-const inputOf = (menu: LineRichMenu): RichMenuInput => ({ name: menu.name, size: menu.size, image_url: menu.image_url, areas: menu.areas, chat_bar_text: menu.chat_bar_text, open_by_default: menu.open_by_default });
+const inputOf = (menu: LineRichMenu): RichMenuInput => ({ name: menu.name, size: menu.size, image_url: menu.image_url, areas: menu.areas, chat_bar_text: menu.chat_bar_text, open_by_default: menu.open_by_default, rule: menu.rule });
 
 export async function getRichMenuOverview(storeId: string, origin: string, deps: { api?: RichMenuLineApi } = {}): Promise<RichMenuOverview> {
   const [menus, forms, token] = await Promise.all([listRichMenus(storeId), formOptions(storeId, origin), getStoreLineToken(storeId).catch(() => null)]);
@@ -94,7 +126,17 @@ export async function getRichMenuOverview(storeId: string, origin: string, deps:
       /* 表示のための確認なので、失敗しても一覧は返す */
     }
   }
-  return { menus, forms: forms.options, max: RICH_MENU_LIMITS.menusMax, has_token: !!token, local: isLocal(), external_notice: externalNotice };
+  const linkCounts: Record<string, number> = {};
+  const hasRules = menus.some((m) => m.rule);
+  if (hasRules) {
+    try {
+      for (const l of await listRichMenuLinks(storeId)) linkCounts[l.menu_id] = (linkCounts[l.menu_id] || 0) + 1;
+    } catch {
+      /* 人数は表示のためだけなので、読めなくても一覧は返す */
+    }
+  }
+  const ruleUnavailable = await ruleUnavailableReason(storeId).catch(() => null);
+  return { menus, forms: forms.options, max: RICH_MENU_LIMITS.menusMax, has_token: !!token, local: isLocal(), external_notice: externalNotice, rule_unavailable: ruleUnavailable, rules_max: RICH_MENU_RULES_MAX, link_counts: linkCounts };
 }
 
 export async function createRichMenu(storeId: string, body: unknown): Promise<ServiceResult<LineRichMenu>> {
@@ -103,9 +145,15 @@ export async function createRichMenu(storeId: string, body: unknown): Promise<Se
   if (errors.length > 0) return fail(400, errors[0]);
   const existing = await listRichMenus(storeId);
   if (existing.length >= RICH_MENU_LIMITS.menusMax) return fail(400, `リッチメニューは ${RICH_MENU_LIMITS.menusMax} 個までです。使っていないものを削除してください`);
+  // 新しいお客様ごとのメニューは、優先順位のいちばん下に入れる
+  if (input.rule) input.rule = { ...input.rule, order: nextRuleOrder(existing) };
   const res = await insertRichMenu(storeId, input);
   if (res.error !== undefined) return fail(500, res.error);
   return { ok: true, data: res.data };
+}
+
+function nextRuleOrder(menus: LineRichMenu[]): number {
+  return menus.reduce((max, m) => (m.rule ? Math.max(max, m.rule.order + 1) : max), 0);
 }
 
 /** 内容を保存する。反映中のメニューを変えたときは「未反映の変更あり」にする（保存しただけでは公式 LINE には出ない） */
@@ -116,7 +164,11 @@ export async function saveRichMenu(storeId: string, id: string, body: unknown): 
   const input = normalizeRichMenuInput(body);
   const errors = validateRichMenu(input);
   if (errors.length > 0) return fail(400, errors[0]);
-  const res = await updateRichMenu(storeId, id, { ...input, dirty: menu.status === 'published' ? true : menu.dirty });
+  // 公式 LINE に出しているあいだは、「全員向け」と「お客様ごと」を入れ替えられない（出し方が違うため）
+  if (menu.status === 'published' && !!input.rule !== !!menu.rule) return fail(409, '公式 LINE に出しているメニューは、「だれに出すか」の種類を変えられません。先に反映をやめてください');
+  // 優先順位は並べ替えで決めるので、保存では変えない（新しくお客様ごとにしたときは、いちばん下に入れる）
+  if (input.rule) input.rule = { ...input.rule, order: menu.rule ? menu.rule.order : nextRuleOrder(await listRichMenus(storeId)) };
+  const res = await updateRichMenu(storeId, id, { ...input, rule: input.rule ?? null, dirty: menu.status === 'published' ? true : menu.dirty });
   if (res.error !== undefined) return fail(500, res.error);
   if (!res.data) return fail(404, 'リッチメニューが見つかりません');
   return { ok: true, data: res.data };
@@ -140,7 +192,7 @@ export type PublishToLineResult = { ok: true; richMenuId: string; ids: Record<st
  * LINE に新しいメニューを作って全員向けにする（上の 1〜3）。最初の 1 つが全員向けになる。
  * 途中で失敗したら、作ったメニューと名札を消してから失敗を返す（作りかけを残さない。いま出ているメニューは変わらない）
  */
-export async function publishToLine(p: { api: RichMenuLineApi; items: PublishItem[] }): Promise<PublishToLineResult> {
+export async function publishToLine(p: { api: RichMenuLineApi; items: PublishItem[]; /** false = 全員向けにしない（お客様ごとのメニュー） */ setDefault?: boolean }): Promise<PublishToLineResult> {
   const created: string[] = [];
   const aliases: string[] = [];
   const ids: Record<string, string> = {};
@@ -178,6 +230,7 @@ export async function publishToLine(p: { api: RichMenuLineApi; items: PublishIte
   }
   // 3. 全員向けにする
   const rootId = ids[p.items[0].key];
+  if (p.setDefault === false) return { ok: true, richMenuId: rootId, ids };
   const setDefault = await p.api.setDefault(rootId);
   if (!setDefault.ok) {
     await rollback();
@@ -262,10 +315,16 @@ export async function publishRichMenu(storeId: string, id: string, origin: strin
   const menu = all.find((m) => m.id === id);
   if (!menu) return fail(404, 'リッチメニューが見つかりません');
   if (!canStartPublish(menu, deps.now)) return fail(409, '反映の途中です。少し待ってから、もう一度お試しください');
+  // お客様ごとのメニューは、全員向けにはせず、条件に合うお客様にだけ設定する
+  if (menu.rule) return publishRuleMenu(storeId, menu, all, origin, deps);
 
   const collected = collectSwitchGroup(id, all);
   if (!collected.ok) return fail(400, collected.error);
   const group = collected.group;
+  const ruleTarget = group.find((m) => m.rule);
+  if (ruleTarget) return fail(400, `「${ruleTarget.name}」はお客様ごとのメニューなので、切り替え先にできません。切り替え先を選び直してください`);
+  // お客様ごとのメニューは、全員向けの反映では触らない（下書きに戻さない・LINE から消さない）
+  const ruleMenuIds = all.filter((m) => m.rule).map((m) => m.line_rich_menu_id).filter((v): v is string => !!v);
   const many = group.length > 1;
   const now = deps.now ?? new Date();
   const stamp = now.getTime().toString(36);
@@ -287,7 +346,7 @@ export async function publishRichMenu(storeId: string, id: string, origin: strin
   }
 
   const groupIds = new Set(group.map((m) => m.id));
-  const others = all.filter((m) => !groupIds.has(m.id) && (m.is_default || m.line_rich_menu_id || m.status === 'published'));
+  const others = all.filter((m) => !groupIds.has(m.id) && !m.rule && (m.is_default || m.line_rich_menu_id || m.status === 'published'));
   const publishedAt = now.toISOString();
   const offPatch = { is_default: false, status: 'draft' as const, line_rich_menu_id: null, dirty: false };
 
@@ -333,7 +392,7 @@ export async function publishRichMenu(storeId: string, id: string, origin: strin
   }
 
   // 4. 記録を更新する。全員向けは 1 店舗に 1 つなので、先にほかのメニューの印を外す
-  const oldIds = all.map((m) => m.line_rich_menu_id).filter((v): v is string => !!v);
+  const oldIds = all.filter((m) => !m.rule).map((m) => m.line_rich_menu_id).filter((v): v is string => !!v);
   for (const other of others) await updateRichMenu(storeId, other.id, offPatch);
   for (const m of group.slice(1)) {
     await updateRichMenu(storeId, m.id, { status: 'published', is_default: false, line_rich_menu_id: result.ids[m.id] ?? null, dirty: false, last_error: null, published_at: publishedAt });
@@ -341,7 +400,7 @@ export async function publishRichMenu(storeId: string, id: string, origin: strin
   const saved = await updateRichMenu(storeId, id, { status: 'published', is_default: true, line_rich_menu_id: result.richMenuId, dirty: false, last_error: null, published_at: publishedAt });
 
   // 5. 古いメニューと名札を消す（失敗しても反映は成功）
-  const cleanup = await cleanupLineRichMenus(api, { menuIds: Object.values(result.ids), aliasIds: [...aliasOf.values()] }, oldIds);
+  const cleanup = await cleanupLineRichMenus(api, { menuIds: [...Object.values(result.ids), ...ruleMenuIds], aliasIds: [...aliasOf.values()] }, oldIds);
   if (cleanup.failed.length > 0) console.warn('[rich-menu] 古いメニュー・名札を消せませんでした（次の反映のときに掃除します）:', cleanup.failed.join(', '));
 
   if (saved.error !== undefined || !saved.data) {
@@ -360,13 +419,16 @@ export async function unpublishRichMenu(storeId: string, id: string, deps: { api
   const menu = all.find((m) => m.id === id);
   if (!menu) return fail(404, 'リッチメニューが見つかりません');
   if (!canStartPublish(menu)) return fail(409, '反映の途中です。少し待ってから、もう一度お試しください');
+  if (menu.rule) return stopRuleMenu(storeId, menu, deps);
   if (!menu.is_default && !menu.line_rich_menu_id && menu.status !== 'published') return fail(400, 'このメニューは反映されていません');
   // 切り替え先として出ているだけのメニューは、元のメニューの反映をやめる
-  const root = all.find((m) => m.is_default);
+  const root = all.find((m) => m.is_default && !m.rule);
   if (!menu.is_default && root && root.id !== id) return fail(409, `このメニューは「${root.name}」の切り替え先として出ています。「${root.name}」の「反映をやめる」を押してください`);
 
   const patch = { is_default: false, status: 'draft' as const, line_rich_menu_id: null, dirty: false, last_error: null };
-  const linked = all.filter((m) => m.id !== id && (m.status === 'published' || m.line_rich_menu_id));
+  // お客様ごとのメニューは、全員向けの反映をやめても出したままにする
+  const linked = all.filter((m) => m.id !== id && !m.rule && (m.status === 'published' || m.line_rich_menu_id));
+  const keepRuleIds = all.filter((m) => m.rule).map((m) => m.line_rich_menu_id).filter((v): v is string => !!v);
 
   if (isLocal()) {
     for (const m of linked) await updateRichMenu(storeId, m.id, patch);
@@ -388,8 +450,8 @@ export async function unpublishRichMenu(storeId: string, id: string, deps: { api
   }
   for (const m of linked) await updateRichMenu(storeId, m.id, patch);
   const res = await updateRichMenu(storeId, id, patch);
-  const oldIds = all.map((m) => m.line_rich_menu_id).filter((v): v is string => !!v);
-  await cleanupLineRichMenus(api, { menuIds: [] }, oldIds).catch(() => null);
+  const oldIds = all.filter((m) => !m.rule).map((m) => m.line_rich_menu_id).filter((v): v is string => !!v);
+  await cleanupLineRichMenus(api, { menuIds: keepRuleIds }, oldIds).catch(() => null);
   if (res.error !== undefined || !res.data) return fail(500, res.error || '保存に失敗しました');
   return { ok: true, data: res.data };
 }
@@ -406,4 +468,285 @@ export async function removeRichMenu(storeId: string, id: string): Promise<Servi
   const res = await deleteRichMenuRow(storeId, id);
   if (res.error !== undefined) return fail(500, res.error);
   return { ok: true, data: { id } };
+}
+
+// ---------------------------------------------------------------------------
+// お客様ごとの切り替え（③-3）
+// 条件に合うお客様にだけ出すメニュー。LINE には「この人にはこのメニュー」と 1 人ずつ（500 人ずつまとめて）設定する。
+// 全員向けのメニューより優先して表示される。条件に合わなくなった人は、設定を外して全員向けに戻す
+// ---------------------------------------------------------------------------
+
+export interface RichMenuSyncSummary {
+  /** メニューを設定した人数 */
+  linked: number;
+  /** 設定を外した人数（全員向けに戻した） */
+  unlinked: number;
+  /** 変わらなかった人数 */
+  unchanged: number;
+  /** LINE に断られて設定できなかった人数（次の見直しでもう一度試す） */
+  failed: number;
+  /** 時間切れで次の回に回した人数 */
+  deferred: number;
+  /** 公式 LINE に出している、お客様ごとのメニューの数 */
+  menus: number;
+}
+
+const emptySummary = (): RichMenuSyncSummary => ({ linked: 0, unlinked: 0, unchanged: 0, failed: 0, deferred: 0, menus: 0 });
+
+/** お客様ごとのメニューを使えるか（使えないときは理由） */
+async function ruleUnavailableReason(storeId: string): Promise<string | null> {
+  if (!(await hasRichMenuLinksTable())) return RICH_MENU_LINKS_SCHEMA_MISSING_MESSAGE;
+  if (isLocal()) return null;
+  // 設計の決まり: LINE からの通知が本物かを確かめられる店舗（チャネルシークレットを登録した店舗）だけで使う
+  const secret = await getStoreLineSecret(storeId).catch(() => null);
+  if (!secret || secret.status !== 'set') return 'お客様ごとの切り替えは、チャネルシークレットを登録した店舗だけで使えます（運営が、テナント側の店舗ページ → 設定 →「LINE 通知の署名チェック」で登録します）';
+  return null;
+}
+
+/**
+ * お客様ごとのメニューの設定を、いまの条件に合わせる（見直し）。
+ * - 条件に合うようになった人・別のメニューに変わる人 → 設定する
+ * - どの条件にも合わなくなった人 → 設定を外す（全員向けのメニューに戻る）
+ * LINE に送れたぶんだけ記録を更新するので、途中で止まっても、次の見直しで続きから合わせられる
+ */
+export async function syncRichMenuAssignments(storeId: string, deps: { api?: RichMenuLineApi; now?: Date; deadlineMs?: number } = {}): Promise<RichMenuSyncSummary> {
+  const summary = emptySummary();
+  const all = await listRichMenus(storeId);
+  const published: PublishedRuleMenu[] = sortRuleMenus(all.filter((m) => m.rule && m.status === 'published' && (isLocal() || m.line_rich_menu_id))).map((m) => ({
+    id: m.id,
+    // local は LINE に作らないので、記録用の仮の ID を使う
+    line_rich_menu_id: m.line_rich_menu_id || `local-${m.id}`,
+    rule: m.rule as RichMenuRule,
+  }));
+  summary.menus = published.length;
+  const current = await listRichMenuLinks(storeId);
+  if (published.length === 0 && current.length === 0) return summary;
+
+  const now = deps.now ?? new Date();
+  let desired = new Map<string, RichMenuAssignment>();
+  if (published.length > 0) {
+    const source = await loadAudienceSource(storeId);
+    const facts = buildCustomerFacts({ customers: source.customers, reservations: source.reservations, visits: source.visits, surveys: source.surveys, today: jstDateOf(now) });
+    desired = planRichMenuAssignments({ menus: published, customers: source.customers, facts, now });
+  }
+  const diff = diffRichMenuAssignments(current, desired);
+  summary.unchanged = diff.unchanged;
+
+  let api: RichMenuLineApi | null = null;
+  if (!isLocal()) {
+    if (deps.api) api = deps.api;
+    else {
+      const token = await getStoreLineToken(storeId);
+      if (!token) {
+        summary.failed = diff.unlink.length + diff.link.reduce((n, g) => n + g.user_ids.length, 0);
+        return summary;
+      }
+      api = createRichMenuLineApi(token);
+    }
+  }
+  const timeUp = () => deps.deadlineMs !== undefined && Date.now() > deps.deadlineMs;
+
+  // 外す（全員向けに戻す）
+  for (const ids of chunkUserIds(diff.unlink)) {
+    if (timeUp()) {
+      summary.deferred += ids.length;
+      continue;
+    }
+    const res = api ? await api.bulkUnlink(ids) : { ok: true };
+    if (!res.ok) {
+      summary.failed += ids.length;
+      continue;
+    }
+    await deleteRichMenuLinks(storeId, ids);
+    summary.unlinked += ids.length;
+  }
+  // 設定する（メニューごとに 500 人ずつ）
+  for (const group of diff.link) {
+    for (const ids of chunkUserIds(group.user_ids)) {
+      if (timeUp()) {
+        summary.deferred += ids.length;
+        continue;
+      }
+      const res = api ? await api.bulkLink(group.line_rich_menu_id, ids) : { ok: true };
+      if (!res.ok) {
+        summary.failed += ids.length;
+        continue;
+      }
+      const error = await upsertRichMenuLinks(storeId, ids.map((line_user_id) => ({ line_user_id, menu_id: group.menu_id, line_rich_menu_id: group.line_rich_menu_id })));
+      if (error) {
+        console.warn('[rich-menu] 設定の記録に失敗:', error);
+        summary.failed += ids.length;
+        continue;
+      }
+      summary.linked += ids.length;
+    }
+  }
+  return summary;
+}
+
+/** 見直しの結果を 1 行で（画面のお知らせ用） */
+export function describeSyncSummary(s: RichMenuSyncSummary): string {
+  const parts = [`設定 ${s.linked} 人`, `解除 ${s.unlinked} 人`, `変更なし ${s.unchanged} 人`];
+  if (s.failed > 0) parts.push(`失敗 ${s.failed} 人（次の見直しでもう一度試します）`);
+  if (s.deferred > 0) parts.push(`残り ${s.deferred} 人（次の見直しで続きを行います）`);
+  return parts.join(' / ');
+}
+
+/** お客様ごとのメニューを公式 LINE に出す（条件に合うお客様にだけ表示される） */
+async function publishRuleMenu(storeId: string, menu: LineRichMenu, all: LineRichMenu[], origin: string, deps: PublishDeps): Promise<ServiceResult<LineRichMenu>> {
+  const reason = await ruleUnavailableReason(storeId);
+  if (reason) return fail(400, reason);
+  if (menusSwitchingTo(menu.id, all).length > 0) return fail(400, 'ほかのメニューの切り替え先になっているメニューは、お客様ごとのメニューにできません');
+  const publishedRules = all.filter((m) => m.id !== menu.id && m.rule && m.status === 'published');
+  if (publishedRules.length >= RICH_MENU_RULES_MAX) return fail(400, `お客様ごとのメニューを出せるのは ${RICH_MENU_RULES_MAX} 個までです`);
+
+  const forms = await formOptions(storeId, origin);
+  const input = inputOf(menu);
+  const errors = validateRichMenu(input, { forPublish: true, formIds: forms.options.map((f) => f.id), menuIds: all.map((m) => m.id), selfId: menu.id });
+  if (errors.length > 0) return fail(400, errors[0]);
+  const built = buildRichMenuObject({ ...input, name: `${LINE_MENU_NAME_PREFIX}${input.name}` }, forms.urlOf);
+  if (!built.ok) return fail(400, built.error);
+
+  const now = deps.now ?? new Date();
+  const publishedAt = now.toISOString();
+  const deadlineMs = Date.now() + RULE_SYNC_BUDGET_MS;
+
+  if (isLocal()) {
+    const res = await updateRichMenu(storeId, menu.id, { status: 'published', is_default: false, dirty: false, last_error: null, published_at: publishedAt });
+    if (res.error !== undefined || !res.data) return fail(500, res.error || '保存に失敗しました');
+    const sync = await syncRichMenuAssignments(storeId, { now, deadlineMs });
+    return { ok: true, data: res.data, notice: `local では LINE に反映しません（記録だけ更新しました。${describeSyncSummary(sync)}）` };
+  }
+
+  const token = await getStoreLineToken(storeId);
+  if (!token) return fail(400, 'LINE のチャネルアクセストークンが登録されていません。店舗の設定で登録してください');
+  const bytes = await (deps.loadImage ?? loadImageBytes)(menu.image_url);
+  if (!bytes) return fail(400, '画像を読み込めませんでした。画像を選び直してください');
+  const imageError = checkRichMenuImage(bytes, menu.size);
+  if (imageError) return fail(400, imageError);
+
+  const claimed = await updateRichMenu(storeId, menu.id, { status: 'publishing' }, { onlyIfStatus: [menu.status], onlyIfUpdatedAt: menu.updated_at });
+  if (claimed.error !== undefined) return fail(500, claimed.error);
+  if (!claimed.data) return fail(409, '反映の途中です。少し待ってから、もう一度お試しください');
+
+  const api = deps.api ?? createRichMenuLineApi(token);
+  const wasPublished = menu.status === 'published';
+  let result: PublishToLineResult;
+  try {
+    // 全員向けにはしない（条件に合うお客様にだけ、あとで 1 人ずつ設定する）
+    result = await publishToLine({ api, items: [{ key: menu.id, object: built.object, image: { bytes, contentType: readImageInfo(bytes)?.type === 'png' ? 'image/png' : 'image/jpeg' }, aliasId: null }], setDefault: false });
+  } catch (e) {
+    result = { ok: false, step: 'create', error: `LINE と通信できませんでした（${e instanceof Error ? e.message : String(e)}）` };
+  }
+  if (!result.ok) {
+    await updateRichMenu(storeId, menu.id, { status: wasPublished ? 'published' : 'failed', last_error: result.error });
+    return fail(502, wasPublished ? `${result.error}（公式 LINE には、前に出したメニューがそのまま出ています）` : result.error);
+  }
+  const saved = await updateRichMenu(storeId, menu.id, { status: 'published', is_default: false, line_rich_menu_id: result.richMenuId, dirty: false, last_error: null, published_at: publishedAt });
+  if (saved.error !== undefined || !saved.data) {
+    await api.remove(result.richMenuId).catch(() => null);
+    return fail(500, saved.error || '保存に失敗しました');
+  }
+  // 条件に合うお客様に設定する（作り直したときは、いまの人を新しいメニューへ付け替える）。そのあとで古いメニューを消す
+  const sync = await syncRichMenuAssignments(storeId, { api, now, deadlineMs });
+  if (menu.line_rich_menu_id && menu.line_rich_menu_id !== result.richMenuId && sync.deferred === 0 && sync.failed === 0) {
+    await api.remove(menu.line_rich_menu_id).catch(() => null);
+  }
+  return { ok: true, data: saved.data, summary: describeSyncSummary(sync) };
+}
+
+/** お客様ごとのメニューを出すのをやめる（設定していた人は、次に条件が合うメニューか、全員向けのメニューに戻る） */
+async function stopRuleMenu(storeId: string, menu: LineRichMenu, deps: { api?: RichMenuLineApi }): Promise<ServiceResult<LineRichMenu>> {
+  if (menu.status !== 'published' && !menu.line_rich_menu_id) return fail(400, 'このメニューは反映されていません');
+  const oldId = menu.line_rich_menu_id;
+  // 先に記録を下書きにする（見直しの対象から外れ、このメニューの人の設定が外れる）
+  const res = await updateRichMenu(storeId, menu.id, { is_default: false, status: 'draft', line_rich_menu_id: null, dirty: false, last_error: null });
+  if (res.error !== undefined || !res.data) return fail(500, res.error || '保存に失敗しました');
+  const deadlineMs = Date.now() + RULE_SYNC_BUDGET_MS;
+  if (isLocal()) {
+    const sync = await syncRichMenuAssignments(storeId, { deadlineMs });
+    return { ok: true, data: res.data, notice: `local では LINE に反映しません（記録だけ更新しました。${describeSyncSummary(sync)}）` };
+  }
+  const token = await getStoreLineToken(storeId);
+  if (!token) return { ok: true, data: res.data, summary: 'LINE のチャネルアクセストークンが登録されていないため、LINE 側の設定は外せませんでした' };
+  const api = deps.api ?? createRichMenuLineApi(token);
+  const sync = await syncRichMenuAssignments(storeId, { api, deadlineMs });
+  // 設定を外し終えてから、メニューを消す（残っている人がいるあいだは消さない。次の見直しで外したあと、次の反映の掃除で消える）
+  if (oldId && sync.deferred === 0 && sync.failed === 0) await api.remove(oldId).catch(() => null);
+  return { ok: true, data: res.data, summary: describeSyncSummary(sync) };
+}
+
+/** お客様ごとのメニューの優先順位を変える（上にあるメニューが勝つ）。変えたあと、設定を見直す */
+export async function reorderRuleMenuOrder(storeId: string, ids: unknown): Promise<ServiceResult<{ order: string[] }>> {
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) return fail(400, '並び順の指定が正しくありません');
+  const all = await listRichMenus(storeId);
+  const next = reorderRuleMenus(all, ids as string[]);
+  for (const { id, order } of next) {
+    const menu = all.find((m) => m.id === id);
+    if (!menu?.rule || menu.rule.order === order) continue;
+    const res = await updateRichMenu(storeId, id, { rule: { ...menu.rule, order } });
+    if (res.error !== undefined) return fail(500, res.error);
+  }
+  scheduleRichMenuSync(storeId, 0);
+  return { ok: true, data: { order: next.map((n) => n.id) } };
+}
+
+/** 見直しに使える時間（反映・並べ替えなど、画面の操作の中で行うとき） */
+const RULE_SYNC_BUDGET_MS = 15 * 1000;
+/** 予約・顧客情報の変更のあと、見直すまでに待つ時間（続けて行われる保存が終わるのを待つ） */
+const RULE_SYNC_DELAY_MS = 10 * 1000;
+
+/**
+ * 予約が入った・顧客情報（タグなど）が変わったあとに、お客様ごとのメニューを見直す。
+ * レスポンスを返したあとに動かす。お客様ごとのメニューを出していない店舗では何もしない
+ */
+export function scheduleRichMenuSync(storeId: string | null | undefined, delayMs: number = RULE_SYNC_DELAY_MS): void {
+  if (!storeId) return;
+  const run = async () => {
+    try {
+      const menus = await listRichMenus(storeId);
+      if (!menus.some((m) => m.rule && m.status === 'published')) return;
+      if (delayMs > 0 && !isLocal()) await new Promise((r) => setTimeout(r, delayMs));
+      const s = await syncRichMenuAssignments(storeId, { deadlineMs: Date.now() + RULE_SYNC_BUDGET_MS });
+      if (s.linked || s.unlinked || s.failed) console.log(`[rich-menu] store=${storeId} ${describeSyncSummary(s)}`);
+    } catch (e) {
+      console.error('[rich-menu] sync error:', e);
+    }
+  };
+  try {
+    after(run);
+  } catch {
+    // リクエストの外（テストなど）から呼ばれたとき
+    void run();
+  }
+}
+
+/** 1 日 1 回の見直し（cron）。お客様ごとのメニューを出している店舗を順に見る */
+export async function runRichMenuSyncForAllStores(deadlineMs: number): Promise<{ stores: number; done: number } & RichMenuSyncSummary> {
+  const storeIds = await listStoresWithRuleMenus();
+  const total = { stores: storeIds.length, done: 0, ...emptySummary() };
+  for (const storeId of storeIds) {
+    if (Date.now() > deadlineMs) break;
+    try {
+      const s = await syncRichMenuAssignments(storeId, { deadlineMs });
+      total.done++;
+      total.linked += s.linked;
+      total.unlinked += s.unlinked;
+      total.unchanged += s.unchanged;
+      total.failed += s.failed;
+      total.deferred += s.deferred;
+      total.menus += s.menus;
+    } catch (e) {
+      console.error(`[rich-menu] store=${storeId} sync error:`, e);
+    }
+  }
+  return total;
+}
+
+/** 「いま見直す」（画面のボタン） */
+export async function syncRichMenuNow(storeId: string): Promise<ServiceResult<RichMenuSyncSummary>> {
+  const reason = await ruleUnavailableReason(storeId);
+  if (reason) return fail(400, reason);
+  const s = await syncRichMenuAssignments(storeId, { deadlineMs: Date.now() + RULE_SYNC_BUDGET_MS });
+  return { ok: true, data: s, summary: describeSyncSummary(s) };
 }

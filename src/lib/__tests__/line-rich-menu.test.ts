@@ -75,7 +75,7 @@ describe('正規化', () => {
   });
 
   it('入力の既定値: 大きさ = 大、バーの文言 = メニュー、最初から開く', () => {
-    expect(normalizeRichMenuInput({ name: ' テスト ' })).toEqual({ name: 'テスト', size: 'large', image_url: '', areas: [], chat_bar_text: 'メニュー', open_by_default: true });
+    expect(normalizeRichMenuInput({ name: ' テスト ' })).toEqual({ name: 'テスト', size: 'large', image_url: '', areas: [], chat_bar_text: 'メニュー', open_by_default: true, rule: null });
     expect(normalizeRichMenuInput({ size: 'small', open_by_default: false, chat_bar_text: 'ご予約はこちら' })).toMatchObject({ size: 'small', open_by_default: false, chat_bar_text: 'ご予約はこちら' });
     expect(normalizeRichMenuInput(null).areas).toEqual([]);
   });

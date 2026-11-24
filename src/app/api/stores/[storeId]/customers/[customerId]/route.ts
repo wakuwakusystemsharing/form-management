@@ -8,6 +8,7 @@ import { getFollowMessageSummariesByReservationIds, getReminderLogSummariesByRes
 import { Customer, CustomerUpdate } from '@/types/form';
 import { updateCustomer, deleteCustomer } from '@/lib/customer-utils';
 import { isContactMethod, normalizeTags } from '@/lib/customer-chart';
+import { scheduleRichMenuSync } from '@/lib/line-rich-menu-service';
 
 // ローカル環境用のデータファイル
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -306,6 +307,8 @@ export async function PATCH(
     }
 
     const updatedCustomer = await updateCustomer(customerId, updateData);
+    // リッチメニューのお客様ごとの切り替え: タグ・性別・誕生日などで条件が変わるので見直す（出していない店舗では何もしない）
+    scheduleRichMenuSync(storeId);
 
     return NextResponse.json(updatedCustomer);
   } catch (error) {

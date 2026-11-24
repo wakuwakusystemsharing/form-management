@@ -14,7 +14,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ sto
     if (auth.response) return auth.response;
     const result = await publishRichMenu(storeId, id, new URL(request.url).origin);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
-    return NextResponse.json({ menu: result.data, notice: result.notice ?? null }, { headers: { 'Cache-Control': 'private, no-store' } });
+    return NextResponse.json({ menu: result.data, notice: result.notice ?? null, summary: result.summary ?? null }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     console.error('[API] rich-menus publish error:', error);
     return NextResponse.json({ error: 'リッチメニューの反映に失敗しました' }, { status: 500 });

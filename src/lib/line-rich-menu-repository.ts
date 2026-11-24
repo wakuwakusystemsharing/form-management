@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import { normalizeRichMenuAreas, isRichMenuSize, DEFAULT_CHAT_BAR_TEXT, type LineRichMenu, type RichMenuInput, type RichMenuStatus } from '@/lib/line-rich-menu';
+import { normalizeRichMenuRule, type RichMenuLink } from '@/lib/line-rich-menu-rules';
 
 const TABLE = 'line_rich_menus';
 const FILE = 'line_rich_menus.json';
@@ -59,6 +60,7 @@ function normalizeRow(row: Record<string, unknown>): LineRichMenu {
     line_rich_menu_id: typeof row.line_rich_menu_id === 'string' && row.line_rich_menu_id ? row.line_rich_menu_id : null,
     is_default: row.is_default === true,
     dirty: row.dirty === true,
+    rule: normalizeRichMenuRule(row.rule),
     last_error: typeof row.last_error === 'string' && row.last_error ? row.last_error : null,
     published_at: typeof row.published_at === 'string' ? row.published_at : null,
     created_at: typeof row.created_at === 'string' ? row.created_at : now,
@@ -116,7 +118,7 @@ export async function insertRichMenu(storeId: string, input: RichMenuInput): Pro
   }
   const { data, error } = await client()
     .from(TABLE)
-    .insert({ store_id: storeId, name: input.name, size: input.size, image_url: input.image_url, areas: input.areas, chat_bar_text: input.chat_bar_text, open_by_default: input.open_by_default })
+    .insert({ store_id: storeId, name: input.name, size: input.size, image_url: input.image_url, areas: input.areas, chat_bar_text: input.chat_bar_text, open_by_default: input.open_by_default, rule: input.rule ?? null })
     .select('*')
     .single();
   if (error) return { error: isMissingRichMenuSchema(error) ? RICH_MENU_SCHEMA_MISSING_MESSAGE : `保存に失敗しました: ${error.message}` };
@@ -124,7 +126,7 @@ export async function insertRichMenu(storeId: string, input: RichMenuInput): Pro
 }
 
 export type RichMenuPatch = Partial<
-  Pick<LineRichMenu, 'name' | 'size' | 'image_url' | 'areas' | 'chat_bar_text' | 'open_by_default' | 'status' | 'line_rich_menu_id' | 'is_default' | 'dirty' | 'last_error' | 'published_at'>
+  Pick<LineRichMenu, 'name' | 'size' | 'image_url' | 'areas' | 'chat_bar_text' | 'open_by_default' | 'status' | 'line_rich_menu_id' | 'is_default' | 'dirty' | 'last_error' | 'published_at' | 'rule'>
 >;
 
 /**
@@ -161,4 +163,98 @@ export async function deleteRichMenuRow(storeId: string, id: string): Promise<Re
   const { error } = await client().from(TABLE).delete().eq('id', id).eq('store_id', storeId);
   if (error) return { error: `削除に失敗しました: ${error.message}` };
   return { data: true };
+}
+
+// ---------------------------------------------------------------------------
+// お客様ごとのメニューの設定の記録（このシステムが LINE に設定した人だけを持つ）
+// local: data/line_rich_menu_links.json / Supabase: line_rich_menu_links
+// ---------------------------------------------------------------------------
+
+const LINKS_TABLE = 'line_rich_menu_links';
+const linksFile = () => path.join(process.cwd(), 'data', 'line_rich_menu_links.json');
+export const RICH_MENU_LINKS_SCHEMA_MISSING_MESSAGE = 'お客様ごとの切り替えのマイグレーションがまだ適用されていません。運営にお問い合わせください';
+
+type LinkRow = RichMenuLink & { store_id: string };
+
+function isMissingLinksSchema(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  if (error.code === '42P01' || error.code === 'PGRST205') return true;
+  const m = (error.message || '').toLowerCase();
+  return m.includes(LINKS_TABLE) && (m.includes('does not exist') || m.includes('could not find') || m.includes('schema cache'));
+}
+
+function readLocalLinks(): LinkRow[] {
+  try {
+    if (!fs.existsSync(linksFile())) return [];
+    const parsed = JSON.parse(fs.readFileSync(linksFile(), 'utf-8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+function writeLocalLinks(rows: LinkRow[]) {
+  const dir = path.dirname(linksFile());
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(linksFile(), JSON.stringify(rows, null, 2));
+}
+
+/** 設定の記録の表があるか（マイグレーションが適用されているか）。local は常に true */
+export async function hasRichMenuLinksTable(): Promise<boolean> {
+  if (isLocal()) return true;
+  const { error } = await client().from(LINKS_TABLE).select('line_user_id').limit(1);
+  return !isMissingLinksSchema(error);
+}
+
+/** その店舗の設定の記録（1000 件ずつ全件）。表が無い環境では空 */
+export async function listRichMenuLinks(storeId: string): Promise<RichMenuLink[]> {
+  if (isLocal()) return readLocalLinks().filter((r) => r.store_id === storeId).map(({ line_user_id, menu_id, line_rich_menu_id }) => ({ line_user_id, menu_id, line_rich_menu_id }));
+  const rows: RichMenuLink[] = [];
+  for (let from = 0; from < 200_000; from += 1000) {
+    const { data, error } = await client().from(LINKS_TABLE).select('line_user_id, menu_id, line_rich_menu_id').eq('store_id', storeId).order('line_user_id', { ascending: true }).range(from, from + 999);
+    if (error) {
+      if (isMissingLinksSchema(error)) return [];
+      throw new Error(error.message);
+    }
+    rows.push(...((data ?? []) as RichMenuLink[]));
+    if (!data || data.length < 1000) break;
+  }
+  return rows;
+}
+
+/** 設定した人を記録する（同じ人は上書き） */
+export async function upsertRichMenuLinks(storeId: string, links: RichMenuLink[]): Promise<string | null> {
+  if (links.length === 0) return null;
+  if (isLocal()) {
+    const ids = new Set(links.map((l) => l.line_user_id));
+    writeLocalLinks([...readLocalLinks().filter((r) => !(r.store_id === storeId && ids.has(r.line_user_id))), ...links.map((l) => ({ store_id: storeId, ...l }))]);
+    return null;
+  }
+  const now = new Date().toISOString();
+  const { error } = await client()
+    .from(LINKS_TABLE)
+    .upsert(links.map((l) => ({ store_id: storeId, line_user_id: l.line_user_id, menu_id: l.menu_id, line_rich_menu_id: l.line_rich_menu_id, linked_at: now })), { onConflict: 'store_id,line_user_id' });
+  return error ? (isMissingLinksSchema(error) ? RICH_MENU_LINKS_SCHEMA_MISSING_MESSAGE : error.message) : null;
+}
+
+/** 設定を外した人の記録を消す */
+export async function deleteRichMenuLinks(storeId: string, userIds: string[]): Promise<string | null> {
+  if (userIds.length === 0) return null;
+  if (isLocal()) {
+    const ids = new Set(userIds);
+    writeLocalLinks(readLocalLinks().filter((r) => !(r.store_id === storeId && ids.has(r.line_user_id))));
+    return null;
+  }
+  const { error } = await client().from(LINKS_TABLE).delete().eq('store_id', storeId).in('line_user_id', userIds);
+  return error ? error.message : null;
+}
+
+/** お客様ごとのメニューを公式 LINE に出している店舗（1 日 1 回の見直しの対象） */
+export async function listStoresWithRuleMenus(): Promise<string[]> {
+  if (isLocal()) return [...new Set(readLocal().filter((m) => m.rule && m.status === 'published').map((m) => m.store_id))];
+  const { data, error } = await client().from(TABLE).select('store_id').eq('status', 'published').not('rule', 'is', null).limit(5000);
+  if (error) {
+    if (isMissingRichMenuSchema(error)) return [];
+    throw new Error(error.message);
+  }
+  return [...new Set(((data ?? []) as Array<{ store_id: string }>).map((r) => r.store_id))];
 }

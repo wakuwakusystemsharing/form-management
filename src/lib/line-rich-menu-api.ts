@@ -9,6 +9,8 @@
  *   全員向けを見る  GET    https://api.line.me/v2/bot/user/all/richmenu              → { richMenuId } / 無ければ 404 / ほかの場所で設定されていれば 403
  *   全員向けを外す  DELETE https://api.line.me/v2/bot/user/all/richmenu
  *   消す            DELETE https://api.line.me/v2/bot/richmenu/{id}
+ *   まとめて付ける  POST   https://api.line.me/v2/bot/richmenu/bulk/link             { richMenuId, userIds }（500 人まで。202 = 受け付けた）
+ *   まとめて外す    POST   https://api.line.me/v2/bot/richmenu/bulk/unlink           { userIds }（500 人まで。202）
  *   名札を付ける    POST   https://api.line.me/v2/bot/richmenu/alias                 { richMenuAliasId, richMenuId }（画像を入れたメニューにだけ付けられる）
  *   名札の一覧      GET    https://api.line.me/v2/bot/richmenu/alias/list            → { aliases: [{ richMenuAliasId, richMenuId }] }
  *   名札を外す      DELETE https://api.line.me/v2/bot/richmenu/alias/{aliasId}       （1 時間に 100 回まで）
@@ -130,6 +132,16 @@ export async function listLineRichMenuAliases(token: string, fetchImpl: FetchImp
   }
 }
 
+/** お客様（500 人まで）に、そのメニューをまとめて付ける。LINE は受け付けだけして、あとから反映する */
+export function bulkLinkLineRichMenu(token: string, richMenuId: string, userIds: string[], fetchImpl: FetchImpl = fetch): Promise<LineApiResult> {
+  return call(fetchImpl, `${API}/richmenu/bulk/link`, { method: 'POST', headers: { ...auth(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ richMenuId, userIds }) });
+}
+
+/** お客様（500 人まで）から、個別に付けたメニューをまとめて外す（全員向けのメニューに戻る） */
+export function bulkUnlinkLineRichMenu(token: string, userIds: string[], fetchImpl: FetchImpl = fetch): Promise<LineApiResult> {
+  return call(fetchImpl, `${API}/richmenu/bulk/unlink`, { method: 'POST', headers: { ...auth(token), 'Content-Type': 'application/json' }, body: JSON.stringify({ userIds }) });
+}
+
 /** 反映の処理が使う LINE の呼び出し（テストでは差し替える） */
 export interface RichMenuLineApi {
   create: (object: Record<string, unknown>) => Promise<LineApiResult & { richMenuId: string | null }>;
@@ -142,6 +154,8 @@ export interface RichMenuLineApi {
   createAlias: (aliasId: string, richMenuId: string) => Promise<LineApiResult>;
   removeAlias: (aliasId: string) => Promise<LineApiResult>;
   listAliases: () => Promise<Array<{ richMenuAliasId: string; richMenuId: string }> | null>;
+  bulkLink: (richMenuId: string, userIds: string[]) => Promise<LineApiResult>;
+  bulkUnlink: (userIds: string[]) => Promise<LineApiResult>;
 }
 
 export function createRichMenuLineApi(token: string, fetchImpl: FetchImpl = fetch): RichMenuLineApi {
@@ -156,5 +170,7 @@ export function createRichMenuLineApi(token: string, fetchImpl: FetchImpl = fetc
     createAlias: (aliasId, id) => createLineRichMenuAlias(token, aliasId, id, fetchImpl),
     removeAlias: (aliasId) => deleteLineRichMenuAlias(token, aliasId, fetchImpl),
     listAliases: () => listLineRichMenuAliases(token, fetchImpl),
+    bulkLink: (id, userIds) => bulkLinkLineRichMenu(token, id, userIds, fetchImpl),
+    bulkUnlink: (userIds) => bulkUnlinkLineRichMenu(token, userIds, fetchImpl),
   };
 }

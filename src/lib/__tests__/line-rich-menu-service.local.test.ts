@@ -29,6 +29,7 @@ function fakeApi(
     list?: Array<{ richMenuId: string; name: string }>;
     aliases?: Array<{ richMenuAliasId: string; richMenuId: string }>;
     removeFails?: string[];
+    linkFails?: boolean;
   } = {}
 ) {
   const calls: string[] = [];
@@ -73,6 +74,14 @@ function fakeApi(
       return ok;
     },
     listAliases: async () => opts.aliases ?? [],
+    bulkLink: async (id, userIds) => {
+      calls.push(`link:${id}=${userIds.join(',')}`);
+      return opts.linkFails ? ng : { ok: true, status: 202, body: '{}' };
+    },
+    bulkUnlink: async (userIds) => {
+      calls.push(`unlink:${userIds.join(',')}`);
+      return { ok: true, status: 202, body: '{}' };
+    },
   };
   return { api, calls };
 }
