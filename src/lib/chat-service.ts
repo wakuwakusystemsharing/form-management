@@ -37,6 +37,7 @@ import {
   type ChatThreadView,
 } from '@/lib/chat';
 import {
+  addChatUsage,
   claimChatNotification,
   clearChatMessageMedia,
   countChatUnread,
@@ -51,9 +52,11 @@ import {
   listChatThreads,
   listChatThreadsToNotify,
   listExpiredChatMedia,
+  loadChatUsageSource,
   markChatThreadRead,
   purgeExpiredChat,
   recordChatInbound,
+  recordChatSystemEvents,
   saveChatNotifySettings,
   saveChatSettings,
   saveChatTemplates,
@@ -78,6 +81,18 @@ import {
   type ChatNotifySettings,
 } from '@/lib/chat-notify';
 import { sendEmail } from '@/lib/email-sender';
+import {
+  EMPTY_USAGE,
+  autoReplyEventText,
+  chatUsageMonth,
+  isUsageMonth,
+  normalizeChatSystemEvent,
+  previousUsageMonth,
+  sortChatUsageRows,
+  type ChatSystemEvent,
+  type ChatUsageCounts,
+  type ChatUsageRow,
+} from '@/lib/chat-events';
 import { fetchLineImageContent, readChatInboundImage, removeChatMedia, saveChatInboundImage, saveChatOutboundImage, type ChatImageContent } from '@/lib/chat-media';
 import { readImageInfo } from '@/lib/line-rich-menu';
 import { getDigestStore, listDigestStaff } from '@/lib/store-digest-repository';
@@ -378,6 +393,7 @@ export async function sendChatReply(
   if (isLocal()) {
     await updateChatOutboundStatus(storeId, message.id, 'sent', null);
     await touchChatThreadAfterReply(storeId, threadId, message.created_at, preview);
+    await addChatUsageSafe(storeId, { outbound: 1 }, now);
     return { ok: true, message: toChatMessageView({ ...message, send_status: 'sent', send_error: null }), notice: 'ローカル環境のため、LINE には送っていません（記録だけ更新しました）' };
   }
 
@@ -404,6 +420,8 @@ export async function sendChatReply(
   } catch (e) {
     console.error('[chat] 送信結果の保存エラー:', e instanceof Error ? e.message : e);
   }
+  // 利用量: 送れた返信だけを数える（失敗・送り直しの途中は数えない）
+  await addChatUsageSafe(storeId, { outbound: 1 }, now);
   return { ok: true, message: toChatMessageView({ ...message, send_status: 'sent', send_error: null }) };
 }
 
@@ -605,6 +623,7 @@ export async function storeChatInboundImage(storeId: string, lineMessageId: stri
         if (!ext) return fail('画像の種類が分かりません');
         const mediaPath = chatInboundImagePath(storeId, message.thread_id, message.id, ext);
         await saveChatInboundImage(mediaPath, res.content);
+        await addChatUsageSafe(storeId, { image_bytes: res.content.data.length });
         const meta = { ...(message.meta ?? {}) };
         delete meta.media_error;
         await setChatMessageMedia(storeId, message.id, { media_path: mediaPath, meta: Object.keys(meta).length > 0 ? meta : null });
@@ -649,6 +668,7 @@ export async function uploadChatReplyImage(storeId: string, data: Buffer): Promi
   if (!info) return { ok: false, status: 400, error: '送れるのは JPEG か PNG の画像だけです' };
   try {
     const saved = await saveChatOutboundImage(storeId, data, info.type === 'png' ? 'png' : 'jpg');
+    await addChatUsageSafe(storeId, { image_bytes: data.length });
     return { ok: true, url: saved.url };
   } catch (e) {
     console.error('[chat] 画像のアップロードエラー:', e instanceof Error ? e.message : e);
@@ -708,4 +728,95 @@ export async function purgeExpiredChatMedia(now: Date, limit = 200): Promise<{ r
   }
   await clearChatMessageMedia(cleared);
   return { removed: cleared.length, failed };
+}
+
+// ---------------------------------------------------------------------------
+// ④-5: 自動で送ったメッセージを会話に出す・利用量の記録
+// ---------------------------------------------------------------------------
+
+type RawChatSystemEvent = Parameters<typeof normalizeChatSystemEvent>[0];
+
+/**
+ * 自動で送ったメッセージ（リマインダー・フォロー・配信・自動応答・空き待ちのお知らせ）を、会話に 1 行で残す。
+ * トーク機能が ON の店舗・すでに会話のあるお客様だけ（それ以外は何もしない）。
+ * **例外を投げない**（記録に失敗しても、送信そのものの結果は変えない）。戻り値 = 記録した件数
+ */
+export async function recordChatSystemEventsSafe(storeId: string | null | undefined, events: ReadonlyArray<RawChatSystemEvent>): Promise<number> {
+  try {
+    if (!storeId) return 0;
+    const normalized = events.map((e) => normalizeChatSystemEvent(e)).filter((e): e is ChatSystemEvent => e !== null);
+    if (normalized.length === 0) return 0;
+    return await recordChatSystemEvents(storeId, normalized);
+  } catch (e) {
+    console.error(`[chat] 自動の記録エラー: storeId=${storeId}`, e instanceof Error ? e.message : e);
+    return 0;
+  }
+}
+
+/** LINE への応答を返したあとに、自動で送ったメッセージを会話に残す（送信の処理を遅くしない） */
+export function scheduleChatSystemEvents(storeId: string | null | undefined, events: ReadonlyArray<RawChatSystemEvent>): void {
+  if (!storeId || events.length === 0) return;
+  const run = async () => {
+    await recordChatSystemEventsSafe(storeId, events);
+  };
+  try {
+    after(run);
+  } catch {
+    // リクエストの外（テスト・cron の処理の途中など）から呼ばれたとき
+    void run();
+  }
+}
+
+/**
+ * Webhook が自動で返信した内容を、会話に残す（1 回の返信 = 1 行）。
+ * 同じ通知が LINE から送り直されても、返信の鍵（replyToken）が同じなので 1 回だけ記録される
+ */
+export function scheduleChatAutoReplyEvents(storeId: string | null | undefined, lineUserId: string | null | undefined, replies: ReadonlyArray<{ replyToken: string; messages: ReadonlyArray<unknown>; at: string }>): void {
+  if (!storeId || !lineUserId || replies.length === 0) return;
+  const events: RawChatSystemEvent[] = [];
+  replies.forEach((r, i) => {
+    const text = autoReplyEventText(r.messages);
+    // replyToken は英数字。念のため、鍵に使える文字だけを残す
+    const token = r.replyToken.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80);
+    if (text && token) events.push({ line_user_id: lineUserId, kind: 'auto_reply', text, source_key: `reply:${token}:${i}`, at: r.at });
+  });
+  scheduleChatSystemEvents(storeId, events);
+}
+
+/** 利用量を足す。**例外を投げない**（数えるのに失敗しても、受信・返信の結果は変えない） */
+async function addChatUsageSafe(storeId: string, delta: Partial<ChatUsageCounts>, at: Date = new Date()): Promise<void> {
+  try {
+    await addChatUsage(storeId, chatUsageMonth(at), delta);
+  } catch (e) {
+    console.error(`[chat] 利用量の記録エラー: storeId=${storeId}`, e instanceof Error ? e.message : e);
+  }
+}
+
+export interface ChatUsageReport {
+  month: string;
+  previous_month: string;
+  rows: ChatUsageRow[];
+  totals: ChatUsageCounts;
+  /** 利用量の表が無い（マイグレーション未適用）= 数はすべて 0 */
+  unavailable: boolean;
+}
+
+/** 全店舗のトークの利用状況（運営 = マスター管理者の一覧用）。month = 日本時間の YYYY-MM（省略 = 今月） */
+export async function getChatUsageReport(month?: string | null, now: Date = new Date()): Promise<ChatUsageReport> {
+  const target = isUsageMonth(month) ? month : chatUsageMonth(now);
+  const previous = previousUsageMonth(target);
+  const source = await loadChatUsageSource([target, previous]);
+  const pick = (storeId: string, m: string): ChatUsageCounts => {
+    const u = source.usage.find((x) => x.store_id === storeId && x.month === m);
+    return u ? { inbound: u.inbound, outbound: u.outbound, image_bytes: u.image_bytes } : { ...EMPTY_USAGE };
+  };
+  const ids = [...new Set([...source.settings.map((s) => s.store_id), ...source.usage.map((u) => u.store_id)])];
+  const rows = ids.map((id): ChatUsageRow => {
+    const s = source.settings.find((x) => x.store_id === id);
+    return { store_id: id, store_name: source.storeNames[id] ?? id, enabled: s?.enabled === true, enabled_at: s?.enabled_at ?? null, current: pick(id, target), previous: pick(id, previous) };
+  });
+  // トークを一度も ON にしていない店舗（通知や定型文だけ保存した店舗）で、利用も無いものは出さない
+  const shown = rows.filter((r) => r.enabled || r.enabled_at || r.current.inbound + r.current.outbound + r.previous.inbound + r.previous.outbound > 0);
+  const totals = shown.reduce<ChatUsageCounts>((sum, r) => ({ inbound: sum.inbound + r.current.inbound, outbound: sum.outbound + r.current.outbound, image_bytes: sum.image_bytes + r.current.image_bytes }), { ...EMPTY_USAGE });
+  return { month: target, previous_month: previous, rows: sortChatUsageRows(shown), totals, unavailable: source.missing };
 }

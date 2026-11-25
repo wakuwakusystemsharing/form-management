@@ -510,7 +510,13 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
     const body = m.kind === 'text' ? <LinkedText text={m.text ?? ''} /> : null;
     let bubble: React.ReactNode;
     if (m.direction === 'system') {
-      bubble = <p className="mx-auto max-w-[90%] rounded-full bg-muted px-3 py-1 text-center text-[11px] text-muted-foreground">{m.text}</p>;
+      // 自動で送ったメッセージの記録（リマインダー・配信・自動応答など）: まんなかに小さく 1 行
+      bubble = (
+        <p className="mx-auto max-w-[90%] rounded-full bg-muted px-3 py-1 text-center text-[11px] text-muted-foreground" data-system="1">
+          {m.text}
+          <span className="ml-2 text-[10px]">{fmtTime(m.created_at)}</span>
+        </p>
+      );
     } else if (m.auto) {
       // フォームの送信文・コマンド: 小さく薄く
       bubble = (

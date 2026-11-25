@@ -81,7 +81,7 @@ export function chatEnableBlocker(input: { secretSet: boolean; tableMissing?: bo
 
 export type ChatMessageKind = 'text' | 'image' | 'sticker' | 'video' | 'audio' | 'file' | 'location' | 'other';
 /** 自動の印の種類: フォームの送信文 / コマンド / キーワード自動応答の合言葉 / フォームの送信文に続けて送られた文 */
-export type ChatAutoKind = 'form' | 'command' | 'keyword' | 'follow_up';
+export type ChatAutoKind = 'form' | 'command' | 'keyword' | 'follow_up' | 'system';
 
 export const CHAT_TEXT_MAX = 5000;
 export const CHAT_PREVIEW_MAX = 60;

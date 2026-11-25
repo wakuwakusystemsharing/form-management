@@ -30,7 +30,7 @@ describe('store-admin-guide（店舗管理者ページの使い方の文言）',
     expect(titles('settings')).toEqual(expect.arrayContaining(['表示設定', 'アカウント情報']));
     expect(titles('richmenu')).toEqual(expect.arrayContaining(['新しく作る', '型から作る', '画像とボタン', '押したときの動き', '別のメニューに切り替える', 'スマホでの見え方', 'だれに出すか', '反映する', '反映をやめる']));
     expect(titles('calendar')).toEqual(expect.arrayContaining(['月 / 週 / 日', 'キャンセルも表示', '予約以外の予定', '終日']));
-    expect(titles('chat')).toEqual(expect.arrayContaining(['会話の一覧', '会話を読む', '返信する', '画像を送る', '定型文', '対応済みにする', '自動の表示', '顧客の情報']));
+    expect(titles('chat')).toEqual(expect.arrayContaining(['会話の一覧', '会話を読む', '返信する', '画像を送る', '定型文', '対応済みにする', '自動の表示', '自動で送ったメッセージ', '顧客の情報']));
   });
 
   it('getStoreAdminGuide は未知のタブで undefined、ヒントは空でない', () => {

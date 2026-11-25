@@ -85,6 +85,37 @@ function fillRecipientLinks(payloads: Record<string, unknown>[], recipientId: st
   return JSON.parse(JSON.stringify(payloads).split(RECIPIENT_QUERY).join(`?r=${recipientId}`));
 }
 
+/**
+ * 1 対 1 トーク: 自動で送ったことを、会話に 1 行で残す（設計: docs/店舗管理者ページ_追加4機能_実装設計.md の 8 章）。
+ * - 記録するかどうかは DB 関数 chat_record_system_events が決める（トーク機能が ON の店舗・すでに会話のあるお客様だけ）
+ * - **送信が終わったあとに呼び、失敗しても送信の結果は変えない**（ログに残すだけ）
+ * - 同じ送信は 1 回だけ記録される（source_key = 元の送信の ID）
+ * - 文は Next.js 側の src/lib/chat-events.ts と同じ形にする（直すときは両方）
+ * - 関数が無い（マイグレーション未適用）環境では、何もせずに戻る
+ */
+async function recordChatEvents(storeId: string, events: Array<{ line_user_id: string; kind: string; text: string; source_key: string; at: string }>) {
+  if (!storeId || events.length === 0) return;
+  try {
+    const { error } = await supabase.rpc("chat_record_system_events", { p_store_id: storeId, p_events: events });
+    if (error && !/chat_record_system_events|does not exist|schema cache|PGRST202/i.test(`${error.code ?? ""} ${error.message ?? ""}`)) {
+      console.warn(`トークへの記録エラー: store=${storeId} ${error.message}`);
+    }
+  } catch (e) {
+    console.warn(`トークへの記録エラー: store=${storeId}`, e);
+  }
+}
+
+/** 配信を送れた宛先について、会話に「配信『〇〇』を送信しました」と残す（500 人ぶんを 1 回で渡す） */
+async function recordBroadcastChatEvents(b, recipients: Array<{ id: string; line_user_id: string }>, sentAt: string) {
+  if (recipients.length === 0) return;
+  const name = typeof b.name === "string" ? b.name.trim() : "";
+  const text = name ? `配信「${name.length > 60 ? name.slice(0, 60) + "…" : name}」を送信しました` : "配信を送信しました";
+  await recordChatEvents(
+    b.store_id,
+    recipients.map((r) => ({ line_user_id: r.line_user_id, kind: "broadcast", text, source_key: `broadcast:${r.id}`, at: sentAt })),
+  );
+}
+
 async function markRecipients(ids: string[], patch: Record<string, unknown>) {
   for (let i = 0; i < ids.length; i += 200) {
     const { error } = await supabase.from("broadcast_recipients").update(patch).in("id", ids.slice(i, i + 200));
@@ -138,6 +169,7 @@ async function processBroadcast(b, token: string, deadline: number, totals) {
       if (kind === "sent") {
         await markRecipients(batch.map((r) => r.id), { status: "sent", sent_at: nowIso, error: null });
         totals.sent += batch.length;
+        await recordBroadcastChatEvents(b, batch, nowIso);
         continue;
       }
       if (kind === "auth") {
@@ -182,6 +214,7 @@ async function pushEach(b, token: string, batch, payloads, withName: boolean, to
     if (sentIds.length > 0) {
       await markRecipients(sentIds, { status: "sent", sent_at: nowIso, error: null });
       totals.sent += sentIds.length;
+      await recordBroadcastChatEvents(b, results.filter((x) => x.kind === "sent").map((x) => x.r), nowIso);
     }
     for (const x of results.filter((y) => y.kind === "reject")) {
       await markRecipients([x.r.id], { status: "failed", error: `LINE エラー ${x.res.status}: ${x.res.body.slice(0, 200)}` });
@@ -227,7 +260,7 @@ Deno.serve(async () => {
     // 1. 送信時刻を過ぎた配信（予約済み + 送信途中のもの）
     const { data: due, error: dueError } = await supabase
       .from("broadcasts")
-      .select("id,store_id,status,payloads,has_personalization,started_at,claimed_at")
+      .select("id,store_id,name,status,payloads,has_personalization,started_at,claimed_at")
       .in("status", ["scheduled", "sending"])
       .lte("scheduled_at", nowIso)
       .order("scheduled_at", { ascending: true })

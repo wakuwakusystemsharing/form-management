@@ -16,8 +16,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { Search, Plus, LogOut, Store as StoreIcon, Building2, Trash2, Shield, Users, ChevronLeft, Copy, ExternalLink } from 'lucide-react';
+import { Search, Plus, LogOut, MessagesSquare, Store as StoreIcon, Building2, Trash2, Shield, Users, ChevronLeft, Copy, ExternalLink } from 'lucide-react';
 import { fetchWithAuth } from '@/lib/client-auth';
+import ChatUsagePanel from '@/components/chat/ChatUsagePanel';
 
 interface Organization {
   id: string;
@@ -361,6 +362,7 @@ export default function MasterAdminPage() {
           <TabsList className="mb-6">
             <TabsTrigger value="stores"><StoreIcon className="h-4 w-4 mr-2" />全店舗 ({stores.length})</TabsTrigger>
             <TabsTrigger value="tenants"><Building2 className="h-4 w-4 mr-2" />テナント管理 ({organizations.length})</TabsTrigger>
+            <TabsTrigger value="chat-usage"><MessagesSquare className="h-4 w-4 mr-2" />トーク利用状況</TabsTrigger>
           </TabsList>
 
           {/* 全店舗タブ */}
@@ -529,6 +531,11 @@ export default function MasterAdminPage() {
                 </div>
               </div>
             )}
+          </TabsContent>
+
+          {/* 1 対 1 トークの利用状況（全店舗。有料オプションの料金を決める・請求するときの材料） */}
+          <TabsContent value="chat-usage">
+            <ChatUsagePanel />
           </TabsContent>
         </Tabs>
       </main>
