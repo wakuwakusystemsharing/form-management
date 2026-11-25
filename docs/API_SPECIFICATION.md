@@ -928,6 +928,36 @@ LINE Webhook の署名チェックの設定（チャネルシークレット）
 { "secret_set": true, "updated_at": "2026-11-20T00:00:00.000Z", "webhook_url": "https://…/api/webhooks/line?storeId=abc123" }
 ```
 
+### `GET / PUT /api/stores/{storeId}/chat-settings`
+1 対 1 トークの設定（お客様が公式 LINE に送ったメッセージを保存するか・会話の保存期間）
+
+**認証**: 運営（マスター管理者・システム管理者）だけ。店舗管理者は自分の店舗でも 403。local は認証スキップ
+
+- `GET`: 設定と、保存している会話の件数を返す
+- `PUT`: `{ "enabled"?: boolean, "retention_years"?: 1 | 2 | 3 }`（指定した項目だけを変える）
+  - 選べない値は 400
+  - OFF → ON にできるのは、チャネルシークレットを登録した店舗だけ（未登録は `409`。理由を `error` に入れる）
+  - マイグレーション未適用の環境は `409`
+  - OFF にしても保存済みの会話は消さない（新しいメッセージを保存しなくなる）
+
+**レスポンス**（2 つとも同じ。会話の中身・LINE ユーザー ID は返さない）:
+```json
+{
+  "enabled": true,
+  "retention_years": 1,
+  "enabled_at": "2026-11-25T04:00:00.000Z",
+  "updated_at": "2026-11-25T04:00:00.000Z",
+  "secret_set": true,
+  "enable_blocker": null,
+  "stats": { "threads": 3, "messages": 12, "last_message_at": "2026-11-25T05:10:00.000Z" }
+}
+```
+
+- `enable_blocker`: ON にできない理由（できるなら null）
+- `stats`: 保存している会話の人数・通数・最後に届いた日時
+
+**受信**: `POST /api/webhooks/line` が、トーク機能が ON の店舗・署名を確認できた通知について、お客様からのメッセージを保存する（LINE への応答を返したあと。保存に失敗しても応答は変わらない）
+
 ### `POST /api/stores/{storeId}/line-webhook/test`
 接続を確認（LINE に登録されている Webhook URL がこの店舗のものか + LINE からテストの通知を受け取れるか）。local では 400
 

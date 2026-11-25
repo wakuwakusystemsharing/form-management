@@ -310,6 +310,20 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - 優先順位: 一覧の ↑↓（`POST /api/stores/{storeId}/rich-menus/rule-order` に `{ ids }`）。保存では変えない（新しいお客様ごとのメニューは、いちばん下）。一覧には「出す相手」と「いま N 人に設定中」（`link_counts`）を出す
 - Vitest: `line-rich-menu.test.ts` / `line-rich-menu-layouts.test.ts` / `line-rich-menu-rules.test.ts` / `line-rich-menu-service.local.test.ts` / `line-rich-menu-rules-service.local.test.ts` / `store-admin-tabs.test.ts` / `admin-api-auth.test.ts`
 
+**1 対 1 トーク（設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 8 章。リリース手順: `docs/1対1トーク_リリース手順.md`。規約に追記する文の下書き: `docs/1対1トーク_規約追記の下書き.md`。④-1 = 受信と保存 だけ実装済み。④-2 = 画面と返信 / ④-3 = 通知と自動削除 / ④-4 = 画像と定型文 / ④-5 = 自動送信の表示と利用量 はこれから）:**
+- お客様が公式 LINE に送ったメッセージを保存し、管理画面で読んで返信する機能。**既定は OFF。運営（マスター管理者・システム管理者）が店舗ごとに ON にした店舗だけ保存する**（行が無い店舗 = OFF）。会話には体の悩みなど慎重に扱う内容が入るので、**プライバシーポリシーの公開とお客様への説明が済んだ店舗だけ ON にする**（それまでは本番のテスト用店舗だけ）
+- 設定: テナント側 店舗ページ → 設定タブ → 「1 対 1 トーク」（`ChatSettingsCard.tsx`。ON / OFF・会話の保存期間 1 / 2 / 3 年 = `CHAT_RETENTION_OPTIONS`・保存している会話の件数）。API `GET/PUT /api/stores/{storeId}/chat-settings`（**`authorizeUpperAdminStoreAccess` = 運営だけ**。店舗管理者は自分の店舗でも 403。会話の中身・LINE ユーザー ID は返さない）
+- **ON にできるのは、チャネルシークレットを登録した店舗だけ**（`chatEnableBlocker`。偽の通知を会話として保存しないため。local は制限なし）。確かめるのは OFF → ON のときだけ（保存期間の変更・OFF はいつでもできる）
+- **受信**: Webhook が署名を確かめたあと `scheduleChatInbound(storeId, events, { verified })`（`src/lib/chat-service.ts`。`after()` で **LINE への応答を返したあと**に保存 = 予約確認などの返信を遅くしない。保存するメッセージの無い通知では何も読まない）→ `recordChatInboundEvents`（ON の店舗・**署名を確認できた通知だけ**。例外を投げない = 保存に失敗しても既存の応答は変わらない）
+  - 保存する形 `toChatInbound(ev)`: 文字（5000 文字まで）/ 画像・動画・音声・ファイル・位置情報は**種類だけ**（中身は保存しない。画像の中身は ④-4 から）/ スタンプは番号だけ（`meta`）。グループ・複数人トーク・メッセージ以外の通知（友だち追加・ボタン操作）は保存しない。日時は LINE の通知の日時（届いた順ではなく送られた順に並べる）
+  - **「自動」の印**（`classifyAutoMessage(text, { keywords, optKeywords })` → `form` = 1 行目が【…】で始まるフォームの送信文 / `command` = 予約確認・予約をキャンセル・予約を変更・空き待ち確認・「キャンセル: 3」・スタッフ登録・店舗の配信停止 / 再開の合言葉 / `keyword` = LINE メッセージのキーワード自動応答の合言葉）。印の付いた文は**未読に数えない**（付けないと、予約が入るたびに未読が増える）。フォームの送信文の 3 秒以内に同じ人から届いた文（2 通目の固定テキスト・選択肢ごとの追加メッセージ）は `follow_up`（`isFormFollowUp`。`CHAT_FOLLOW_UP_WINDOW_MS`）。**新しいコマンド・フォームの送信文の形を足したら、ここにも足す**
+  - 保存は DB 関数 `chat_record_inbound` が 1 回で行う（会話が無ければ作る → 同じ `line_message_id` は 1 件だけ（LINE は応答が遅いと送り直す）→ 未読の加算・一覧の 1 行の更新）。local は `data/chat.json` で同じ手順（**直すときは両方**）
+- データ: `chat_settings`（店舗ごとの設定）/ `chat_threads`（店舗 × LINE ユーザー ID で 1 本。顧客 ID ではまとめない = 同じ人が顧客に 2 人いても会話は分かれない。`unread_count` / `status` = open / done / `last_message_preview`）/ `chat_messages`（`direction` = in / out / system、`kind`、`auto` / `auto_kind`、`line_message_id`、返信用の `client_key` / `send_status` は ④-2 で使う）。どれも RLS ポリシー無し = service_role のみ
+- 純粋ロジック `src/lib/chat.ts`、保存 `src/lib/chat-repository.ts`、業務ロジック `src/lib/chat-service.ts`
+- マイグレーション `20261127000000_add_chat.sql`。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも既存の機能は動く（OFF として動き、設定カードに理由を出して ON にできない）。**staging には LINE からの通知が届かないので、受信は本番のテスト用店舗で確かめる**
+- **④-2 でやること（忘れないように）**: 「トーク」タブは `admin_visible_options` に項目を足し、**未設定は非表示**（リッチメニューと同じ `defaultHidden`。トーク機能が ON で、かつチェックを入れた店舗だけ店舗管理者に出す）。設定カードの「いまは受信して保存するところまでです」の注意書きを外す
+- Vitest: `chat.test.ts` / `chat-service.local.test.ts` / `chat-service.test.ts` / `line-webhook-signature-route.test.ts` / `admin-api-auth.test.ts`
+
 **全予約一覧の「集計ダウンロード」（`/tenant/{slug}/admin/reservations` → 予約一覧タブ。Excel = 予約数 / キャンセル数 / アンケート回答数 / 出力条件 の 4 シート。店舗 × 月）:**
 - 予約は `GET /api/reservations`、アンケート回答数は `GET /api/surveys/stats`。どちらも **ログイン必須 + 見てよい店舗だけ**（`src/lib/admin-store-scope.ts` の `getAccessibleStoreIds` = マスター: 全店舗 / システム管理者: 同じテナント / 店舗管理者: 自分の店舗。`resolveStoreScope` で `store_id` の指定を確認し、範囲外は 403。local は認証スキップ）、**`fetchAllRows` で 1000 件ずつ全件取得**（以前は 1 回の取得 = 1000 件までで、件数が欠けていた）
 - 月の基準: 予約数・キャンセル数 = 予約日の月、アンケート回答数 = 回答日時の**日本時間**の月（`src/lib/survey-month-stats.ts` の `countSurveysByStoreMonth`）。ステータス・テスト用顧客の絞り込みは予約だけに効く。アンケート件数を取得できないときはダウンロードを止める（0 件のシートを出さない）
@@ -676,6 +690,9 @@ export async function GET(req, { params }) {
 - `POST /api/stores/{storeId}/rich-menus/rule-order` - お客様ごとのメニューの優先順位（`{ ids }`）
 - `POST /api/cron/rich-menu-sync` - 1 日 1 回の見直し（pg_cron から。Service Role Key の Bearer）
 
+### 1 対 1 トーク API:
+- `GET/PUT /api/stores/{storeId}/chat-settings` - トーク機能の ON / OFF・会話の保存期間（`{ enabled?, retention_years? }`。運営だけ。ON にできるのはチャネルシークレットを登録した店舗だけ）
+
 ### 予約カレンダー API:
 - `GET /api/stores/{storeId}/reservations/calendar` - 期間に掛かる予約と、予約以外の予定の時間（`from` / `to` = YYYY-MM-DD。最大 62 日。認証必須）
 
@@ -790,6 +807,7 @@ export async function GET(req, { params }) {
 - `reminder_logs` - LINE 予約リマインダーの送信記録（1 予約 × 対象日 = 1 行。二重送信防止・後追い確認）
 - `waitlist_entries` / `waitlist_notifications` - 空き待ち（キャンセル待ち）の登録と通知の記録
 - `store_digest_settings` / `store_digest_staff` / `store_digest_logs` - 朝の「今日の予約まとめ」・月次レポートの設定（合言葉つき）/ LINE で受け取るスタッフ / 送信の記録
+- `chat_settings` / `chat_threads` / `chat_messages` - 1 対 1 トーク（店舗ごとの設定 = 行なしは OFF / 会話 = 店舗 × LINE ユーザーで 1 本 / メッセージ）
 - `wall_boards` / `wall_posts` / `wall_reports` / `wall_consents` / `wall_moderation_logs` / `wall_topics` / `wall_empathies` - 寄せ書きウォール（ボード設定 / 付箋 / 通報 / 同意 / 公開操作の記録 / お題 / 共感。投稿者・共感した人は hash のみ）
 
 **RLS（Row Level Security）:**
@@ -824,6 +842,7 @@ export async function GET(req, { params }) {
 - `20261120000000_add_store_digest.sql` - 朝のまとめ・月次レポート: store_digest_settings / store_digest_staff / store_digest_logs
 - `20261125000000_add_line_rich_menus.sql` - リッチメニュー: line_rich_menus
 - `20261126000000_add_line_rich_menu_links.sql` - リッチメニューのお客様ごとの切り替え: line_rich_menu_links
+- `20261127000000_add_chat.sql` - 1 対 1 トーク: chat_settings / chat_threads / chat_messages、DB 関数 `chat_record_inbound`
 - `20261009000000_add_wall.sql` - 寄せ書きウォールの 5 テーブル・RLS・DB 関数 `wall_insert_post_checked` / `wall_add_report`
 - `20261010000000_add_wall_daily_max.sql` - wall_boards.daily_max
 - `20261011000000_add_wall_engagement.sql` - 寄せ書きの追加機能（wall_topics / wall_empathies、wall_posts の reaction / topic_id / note_color / note_deco / empathy_count、wall_boards の empathy_* / customer_pick_enabled、DB 関数 `wall_toggle_empathy`）
