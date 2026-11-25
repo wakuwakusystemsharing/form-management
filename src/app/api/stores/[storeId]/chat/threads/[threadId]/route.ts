@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { authorizeStoreAccess } from '@/lib/store-access';
-import { getChatThreadDetail, updateChatThreadStatus } from '@/lib/chat-service';
+import { authorizeStoreAccess, authorizeUpperAdminStoreAccess } from '@/lib/store-access';
+import { deleteChatThread, getChatThreadDetail, updateChatThreadStatus } from '@/lib/chat-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,5 +39,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ st
   } catch (error) {
     console.error('[API] chat thread status error:', error);
     return NextResponse.json({ error: '対応の状態の保存に失敗しました' }, { status: 500 });
+  }
+}
+
+// DELETE /api/stores/{storeId}/chat/threads/{threadId} - 会話 1 本を、メッセージ・画像ごと消す（元に戻せない）
+// **運営だけ**（店舗管理者は自分の店舗でも 403）。お客様から削除を求められたときに使う。
+// 消すのは、このシステムに保存した分だけ（LINE のアプリに残っているトークは消えない）
+export async function DELETE(request: Request, { params }: { params: Promise<{ storeId: string; threadId: string }> }) {
+  try {
+    const { storeId, threadId } = await params;
+    const auth = await authorizeUpperAdminStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
+    const result = await deleteChatThread(storeId, threadId, auth.user);
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json({ deleted: true, messages: result.messages, images: result.images }, NO_STORE);
+  } catch (error) {
+    console.error('[API] chat thread delete error:', error);
+    return NextResponse.json({ error: '会話の削除に失敗しました' }, { status: 500 });
   }
 }
