@@ -243,3 +243,264 @@ export function readLocalChatData(): { threads: ChatThread[]; messages: ChatMess
   const d = readLocal();
   return { threads: d.threads, messages: d.messages };
 }
+
+// ---------------------------------------------------------------------------
+// ④-2: 会話の一覧・メッセージ・既読・返信
+// ---------------------------------------------------------------------------
+
+const THREAD_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MESSAGE_COLUMNS = 'id, thread_id, store_id, direction, kind, text, meta, media_path, auto, auto_kind, line_message_id, client_key, send_status, send_error, sent_by, created_at';
+
+const byCreated = (a: ChatMessage, b: ChatMessage) => (a.created_at === b.created_at ? Number(a.id) - Number(b.id) : a.created_at < b.created_at ? -1 : 1);
+
+/** その店舗の会話（新しい順。最大 limit 本）。表が未適用なら空 */
+export async function listChatThreads(storeId: string, limit = 300): Promise<ChatThread[]> {
+  if (isLocal()) {
+    return readLocal()
+      .threads.filter((t) => t.store_id === storeId)
+      .sort((a, b) => (a.last_message_at < b.last_message_at ? 1 : -1))
+      .slice(0, limit);
+  }
+  const { data, error } = await client().from('chat_threads').select('*').eq('store_id', storeId).order('last_message_at', { ascending: false }).limit(limit);
+  if (error) {
+    if (isMissingChatSchema(error)) return [];
+    throw new Error(error.message || '会話の読み取りエラー');
+  }
+  return (data ?? []) as ChatThread[];
+}
+
+/** 会話 1 本。**必ず店舗 ID と一緒に確かめる**（他の店舗の会話 ID を指定されても返さない） */
+export async function getChatThread(storeId: string, threadId: string): Promise<ChatThread | null> {
+  if (!THREAD_ID_PATTERN.test(threadId)) return null;
+  if (isLocal()) return readLocal().threads.find((t) => t.id === threadId && t.store_id === storeId) ?? null;
+  const { data, error } = await client().from('chat_threads').select('*').eq('id', threadId).eq('store_id', storeId).maybeSingle();
+  if (error) {
+    if (isMissingChatSchema(error)) return null;
+    throw new Error(error.message || '会話の読み取りエラー');
+  }
+  return (data as ChatThread | null) ?? null;
+}
+
+/** DB の id は数値で返るので、文字列にそろえる */
+function normalizeMessageRow(m: ChatMessage): ChatMessage {
+  return { ...m, id: String(m.id) };
+}
+
+/**
+ * 会話のメッセージ（古い → 新しい順）。
+ * - 指定なし: 新しいほうから limit 通
+ * - beforeId: その ID より前の limit 通（さかのぼって読む）
+ * - afterId: その ID より後（新着の確認）
+ */
+export async function listChatMessages(
+  storeId: string,
+  threadId: string,
+  opts: { beforeId?: string | null; afterId?: string | null; limit?: number } = {},
+): Promise<{ messages: ChatMessage[]; hasMore: boolean }> {
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+  const num = (v: string | null | undefined) => (v && /^\d+$/.test(v) ? Number(v) : null);
+  const before = num(opts.beforeId);
+  const after = num(opts.afterId);
+  if (isLocal()) {
+    const all = readLocal()
+      .messages.filter((m) => m.thread_id === threadId && m.store_id === storeId)
+      .sort(byCreated);
+    if (after !== null) return { messages: all.filter((m) => Number(m.id) > after), hasMore: false };
+    const pool = before !== null ? all.filter((m) => Number(m.id) < before) : all;
+    return { messages: pool.slice(-limit), hasMore: pool.length > limit };
+  }
+  if (after !== null) {
+    const { data, error } = await client()
+      .from('chat_messages')
+      .select(MESSAGE_COLUMNS)
+      .eq('thread_id', threadId)
+      .eq('store_id', storeId)
+      .gt('id', after)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(200);
+    if (error) throw new Error(error.message || 'メッセージの読み取りエラー');
+    return { messages: ((data ?? []) as ChatMessage[]).map(normalizeMessageRow), hasMore: false };
+  }
+  let q = client().from('chat_messages').select(MESSAGE_COLUMNS).eq('thread_id', threadId).eq('store_id', storeId);
+  if (before !== null) q = q.lt('id', before);
+  const { data, error } = await q
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
+  if (error) throw new Error(error.message || 'メッセージの読み取りエラー');
+  const rows = ((data ?? []) as ChatMessage[]).map(normalizeMessageRow);
+  return { messages: rows.slice(0, limit).reverse(), hasMore: rows.length > limit };
+}
+
+/** 既読にする（未読の数を 0 に） */
+export async function markChatThreadRead(storeId: string, threadId: string): Promise<void> {
+  if (isLocal()) {
+    const data = readLocal();
+    const t = data.threads.find((x) => x.id === threadId && x.store_id === storeId);
+    if (t && t.unread_count !== 0) {
+      t.unread_count = 0;
+      writeLocal(data);
+    }
+    return;
+  }
+  const { error } = await client().from('chat_threads').update({ unread_count: 0 }).eq('id', threadId).eq('store_id', storeId).gt('unread_count', 0);
+  if (error) throw new Error(error.message || '既読の更新エラー');
+}
+
+/** 未読の合計（タブのバッジ用）。表が未適用・読み取り失敗は 0 */
+export async function countChatUnread(storeId: string): Promise<number> {
+  if (isLocal()) return readLocal().threads.filter((t) => t.store_id === storeId).reduce((sum, t) => sum + (t.unread_count || 0), 0);
+  try {
+    const { data, error } = await client().from('chat_threads').select('unread_count').eq('store_id', storeId).gt('unread_count', 0).limit(1000);
+    if (error) return 0;
+    return ((data ?? []) as Array<{ unread_count: number }>).reduce((sum, r) => sum + (Number(r.unread_count) || 0), 0);
+  } catch {
+    return 0;
+  }
+}
+
+/** 会話に顧客をひも付ける（会話ができたあとで顧客が登録されたとき） */
+export async function setChatThreadCustomer(storeId: string, threadId: string, customerId: string): Promise<void> {
+  if (isLocal()) {
+    const data = readLocal();
+    const t = data.threads.find((x) => x.id === threadId && x.store_id === storeId);
+    if (t) {
+      t.customer_id = customerId;
+      writeLocal(data);
+    }
+    return;
+  }
+  await client().from('chat_threads').update({ customer_id: customerId }).eq('id', threadId).eq('store_id', storeId).is('customer_id', null);
+}
+
+export interface ChatCustomerBrief {
+  id: string;
+  name: string | null;
+  line_user_id: string | null;
+  line_blocked_at: string | null;
+}
+
+const toBrief = (c: Record<string, unknown>): ChatCustomerBrief => ({
+  id: String(c.id),
+  name: typeof c.name === 'string' ? c.name : null,
+  line_user_id: typeof c.line_user_id === 'string' ? c.line_user_id : null,
+  line_blocked_at: typeof c.line_blocked_at === 'string' ? c.line_blocked_at : null,
+});
+
+/** 会話の相手の顧客（名前・ブロックの有無）。LINE ユーザー ID で探す（登録の古い順） */
+export async function findChatCustomers(storeId: string, lineUserIds: string[]): Promise<ChatCustomerBrief[]> {
+  const ids = [...new Set(lineUserIds.filter(Boolean))];
+  if (ids.length === 0) return [];
+  if (isLocal()) {
+    try {
+      const file = path.join(DATA_DIR, 'customers.json');
+      if (!fs.existsSync(file)) return [];
+      const rows = JSON.parse(fs.readFileSync(file, 'utf-8')) as Array<Record<string, unknown>>;
+      return (Array.isArray(rows) ? rows : []).filter((c) => c.store_id === storeId && typeof c.line_user_id === 'string' && ids.includes(c.line_user_id)).map(toBrief);
+    } catch {
+      return [];
+    }
+  }
+  const out: ChatCustomerBrief[] = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    const query = (columns: string) => client().from('customers').select(columns).eq('store_id', storeId).in('line_user_id', chunk).order('created_at', { ascending: true });
+    let res = await query('id, name, line_user_id, line_blocked_at');
+    // line_blocked_at 列が未適用の環境では、列なしで取り直す
+    if (res.error) res = await query('id, name, line_user_id');
+    if (res.error) throw new Error(res.error.message || '顧客の読み取りエラー');
+    for (const c of (res.data ?? []) as Array<Record<string, unknown>>) out.push(toBrief(c));
+  }
+  return out;
+}
+
+export interface ChatOutboundInput {
+  text: string;
+  clientKey: string;
+  sentBy: string | null;
+  sentByName: string | null;
+  now?: Date;
+}
+
+/**
+ * 返信を「送信中」で保存する。同じ送信の ID（client_key）は 1 回だけ:
+ * すでにあれば、そのメッセージを created = false で返す（二重に保存しない）
+ */
+export async function insertChatOutbound(storeId: string, threadId: string, input: ChatOutboundInput): Promise<{ message: ChatMessage; created: boolean }> {
+  const at = (input.now ?? new Date()).toISOString();
+  const meta = input.sentByName ? { sent_by_name: input.sentByName } : null;
+  if (isLocal()) {
+    const data = readLocal();
+    const existing = data.messages.find((m) => m.store_id === storeId && m.client_key === input.clientKey);
+    if (existing) return { message: existing, created: false };
+    const nextId = data.messages.reduce((max, m) => Math.max(max, Number(m.id) || 0), 0) + 1;
+    const message: ChatMessage = {
+      id: String(nextId),
+      thread_id: threadId,
+      store_id: storeId,
+      direction: 'out',
+      kind: 'text',
+      text: input.text,
+      meta,
+      media_path: null,
+      auto: false,
+      auto_kind: null,
+      line_message_id: null,
+      client_key: input.clientKey,
+      send_status: 'sending',
+      send_error: null,
+      sent_by: input.sentBy,
+      created_at: at,
+    };
+    data.messages.push(message);
+    writeLocal(data);
+    return { message, created: true };
+  }
+  const row = { thread_id: threadId, store_id: storeId, direction: 'out', kind: 'text', text: input.text, meta, auto: false, client_key: input.clientKey, send_status: 'sending', sent_by: input.sentBy, created_at: at };
+  const { data, error } = await client().from('chat_messages').insert(row).select(MESSAGE_COLUMNS).single();
+  if (!error && data) return { message: normalizeMessageRow(data as ChatMessage), created: true };
+  if (error?.code === '23505') {
+    const found = await client().from('chat_messages').select(MESSAGE_COLUMNS).eq('store_id', storeId).eq('client_key', input.clientKey).maybeSingle();
+    if (found.data) return { message: normalizeMessageRow(found.data as ChatMessage), created: false };
+  }
+  throw new Error(error?.message || '返信の保存エラー');
+}
+
+/** 返信の送信結果を書く（sending → sent / failed。もう一度送るときは sending に戻す） */
+export async function updateChatOutboundStatus(storeId: string, messageId: string, status: 'sending' | 'sent' | 'failed', sendError: string | null = null): Promise<void> {
+  if (isLocal()) {
+    const data = readLocal();
+    const m = data.messages.find((x) => x.id === messageId && x.store_id === storeId);
+    if (m) {
+      m.send_status = status;
+      m.send_error = sendError;
+      writeLocal(data);
+    }
+    return;
+  }
+  const { error } = await client().from('chat_messages').update({ send_status: status, send_error: sendError }).eq('id', Number(messageId)).eq('store_id', storeId);
+  if (error) throw new Error(error.message || '送信結果の保存エラー');
+}
+
+/** 返信を送ったあと: 一覧の 1 行と日時を更新し、未読を 0 にする（返信した = 読んだ） */
+export async function touchChatThreadAfterReply(storeId: string, threadId: string, at: string, preview: string): Promise<void> {
+  if (isLocal()) {
+    const data = readLocal();
+    const t = data.threads.find((x) => x.id === threadId && x.store_id === storeId);
+    if (t) {
+      if (at >= t.last_message_at) {
+        t.last_message_at = at;
+        t.last_message_preview = preview;
+      }
+      t.unread_count = 0;
+      t.updated_at = new Date().toISOString();
+      writeLocal(data);
+    }
+    return;
+  }
+  const c = client();
+  await c.from('chat_threads').update({ unread_count: 0, updated_at: new Date().toISOString() }).eq('id', threadId).eq('store_id', storeId);
+  // 送っているあいだに新しいメッセージが届いていたら、一覧の 1 行はそちらを残す
+  await c.from('chat_threads').update({ last_message_at: at, last_message_preview: preview }).eq('id', threadId).eq('store_id', storeId).lte('last_message_at', at);
+}

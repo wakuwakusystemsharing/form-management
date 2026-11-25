@@ -958,6 +958,87 @@ LINE Webhook の署名チェックの設定（チャネルシークレット）
 
 **受信**: `POST /api/webhooks/line` が、トーク機能が ON の店舗・署名を確認できた通知について、お客様からのメッセージを保存する（LINE への応答を返したあと。保存に失敗しても応答は変わらない）
 
+### `GET /api/stores/{storeId}/chat/threads`
+1 対 1 トークの会話の一覧
+
+**認証**: `authorizeStoreAccess`（マスター / 同じテナントのシステム管理者 / その店舗の店舗管理者）
+
+**クエリ**: `filter` = `all`（既定）/ `unread`（未読のある会話だけ）、`search` = 名前の一部
+
+**レスポンス**（未読のある会話が上、その中は新しい順。LINE ユーザー ID は返さない）:
+```json
+{
+  "enabled": true,
+  "unread_total": 3,
+  "threads": [
+    { "id": "…uuid…", "name": "山田 花子", "customer_id": "c1", "last_message_at": "2026-11-25T05:10:00.000Z", "preview": "駐車場はありますか？", "unread_count": 2, "status": "open", "blocked": false }
+  ]
+}
+```
+
+- `enabled`: トーク機能が ON か（OFF でも、保存済みの会話は返す）
+- `name`: 顧客の名前。顧客が見つからない人は「（お名前不明）」
+- `blocked`: ブロック（友だち解除）の通知が来ている = 返信しても届かない
+
+### `GET /api/stores/{storeId}/chat/threads/{threadId}`
+会話 1 本とメッセージ
+
+**認証**: `authorizeStoreAccess`。**他の店舗の会話 ID・存在しない ID は 404**
+
+**クエリ**:
+- 指定なし: 新しいほうから 50 通。**開くと既読になる**
+- `before={メッセージ ID}`: その ID より前の 50 通（さかのぼって読む）
+- `after={メッセージ ID}`: その ID より後（新着の確認）
+- `read=0`: 既読にしない
+
+**レスポンス**（メッセージは古い → 新しい順）:
+```json
+{
+  "thread": { "id": "…", "name": "山田 花子", "customer_id": "c1", "last_message_at": "…", "preview": "…", "unread_count": 0, "status": "open", "blocked": false },
+  "messages": [
+    { "id": "12", "direction": "in", "kind": "text", "text": "駐車場はありますか？", "auto": false, "auto_kind": null, "sticker_url": null, "send_status": null, "send_error": null, "sent_by_name": null, "created_at": "2026-11-25T05:10:00.000Z" },
+    { "id": "13", "direction": "out", "kind": "text", "text": "ございます。", "auto": false, "auto_kind": null, "sticker_url": null, "send_status": "sent", "send_error": null, "sent_by_name": "staff@example.com", "created_at": "2026-11-25T05:12:00.000Z" }
+  ],
+  "has_more": false
+}
+```
+
+- `direction`: `in` = お客様から / `out` = 店舗から / `system` = 自動の記録
+- `kind`: `text` / `image` / `sticker` / `video` / `audio` / `file` / `location` / `other`（文字以外は中身を持たない）
+- `auto`: フォームの送信文・コマンドなど（`auto_kind` = `form` / `command` / `keyword` / `follow_up`）
+
+### `POST /api/stores/{storeId}/chat/threads/{threadId}/messages`
+返信を送る（公式 LINE の通数を 1 通使う）
+
+**認証**: `authorizeStoreAccess`
+
+**リクエスト**:
+```json
+{ "text": "ございます。お店の前に 3 台分あります。", "client_key": "3f2b8c1e-6a4d-4f7b-9c2a-1d5e8f0a7b3c" }
+```
+
+- `text`: 空でない・5000 文字まで
+- `client_key`: 送信ボタンを押したときに画面が作る UUID。**同じ ID は 1 回だけ送る**（連打・通信の再試行で二重にならない）。失敗した返信は、同じ ID でもう一度呼ぶと送り直す
+
+**レスポンス**:
+- 成功 `200`: `{ "message": { …メッセージ…, "send_status": "sent" }, "notice": null }`（local は LINE に送らず `notice` に理由）
+- `400`: 内容が正しくない / `404`: 会話が無い（他の店舗の会話を含む）/ `409`: トーク機能が OFF・トークン未設定
+- `502`: LINE に送れなかった。`{ "error": "今月の通数の上限に達しています", "message": { …, "send_status": "failed", "send_error": "…" } }`
+
+### `GET /api/stores/{storeId}/chat/unread`
+トーク機能が ON か・未読の合計（メニューのバッジ用）
+
+**認証**: `authorizeStoreAccess`
+
+**クエリ**: `quota=1` で、公式 LINE の今月の通数も返す
+
+**レスポンス**:
+```json
+{ "enabled": true, "unread": 3, "line_quota": { "type": "limited", "limit": 200, "usage": 57 } }
+```
+
+- `line_quota` は `quota=1` のときだけ。取得できなければ null
+
 ### `POST /api/stores/{storeId}/line-webhook/test`
 接続を確認（LINE に登録されている Webhook URL がこの店舗のものか + LINE からテストの通知を受け取れるか）。local では 400
 

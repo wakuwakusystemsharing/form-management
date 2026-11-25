@@ -172,3 +172,102 @@ describe('届いたメッセージの保存', () => {
     await expect(service.recordChatInboundEvents(STORE, [null, 'x', { type: 'message' }], { verified: false })).resolves.toMatchObject({ saved: 0 });
   });
 });
+
+describe('トーク画面（一覧・会話・既読・返信）', () => {
+  const KEY1 = '11111111-1111-4111-8111-111111111111';
+  const KEY2 = '22222222-2222-4222-8222-222222222222';
+
+  const seed = async () => {
+    await turnOn();
+    await record([textEvent('こんにちは', { at: T0 }), textEvent('駐車場はありますか？', { at: T0 + 60000 }), textEvent('はじめまして', { user: 'U2', at: T0 + 120000 }), textEvent('予約確認', { user: 'U3', at: T0 + 180000 })]);
+  };
+
+  it('一覧: 未読のある会話が上。名前は顧客から引き、LINE ユーザー ID は返さない', async () => {
+    await seed();
+    const ov = await service.getChatOverview(STORE);
+    expect(ov.enabled).toBe(true);
+    expect(ov.unread_total).toBe(3);
+    // U3 は「予約確認」だけ = 未読 0 なので、いちばん新しくても下
+    expect(ov.threads.map((t) => [t.name, t.unread_count])).toEqual([
+      ['（お名前不明）', 1],
+      ['山田', 2],
+      ['（お名前不明）', 0],
+    ]);
+    expect(JSON.stringify(ov)).not.toMatch(/U[123]\b/);
+    expect((await service.getChatOverview(STORE, { filter: 'unread' })).threads).toHaveLength(2);
+    expect((await service.getChatOverview(STORE, { search: '山' })).threads.map((t) => t.name)).toEqual(['山田']);
+    expect(await service.getChatUnread(STORE)).toEqual({ enabled: true, unread: 3 });
+  });
+
+  it('会話を開くと既読になる。read = false のときは既読にしない', async () => {
+    await seed();
+    const id = (await service.getChatOverview(STORE)).threads.find((t) => t.name === '山田')!.id;
+    const peek = await service.getChatThreadDetail(STORE, id, { read: false });
+    expect(peek?.thread.unread_count).toBe(2);
+    expect((await service.getChatUnread(STORE)).unread).toBe(3);
+    const detail = await service.getChatThreadDetail(STORE, id);
+    expect(detail?.thread).toMatchObject({ name: '山田', customer_id: 'c1', unread_count: 0 });
+    expect(detail?.messages.map((m) => [m.direction, m.text])).toEqual([
+      ['in', 'こんにちは'],
+      ['in', '駐車場はありますか？'],
+    ]);
+    expect((await service.getChatUnread(STORE)).unread).toBe(1);
+  });
+
+  it('他の店舗の会話 ID・存在しない ID・形のおかしい ID では、会話を返さない', async () => {
+    await seed();
+    const id = (await service.getChatOverview(STORE)).threads[0].id;
+    expect(await service.getChatThreadDetail('st9999', id)).toBeNull();
+    expect(await service.getChatThreadDetail(STORE, '00000000-0000-4000-8000-000000000000')).toBeNull();
+    expect(await service.getChatThreadDetail(STORE, "x' or '1'='1")).toBeNull();
+    expect(await service.sendChatReply('st9999', id, { text: 'こんにちは', client_key: KEY1 }, null)).toMatchObject({ ok: false, status: 404 });
+    expect(repo.readLocalChatData().messages.filter((m) => m.direction === 'out')).toHaveLength(0);
+  });
+
+  it('返信: 保存され、一覧の 1 行と未読が変わる。同じ送信の ID を 2 回送っても 1 通', async () => {
+    await seed();
+    const id = (await service.getChatOverview(STORE)).threads.find((t) => t.name === '山田')!.id;
+    const now = new Date(T0 + 300000);
+    const first = await service.sendChatReply(STORE, id, { text: 'ございます。3 台分です。', client_key: KEY1 }, { id: 'u1', email: 'staff@example.com' }, { now });
+    expect(first).toMatchObject({ ok: true, message: { direction: 'out', text: 'ございます。3 台分です。', send_status: 'sent', sent_by_name: 'staff@example.com' } });
+    const again = await service.sendChatReply(STORE, id, { text: 'ございます。3 台分です。', client_key: KEY1 }, { id: 'u1', email: 'staff@example.com' }, { now });
+    expect(again.ok && again.message.id).toBe(first.ok && first.message.id);
+    expect(repo.readLocalChatData().messages.filter((m) => m.direction === 'out')).toHaveLength(1);
+    const thread = (await service.getChatOverview(STORE)).threads.find((t) => t.id === id)!;
+    expect(thread).toMatchObject({ unread_count: 0, preview: 'ございます。3 台分です。', last_message_at: now.toISOString() });
+    // 別の ID なら 2 通目として送る
+    await service.sendChatReply(STORE, id, { text: 'お待ちしております。', client_key: KEY2 }, null, { now: new Date(T0 + 360000) });
+    expect((await service.getChatThreadDetail(STORE, id))?.messages.map((m) => m.direction)).toEqual(['in', 'in', 'out', 'out']);
+  });
+
+  it('返信の内容がおかしいとき・トーク機能が OFF のときは送らない', async () => {
+    await seed();
+    const id = (await service.getChatOverview(STORE)).threads[0].id;
+    expect(await service.sendChatReply(STORE, id, { text: '  ', client_key: KEY1 }, null)).toMatchObject({ ok: false, status: 400 });
+    expect(await service.sendChatReply(STORE, id, { text: 'こんにちは', client_key: 'x' }, null)).toMatchObject({ ok: false, status: 400 });
+    await service.updateChatSettings(STORE, { enabled: false });
+    expect(await service.sendChatReply(STORE, id, { text: 'こんにちは', client_key: KEY1 }, null)).toMatchObject({ ok: false, status: 409 });
+    expect(repo.readLocalChatData().messages.filter((m) => m.direction === 'out')).toHaveLength(0);
+    // OFF でも、保存済みの会話は読める
+    const ov = await service.getChatOverview(STORE);
+    expect(ov.enabled).toBe(false);
+    expect(ov.threads.length).toBeGreaterThan(0);
+  });
+
+  it('メッセージが多い会話は、新しいほうから 50 通。さかのぼって読める', async () => {
+    await turnOn();
+    await record(Array.from({ length: 60 }, (_, i) => textEvent(`m${i + 1}`, { at: T0 + i * 1000 })));
+    const id = (await service.getChatOverview(STORE)).threads[0].id;
+    const latest = await service.getChatThreadDetail(STORE, id);
+    expect(latest?.messages).toHaveLength(50);
+    expect(latest?.has_more).toBe(true);
+    expect(latest?.messages[0].text).toBe('m11');
+    const older = await service.getChatThreadDetail(STORE, id, { beforeId: latest!.messages[0].id, read: false });
+    expect(older?.messages.map((m) => m.text)).toEqual(Array.from({ length: 10 }, (_, i) => `m${i + 1}`));
+    expect(older?.has_more).toBe(false);
+    // 新着の確認: 最後の ID より後だけ
+    await record([textEvent('m61', { at: T0 + 61000 })]);
+    const added = await service.getChatThreadDetail(STORE, id, { afterId: latest!.messages[49].id });
+    expect(added?.messages.map((m) => m.text)).toEqual(['m61']);
+  });
+});

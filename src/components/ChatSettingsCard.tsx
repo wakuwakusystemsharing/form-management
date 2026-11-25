@@ -101,7 +101,7 @@ export default function ChatSettingsCard({ storeId }: { storeId: string }) {
         {view && (
           <>
             <p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
-              いまは「受信して保存する」ところまでです。会話を読む・返信する画面（トークのタブ）は、次の更新で追加します。
+              会話は、このページの「トーク」タブで読んで返信できます。店舗管理者にも見せるときは、上の「店舗管理者に表示するメニュー」で「トークを表示」にチェックを入れてください（チェックを入れるまで、店舗管理者には出ません）。
             </p>
 
             {!view.enabled && view.enable_blocker && (
@@ -131,6 +131,7 @@ export default function ChatSettingsCard({ storeId }: { storeId: string }) {
                   <li>この店舗の公式 LINE にお客様が送ったメッセージを、これから保存します（ON にする前のメッセージは保存されません）。</li>
                   <li>体の悩みなど、慎重に扱う内容が入ることがあります。プライバシーポリシーへの記載と、お客様への説明が済んだ店舗だけ ON にしてください。</li>
                   <li>保存期間（{view.retention_years} 年）を過ぎた会話は、自動で削除します。</li>
+                  <li>公式 LINE の管理画面やアプリから返信した内容は、このシステムには出ません。返信は「トーク」タブにまとめてください。</li>
                 </ul>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" size="sm" onClick={() => save({ enabled: true }, 'トーク機能を ON にしました', 'これから届くメッセージを保存します')} disabled={busy}>
