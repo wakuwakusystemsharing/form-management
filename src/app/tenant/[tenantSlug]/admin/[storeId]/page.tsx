@@ -1555,7 +1555,7 @@ export default function StoreDetailPage() {
 
         {/* ── タブナビゲーション ── */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="h-auto sm:h-10 bg-card border border-border p-1 w-full sm:w-auto grid grid-cols-4 sm:grid-cols-8 sm:inline-grid">
+          <TabsList className="h-auto lg:h-10 bg-card border border-border p-1 w-full lg:w-auto grid grid-cols-4 sm:grid-cols-5 lg:inline-flex">
             <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">概要</TabsTrigger>
             <TabsTrigger value="calendar" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">カレンダー</TabsTrigger>
             <TabsTrigger value="forms" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">予約フォーム</TabsTrigger>
