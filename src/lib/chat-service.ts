@@ -7,9 +7,15 @@
 import { after } from 'next/server';
 import { getAppEnvironment, getBaseUrl } from '@/lib/env';
 import {
+  CHAT_OUTBOUND_IMAGE_MAX_BYTES,
   buildChatPreview,
   chatDisplayName,
   chatEnableBlocker,
+  chatImageExt,
+  chatInboundImagePath,
+  chatOutboundImagePathFromUrl,
+  isChatThreadStatus,
+  validateChatTemplates,
   classifyAutoMessage,
   decideResend,
   describeChatSendError,
@@ -22,16 +28,21 @@ import {
   type ChatAutoContext,
   type ChatInbound,
   type ChatMessageView,
+  type ChatReplyTemplate,
   type ChatSettings,
   type ChatStats,
   type ChatThread,
   type ChatThreadFilter,
+  type ChatThreadStatus,
   type ChatThreadView,
 } from '@/lib/chat';
 import {
   claimChatNotification,
+  clearChatMessageMedia,
   countChatUnread,
   findChatCustomers,
+  findChatMessageByLineId,
+  getChatMessage,
   getChatSettings,
   getChatStats,
   getChatThread,
@@ -39,12 +50,16 @@ import {
   listChatMessages,
   listChatThreads,
   listChatThreadsToNotify,
+  listExpiredChatMedia,
   markChatThreadRead,
   purgeExpiredChat,
   recordChatInbound,
   saveChatNotifySettings,
   saveChatSettings,
+  saveChatTemplates,
+  setChatMessageMedia,
   setChatThreadCustomer,
+  setChatThreadStatus,
   touchChatThreadAfterReply,
   updateChatOutboundStatus,
   type ChatCustomerBrief,
@@ -63,6 +78,8 @@ import {
   type ChatNotifySettings,
 } from '@/lib/chat-notify';
 import { sendEmail } from '@/lib/email-sender';
+import { fetchLineImageContent, readChatInboundImage, removeChatMedia, saveChatInboundImage, saveChatOutboundImage, type ChatImageContent } from '@/lib/chat-media';
+import { readImageInfo } from '@/lib/line-rich-menu';
 import { getDigestStore, listDigestStaff } from '@/lib/store-digest-repository';
 import { getStoreLineSecret } from '@/lib/line-secret-repository';
 import { listEnabledLineFlexMessages } from '@/lib/line-flex-repository';
@@ -132,10 +149,12 @@ export interface ChatInboundSummary {
  * - 署名を確認できた通知だけ（偽の通知を会話として保存しない。local は確認なし）
  * - **例外を投げない**（保存に失敗しても、予約確認などの既存の応答を止めない）
  */
-export async function recordChatInboundEvents(storeId: string, events: ReadonlyArray<unknown>, opts: { verified: boolean; origin?: string | null }, deps: ChatNotifyDeps = {}): Promise<ChatInboundSummary> {
+export async function recordChatInboundEvents(storeId: string, events: ReadonlyArray<unknown>, opts: { verified: boolean; origin?: string | null }, deps: ChatNotifyDeps & ChatImageDeps = {}): Promise<ChatInboundSummary> {
   const summary: ChatInboundSummary = { saved: 0, duplicated: 0, failed: 0 };
   // 新しく保存できたメッセージ（通知の対象を決めるのに使う。同じ通知の送り直しでは、もう一度知らせない）
   const savedIds: string[] = [];
+  // 新しく保存できた画像のメッセージ（このあと LINE から中身を取りにいく）
+  const savedImageIds: string[] = [];
   try {
     const inbounds = events.map((ev) => toChatInbound(ev)).filter((m): m is ChatInbound => m !== null);
     if (inbounds.length === 0) return { ...summary, skipped: 'none' };
@@ -154,6 +173,7 @@ export async function recordChatInboundEvents(storeId: string, events: ReadonlyA
         if (await recordChatInbound(storeId, msg, autoKind)) {
           summary.saved += 1;
           savedIds.push(msg.lineMessageId);
+          if (msg.kind === 'image') savedImageIds.push(msg.lineMessageId);
         } else summary.duplicated += 1;
       } catch (e) {
         summary.failed += 1;
@@ -165,6 +185,8 @@ export async function recordChatInboundEvents(storeId: string, events: ReadonlyA
   }
   // 新着の通知（スタッフの LINE・メール。任意）。通知に失敗しても、保存の結果は変えない
   if (savedIds.length > 0) await notifyChatInbound(storeId, savedIds, { origin: opts.origin }, deps);
+  // 届いた画像の中身を LINE から取得して保存する（公開しない置き場）。local は LINE と通信しない
+  if (!isLocal() || deps.fetchContent) for (const id of savedImageIds) await storeChatInboundImage(storeId, id, deps);
   return summary;
 }
 
@@ -230,7 +252,7 @@ export async function getChatOverview(storeId: string, opts: { filter?: ChatThre
   const [{ settings }, threads] = await Promise.all([getChatSettings(storeId), listChatThreads(storeId)]);
   const customers = await customersByLineUser(storeId, threads);
   const views = threads.map((t) => toThreadView(t, customers.get(t.line_user_id)));
-  const filtered = views.filter((v) => (opts.filter === 'unread' ? v.unread_count > 0 : true) && matchesChatSearch(v.name, opts.search));
+  const filtered = views.filter((v) => (opts.filter === 'unread' ? v.unread_count > 0 : opts.filter === 'open' ? v.status === 'open' : true) && matchesChatSearch(v.name, opts.search));
   return { enabled: settings.enabled, threads: sortChatThreads(filtered), unread_total: views.reduce((sum, v) => sum + v.unread_count, 0) };
 }
 
@@ -296,6 +318,26 @@ export const pushChatText: ChatPushFn = async (accessToken, to, text, retryKey) 
   }
 };
 
+/** LINE に画像を 1 通送る（imageUrl = 公開の https の URL。プレビューも同じ画像を使う = 1MB 以下の JPEG / PNG） */
+export const pushChatImage: ChatPushFn = async (accessToken, to, imageUrl, retryKey) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CHAT_PUSH_TIMEOUT_MS);
+  try {
+    const res = await fetch(LINE_PUSH_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8', Authorization: `Bearer ${accessToken}`, 'X-Line-Retry-Key': retryKey },
+      body: JSON.stringify({ to, messages: [{ type: 'image', originalContentUrl: imageUrl, previewImageUrl: imageUrl }] }),
+      signal: controller.signal,
+    });
+    const body = await res.text().catch(() => '');
+    return { ok: res.ok || res.status === 409, status: res.status, body };
+  } catch (e) {
+    return { ok: false, status: 0, body: e instanceof Error ? e.message : String(e) };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 export type ChatReplyResult =
   | { ok: true; message: ChatMessageView; notice?: string }
   | { ok: false; status: number; error: string; message?: ChatMessageView };
@@ -310,9 +352,9 @@ export async function sendChatReply(
   threadId: string,
   input: unknown,
   user: { id: string; email?: string | null } | null,
-  deps: { push?: ChatPushFn; now?: Date } = {},
+  deps: { push?: ChatPushFn; pushImage?: ChatPushFn; now?: Date } = {},
 ): Promise<ChatReplyResult> {
-  const v = validateChatReply(input);
+  const v = validateChatReply(input, { storeId });
   if (!v.ok) return { ok: false, status: 400, error: v.error };
   const thread = await getChatThread(storeId, threadId);
   if (!thread) return { ok: false, status: 404, error: '会話が見つかりません' };
@@ -320,7 +362,11 @@ export async function sendChatReply(
   if (!settings.enabled) return { ok: false, status: 409, error: 'トーク機能が OFF のため、返信できません' };
 
   const now = deps.now ?? new Date();
-  const { message, created } = await insertChatOutbound(storeId, threadId, { text: v.text, clientKey: v.clientKey, sentBy: user?.id ?? null, sentByName: user?.email ?? null, now });
+  // 画像の返信: 送る画像の置き場の中のパス（保存期間を過ぎたとき、画像のファイルも消すために持っておく）
+  const imagePath = v.imageUrl ? chatOutboundImagePathFromUrl(v.imageUrl, storeId) : null;
+  const image = v.imageUrl && imagePath ? { url: v.imageUrl, path: imagePath } : null;
+  const preview = image ? '画像を送りました' : buildChatPreview('text', v.text);
+  const { message, created } = await insertChatOutbound(storeId, threadId, { text: v.text, image, clientKey: v.clientKey, sentBy: user?.id ?? null, sentByName: user?.email ?? null, now });
   if (message.thread_id !== threadId) return { ok: false, status: 409, error: '送信の情報が正しくありません。画面を読み込み直してください' };
   if (!created) {
     const decision = decideResend(message, now);
@@ -331,7 +377,7 @@ export async function sendChatReply(
   // local は LINE と通信せず、記録だけ更新する
   if (isLocal()) {
     await updateChatOutboundStatus(storeId, message.id, 'sent', null);
-    await touchChatThreadAfterReply(storeId, threadId, message.created_at, buildChatPreview('text', message.text));
+    await touchChatThreadAfterReply(storeId, threadId, message.created_at, preview);
     return { ok: true, message: toChatMessageView({ ...message, send_status: 'sent', send_error: null }), notice: 'ローカル環境のため、LINE には送っていません（記録だけ更新しました）' };
   }
 
@@ -341,7 +387,11 @@ export async function sendChatReply(
     await updateChatOutboundStatus(storeId, message.id, 'failed', error);
     return { ok: false, status: 409, error, message: toChatMessageView({ ...message, send_status: 'failed', send_error: error }) };
   }
-  const res = await (deps.push ?? pushChatText)(token, thread.line_user_id, message.text ?? v.text, v.clientKey);
+  // 送る内容は、保存してある内容（同じ送信の ID の送り直しでも、最初に保存した内容を送る）
+  const savedImageUrl = message.kind === 'image' ? message.meta?.image_url : null;
+  const res = savedImageUrl
+    ? await (deps.pushImage ?? pushChatImage)(token, thread.line_user_id, savedImageUrl, v.clientKey)
+    : await (deps.push ?? pushChatText)(token, thread.line_user_id, message.text ?? v.text, v.clientKey);
   if (!res.ok) {
     const error = describeChatSendError(res.status, res.body);
     await updateChatOutboundStatus(storeId, message.id, 'failed', error).catch((e) => console.error('[chat] 送信結果の保存エラー:', e));
@@ -350,7 +400,7 @@ export async function sendChatReply(
   // 送れたあとの記録に失敗しても、送信は成功として返す（もう一度押されても、同じ鍵なので LINE には 2 回届かない）
   try {
     await updateChatOutboundStatus(storeId, message.id, 'sent', null);
-    await touchChatThreadAfterReply(storeId, threadId, message.created_at, buildChatPreview('text', message.text));
+    await touchChatThreadAfterReply(storeId, threadId, message.created_at, preview);
   } catch (e) {
     console.error('[chat] 送信結果の保存エラー:', e instanceof Error ? e.message : e);
   }
@@ -504,7 +554,158 @@ export async function sendChatNotifyTest(storeId: string, origin: string | null,
 
 /** 保存期間を過ぎた会話の自動削除（1 日 1 回の cron から）。1 回に 5000 通まで。残りは次の日に回す */
 export async function runChatRetention(now: Date = new Date()): Promise<ChatPurgeResult> {
+  // 先に画像のファイルを消す（行を先に消すと、画像の場所が分からなくなって画像だけ残る）。失敗しても、文字のメッセージの削除は続ける
+  try {
+    const media = await purgeExpiredChatMedia(now);
+    if (media.removed > 0 || media.failed > 0) console.log(`[chat] 自動削除（画像）: 消した=${media.removed} 消せなかった=${media.failed}`);
+  } catch (e) {
+    console.error('[chat] 画像の自動削除エラー:', e instanceof Error ? e.message : e);
+  }
   const result = await purgeExpiredChat(now, CHAT_RETENTION_BATCH);
   if (result.messages > 0 || result.threads > 0) console.log(`[chat] 自動削除: メッセージ=${result.messages} 会話=${result.threads} 残り=${result.remaining ? 'あり' : 'なし'}`);
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// ④-4: 画像の受信と返信・定型文・対応済みの切り替え
+// ---------------------------------------------------------------------------
+
+/** 届いた画像を LINE から取りにいく回数（LINE 側の準備中・一時的な通信エラーのとき） */
+const INBOUND_IMAGE_TRIES = 3;
+
+export interface ChatImageDeps {
+  /** LINE から画像の中身を取得する（差し替え用） */
+  fetchContent?: (accessToken: string, lineMessageId: string) => Promise<{ content: ChatImageContent | null; reason?: string; retry?: boolean }>;
+  /** 待つ（差し替え用。テストでは待たない） */
+  wait?: (ms: number) => Promise<void>;
+}
+
+/**
+ * お客様から届いた画像の中身を、LINE から取得して保存する（公開しない置き場）。
+ * 取得できなかったときは「読み込めませんでした」の印を付ける（メッセージは残す）。**例外を投げない**
+ */
+export async function storeChatInboundImage(storeId: string, lineMessageId: string, deps: ChatImageDeps = {}): Promise<'saved' | 'failed' | 'skipped'> {
+  try {
+    const message = await findChatMessageByLineId(storeId, lineMessageId);
+    if (!message || message.kind !== 'image' || message.direction !== 'in' || message.media_path) return 'skipped';
+    const fail = async (reason: string) => {
+      console.warn(`[chat] 画像を保存できませんでした: storeId=${storeId} ${reason}`);
+      await setChatMessageMedia(storeId, message.id, { media_path: null, meta: { ...(message.meta ?? {}), media_error: '1' } });
+      return 'failed' as const;
+    };
+    const token = await getStoreLineToken(storeId).catch(() => null);
+    if (!token) return fail('トークン未設定');
+    const fetchContent = deps.fetchContent ?? fetchLineImageContent;
+    const wait = deps.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    let last = '';
+    for (let i = 0; i < INBOUND_IMAGE_TRIES; i++) {
+      const res = await fetchContent(token, lineMessageId);
+      if (res.content) {
+        const ext = chatImageExt(res.content.contentType);
+        if (!ext) return fail('画像の種類が分かりません');
+        const mediaPath = chatInboundImagePath(storeId, message.thread_id, message.id, ext);
+        await saveChatInboundImage(mediaPath, res.content);
+        const meta = { ...(message.meta ?? {}) };
+        delete meta.media_error;
+        await setChatMessageMedia(storeId, message.id, { media_path: mediaPath, meta: Object.keys(meta).length > 0 ? meta : null });
+        return 'saved';
+      }
+      last = res.reason ?? '取得できません';
+      if (!res.retry) break;
+      if (i < INBOUND_IMAGE_TRIES - 1) await wait(1500 * (i + 1));
+    }
+    return fail(last);
+  } catch (e) {
+    console.error(`[chat] 画像の保存エラー: storeId=${storeId}`, e instanceof Error ? e.message : e);
+    return 'failed';
+  }
+}
+
+/**
+ * お客様から届いた画像を返す（トークの画面用）。
+ * **他の店舗のメッセージ・店舗が送った画像・画像の無いメッセージは null**（API は 404）
+ */
+export async function getChatInboundImage(storeId: string, messageId: string): Promise<ChatImageContent | null> {
+  const message = await getChatMessage(storeId, messageId);
+  if (!message || message.direction !== 'in' || message.kind !== 'image' || !message.media_path) return null;
+  // 保存先は「店舗 ID / 会話 ID / メッセージ ID」。記録が書き換えられていても、その店舗の置き場の外は読まない
+  if (!message.media_path.startsWith(`${storeId}/`)) return null;
+  return readChatInboundImage(message.media_path);
+}
+
+export type ChatImageUploadResult = { ok: true; url: string } | { ok: false; status: number; error: string };
+
+/**
+ * 返信で送る画像を受け取り、公開の置き場に保存して URL を返す（このあと sendChatReply に image_url として渡す）。
+ * JPEG / PNG・1MB まで（画面で縮めてから送る。LINE のプレビュー画像の上限が 1MB のため）
+ */
+export async function uploadChatReplyImage(storeId: string, data: Buffer): Promise<ChatImageUploadResult> {
+  const { settings } = await getChatSettings(storeId);
+  if (!settings.enabled) return { ok: false, status: 409, error: 'トーク機能が OFF のため、画像を送れません' };
+  if (data.length === 0) return { ok: false, status: 400, error: '画像を選んでください' };
+  if (data.length > CHAT_OUTBOUND_IMAGE_MAX_BYTES) return { ok: false, status: 400, error: '画像が大きすぎます（1MB まで）。もう一度、画像を選び直してください' };
+  // ファイルの中身の先頭を見て、本当に JPEG / PNG かを確かめる（拡張子や申告された種類は信用しない）
+  const info = readImageInfo(new Uint8Array(data.buffer, data.byteOffset, Math.min(data.length, 65536)));
+  if (!info) return { ok: false, status: 400, error: '送れるのは JPEG か PNG の画像だけです' };
+  try {
+    const saved = await saveChatOutboundImage(storeId, data, info.type === 'png' ? 'png' : 'jpg');
+    return { ok: true, url: saved.url };
+  } catch (e) {
+    console.error('[chat] 画像のアップロードエラー:', e instanceof Error ? e.message : e);
+    return { ok: false, status: 500, error: '画像のアップロードに失敗しました' };
+  }
+}
+
+/** 対応中 / 対応済み を切り替える */
+export async function updateChatThreadStatus(storeId: string, threadId: string, input: unknown): Promise<{ ok: true; status: ChatThreadStatus } | { ok: false; status: number; error: string }> {
+  const status = (input && typeof input === 'object' ? (input as Record<string, unknown>).status : null) as unknown;
+  if (!isChatThreadStatus(status)) return { ok: false, status: 400, error: '対応の状態が正しくありません' };
+  if (!(await setChatThreadStatus(storeId, threadId, status))) return { ok: false, status: 404, error: '会話が見つかりません' };
+  return { ok: true, status };
+}
+
+/** 定型文の一覧 */
+export async function getChatTemplates(storeId: string): Promise<ChatReplyTemplate[]> {
+  return (await getChatSettings(storeId)).templates ?? [];
+}
+
+/** 定型文を保存する（一覧をまるごと差し替える。店舗管理者も変えられる） */
+export async function updateChatTemplates(storeId: string, input: unknown): Promise<{ ok: true; templates: ChatReplyTemplate[] } | { ok: false; status: number; error: string }> {
+  const raw = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>).templates : input;
+  const v = validateChatTemplates(raw);
+  if (!v.ok) return { ok: false, status: 400, error: v.error };
+  try {
+    return { ok: true, templates: await saveChatTemplates(storeId, v.value) };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '定型文の保存に失敗しました';
+    return { ok: false, status: message.includes('マイグレーション') ? 409 : 500, error: message };
+  }
+}
+
+/**
+ * 保存期間を過ぎたメッセージの画像を消す（自動削除の前に行う）。
+ * 画像のファイルを消せたメッセージだけ、画像の場所を空にする（= このあと行を消せるようになる）。
+ * 消せなかった画像のメッセージは、行を残して次の日にもう一度試す
+ */
+export async function purgeExpiredChatMedia(now: Date, limit = 200): Promise<{ removed: number; failed: number }> {
+  const items = await listExpiredChatMedia(now, limit);
+  if (items.length === 0) return { removed: 0, failed: 0 };
+  const cleared: string[] = [];
+  let failed = 0;
+  for (const kind of ['inbound', 'outbound'] as const) {
+    const group = items.filter((m) => (kind === 'inbound' ? m.direction === 'in' : m.direction !== 'in'));
+    if (group.length === 0) continue;
+    const failedPaths = new Set(
+      await removeChatMedia(
+        kind,
+        group.map((m) => m.media_path),
+      ).catch(() => group.map((m) => m.media_path)),
+    );
+    for (const m of group) {
+      if (failedPaths.has(m.media_path)) failed += 1;
+      else cleared.push(m.id);
+    }
+  }
+  await clearChatMessageMedia(cleared);
+  return { removed: cleared.length, failed };
 }

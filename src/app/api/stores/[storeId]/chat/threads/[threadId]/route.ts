@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authorizeStoreAccess } from '@/lib/store-access';
-import { getChatThreadDetail } from '@/lib/chat-service';
+import { getChatThreadDetail, updateChatThreadStatus } from '@/lib/chat-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,5 +22,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ stor
   } catch (error) {
     console.error('[API] chat thread error:', error);
     return NextResponse.json({ error: '会話の取得に失敗しました' }, { status: 500 });
+  }
+}
+
+// PATCH /api/stores/{storeId}/chat/threads/{threadId} - 対応中 / 対応済み を切り替える（{ status: 'open' | 'done' }）
+// 対応済みにした会話に、お客様から新しいメッセージが届くと、自動で対応中に戻る
+export async function PATCH(request: Request, { params }: { params: Promise<{ storeId: string; threadId: string }> }) {
+  try {
+    const { storeId, threadId } = await params;
+    const auth = await authorizeStoreAccess(request, storeId);
+    if (auth.response) return auth.response;
+    const body = await request.json().catch(() => null);
+    const result = await updateChatThreadStatus(storeId, threadId, body);
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json({ status: result.status }, NO_STORE);
+  } catch (error) {
+    console.error('[API] chat thread status error:', error);
+    return NextResponse.json({ error: '対応の状態の保存に失敗しました' }, { status: 500 });
   }
 }

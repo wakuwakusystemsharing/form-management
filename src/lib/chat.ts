@@ -279,6 +279,10 @@ export interface ChatMessageView {
   auto_kind: ChatAutoKind | null;
   /** スタンプの画像（LINE の公開 URL。番号が分かるものだけ） */
   sticker_url: string | null;
+  /** 画像の URL（お客様から届いた画像 = ログインが要る API / 店舗が送った画像 = 公開の URL）。保存できていなければ null */
+  image_url: string | null;
+  /** お客様から届いた画像を、LINE から取得できなかった（「画像（読み込めませんでした）」と出す） */
+  image_failed: boolean;
   send_status: 'sending' | 'sent' | 'failed' | null;
   send_error: string | null;
   /** 返信したスタッフ（メールアドレス） */
@@ -307,6 +311,8 @@ export function toChatMessageView(m: ChatMessage): ChatMessageView {
     auto: m.auto === true,
     auto_kind: m.auto_kind,
     sticker_url: m.kind === 'sticker' ? stickerImageUrl(m.meta) : null,
+    image_url: chatImageViewUrl(m),
+    image_failed: m.kind === 'image' && m.direction === 'in' && !m.media_path && m.meta?.media_error === '1',
     send_status: m.send_status,
     send_error: m.send_error,
     sent_by_name: m.meta?.sent_by_name || null,
@@ -314,9 +320,10 @@ export function toChatMessageView(m: ChatMessage): ChatMessageView {
   };
 }
 
-export type ChatThreadFilter = 'all' | 'unread';
+/** all = すべて / unread = 未読のある会話 / open = 対応中（対応済みにしていない会話） */
+export type ChatThreadFilter = 'all' | 'unread' | 'open';
 
-export const isChatThreadFilter = (v: unknown): v is ChatThreadFilter => v === 'all' || v === 'unread';
+export const isChatThreadFilter = (v: unknown): v is ChatThreadFilter => v === 'all' || v === 'unread' || v === 'open';
 
 /** 一覧の並び: 未読のある会話が上、その中は新しい順 */
 export function sortChatThreads<T extends { unread_count: number; last_message_at: string }>(threads: ReadonlyArray<T>): T[] {
@@ -346,17 +353,30 @@ export function normalizeClientKey(value: unknown): string | null {
   return UUID_PATTERN.test(v) ? v : null;
 }
 
-export type ChatReplyValidation = { ok: true; text: string; clientKey: string } | { ok: false; error: string };
+/** imageUrl があれば画像の返信（text は空）、無ければ文字の返信 */
+export type ChatReplyValidation = { ok: true; text: string; imageUrl: string | null; clientKey: string } | { ok: false; error: string };
 
-/** 返信の検証: 空でない・5000 文字まで・送信の ID が正しい形 */
-export function validateChatReply(raw: unknown): ChatReplyValidation {
+/**
+ * 返信の検証。
+ * - 文字: 空でない・5000 文字まで
+ * - 画像（image_url）: この店舗が「画像を送る」でアップロードした画像の URL だけ（ほかの URL を LINE に送らせない）
+ * - 送信の ID が正しい形
+ */
+export function validateChatReply(raw: unknown, opts: { storeId?: string } = {}): ChatReplyValidation {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  if (r.image_url !== undefined && r.image_url !== null && r.image_url !== '') {
+    const imageUrl = typeof r.image_url === 'string' ? r.image_url.trim() : '';
+    if (!opts.storeId || !isChatOutboundImageUrl(imageUrl, opts.storeId)) return { ok: false, error: '送れる画像ではありません。もう一度、画像を選び直してください' };
+    const key = normalizeClientKey(r.client_key);
+    if (!key) return { ok: false, error: '送信の情報が正しくありません。画面を読み込み直してください' };
+    return { ok: true, text: '', imageUrl, clientKey: key };
+  }
   const text = typeof r.text === 'string' ? r.text.replace(/\r\n/g, '\n').trim() : '';
   if (!text) return { ok: false, error: 'メッセージを入力してください' };
   if (text.length > CHAT_TEXT_MAX) return { ok: false, error: `メッセージは ${CHAT_TEXT_MAX} 文字までです（いま ${text.length} 文字）` };
   const clientKey = normalizeClientKey(r.client_key);
   if (!clientKey) return { ok: false, error: '送信の情報が正しくありません。画面を読み込み直してください' };
-  return { ok: true, text, clientKey };
+  return { ok: true, text, imageUrl: null, clientKey };
 }
 
 /** 「送信中」のまま、この時間がたった返信は、もう一度送れる（サーバーが途中で止まったとき用） */
@@ -399,3 +419,124 @@ export function nextChatPollDelay(prevDelayMs: number, changed: boolean): number
   if (changed) return CHAT_POLL_MIN_MS;
   return Math.min(CHAT_POLL_MAX_MS, Math.max(CHAT_POLL_MIN_MS, prevDelayMs) + 5000);
 }
+
+// ---------------------------------------------------------------------------
+// 画像（④-4）
+// ---------------------------------------------------------------------------
+
+/** お客様から届いた画像の上限（これより大きい画像は保存しない） */
+export const CHAT_INBOUND_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+/** 店舗が送る画像の上限（LINE のプレビュー画像の上限 = 1MB。画面で縮めてからアップロードする） */
+export const CHAT_OUTBOUND_IMAGE_MAX_BYTES = 1024 * 1024;
+/** 店舗が送る画像の長いほうの辺の上限（画面で縮める） */
+export const CHAT_OUTBOUND_IMAGE_MAX_SIDE = 1600;
+/** お客様から届いた画像の保存先（公開しないバケツ） */
+export const CHAT_MEDIA_BUCKET = 'chat-media';
+/** 店舗が送る画像の置き場（公開のバケツの下。LINE が取りに来るので公開の URL が要る。名前は推測できない 32 桁） */
+export const CHAT_OUTBOUND_IMAGE_DIR = 'chat_images';
+
+const IMAGE_EXT_BY_TYPE: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' };
+
+/** 画像の種類（Content-Type）→ 拡張子。画像でなければ null */
+export function chatImageExt(contentType: string | null | undefined): string | null {
+  const t = (contentType ?? '').split(';')[0].trim().toLowerCase();
+  return IMAGE_EXT_BY_TYPE[t] ?? null;
+}
+
+export function chatImageContentType(pathOrExt: string): string {
+  const ext = pathOrExt.split('.').pop()?.toLowerCase() ?? '';
+  return Object.entries(IMAGE_EXT_BY_TYPE).find(([, e]) => e === ext)?.[0] ?? 'image/jpeg';
+}
+
+/** お客様から届いた画像の保存先（公開しないバケツの中のパス） */
+export function chatInboundImagePath(storeId: string, threadId: string, messageId: string, ext: string): string {
+  return `${storeId}/${threadId}/${messageId}.${ext}`;
+}
+
+/** 店舗が送る画像の保存先（公開のバケツの中のパス）。name = 推測できない 32 桁の 16 進数 */
+export function chatOutboundImagePath(storeId: string, name: string, ext: 'jpg' | 'png'): string {
+  return `${CHAT_OUTBOUND_IMAGE_DIR}/${storeId}/${name}.${ext}`;
+}
+
+/** URL（またはパス）から、店舗が送る画像の保存先のパスを取り出す。その店舗の置き場のものでなければ null */
+export function chatOutboundImagePathFromUrl(url: string, storeId: string): string | null {
+  if (!url || url.includes('..')) return null;
+  const m = url.match(/(?:^|\/)(chat_images\/([A-Za-z0-9_-]{1,64})\/[0-9a-f]{32}\.(?:jpg|png))(?:[?#].*)?$/);
+  return m && m[2] === storeId ? m[1] : null;
+}
+
+/**
+ * 返信で送ってよい画像の URL か: その店舗の置き場（chat_images/{storeId}/）にある画像で、https（local はサイト内のパスも可）。
+ * 画面から渡された URL をそのまま LINE に送ると、どんな URL でも送れてしまうので、ここで絞る
+ */
+export function isChatOutboundImageUrl(url: string, storeId: string): boolean {
+  if (!chatOutboundImagePathFromUrl(url, storeId)) return false;
+  return url.startsWith('https://') || url.startsWith('/chat_images/');
+}
+
+/** 画面に出す画像の URL */
+function chatImageViewUrl(m: ChatMessage): string | null {
+  if (m.kind !== 'image') return null;
+  if (m.direction === 'out') return m.meta?.image_url || null;
+  return m.media_path ? `/api/stores/${encodeURIComponent(m.store_id)}/chat/media/${encodeURIComponent(String(m.id))}` : null;
+}
+
+// ---------------------------------------------------------------------------
+// 定型文（④-4）
+// ---------------------------------------------------------------------------
+
+export const CHAT_TEMPLATE_MAX = 30;
+export const CHAT_TEMPLATE_TITLE_MAX = 30;
+export const CHAT_TEMPLATE_TEXT_MAX = 1000;
+
+export interface ChatReplyTemplate {
+  id: string;
+  /** 一覧に出す名前 */
+  title: string;
+  /** 入力欄に入れる文 */
+  text: string;
+}
+
+/** 保存されている値を定型文の配列にする（読めない行は捨てる） */
+export function normalizeChatTemplates(raw: unknown): ChatReplyTemplate[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ChatReplyTemplate[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const r = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
+    const title = typeof r.title === 'string' ? r.title.trim().slice(0, CHAT_TEMPLATE_TITLE_MAX) : '';
+    const text = typeof r.text === 'string' ? r.text.replace(/\r\n/g, '\n').trim().slice(0, CHAT_TEMPLATE_TEXT_MAX) : '';
+    if (!title || !text) continue;
+    let id = typeof r.id === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(r.id) ? r.id : `t${out.length + 1}`;
+    while (seen.has(id)) id = `${id}_`;
+    seen.add(id);
+    out.push({ id, title, text });
+    if (out.length >= CHAT_TEMPLATE_MAX) break;
+  }
+  return out;
+}
+
+export type ChatTemplatesValidation = { ok: true; value: ChatReplyTemplate[] } | { ok: false; error: string };
+
+/** 画面から届いた定型文の検証（30 個まで・名前 30 文字まで・文 1000 文字まで） */
+export function validateChatTemplates(raw: unknown): ChatTemplatesValidation {
+  if (!Array.isArray(raw)) return { ok: false, error: '定型文の内容が正しくありません' };
+  if (raw.length > CHAT_TEMPLATE_MAX) return { ok: false, error: `定型文は ${CHAT_TEMPLATE_MAX} 個までです` };
+  for (const [i, item] of raw.entries()) {
+    const r = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
+    const title = typeof r.title === 'string' ? r.title.trim() : '';
+    const text = typeof r.text === 'string' ? r.text.trim() : '';
+    if (!title) return { ok: false, error: `${i + 1} 個目の定型文の名前を入力してください` };
+    if (title.length > CHAT_TEMPLATE_TITLE_MAX) return { ok: false, error: `定型文の名前は ${CHAT_TEMPLATE_TITLE_MAX} 文字までです（「${title.slice(0, 10)}…」）` };
+    if (!text) return { ok: false, error: `「${title}」の文を入力してください` };
+    if (text.length > CHAT_TEMPLATE_TEXT_MAX) return { ok: false, error: `「${title}」の文は ${CHAT_TEMPLATE_TEXT_MAX} 文字までです` };
+  }
+  return { ok: true, value: normalizeChatTemplates(raw) };
+}
+
+// ---------------------------------------------------------------------------
+// 対応済みの切り替え（④-4）
+// ---------------------------------------------------------------------------
+
+export type ChatThreadStatus = 'open' | 'done';
+export const isChatThreadStatus = (v: unknown): v is ChatThreadStatus => v === 'open' || v === 'done';

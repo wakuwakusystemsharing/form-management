@@ -963,7 +963,7 @@ LINE Webhook の署名チェックの設定（チャネルシークレット）
 
 **認証**: `authorizeStoreAccess`（マスター / 同じテナントのシステム管理者 / その店舗の店舗管理者）
 
-**クエリ**: `filter` = `all`（既定）/ `unread`（未読のある会話だけ）、`search` = 名前の一部
+**クエリ**: `filter` = `all`（既定）/ `unread`（未読のある会話だけ）/ `open`（対応中の会話だけ）、`search` = 名前の一部
 
 **レスポンス**（未読のある会話が上、その中は新しい順。LINE ユーザー ID は返さない）:
 ```json
@@ -1004,7 +1004,8 @@ LINE Webhook の署名チェックの設定（チャネルシークレット）
 ```
 
 - `direction`: `in` = お客様から / `out` = 店舗から / `system` = 自動の記録
-- `kind`: `text` / `image` / `sticker` / `video` / `audio` / `file` / `location` / `other`（文字以外は中身を持たない）
+- `kind`: `text` / `image` / `sticker` / `video` / `audio` / `file` / `location` / `other`（文字と画像以外は中身を持たない）
+- `image_url` / `image_failed`: 画像の URL（お客様から届いた画像 = `GET .../chat/media/{messageId}` / 店舗が送った画像 = 公開の URL）と、LINE から取得できなかったか
 - `auto`: フォームの送信文・コマンドなど（`auto_kind` = `form` / `command` / `keyword` / `follow_up`）
 
 ### `POST /api/stores/{storeId}/chat/threads/{threadId}/messages`
@@ -1024,6 +1025,53 @@ LINE Webhook の署名チェックの設定（チャネルシークレット）
 - 成功 `200`: `{ "message": { …メッセージ…, "send_status": "sent" }, "notice": null }`（local は LINE に送らず `notice` に理由）
 - `400`: 内容が正しくない / `404`: 会話が無い（他の店舗の会話を含む）/ `409`: トーク機能が OFF・トークン未設定
 - `502`: LINE に送れなかった。`{ "error": "今月の通数の上限に達しています", "message": { …, "send_status": "failed", "send_error": "…" } }`
+
+### `PATCH /api/stores/{storeId}/chat/threads/{threadId}`
+対応中 / 対応済み を切り替える
+
+**認証**: `authorizeStoreAccess`。他の店舗の会話 ID・存在しない ID は 404
+
+**リクエスト**: `{ "status": "done" }`（`open` = 対応中 / `done` = 対応済み。それ以外は 400）
+
+**レスポンス**: `{ "status": "done" }`
+
+対応済みにした会話に、お客様から自動でない新しいメッセージが届くと、対応中に戻る。会話の一覧は `filter=open` で対応中だけに絞り込める
+
+### `GET /api/stores/{storeId}/chat/media/{messageId}`
+お客様から届いた画像（画像のデータそのものを返す）
+
+**認証**: `authorizeStoreAccess`。画像は公開していない置き場にあり、この API を通してだけ読める
+
+- 他の店舗のメッセージ・画像の無いメッセージ・店舗が送った画像は 404
+- `Content-Type` は画像の種類、`Cache-Control: private, max-age=3600`
+- 会話の API が返すメッセージの `image_url` に、この URL が入る（店舗が送った画像は公開の URL）。LINE から取得できなかった画像は `image_url: null` + `image_failed: true`
+
+### `POST /api/stores/{storeId}/chat/images`
+返信で送る画像をアップロードする
+
+**認証**: `authorizeStoreAccess`
+
+**リクエスト**: `multipart/form-data` の `file`。JPEG / PNG・1MB まで（画面で、長いほうの辺 1600px まで・1MB 以下に縮めてから送る）
+
+**レスポンス**: `{ "url": "https://…/chat_images/{storeId}/{32 桁}.jpg" }`
+- `400`: 画像が無い・1MB を超える・JPEG / PNG でない（ファイルの中身で確かめる）/ `409`: トーク機能が OFF
+
+返ってきた `url` を、返信の API（`POST .../chat/threads/{threadId}/messages`）に `{ "image_url": "…", "client_key": "…" }` として渡すと、画像を送る（公式 LINE の通数を 1 通使う）。**この店舗がここでアップロードした画像の URL 以外は、400 で断る**
+
+### `GET / PUT /api/stores/{storeId}/chat/templates`
+定型文（よく使う返信）
+
+**認証**: `authorizeStoreAccess`（店舗管理者も変えられる）
+
+**PUT のリクエスト**（一覧をまるごと差し替える）:
+```json
+{ "templates": [{ "id": "t1", "title": "営業時間のご案内", "text": "平日は 10 時から 19 時までです。" }] }
+```
+
+- 30 個まで・`title` 30 文字まで・`text` 1000 文字まで。名前か文が空だと 400
+- マイグレーション未適用の環境は 409
+
+**レスポンス**（2 つとも同じ）: `{ "templates": [{ "id": "t1", "title": "…", "text": "…" }] }`
 
 ### `GET /api/stores/{storeId}/chat/unread`
 トーク機能が ON か・未読の合計（メニューのバッジ用）
