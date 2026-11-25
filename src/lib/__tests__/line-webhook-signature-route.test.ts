@@ -14,6 +14,13 @@ vi.mock('@/lib/line-secret-repository', () => ({
   getStoreLineSecret: vi.fn(async () => secretState.current),
 }));
 
+const chatCalls = vi.hoisted(() => ({ list: [] as Array<{ storeId: string; count: number; verified: boolean }> }));
+vi.mock('@/lib/chat-service', () => ({
+  scheduleChatInbound: vi.fn((storeId: string, events: unknown[], opts: { verified: boolean }) => {
+    chatCalls.list.push({ storeId, count: events.length, verified: opts.verified });
+  }),
+}));
+
 vi.mock('@/lib/supabase', () => ({
   createAdminClient: () => ({
     from: () => ({
@@ -42,7 +49,18 @@ const EMPTY = '{"destination":"U1","events":[]}';
 describe('LINE Webhook の署名チェック', () => {
   beforeEach(() => {
     secretState.current = { status: 'none' };
+    chatCalls.list = [];
   });
+
+  it('1 対 1 トークの保存には、署名を確認できたかどうかを渡す（断った通知は渡さない）', async () => {
+    await post(EMPTY);
+    expect(chatCalls.list).toEqual([{ storeId: 'abc123', count: 0, verified: false }]);
+    secretState.current = { status: 'set', secret: SECRET, updated_at: '2026-11-20T00:00:00.000Z' };
+    await post(EMPTY, sign(EMPTY));
+    expect(chatCalls.list[1]).toEqual({ storeId: 'abc123', count: 0, verified: true });
+    await post(EMPTY, 'detarame');
+    expect(chatCalls.list).toHaveLength(2);
+  }, 120000);
 
   it('シークレット未登録の店舗は、署名が無くても今までどおり受け付ける', async () => {
     const res = await post(EMPTY);

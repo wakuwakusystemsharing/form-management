@@ -16,6 +16,7 @@ import { scheduleCancelOpeningBroadcast } from '@/lib/broadcast-automation-servi
 import { ensureFriendCustomer } from '@/lib/line-friend-customers';
 import { LINE_SIGNATURE_HEADER, decideWebhookSignature } from '@/lib/line-signature';
 import { getStoreLineSecret } from '@/lib/line-secret-repository';
+import { scheduleChatInbound } from '@/lib/chat-service';
 import { CHANGE_KEYWORD, MENU_CHANGE_MESSAGE_HEAD, isChangePostback } from '@/lib/reservation-change';
 import { buildChangeMenuReply, buildMenuChangeDoneReply, handleChangePostback } from '@/lib/reservation-change-service';
 import { WAITLIST_KEYWORD, WAITLIST_MESSAGE_HEAD, isWaitlistPostback } from '@/lib/waitlist';
@@ -517,6 +518,10 @@ export async function POST(req: NextRequest) {
     body = null;
   }
   const events: LineEvent[] = Array.isArray(body?.events) ? (body.events as LineEvent[]) : [];
+
+  // 1 対 1 トーク: お客様からのメッセージを会話に保存する（トーク機能が ON の店舗・署名を確認できた通知だけ）。
+  // LINE への応答を返したあとに動かし、失敗しても以降の処理（予約確認などの応答）は変えない
+  scheduleChatInbound(storeId, events, { verified: signatureDecision === 'verified' });
 
   // follow / unfollow を全イベントについて先に反映（reply トークンに依存しない処理）。
   for (const ev of events) {
