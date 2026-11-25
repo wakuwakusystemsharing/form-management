@@ -15,6 +15,7 @@ import StoreAdminManager from '@/components/StoreAdminManager';
 import StoreAdminMenuSettings from '@/components/StoreAdminMenuSettings';
 import StoreDigestSettings from '@/components/StoreDigestSettings';
 import LineWebhookSecretSettings from '@/components/LineWebhookSecretSettings';
+import ChatSettingsCard from '@/components/ChatSettingsCard';
 import FormHistoryDialog from '@/components/FormHistoryDialog';
 import ReminderTemplateEditor from '@/components/ReminderTemplateEditor';
 import { REMINDER_BEFORE_TIME_OPTIONS, formatMinutesJa } from '@/lib/follow-message-scheduler';
@@ -2525,6 +2526,9 @@ export default function StoreDetailPage() {
 
             {/* LINE 通知の署名チェック（チャネルシークレットの登録。運営だけ） */}
             <LineWebhookSecretSettings storeId={storeId} />
+
+            {/* 1 対 1 トーク（ON / OFF・保存期間。運営だけ） */}
+            <ChatSettingsCard storeId={storeId} />
 
             {/* 危険ゾーン */}
             <Card className="border-destructive/50">

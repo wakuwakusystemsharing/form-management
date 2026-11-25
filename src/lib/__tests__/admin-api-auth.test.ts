@@ -105,6 +105,8 @@ const CASES: Case[] = [
   { name: '店舗管理者の一覧', load: () => import('@/app/api/stores/[storeId]/admins/route'), method: 'GET', url: '/api/stores/storea/admins', params: { storeId: 'storea' }, upperOnly: true },
   { name: '店舗管理者の追加', load: () => import('@/app/api/stores/[storeId]/admins/route'), method: 'POST', url: '/api/stores/storea/admins', params: { storeId: 'storea' }, body: { email: 'x@example.com' }, upperOnly: true },
   { name: '店舗管理者の削除', load: () => import('@/app/api/stores/[storeId]/admins/[userId]/route'), method: 'DELETE', url: '/api/stores/storea/admins/u1', params: { storeId: 'storea', userId: 'u1' }, upperOnly: true },
+  { name: 'トークの設定の取得', load: () => import('@/app/api/stores/[storeId]/chat-settings/route'), method: 'GET', url: '/api/stores/storea/chat-settings', params: { storeId: 'storea' }, upperOnly: true },
+  { name: 'トークの設定の変更', load: () => import('@/app/api/stores/[storeId]/chat-settings/route'), method: 'PUT', url: '/api/stores/storea/chat-settings', params: { storeId: 'storea' }, body: { enabled: true }, upperOnly: true },
 ];
 
 async function call(c: Case): Promise<Response> {
