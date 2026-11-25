@@ -1645,6 +1645,7 @@ export default function StoreAdminPage() {
             <ChatPanel
               storeId={storeId}
               initialCustomerId={searchParams.get('chatCustomer')}
+              canDelete={isUpperAdminUser && !previewAsStoreAdmin}
               customerHref={visibleTabIds.includes('customers') ? (customerId) => `/${storeId}/admin?tab=customers&customerId=${encodeURIComponent(customerId)}` : undefined}
               onUnreadChange={(unread) => setChatState((prev) => (prev.unread === unread ? prev : { ...prev, unread }))}
             />

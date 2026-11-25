@@ -117,6 +117,7 @@ const CASES: Case[] = [
   { name: 'トークの定型文の一覧', load: () => import('@/app/api/stores/[storeId]/chat/templates/route'), method: 'GET', url: '/api/stores/storea/chat/templates', params: { storeId: 'storea' } },
   { name: 'トークの定型文の保存', load: () => import('@/app/api/stores/[storeId]/chat/templates/route'), method: 'PUT', url: '/api/stores/storea/chat/templates', params: { storeId: 'storea' }, body: { templates: [] } },
   { name: 'トークの画像のアップロード', load: () => import('@/app/api/stores/[storeId]/chat/images/route'), method: 'POST', url: '/api/stores/storea/chat/images', params: { storeId: 'storea' }, body: {} },
+  { name: 'トークの会話の削除', load: () => import('@/app/api/stores/[storeId]/chat/threads/[threadId]/route'), method: 'DELETE', url: '/api/stores/storea/chat/threads/t1', params: { storeId: 'storea', threadId: 't1' }, upperOnly: true },
   { name: 'トークの設定の取得', load: () => import('@/app/api/stores/[storeId]/chat-settings/route'), method: 'GET', url: '/api/stores/storea/chat-settings', params: { storeId: 'storea' }, upperOnly: true },
   { name: 'トークの設定の変更', load: () => import('@/app/api/stores/[storeId]/chat-settings/route'), method: 'PUT', url: '/api/stores/storea/chat-settings', params: { storeId: 'storea' }, body: { enabled: true }, upperOnly: true },
 ];

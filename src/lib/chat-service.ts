@@ -41,6 +41,7 @@ import {
   claimChatNotification,
   clearChatMessageMedia,
   countChatUnread,
+  deleteChatThreadRows,
   findChatCustomers,
   findChatMessageByLineId,
   getChatMessage,
@@ -49,6 +50,7 @@ import {
   getChatThread,
   insertChatOutbound,
   listChatMessages,
+  listChatThreadMedia,
   listChatThreads,
   listChatThreadsToNotify,
   listExpiredChatMedia,
@@ -819,4 +821,37 @@ export async function getChatUsageReport(month?: string | null, now: Date = new 
   const shown = rows.filter((r) => r.enabled || r.enabled_at || r.current.inbound + r.current.outbound + r.previous.inbound + r.previous.outbound > 0);
   const totals = shown.reduce<ChatUsageCounts>((sum, r) => ({ inbound: sum.inbound + r.current.inbound, outbound: sum.outbound + r.current.outbound, image_bytes: sum.image_bytes + r.current.image_bytes }), { ...EMPTY_USAGE });
   return { month: target, previous_month: previous, rows: sortChatUsageRows(shown), totals, unavailable: source.missing };
+}
+
+// ---------------------------------------------------------------------------
+// 会話を消す（お客様から削除を求められたとき。運営だけが呼ぶ。役割の確認は API 側で行う）
+// ---------------------------------------------------------------------------
+
+export type ChatThreadDeleteResult = { ok: true; messages: number; images: number } | { ok: false; status: number; error: string };
+
+/**
+ * 会話 1 本を、メッセージ・画像ごと消す（元に戻せない）。
+ * 順番: ① 画像のファイルを消す → ② 会話とメッセージの行を消す。
+ * 画像を消せなかったときは、行を消さずに失敗で返す（行を先に消すと、画像の場所が分からなくなって画像だけ残る）。
+ * 消すのは、このシステムに保存した分だけ。お客様や店舗の LINE アプリに残っているトークは消えない
+ */
+export async function deleteChatThread(storeId: string, threadId: string, user: { id: string; email?: string | null } | null): Promise<ChatThreadDeleteResult> {
+  const thread = await getChatThread(storeId, threadId);
+  if (!thread) return { ok: false, status: 404, error: '会話が見つかりません' };
+  const media = await listChatThreadMedia(storeId, threadId);
+  // 消すのは、その店舗の置き場にある画像だけ（記録が書き換えられていても、ほかの場所のファイルは消さない）
+  const inbound = media.filter((m) => m.direction === 'in' && m.media_path.startsWith(`${storeId}/`)).map((m) => m.media_path);
+  const outbound = media.filter((m) => m.direction !== 'in' && chatOutboundImagePathFromUrl(m.media_path, storeId) === m.media_path).map((m) => m.media_path);
+  try {
+    const failed = [...(await removeChatMedia('inbound', inbound)), ...(await removeChatMedia('outbound', outbound))];
+    if (failed.length > 0) return { ok: false, status: 500, error: '画像を消せなかったため、会話を削除していません。少し待ってから、もう一度お試しください' };
+  } catch (e) {
+    console.error(`[chat] 会話の画像の削除エラー: storeId=${storeId}`, e instanceof Error ? e.message : e);
+    return { ok: false, status: 500, error: '画像を消せなかったため、会話を削除していません。少し待ってから、もう一度お試しください' };
+  }
+  const deleted = await deleteChatThreadRows(storeId, threadId);
+  if (!deleted) return { ok: false, status: 404, error: '会話が見つかりません' };
+  // だれが・いつ・どの会話を消したかをログに残す（会話の中身・お客様の名前は残さない）
+  console.log(`[chat] 会話を削除しました: storeId=${storeId} thread=${threadId} messages=${deleted.messages} images=${inbound.length + outbound.length} by=${user?.id ?? 'local'}`);
+  return { ok: true, messages: deleted.messages, images: inbound.length + outbound.length };
 }

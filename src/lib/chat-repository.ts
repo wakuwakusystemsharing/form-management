@@ -948,3 +948,43 @@ export async function loadChatUsageSource(months: string[]): Promise<ChatUsageSo
   }
   return { settings, usage, storeNames, missing };
 }
+
+// ---------------------------------------------------------------------------
+// 会話を消す（お客様から削除を求められたとき。運営だけ）
+// ---------------------------------------------------------------------------
+
+/** その会話の、画像を持つメッセージ（会話を消す前に、画像のファイルを消すために読む） */
+export async function listChatThreadMedia(storeId: string, threadId: string): Promise<Array<{ direction: 'in' | 'out' | 'system'; media_path: string }>> {
+  if (isLocal()) {
+    return readLocal()
+      .messages.filter((m) => m.store_id === storeId && m.thread_id === threadId && !!m.media_path)
+      .map((m) => ({ direction: m.direction, media_path: m.media_path as string }));
+  }
+  const { data, error } = await client().from('chat_messages').select('direction, media_path').eq('store_id', storeId).eq('thread_id', threadId).not('media_path', 'is', null).limit(10000);
+  if (error) throw new Error(error.message || 'メッセージの読み取りエラー');
+  return ((data ?? []) as Array<{ direction: 'in' | 'out' | 'system'; media_path: string }>).filter((m) => !!m.media_path);
+}
+
+/**
+ * 会話 1 本と、そのメッセージをすべて消す。**必ず店舗 ID と一緒に確かめる**。
+ * 戻り値 = 消したメッセージの数（会話が無ければ null）。画像のファイルは、呼び出し側が先に消しておく
+ */
+export async function deleteChatThreadRows(storeId: string, threadId: string): Promise<{ messages: number } | null> {
+  if (!THREAD_ID_PATTERN.test(threadId)) return null;
+  if (isLocal()) {
+    const data = readLocal();
+    if (!data.threads.some((t) => t.id === threadId && t.store_id === storeId)) return null;
+    const before = data.messages.length;
+    data.messages = data.messages.filter((m) => !(m.thread_id === threadId && m.store_id === storeId));
+    data.threads = data.threads.filter((t) => !(t.id === threadId && t.store_id === storeId));
+    writeLocal(data);
+    return { messages: before - data.messages.length };
+  }
+  const c = client();
+  const counted = await c.from('chat_messages').select('id', { count: 'exact', head: true }).eq('store_id', storeId).eq('thread_id', threadId);
+  // メッセージは、会話を消すと一緒に消える（外部キーの ON DELETE CASCADE）
+  const { data, error } = await c.from('chat_threads').delete().eq('id', threadId).eq('store_id', storeId).select('id');
+  if (error) throw new Error(error.message || '会話の削除エラー');
+  if (!Array.isArray(data) || data.length === 0) return null;
+  return { messages: counted.count ?? 0 };
+}
