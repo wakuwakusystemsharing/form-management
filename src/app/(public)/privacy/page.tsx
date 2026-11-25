@@ -31,6 +31,11 @@ export default function PrivacyPage() {
             <li>LINE ユーザーID — LINE LIFF SDK を通じて自動的に取得</li>
             <li>予約情報（メニュー、日時等） — 予約フォーム送信時にご本人から直接取得</li>
             <li>Google Calendar データ — OAuth同意に基づき Google Calendar API を通じて取得</li>
+            <li>
+              公式 LINE のトーク内容（メッセージの本文、画像、送信日時） — 1 対 1 トーク機能を利用している店舗の LINE 公式アカウントに、
+              お客様がメッセージを送信したときに、LINE Messaging API を通じて取得します。
+              動画・音声・ファイル・位置情報については、送信された事実（種類と日時）のみを記録し、内容は取得しません。
+            </li>
           </ul>
         </section>
 
@@ -41,6 +46,7 @@ export default function PrivacyPage() {
             <li>予約の受付・管理およびサービスの提供</li>
             <li>予約確認・変更等に関するご連絡</li>
             <li>サービスの改善および利用状況の分析</li>
+            <li>お客様からのお問い合わせへの対応、およびその対応履歴の管理（1 対 1 トーク機能を利用している店舗に限ります）</li>
           </ul>
         </section>
 
@@ -106,6 +112,10 @@ export default function PrivacyPage() {
               https://myaccount.google.com/permissions
             </a>
             {" "}から行うことができます。
+          </p>
+          <p className="text-sm text-muted-foreground mt-2">
+            公式 LINE のトーク内容は、店舗ごとに定めた保存期間（1年・2年・3年のいずれか）が経過した後、自動的に削除します。
+            保存期間内であっても、ご本人から削除のご請求があった場合は、「6. 保有個人データに関する権利」に従って対応します。
           </p>
         </section>
 
@@ -267,7 +277,32 @@ export default function PrivacyPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold mb-3">11. プライバシーポリシーの改定</h2>
+          <h2 className="text-xl font-semibold mb-3">11. 公式 LINE のトーク内容の取扱い</h2>
+          <ol className="list-decimal pl-5 text-sm text-muted-foreground space-y-1">
+            <li>
+              本サービスの 1 対 1 トーク機能を利用している店舗では、お客様が当該店舗の LINE 公式アカウントに送信したメッセージを
+              本サービスに保存し、当該店舗の担当者が閲覧・返信できるようにしています。
+            </li>
+            <li>
+              保存の対象となるのは、当該店舗が本機能の利用を開始した後に送信されたメッセージです。
+              グループトーク・複数人トークの内容は保存しません。
+            </li>
+            <li>
+              トーク内容を閲覧できるのは、当該店舗の管理者、および本サービスの運営上必要な範囲で当社の担当者に限ります。
+              お客様から送信された画像は、外部から直接アクセスできない場所に保管します。
+            </li>
+            <li>
+              トーク内容には、お身体の状態やご病歴など、特に配慮が必要な情報が含まれることがあります。
+              当社は、これらの情報をお問い合わせへの対応以外の目的で利用せず、広告の配信や第三者への提供には用いません。
+            </li>
+            <li>
+              お客様は、当該店舗または当社に申し出ることにより、ご自身のトーク内容の削除を求めることができます。
+            </li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold mb-3">12. プライバシーポリシーの改定</h2>
           <p className="text-sm text-muted-foreground">
             本ポリシーの内容は、法令の変更やサービスの変更に伴い改定することがあります。
             重要な変更がある場合は、本サービス上でお知らせします。
@@ -279,7 +314,7 @@ export default function PrivacyPage() {
             制定日: 2026年3月19日
           </p>
           <p className="text-sm text-muted-foreground">
-            最終改定日: 2026年5月15日
+            最終改定日: 2026年11月25日
           </p>
         </section>
 
