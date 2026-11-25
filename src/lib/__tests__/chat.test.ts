@@ -4,8 +4,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   CHAT_DEFAULT_SETTINGS,
+  CHAT_POLL_MAX_MS,
+  CHAT_POLL_MIN_MS,
+  CHAT_UNKNOWN_NAME,
   buildChatPreview,
+  chatDisplayName,
   chatEnableBlocker,
+  decideResend,
+  describeChatSendError,
+  matchesChatSearch,
+  nextChatPollDelay,
+  normalizeClientKey,
+  sortChatThreads,
+  stickerImageUrl,
+  toChatMessageView,
+  validateChatReply,
   classifyAutoMessage,
   isFormFollowUp,
   normalizeChatSettings,
@@ -117,5 +130,93 @@ describe('「自動」の印', () => {
     expect(isFormFollowUp({ autoKind: 'command', at }, '2026-11-25T03:00:00.400Z')).toBe(false);
     expect(isFormFollowUp({ autoKind: null, at }, '2026-11-25T03:00:00.400Z')).toBe(false);
     expect(isFormFollowUp(null, at)).toBe(false);
+  });
+});
+
+describe('画面に出す形', () => {
+  it('一覧は未読のある会話が上、その中は新しい順', () => {
+    const t = (id: string, unread: number, at: string) => ({ id, unread_count: unread, last_message_at: at });
+    const sorted = sortChatThreads([t('a', 0, '2026-11-25T05:00:00Z'), t('b', 2, '2026-11-25T01:00:00Z'), t('c', 0, '2026-11-25T06:00:00Z'), t('d', 1, '2026-11-25T03:00:00Z')]);
+    expect(sorted.map((x) => x.id)).toEqual(['d', 'b', 'c', 'a']);
+  });
+
+  it('名前の無い人は「（お名前不明）」。検索は大文字小文字を区別しない', () => {
+    expect(chatDisplayName(' 山田 ')).toBe('山田');
+    expect(chatDisplayName(null)).toBe(CHAT_UNKNOWN_NAME);
+    expect(matchesChatSearch('Yamada 太郎', 'yama')).toBe(true);
+    expect(matchesChatSearch('山田', '佐藤')).toBe(false);
+    expect(matchesChatSearch('山田', '  ')).toBe(true);
+  });
+
+  it('スタンプは番号が数字のときだけ画像にする。返信した人の名前を出す', () => {
+    expect(stickerImageUrl({ sticker_id: '1988' })).toBe('https://stickershop.line-scdn.net/stickershop/v1/sticker/1988/android/sticker.png');
+    expect(stickerImageUrl({ sticker_id: '../x' })).toBeNull();
+    expect(stickerImageUrl(null)).toBeNull();
+    const view = toChatMessageView({
+      id: '7',
+      thread_id: 't',
+      store_id: 's',
+      direction: 'out',
+      kind: 'text',
+      text: 'ありがとうございます',
+      meta: { sent_by_name: 'staff@example.com' },
+      media_path: null,
+      auto: false,
+      auto_kind: null,
+      line_message_id: null,
+      client_key: 'k',
+      send_status: 'sent',
+      send_error: null,
+      sent_by: 'u1',
+      created_at: '2026-11-25T03:00:00.000Z',
+    });
+    expect(view).toMatchObject({ id: '7', direction: 'out', sent_by_name: 'staff@example.com', send_status: 'sent', sticker_url: null });
+    // 画面に返す形には、送信の ID・スタッフの ID を入れない
+    expect(Object.keys(view)).not.toEqual(expect.arrayContaining(['client_key', 'sent_by', 'line_message_id', 'store_id']));
+  });
+});
+
+describe('返信', () => {
+  const KEY = '3f2b8c1e-6a4d-4f7b-9c2a-1d5e8f0a7b3c';
+
+  it('空の文・5000 文字を超える文・形のおかしい送信の ID は断る', () => {
+    expect(validateChatReply({ text: '  ありがとうございます\r\nまたお待ちしています ', client_key: KEY })).toEqual({ ok: true, text: 'ありがとうございます\nまたお待ちしています', clientKey: KEY });
+    expect(validateChatReply({ text: '   ', client_key: KEY }).ok).toBe(false);
+    expect(validateChatReply({ text: 'あ'.repeat(5001), client_key: KEY }).ok).toBe(false);
+    expect(validateChatReply({ text: 'あ'.repeat(5000), client_key: KEY }).ok).toBe(true);
+    expect(validateChatReply({ text: 'こんにちは', client_key: 'abc' }).ok).toBe(false);
+    expect(validateChatReply({ text: 'こんにちは' }).ok).toBe(false);
+    expect(validateChatReply(null).ok).toBe(false);
+    expect(normalizeClientKey(KEY.toUpperCase())).toBe(KEY);
+  });
+
+  it('同じ送信の ID が届いたとき: 送信済みは送らない / 送信中は待つ / 失敗・止まったものは送り直す', () => {
+    const now = new Date('2026-11-25T03:00:40Z');
+    expect(decideResend({ send_status: 'sent', created_at: '2026-11-25T03:00:00Z' }, now)).toBe('done');
+    expect(decideResend({ send_status: 'failed', created_at: '2026-11-25T03:00:00Z' }, now)).toBe('resend');
+    expect(decideResend({ send_status: 'sending', created_at: '2026-11-25T03:00:30Z' }, now)).toBe('wait');
+    expect(decideResend({ send_status: 'sending', created_at: '2026-11-25T03:00:00Z' }, now)).toBe('resend');
+  });
+
+  it('送れなかった理由を、分かる言葉にする', () => {
+    expect(describeChatSendError(401, '')).toContain('チャネルアクセストークン');
+    expect(describeChatSendError(429, '{"message":"You have reached your monthly limit."}')).toBe('今月の通数の上限に達しています');
+    expect(describeChatSendError(429, '{"message":"Too many requests"}')).toContain('混み合って');
+    expect(describeChatSendError(400, '{"message":"Failed to send messages"}')).toContain('ブロック');
+    expect(describeChatSendError(0, 'aborted')).toContain('通信できません');
+    expect(describeChatSendError(503, '')).toContain('LINE 側');
+  });
+});
+
+describe('新着の確認の間隔', () => {
+  it('新着があれば 15 秒、無い間は 30 秒まで少しずつ延ばす', () => {
+    expect(nextChatPollDelay(CHAT_POLL_MAX_MS, true)).toBe(CHAT_POLL_MIN_MS);
+    let d = CHAT_POLL_MIN_MS;
+    const seen: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      d = nextChatPollDelay(d, false);
+      seen.push(d);
+    }
+    expect(seen).toEqual([20000, 25000, 30000, 30000, 30000]);
   });
 });

@@ -9,6 +9,7 @@ import {
   Calendar,
   CalendarDays,
   PanelBottom,
+  MessagesSquare,
   ClipboardList,
   Gift,
   StickyNote,
@@ -41,6 +42,10 @@ interface StoreAdminLayoutProps {
   showCalendar?: boolean;
   /** 「リッチメニュー」をメニューに出すか（admin_visible_options.rich_menu の判定結果） */
   showRichMenu?: boolean;
+  /** 「トーク」をメニューに出すか（表示の設定が ON で、トーク機能が ON の店舗） */
+  showChat?: boolean;
+  /** トークの未読の合計（メニューにバッジで出す） */
+  chatUnread?: number;
 }
 
 const allMenuItems: { id: StoreAdminNavId; label: string; icon: typeof LayoutDashboard }[] = [
@@ -48,6 +53,7 @@ const allMenuItems: { id: StoreAdminNavId; label: string; icon: typeof LayoutDas
   { id: 'reservations', label: '予約管理', icon: Calendar },
   { id: 'calendar', label: 'カレンダー', icon: CalendarDays },
   { id: 'customers', label: '顧客管理', icon: Users },
+  { id: 'chat', label: 'トーク', icon: MessagesSquare },
   { id: 'surveys', label: 'アンケート管理', icon: ClipboardList },
   { id: 'lotteries', label: '抽選管理', icon: Gift },
   { id: 'walls', label: '寄せ書き', icon: StickyNote },
@@ -65,9 +71,11 @@ interface MenuContentProps {
   onTabChange: (tabId: string) => void;
   onLogout?: () => void;
   isCollapsed?: boolean;
+  /** メニューの項目に出す数（未読など） */
+  badges?: Partial<Record<StoreAdminNavId, number>>;
 }
 
-const MenuContent = ({ menuItems, onItemClick, storeName, userEmail, activeTab, onTabChange, onLogout, isCollapsed = false }: MenuContentProps) => (
+const MenuContent = ({ menuItems, onItemClick, storeName, userEmail, activeTab, onTabChange, onLogout, isCollapsed = false, badges }: MenuContentProps) => (
     <div className="flex flex-col h-full">
       <div className={cn("border-b", isCollapsed ? "p-2" : "p-4")}>
         {isCollapsed ? (
@@ -95,6 +103,7 @@ const MenuContent = ({ menuItems, onItemClick, storeName, userEmail, activeTab, 
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
+          const badge = badges?.[item.id] ?? 0;
           
           return (
             <button
@@ -105,7 +114,7 @@ const MenuContent = ({ menuItems, onItemClick, storeName, userEmail, activeTab, 
               }}
               title={isCollapsed ? item.label : undefined}
               className={cn(
-                "w-full flex items-center rounded-lg text-sm font-medium transition-[background-color,color] duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
+                "relative w-full flex items-center rounded-lg text-sm font-medium transition-[background-color,color] duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
                 isCollapsed ? "justify-center px-2 py-2" : "space-x-3 px-3 py-2",
                 isActive
                   ? "bg-primary text-primary-foreground"
@@ -114,6 +123,18 @@ const MenuContent = ({ menuItems, onItemClick, storeName, userEmail, activeTab, 
             >
               <Icon className="h-5 w-5" aria-hidden="true" />
               {!isCollapsed && <span>{item.label}</span>}
+              {badge > 0 && (
+                <span
+                  data-slot="nav-badge"
+                  aria-label={`未読 ${badge} 件`}
+                  className={cn(
+                    "rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white",
+                    isCollapsed ? "absolute right-0.5 top-0.5" : "!ml-auto"
+                  )}
+                >
+                  {badge > 99 ? '99+' : badge}
+                </span>
+              )}
             </button>
           );
         })}
@@ -148,6 +169,8 @@ export default function StoreAdminLayout({
   visibleTabs,
   showCalendar = false,
   showRichMenu = false,
+  showChat = false,
+  chatUnread = 0,
 }: StoreAdminLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -155,8 +178,9 @@ export default function StoreAdminLayout({
   const router = useRouter();
 
   // 店舗設定で非表示にされたタブを除外（null = すべて表示）
-  const visibleIds = buildStoreAdminNav(resolveVisibleTabs(visibleTabs), { calendar: showCalendar, richMenu: showRichMenu });
+  const visibleIds = buildStoreAdminNav(resolveVisibleTabs(visibleTabs), { calendar: showCalendar, richMenu: showRichMenu, chat: showChat });
   const menuItems = allMenuItems.filter((item) => visibleIds.includes(item.id));
+  const badges: Partial<Record<StoreAdminNavId, number>> = { chat: chatUnread };
 
   // 表示スタイル（標準 / Material）を <html data-ui> に反映。画面幅の変化・設定変更にも追従し、離脱時に解除
   useEffect(() => {
@@ -210,6 +234,7 @@ export default function StoreAdminLayout({
           onTabChange={handleTabChange}
           onLogout={onLogout}
           isCollapsed={sidebarCollapsed}
+          badges={badges}
         />
         {/* 折りたたみボタン */}
         <Button
@@ -254,6 +279,7 @@ export default function StoreAdminLayout({
                     activeTab={activeTab}
                     onTabChange={handleTabChange}
                     onLogout={onLogout}
+                    badges={badges}
                   />
                 </SheetContent>
               </Sheet>
@@ -296,10 +322,15 @@ export default function StoreAdminLayout({
                     )}
                   >
                     <span data-slot="mobile-nav-indicator" className={cn(
-                      "flex items-center justify-center h-7 w-12 rounded-full transition-colors",
+                      "relative flex items-center justify-center h-7 w-12 rounded-full transition-colors",
                       isActive && "bg-primary/15"
                     )}>
                       <Icon className="h-5 w-5" aria-hidden="true" />
+                      {(badges[item.id] ?? 0) > 0 && (
+                        <span data-slot="nav-badge" className="absolute -top-1 right-0 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                          {(badges[item.id] ?? 0) > 99 ? '99+' : badges[item.id]}
+                        </span>
+                      )}
                     </span>
                     <span className="truncate max-w-full">{item.label.replace(' β', '')}</span>
                   </button>

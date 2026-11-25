@@ -7,19 +7,48 @@
 import { after } from 'next/server';
 import { getAppEnvironment } from '@/lib/env';
 import {
+  buildChatPreview,
+  chatDisplayName,
   chatEnableBlocker,
   classifyAutoMessage,
+  decideResend,
+  describeChatSendError,
+  matchesChatSearch,
+  sortChatThreads,
   toChatInbound,
+  toChatMessageView,
+  validateChatReply,
   validateChatSettingsInput,
   type ChatAutoContext,
   type ChatInbound,
+  type ChatMessageView,
   type ChatSettings,
   type ChatStats,
+  type ChatThread,
+  type ChatThreadFilter,
+  type ChatThreadView,
 } from '@/lib/chat';
-import { getChatSettings, getChatStats, recordChatInbound, saveChatSettings } from '@/lib/chat-repository';
+import {
+  countChatUnread,
+  findChatCustomers,
+  getChatSettings,
+  getChatStats,
+  getChatThread,
+  insertChatOutbound,
+  listChatMessages,
+  listChatThreads,
+  markChatThreadRead,
+  recordChatInbound,
+  saveChatSettings,
+  setChatThreadCustomer,
+  touchChatThreadAfterReply,
+  updateChatOutboundStatus,
+  type ChatCustomerBrief,
+} from '@/lib/chat-repository';
+import { LINE_PUSH_ENDPOINT } from '@/lib/line-push';
 import { getStoreLineSecret } from '@/lib/line-secret-repository';
 import { listEnabledLineFlexMessages } from '@/lib/line-flex-repository';
-import { getBroadcastSettings } from '@/lib/broadcast-repository';
+import { getBroadcastSettings, getStoreLineToken } from '@/lib/broadcast-repository';
 
 const isLocal = () => getAppEnvironment() === 'local';
 
@@ -130,4 +159,176 @@ export function scheduleChatInbound(storeId: string, events: ReadonlyArray<unkno
     // リクエストの外（テストなど）から呼ばれたとき
     void run();
   }
+}
+
+// ---------------------------------------------------------------------------
+// ④-2: トーク画面（会話の一覧・会話・既読）と返信
+// ---------------------------------------------------------------------------
+
+export interface ChatOverview {
+  /** トーク機能が ON か（OFF の店舗では、保存済みの会話は読めるが、新しく届かず返信もできない） */
+  enabled: boolean;
+  threads: ChatThreadView[];
+  unread_total: number;
+}
+
+function toThreadView(t: ChatThread, customer: ChatCustomerBrief | undefined): ChatThreadView {
+  return {
+    id: t.id,
+    name: chatDisplayName(customer?.name),
+    customer_id: customer?.id ?? t.customer_id ?? null,
+    last_message_at: t.last_message_at,
+    preview: t.last_message_preview,
+    unread_count: t.unread_count || 0,
+    status: t.status === 'done' ? 'done' : 'open',
+    blocked: !!customer?.line_blocked_at,
+  };
+}
+
+/** LINE ユーザー ID → 顧客（同じ人が 2 人登録されているときは、登録の古いほう） */
+async function customersByLineUser(storeId: string, threads: ChatThread[]): Promise<Map<string, ChatCustomerBrief>> {
+  const map = new Map<string, ChatCustomerBrief>();
+  try {
+    for (const c of await findChatCustomers(
+      storeId,
+      threads.map((t) => t.line_user_id),
+    )) {
+      if (c.line_user_id && !map.has(c.line_user_id)) map.set(c.line_user_id, c);
+    }
+  } catch (e) {
+    console.error('[chat] 顧客の読み取りエラー:', e instanceof Error ? e.message : e);
+  }
+  return map;
+}
+
+/** 会話の一覧（未読が上・新しい順）。名前での絞り込み・未読だけの絞り込み */
+export async function getChatOverview(storeId: string, opts: { filter?: ChatThreadFilter; search?: string | null } = {}): Promise<ChatOverview> {
+  const [{ settings }, threads] = await Promise.all([getChatSettings(storeId), listChatThreads(storeId)]);
+  const customers = await customersByLineUser(storeId, threads);
+  const views = threads.map((t) => toThreadView(t, customers.get(t.line_user_id)));
+  const filtered = views.filter((v) => (opts.filter === 'unread' ? v.unread_count > 0 : true) && matchesChatSearch(v.name, opts.search));
+  return { enabled: settings.enabled, threads: sortChatThreads(filtered), unread_total: views.reduce((sum, v) => sum + v.unread_count, 0) };
+}
+
+/** タブのバッジ用: ON かどうかと、未読の合計だけ */
+export async function getChatUnread(storeId: string): Promise<{ enabled: boolean; unread: number }> {
+  const { settings } = await getChatSettings(storeId);
+  const unread = await countChatUnread(storeId);
+  return { enabled: settings.enabled, unread };
+}
+
+export interface ChatThreadDetail {
+  thread: ChatThreadView;
+  messages: ChatMessageView[];
+  /** さかのぼって読めるメッセージがまだあるか */
+  has_more: boolean;
+}
+
+/**
+ * 会話 1 本とメッセージ。**他の店舗の会話 ID を指定されたら null**（API は 404）。
+ * 開いたら既読にする（read = false のときはしない = 新着の確認だけ）
+ */
+export async function getChatThreadDetail(
+  storeId: string,
+  threadId: string,
+  opts: { beforeId?: string | null; afterId?: string | null; read?: boolean } = {},
+): Promise<ChatThreadDetail | null> {
+  const thread = await getChatThread(storeId, threadId);
+  if (!thread) return null;
+  const [{ messages, hasMore }, customers] = await Promise.all([listChatMessages(storeId, threadId, { beforeId: opts.beforeId, afterId: opts.afterId }), customersByLineUser(storeId, [thread])]);
+  const customer = customers.get(thread.line_user_id);
+  // 会話ができたあとで顧客が登録された人は、ここでひも付ける
+  if (customer && !thread.customer_id) await setChatThreadCustomer(storeId, threadId, customer.id).catch(() => undefined);
+  let unread = thread.unread_count || 0;
+  if (opts.read !== false && unread > 0) {
+    await markChatThreadRead(storeId, threadId);
+    unread = 0;
+  }
+  return { thread: { ...toThreadView(thread, customer), unread_count: unread }, messages: messages.map(toChatMessageView), has_more: hasMore };
+}
+
+const CHAT_PUSH_TIMEOUT_MS = 10000;
+
+/** LINE に文字を 1 通送る（10 秒で打ち切り。同じ鍵の再送は LINE 側で 1 回にまとまる） */
+export type ChatPushFn = (accessToken: string, to: string, text: string, retryKey: string) => Promise<{ ok: boolean; status: number; body: string }>;
+
+export const pushChatText: ChatPushFn = async (accessToken, to, text, retryKey) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CHAT_PUSH_TIMEOUT_MS);
+  try {
+    const res = await fetch(LINE_PUSH_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=UTF-8', Authorization: `Bearer ${accessToken}`, 'X-Line-Retry-Key': retryKey },
+      body: JSON.stringify({ to, messages: [{ type: 'text', text }] }),
+      signal: controller.signal,
+    });
+    const body = await res.text().catch(() => '');
+    // 409 = 同じ鍵の送信を LINE がすでに受け付けている（前回の送信が届いていた）
+    return { ok: res.ok || res.status === 409, status: res.status, body };
+  } catch (e) {
+    return { ok: false, status: 0, body: e instanceof Error ? e.message : String(e) };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+export type ChatReplyResult =
+  | { ok: true; message: ChatMessageView; notice?: string }
+  | { ok: false; status: number; error: string; message?: ChatMessageView };
+
+/**
+ * 返信を送る。
+ * ① 検証 → ② 「送信中」で保存（同じ送信の ID は 1 回だけ）→ ③ LINE に push → ④ 送信済み / 失敗 を記録
+ * 連打・通信の再試行で同じ ID が 2 回届いても、送るのは 1 回。失敗した返信は、同じ ID でもう一度送れる
+ */
+export async function sendChatReply(
+  storeId: string,
+  threadId: string,
+  input: unknown,
+  user: { id: string; email?: string | null } | null,
+  deps: { push?: ChatPushFn; now?: Date } = {},
+): Promise<ChatReplyResult> {
+  const v = validateChatReply(input);
+  if (!v.ok) return { ok: false, status: 400, error: v.error };
+  const thread = await getChatThread(storeId, threadId);
+  if (!thread) return { ok: false, status: 404, error: '会話が見つかりません' };
+  const { settings } = await getChatSettings(storeId);
+  if (!settings.enabled) return { ok: false, status: 409, error: 'トーク機能が OFF のため、返信できません' };
+
+  const now = deps.now ?? new Date();
+  const { message, created } = await insertChatOutbound(storeId, threadId, { text: v.text, clientKey: v.clientKey, sentBy: user?.id ?? null, sentByName: user?.email ?? null, now });
+  if (message.thread_id !== threadId) return { ok: false, status: 409, error: '送信の情報が正しくありません。画面を読み込み直してください' };
+  if (!created) {
+    const decision = decideResend(message, now);
+    if (decision !== 'resend') return { ok: true, message: toChatMessageView(message) };
+    await updateChatOutboundStatus(storeId, message.id, 'sending', null);
+  }
+
+  // local は LINE と通信せず、記録だけ更新する
+  if (isLocal()) {
+    await updateChatOutboundStatus(storeId, message.id, 'sent', null);
+    await touchChatThreadAfterReply(storeId, threadId, message.created_at, buildChatPreview('text', message.text));
+    return { ok: true, message: toChatMessageView({ ...message, send_status: 'sent', send_error: null }), notice: 'ローカル環境のため、LINE には送っていません（記録だけ更新しました）' };
+  }
+
+  const token = await getStoreLineToken(storeId).catch(() => null);
+  if (!token) {
+    const error = 'LINE のチャネルアクセストークンが未設定です（運営にお問い合わせください）';
+    await updateChatOutboundStatus(storeId, message.id, 'failed', error);
+    return { ok: false, status: 409, error, message: toChatMessageView({ ...message, send_status: 'failed', send_error: error }) };
+  }
+  const res = await (deps.push ?? pushChatText)(token, thread.line_user_id, message.text ?? v.text, v.clientKey);
+  if (!res.ok) {
+    const error = describeChatSendError(res.status, res.body);
+    await updateChatOutboundStatus(storeId, message.id, 'failed', error).catch((e) => console.error('[chat] 送信結果の保存エラー:', e));
+    return { ok: false, status: 502, error, message: toChatMessageView({ ...message, send_status: 'failed', send_error: error }) };
+  }
+  // 送れたあとの記録に失敗しても、送信は成功として返す（もう一度押されても、同じ鍵なので LINE には 2 回届かない）
+  try {
+    await updateChatOutboundStatus(storeId, message.id, 'sent', null);
+    await touchChatThreadAfterReply(storeId, threadId, message.created_at, buildChatPreview('text', message.text));
+  } catch (e) {
+    console.error('[chat] 送信結果の保存エラー:', e instanceof Error ? e.message : e);
+  }
+  return { ok: true, message: toChatMessageView({ ...message, send_status: 'sent', send_error: null }) };
 }

@@ -250,3 +250,152 @@ export interface ChatStats {
   messages: number;
   last_message_at: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// 画面に返す形（④-2）。LINE ユーザー ID は画面に出さない
+// ---------------------------------------------------------------------------
+
+export const CHAT_UNKNOWN_NAME = '（お名前不明）';
+
+export interface ChatThreadView {
+  id: string;
+  /** 顧客の名前（顧客が見つからない人は「（お名前不明）」） */
+  name: string;
+  customer_id: string | null;
+  last_message_at: string;
+  preview: string | null;
+  unread_count: number;
+  status: 'open' | 'done';
+  /** ブロック（友だち解除）の通知が来ている = 返信しても届かない */
+  blocked: boolean;
+}
+
+export interface ChatMessageView {
+  id: string;
+  direction: 'in' | 'out' | 'system';
+  kind: ChatMessageKind;
+  text: string | null;
+  auto: boolean;
+  auto_kind: ChatAutoKind | null;
+  /** スタンプの画像（LINE の公開 URL。番号が分かるものだけ） */
+  sticker_url: string | null;
+  send_status: 'sending' | 'sent' | 'failed' | null;
+  send_error: string | null;
+  /** 返信したスタッフ（メールアドレス） */
+  sent_by_name: string | null;
+  created_at: string;
+}
+
+/** 会話の一覧の名前: 顧客の名前 → 「（お名前不明）」 */
+export function chatDisplayName(customerName: string | null | undefined): string {
+  const n = (customerName ?? '').trim();
+  return n || CHAT_UNKNOWN_NAME;
+}
+
+/** スタンプの画像の URL（番号が数字のときだけ） */
+export function stickerImageUrl(meta: Record<string, string> | null | undefined): string | null {
+  const id = meta?.sticker_id;
+  return id && /^\d+$/.test(id) ? `https://stickershop.line-scdn.net/stickershop/v1/sticker/${id}/android/sticker.png` : null;
+}
+
+export function toChatMessageView(m: ChatMessage): ChatMessageView {
+  return {
+    id: String(m.id),
+    direction: m.direction,
+    kind: m.kind,
+    text: m.text,
+    auto: m.auto === true,
+    auto_kind: m.auto_kind,
+    sticker_url: m.kind === 'sticker' ? stickerImageUrl(m.meta) : null,
+    send_status: m.send_status,
+    send_error: m.send_error,
+    sent_by_name: m.meta?.sent_by_name || null,
+    created_at: m.created_at,
+  };
+}
+
+export type ChatThreadFilter = 'all' | 'unread';
+
+export const isChatThreadFilter = (v: unknown): v is ChatThreadFilter => v === 'all' || v === 'unread';
+
+/** 一覧の並び: 未読のある会話が上、その中は新しい順 */
+export function sortChatThreads<T extends { unread_count: number; last_message_at: string }>(threads: ReadonlyArray<T>): T[] {
+  return [...threads].sort((a, b) => {
+    const ua = a.unread_count > 0 ? 1 : 0;
+    const ub = b.unread_count > 0 ? 1 : 0;
+    if (ua !== ub) return ub - ua;
+    return a.last_message_at < b.last_message_at ? 1 : a.last_message_at > b.last_message_at ? -1 : 0;
+  });
+}
+
+/** 名前での絞り込み（大文字小文字・前後の空白を無視。空なら全部） */
+export function matchesChatSearch(name: string, search: string | null | undefined): boolean {
+  const q = (search ?? '').trim().toLowerCase();
+  return !q || name.toLowerCase().includes(q);
+}
+
+// ---------------------------------------------------------------------------
+// 返信（④-2）
+// ---------------------------------------------------------------------------
+
+/** 送信ボタンを押したときに画面が作る ID。LINE の再送防止の鍵（X-Line-Retry-Key）にも使うので UUID の形だけを通す */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export function normalizeClientKey(value: unknown): string | null {
+  const v = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return UUID_PATTERN.test(v) ? v : null;
+}
+
+export type ChatReplyValidation = { ok: true; text: string; clientKey: string } | { ok: false; error: string };
+
+/** 返信の検証: 空でない・5000 文字まで・送信の ID が正しい形 */
+export function validateChatReply(raw: unknown): ChatReplyValidation {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const text = typeof r.text === 'string' ? r.text.replace(/\r\n/g, '\n').trim() : '';
+  if (!text) return { ok: false, error: 'メッセージを入力してください' };
+  if (text.length > CHAT_TEXT_MAX) return { ok: false, error: `メッセージは ${CHAT_TEXT_MAX} 文字までです（いま ${text.length} 文字）` };
+  const clientKey = normalizeClientKey(r.client_key);
+  if (!clientKey) return { ok: false, error: '送信の情報が正しくありません。画面を読み込み直してください' };
+  return { ok: true, text, clientKey };
+}
+
+/** 「送信中」のまま、この時間がたった返信は、もう一度送れる（サーバーが途中で止まったとき用） */
+export const CHAT_SENDING_STALE_MS = 30000;
+
+/**
+ * 同じ送信の ID の返信がすでにあるとき、どうするか。
+ * - done   … 送信済み。何もしない（二重に送らない）
+ * - wait   … いま送っている最中。何もしない
+ * - resend … 失敗した / 送信中のまま止まっている → 同じ ID でもう一度送る（LINE 側も同じ鍵なので二重にならない）
+ */
+export function decideResend(existing: { send_status: 'sending' | 'sent' | 'failed' | null; created_at: string; updated_at?: string | null }, now: Date = new Date()): 'done' | 'wait' | 'resend' {
+  if (existing.send_status === 'sent') return 'done';
+  if (existing.send_status === 'failed') return 'resend';
+  const startedAt = Date.parse(existing.updated_at || existing.created_at);
+  return Number.isFinite(startedAt) && now.getTime() - startedAt < CHAT_SENDING_STALE_MS ? 'wait' : 'resend';
+}
+
+/** LINE に送れなかった理由（画面に出す文） */
+export function describeChatSendError(status: number, body: string | null | undefined): string {
+  const b = (body ?? '').toLowerCase();
+  if (status === 401 || status === 403) return 'LINE のチャネルアクセストークンを確認してください（運営にお問い合わせください）';
+  if (status === 429) return b.includes('monthly limit') ? '今月の通数の上限に達しています' : 'LINE への送信が混み合っています。少し待ってから、もう一度送ってください';
+  if (status === 400) return 'このお客様には送れませんでした（ブロックされているか、友だちではない可能性があります）';
+  if (status === 0) return 'LINE と通信できませんでした。もう一度送ってください';
+  if (status >= 500) return 'LINE 側でエラーが起きました。少し待ってから、もう一度送ってください';
+  return `LINE に送れませんでした（${status}）`;
+}
+
+// ---------------------------------------------------------------------------
+// 新着の確認の間隔（未読バッジ・一覧）
+// ---------------------------------------------------------------------------
+
+/** 新着があった直後は 15 秒おき、新着が無い間は 30 秒まで延ばす */
+export const CHAT_POLL_MIN_MS = 15000;
+export const CHAT_POLL_MAX_MS = 30000;
+
+/** 次に確認するまでの時間（changed = 前回から何か変わった） */
+export function nextChatPollDelay(prevDelayMs: number, changed: boolean): number {
+  if (changed) return CHAT_POLL_MIN_MS;
+  return Math.min(CHAT_POLL_MAX_MS, Math.max(CHAT_POLL_MIN_MS, prevDelayMs) + 5000);
+}

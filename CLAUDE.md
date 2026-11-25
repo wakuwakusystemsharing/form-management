@@ -310,7 +310,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - 優先順位: 一覧の ↑↓（`POST /api/stores/{storeId}/rich-menus/rule-order` に `{ ids }`）。保存では変えない（新しいお客様ごとのメニューは、いちばん下）。一覧には「出す相手」と「いま N 人に設定中」（`link_counts`）を出す
 - Vitest: `line-rich-menu.test.ts` / `line-rich-menu-layouts.test.ts` / `line-rich-menu-rules.test.ts` / `line-rich-menu-service.local.test.ts` / `line-rich-menu-rules-service.local.test.ts` / `store-admin-tabs.test.ts` / `admin-api-auth.test.ts`
 
-**1 対 1 トーク（設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 8 章。リリース手順: `docs/1対1トーク_リリース手順.md`。規約に追記する文の下書き: `docs/1対1トーク_規約追記の下書き.md`。④-1 = 受信と保存 だけ実装済み。④-2 = 画面と返信 / ④-3 = 通知と自動削除 / ④-4 = 画像と定型文 / ④-5 = 自動送信の表示と利用量 はこれから）:**
+**1 対 1 トーク（設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 8 章。リリース手順: `docs/1対1トーク_リリース手順.md`。規約に追記する文の下書き: `docs/1対1トーク_規約追記の下書き.md`。④-1 = 受信と保存、④-2 = 画面と返信・未読バッジ は実装済み。④-3 = 通知と自動削除 / ④-4 = 画像と定型文 / ④-5 = 自動送信の表示と利用量 はこれから）:**
 - お客様が公式 LINE に送ったメッセージを保存し、管理画面で読んで返信する機能。**既定は OFF。運営（マスター管理者・システム管理者）が店舗ごとに ON にした店舗だけ保存する**（行が無い店舗 = OFF）。会話には体の悩みなど慎重に扱う内容が入るので、**プライバシーポリシーの公開とお客様への説明が済んだ店舗だけ ON にする**（それまでは本番のテスト用店舗だけ）
 - 設定: テナント側 店舗ページ → 設定タブ → 「1 対 1 トーク」（`ChatSettingsCard.tsx`。ON / OFF・会話の保存期間 1 / 2 / 3 年 = `CHAT_RETENTION_OPTIONS`・保存している会話の件数）。API `GET/PUT /api/stores/{storeId}/chat-settings`（**`authorizeUpperAdminStoreAccess` = 運営だけ**。店舗管理者は自分の店舗でも 403。会話の中身・LINE ユーザー ID は返さない）
 - **ON にできるのは、チャネルシークレットを登録した店舗だけ**（`chatEnableBlocker`。偽の通知を会話として保存しないため。local は制限なし）。確かめるのは OFF → ON のときだけ（保存期間の変更・OFF はいつでもできる）
@@ -321,8 +321,18 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - データ: `chat_settings`（店舗ごとの設定）/ `chat_threads`（店舗 × LINE ユーザー ID で 1 本。顧客 ID ではまとめない = 同じ人が顧客に 2 人いても会話は分かれない。`unread_count` / `status` = open / done / `last_message_preview`）/ `chat_messages`（`direction` = in / out / system、`kind`、`auto` / `auto_kind`、`line_message_id`、返信用の `client_key` / `send_status` は ④-2 で使う）。どれも RLS ポリシー無し = service_role のみ
 - 純粋ロジック `src/lib/chat.ts`、保存 `src/lib/chat-repository.ts`、業務ロジック `src/lib/chat-service.ts`
 - マイグレーション `20261127000000_add_chat.sql`。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも既存の機能は動く（OFF として動き、設定カードに理由を出して ON にできない）。**staging には LINE からの通知が届かないので、受信は本番のテスト用店舗で確かめる**
-- **④-2 でやること（忘れないように）**: 「トーク」タブは `admin_visible_options` に項目を足し、**未設定は非表示**（リッチメニューと同じ `defaultHidden`。トーク機能が ON で、かつチェックを入れた店舗だけ店舗管理者に出す）。設定カードの「いまは受信して保存するところまでです」の注意書きを外す
-- Vitest: `chat.test.ts` / `chat-service.local.test.ts` / `chat-service.test.ts` / `line-webhook-signature-route.test.ts` / `admin-api-auth.test.ts`
+- **トーク画面（④-2）**: 店舗管理者ページ `/{storeId}/admin?tab=chat` とテナント側 店舗ページの「トーク」タブで、同じ部品 `src/components/chat/ChatPanel.tsx` を使う。左 = 会話の一覧（未読が上・新しい順 = `sortChatThreads`。名前で検索・「未読」だけ）/ 中 = 会話（お客様は左・店舗は右。`auto` の文は小さく薄く「自動」）/ 右 = 顧客の情報（パソコンの広い幅だけ。既存の `GET /customers/{id}` を読む）。スマホは 一覧 → 会話 の 2 画面
+  - **表示**: `admin_visible_options.chat`（「店舗管理者に表示するメニュー」の「顧客管理」の下の「トークを表示」。**未設定は非表示** = `defaultHidden`）が ON、**かつ**運営がトーク機能を ON にした店舗だけ、店舗管理者のメニューに出す（`buildStoreAdminNav(visibleTabs, { calendar, richMenu, chat })`。項目 ID は `chat`、並びは顧客管理のすぐ後ろ）。ON かどうかは店舗管理者ページが `GET .../chat/unread` で確かめる（設定の API は運営だけなので使えない）。運営が開いたときは、トーク機能が ON なら出る。テナント側 店舗ページのタブは常に出し、OFF の店舗では理由を出す
+  - **未読バッジ**: メニュー（サイドバー・スマホの下部ナビ）の「トーク」に未読の合計（`StoreAdminLayout` の `chatUnread` → `data-slot="nav-badge"`）。店舗管理者ページが 30 秒おき・画面が見えているときだけ `GET .../chat/unread` を呼ぶ。トークを開いているあいだは `ChatPanel` が 15 秒おき（新着が無い間は 30 秒まで延ばす = `nextChatPollDelay`）に一覧と開いている会話の新着（`?after={最後のメッセージ ID}`）を取り、`onUnreadChange` でバッジを合わせる
+  - **既読**: 会話を開いたとき（`getChatThreadDetail`。`read: false` = `?read=0` のときはしない）と、返信したとき。お客様の LINE に「既読」は付かない（LINE の仕様）
+  - **返信** `sendChatReply(storeId, threadId, { text, client_key }, user)`: ① 検証（空でない・5000 文字まで・`client_key` = 画面が送信のたびに作る UUID）→ ② 「送信中」で保存（`insertChatOutbound`。`client_key` は一意 = 同じ ID は 1 回だけ）→ ③ LINE に push（`pushChatText`。10 秒で打ち切り。`X-Line-Retry-Key` = `client_key`。409 = LINE がすでに受け付けている = 成功扱い）→ ④ 送信済み / 失敗（理由 = `describeChatSendError`）を記録し、一覧の 1 行を更新して未読を 0 にする。同じ ID がもう一度届いたときは `decideResend`（送信済み = 何もしない / 送信中で 30 秒以内 = 待つ / 失敗・止まったもの = 同じ ID で送り直す）。**返信は push = 公式 LINE の通数を 1 通使う**（入力欄の下に今月の通数 = `fetchLineQuota`）。トーク機能が OFF の店舗では返信できない（保存済みの会話は読める）。local は LINE と通信せず記録だけ更新する
+  - **画面側の連打対策**: `ChatPanel` の `sendLock`（ref）。画面の状態（入力欄を空にする・ボタンを無効にする）が変わる前の連打は、状態では止められない（3 回押すと別々の `client_key` で 3 通送られる不具合があった）
+  - 返信したスタッフの名前（メールアドレス）は `chat_messages.meta.sent_by_name` に入れる（列は足していない）。**画面に返す形（`ChatThreadView` / `ChatMessageView`）に、LINE ユーザー ID・`client_key`・スタッフの ID を入れない**
+  - **会話は必ず店舗 ID と一緒に読む**（`getChatThread(storeId, threadId)`。他の店舗の会話 ID・形のおかしい ID は null → API は 404）
+  - 顧客詳細の LINE タブに「トークを開く」（`CustomerDetail` の `chatHref`。トークのタブが出ている店舗だけ）→ `?tab=chat&chatCustomer={顧客ID}` → `ChatPanel` の `initialCustomerId` がその顧客の会話を開く（会話が無ければ「まだありません」。こちらから先には送れない）
+  - 文字は HTML として解釈せず、`http` / `https` で始まる所だけリンクにする（`LinkedText`）。画像・動画などは「画像が送られました」とだけ出す（画像の中身は ④-4）。スタンプは番号から LINE の公開の画像 URL を組み立てる（`stickerImageUrl`）
+  - DB の変更なし（④-1 の表のまま）
+- Vitest: `chat.test.ts` / `chat-service.local.test.ts` / `chat-service.test.ts` / `line-webhook-signature-route.test.ts` / `admin-api-auth.test.ts` / `store-admin-tabs.test.ts` / `store-admin-guide.test.ts`
 
 **全予約一覧の「集計ダウンロード」（`/tenant/{slug}/admin/reservations` → 予約一覧タブ。Excel = 予約数 / キャンセル数 / アンケート回答数 / 出力条件 の 4 シート。店舗 × 月）:**
 - 予約は `GET /api/reservations`、アンケート回答数は `GET /api/surveys/stats`。どちらも **ログイン必須 + 見てよい店舗だけ**（`src/lib/admin-store-scope.ts` の `getAccessibleStoreIds` = マスター: 全店舗 / システム管理者: 同じテナント / 店舗管理者: 自分の店舗。`resolveStoreScope` で `store_id` の指定を確認し、範囲外は 403。local は認証スキップ）、**`fetchAllRows` で 1000 件ずつ全件取得**（以前は 1 回の取得 = 1000 件までで、件数が欠けていた）
@@ -381,7 +391,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - マスター管理者・システム管理者が開いた場合は常に全表示（`/api/auth/role` の判定を `isUpperAdminUser` に保持）。**同じブラウザにテナント管理者のセッションが残っていると店舗管理者ページは自動的にそのセッションで開く**ため、全表示になる。ページ上部に「〜として閲覧中」のバナーを出し、「店舗管理者の見え方で確認」（`previewAsStoreAdmin`、sessionStorage `store_admin_preview_{storeId}`）で店舗設定を適用した表示に切り替えられる
 - 定義・正規化は `src/lib/store-admin-tabs.ts`（`STORE_ADMIN_TABS` / `resolveVisibleTabs()`）
 - マイグレーション: `20260902000000_add_admin_visible_tabs.sql`
-- **項目単位の表示**: `stores.admin_visible_options` JSONB（`reservation_forms` / `survey_forms` / `lottery_forms` = 各タブの「フォーム管理」、`customer_reservation_history` = 顧客詳細の予約履歴・来店履歴・統計情報、`customer_lottery_history` = 顧客詳細の抽選履歴、`customer_survey_history` = 顧客詳細のアンケートの回答、`calendar` = 「カレンダー」タブ（「予約管理」に連動。予約管理が非表示でも個別に表示できる）、`rich_menu` = 「リッチメニュー」タブ（**未設定は非表示**。チェックを入れた店舗だけ）、`store_digest` = 設定タブの「今日の予約まとめ・月次レポート」の欄（「設定」に連動。隠すのは設定の欄だけで、すでに ON の送信は止めない。ダッシュボードの「月次レポートを見る」はそのまま））。**未設定キーは親タブに連動**（予約管理 OFF → 顧客詳細の予約・来店・統計も非表示、抽選管理 OFF → 抽選履歴も非表示）。明示的に true/false を保存すると連動より優先。判定は `resolveAdminVisibleOptions(tabs, options, upperAdmin)`。設定 UI は `StoreAdminMenuSettings.tsx` の各タブ配下のチェック（「連動に戻す」で未設定へ）。マイグレーション: `20260904000000_add_admin_visible_options.sql`
+- **項目単位の表示**: `stores.admin_visible_options` JSONB（`reservation_forms` / `survey_forms` / `lottery_forms` = 各タブの「フォーム管理」、`customer_reservation_history` = 顧客詳細の予約履歴・来店履歴・統計情報、`customer_lottery_history` = 顧客詳細の抽選履歴、`customer_survey_history` = 顧客詳細のアンケートの回答、`calendar` = 「カレンダー」タブ（「予約管理」に連動。予約管理が非表示でも個別に表示できる）、`rich_menu` = 「リッチメニュー」タブ（**未設定は非表示**。チェックを入れた店舗だけ）、`chat` = 「トーク」タブ（**未設定は非表示**。チェックを入れ、かつ運営がトーク機能を ON にした店舗だけ）、`store_digest` = 設定タブの「今日の予約まとめ・月次レポート」の欄（「設定」に連動。隠すのは設定の欄だけで、すでに ON の送信は止めない。ダッシュボードの「月次レポートを見る」はそのまま））。**未設定キーは親タブに連動**（予約管理 OFF → 顧客詳細の予約・来店・統計も非表示、抽選管理 OFF → 抽選履歴も非表示）。明示的に true/false を保存すると連動より優先。判定は `resolveAdminVisibleOptions(tabs, options, upperAdmin)`。設定 UI は `StoreAdminMenuSettings.tsx` の各タブ配下のチェック（「連動に戻す」で未設定へ）。マイグレーション: `20260904000000_add_admin_visible_options.sql`
 
 **公式 LINE 向け Flex Message（テナント側 店舗ページ → 「LINE メッセージ」タブ。設計: `docs/LINE Flexメッセージ_実装設計.md`）:**
 - 公式 LINE 管理画面では作れない Flex Message をテンプレート（予約導線カード / メニュー・料金カルーセル / 料金表（リスト）/ 店舗紹介カード / クーポン・キャンペーン / お知らせ・営業案内 / スタッフ紹介カルーセル / ご利用の流れ。上級者は JSON 直接編集・`custom` = プルダウンの一番上）から作り、**キーワード自動応答**（Webhook。完全一致。「予約確認」「キャンセル」は予約不可、同店舗で重複不可）/ **【ご予約確認】・リマインダー・フォローへの差し込み** / **テスト送信**（LINE 連携済み顧客へ push）に使う。ボタンの URL は計測リンク `/go/{id}/{key}` に置き換えてタップ数を数える（`track_taps`）
@@ -692,6 +702,10 @@ export async function GET(req, { params }) {
 
 ### 1 対 1 トーク API:
 - `GET/PUT /api/stores/{storeId}/chat-settings` - トーク機能の ON / OFF・会話の保存期間（`{ enabled?, retention_years? }`。運営だけ。ON にできるのはチャネルシークレットを登録した店舗だけ）
+- `GET /api/stores/{storeId}/chat/threads` - 会話の一覧（`filter` = all / unread、`search` = 名前。未読が上・新しい順。LINE ユーザー ID は返さない）
+- `GET /api/stores/{storeId}/chat/threads/{threadId}` - 会話 1 本とメッセージ（開くと既読。`before` / `after` = メッセージ ID、`read=0` = 既読にしない。他の店舗の会話は 404）
+- `POST /api/stores/{storeId}/chat/threads/{threadId}/messages` - 返信（`{ text, client_key }`。同じ `client_key` は 1 回だけ送る。公式 LINE の通数を 1 通使う）
+- `GET /api/stores/{storeId}/chat/unread` - トーク機能が ON か・未読の合計（`quota=1` で今月の通数も）
 
 ### 予約カレンダー API:
 - `GET /api/stores/{storeId}/reservations/calendar` - 期間に掛かる予約と、予約以外の予定の時間（`from` / `to` = YYYY-MM-DD。最大 62 日。認証必須）
