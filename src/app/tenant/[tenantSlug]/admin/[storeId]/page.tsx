@@ -34,6 +34,7 @@ import BroadcastPanel from '@/components/broadcast/BroadcastPanel';
 import ReservationCalendar from '@/components/ReservationCalendar';
 import RichMenuPanel from '@/components/rich-menu/RichMenuPanel';
 import ChatPanel from '@/components/chat/ChatPanel';
+import ChatNotificationSettings from '@/components/chat/ChatNotificationSettings';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { getBaseUrl } from '@/lib/env';
@@ -2536,6 +2537,9 @@ export default function StoreDetailPage() {
 
             {/* 1 対 1 トーク（ON / OFF・保存期間。運営だけ） */}
             <ChatSettingsCard storeId={storeId} />
+
+            {/* 1 対 1 トークの新着の通知（スタッフの LINE・メール。店舗管理者も変えられる） */}
+            <ChatNotificationSettings storeId={storeId} />
 
             {/* 危険ゾーン */}
             <Card className="border-destructive/50">

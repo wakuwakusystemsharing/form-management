@@ -521,7 +521,7 @@ export async function POST(req: NextRequest) {
 
   // 1 対 1 トーク: お客様からのメッセージを会話に保存する（トーク機能が ON の店舗・署名を確認できた通知だけ）。
   // LINE への応答を返したあとに動かし、失敗しても以降の処理（予約確認などの応答）は変えない
-  scheduleChatInbound(storeId, events, { verified: signatureDecision === 'verified' });
+  scheduleChatInbound(storeId, events, { verified: signatureDecision === 'verified', origin: url.origin });
 
   // follow / unfollow を全イベントについて先に反映（reply トークンに依存しない処理）。
   for (const ev of events) {
