@@ -11,6 +11,16 @@ import { randomUUID } from 'crypto';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
 import {
+  CHAT_NOTIFY_DEFAULTS,
+  CHAT_NOTIFY_INTERVAL_MS,
+  CHAT_RETENTION_BATCH,
+  canNotifyChatThread,
+  chatNotifySettingsToRow,
+  chatRetentionCutoff,
+  normalizeChatNotifySettings,
+  type ChatNotifySettings,
+} from '@/lib/chat-notify';
+import {
   CHAT_DEFAULT_SETTINGS,
   buildChatPreview,
   isFormFollowUp,
@@ -63,24 +73,30 @@ export function isMissingChatSchema(error: { code?: string; message?: string } |
   return msg.includes('chat_') && (msg.includes('does not exist') || msg.includes('could not find') || msg.includes('schema cache'));
 }
 
-export type ChatSettingsState = { settings: ChatSettings; missing: boolean };
+/**
+ * - missing … 表が無い（④-1 のマイグレーション未適用）
+ * - notify … 新着の通知の設定（④-3）
+ * - notifyMissing … 通知の列が無い（④-3 のマイグレーション未適用。行がある店舗でだけ分かる）
+ */
+export type ChatSettingsState = { settings: ChatSettings; missing: boolean; notify: ChatNotifySettings; notifyMissing?: boolean };
 
 /** 設定を読む。行が無い店舗・表が未適用の環境は OFF。読み取りに失敗したときも OFF（保存しない側に倒す） */
 export async function getChatSettings(storeId: string): Promise<ChatSettingsState> {
   if (isLocal()) {
     const row = readLocal().settings.find((s) => s.store_id === storeId);
-    return { settings: row ? normalizeChatSettings(row) : { ...CHAT_DEFAULT_SETTINGS }, missing: false };
+    return { settings: row ? normalizeChatSettings(row) : { ...CHAT_DEFAULT_SETTINGS }, missing: false, notify: normalizeChatNotifySettings(row) };
   }
+  const off = { settings: { ...CHAT_DEFAULT_SETTINGS }, notify: { ...CHAT_NOTIFY_DEFAULTS } };
   try {
-    const { data, error } = await client().from('chat_settings').select('enabled, retention_years, enabled_at, updated_at').eq('store_id', storeId).maybeSingle();
+    const { data, error } = await client().from('chat_settings').select('*').eq('store_id', storeId).maybeSingle();
     if (error) {
       if (!isMissingChatSchema(error)) console.error('[chat] 設定の読み取りエラー:', error.message);
-      return { settings: { ...CHAT_DEFAULT_SETTINGS }, missing: isMissingChatSchema(error) };
+      return { ...off, missing: isMissingChatSchema(error) };
     }
-    return { settings: normalizeChatSettings(data), missing: false };
+    return { settings: normalizeChatSettings(data), missing: false, notify: normalizeChatNotifySettings(data), notifyMissing: !!data && !('notify_line' in (data as Record<string, unknown>)) };
   } catch (e) {
     console.error('[chat] 設定の読み取りエラー:', e);
-    return { settings: { ...CHAT_DEFAULT_SETTINGS }, missing: false };
+    return { ...off, missing: false };
   }
 }
 
@@ -96,7 +112,9 @@ export async function saveChatSettings(
   const row = { store_id: storeId, enabled: value.enabled, retention_years: value.retention_years, enabled_at: enabledAt, updated_at: nowIso };
   if (isLocal()) {
     const data = readLocal();
-    data.settings = [...data.settings.filter((s) => s.store_id !== storeId), row];
+    // 通知の設定（④-3）は同じ行に入っているので、残したまま上書きする
+    const existing = data.settings.find((s) => s.store_id === storeId);
+    data.settings = [...data.settings.filter((s) => s.store_id !== storeId), { ...existing, ...row }];
     writeLocal(data);
     return normalizeChatSettings(row);
   }
@@ -503,4 +521,121 @@ export async function touchChatThreadAfterReply(storeId: string, threadId: strin
   await c.from('chat_threads').update({ unread_count: 0, updated_at: new Date().toISOString() }).eq('id', threadId).eq('store_id', storeId);
   // 送っているあいだに新しいメッセージが届いていたら、一覧の 1 行はそちらを残す
   await c.from('chat_threads').update({ last_message_at: at, last_message_preview: preview }).eq('id', threadId).eq('store_id', storeId).lte('last_message_at', at);
+}
+
+// ---------------------------------------------------------------------------
+// ④-3: 新着の通知・自動削除
+// ---------------------------------------------------------------------------
+
+/** 列が無い（④-3 のマイグレーション未適用）ときのエラーか */
+function isMissingNotifyColumn(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  if (error.code === '42703' || error.code === 'PGRST204') return true;
+  return (error.message || '').toLowerCase().includes('notify_');
+}
+
+/** 通知の設定を保存する。失敗時はエラーメッセージ（日本語）を投げる */
+export async function saveChatNotifySettings(storeId: string, value: ChatNotifySettings, now: Date = new Date()): Promise<ChatNotifySettings> {
+  const row = { ...chatNotifySettingsToRow(value), updated_at: now.toISOString() };
+  if (isLocal()) {
+    const data = readLocal();
+    const existing = data.settings.find((s) => s.store_id === storeId);
+    const base = existing ?? { store_id: storeId, ...CHAT_DEFAULT_SETTINGS };
+    data.settings = [...data.settings.filter((s) => s.store_id !== storeId), { ...base, ...row } as LocalData['settings'][number]];
+    writeLocal(data);
+    return value;
+  }
+  // 行が無い店舗（トーク機能を一度も ON にしていない）でも保存できるように upsert（enabled は既定の OFF のまま）
+  const { error } = await client()
+    .from('chat_settings')
+    .upsert({ store_id: storeId, ...row }, { onConflict: 'store_id' });
+  if (error) {
+    if (isMissingChatSchema(error) || isMissingNotifyColumn(error)) throw new Error('データベースの更新（マイグレーション）がまだ適用されていません');
+    console.error('[chat] 通知の設定の保存エラー:', error.message);
+    throw new Error('通知の設定の保存に失敗しました');
+  }
+  return value;
+}
+
+/**
+ * 保存したメッセージ（LINE 側の ID）のうち、通知の対象（お客様が手で書いた文・画像など = 自動の印が無いもの）がある会話の ID。
+ * 「フォームの送信文に続けて届いた文」の印は保存のときに DB が付けるので、保存したあとに読み直す
+ */
+export async function listChatThreadsToNotify(storeId: string, lineMessageIds: string[]): Promise<string[]> {
+  const ids = [...new Set(lineMessageIds.filter(Boolean))];
+  if (ids.length === 0) return [];
+  if (isLocal()) {
+    return [...new Set(readLocal().messages.filter((m) => m.store_id === storeId && m.direction === 'in' && !m.auto && m.line_message_id && ids.includes(m.line_message_id)).map((m) => m.thread_id))];
+  }
+  const { data, error } = await client().from('chat_messages').select('thread_id').eq('store_id', storeId).eq('direction', 'in').eq('auto', false).in('line_message_id', ids);
+  if (error) throw new Error(error.message || 'メッセージの読み取りエラー');
+  return [...new Set(((data ?? []) as Array<{ thread_id: string }>).map((r) => r.thread_id))];
+}
+
+/**
+ * その会話の通知を確保する。true = いま通知してよい（通知の日時を書き換えた）。
+ * 前の通知から 10 分たっていない・未読が無い・同時に別の処理が確保した ときは false（通知を二重に送らない）
+ */
+export async function claimChatNotification(storeId: string, threadId: string, now: Date = new Date()): Promise<boolean> {
+  if (isLocal()) {
+    const data = readLocal();
+    const t = data.threads.find((x) => x.id === threadId && x.store_id === storeId);
+    if (!t || t.unread_count <= 0 || !canNotifyChatThread(t.notified_at, now)) return false;
+    t.notified_at = now.toISOString();
+    writeLocal(data);
+    return true;
+  }
+  const { data, error } = await client().rpc('chat_claim_notification', { p_store_id: storeId, p_thread_id: threadId, p_now: now.toISOString(), p_interval_seconds: Math.round(CHAT_NOTIFY_INTERVAL_MS / 1000) });
+  if (error) {
+    // 関数が無い（マイグレーション未適用）ときは通知しない
+    if (!isMissingChatSchema(error)) console.error('[chat] 通知の確保エラー:', error.message);
+    return false;
+  }
+  return data === true;
+}
+
+export interface ChatPurgeResult {
+  messages: number;
+  threads: number;
+  /** まだ消すものが残っているか（1 回の上限に達した） */
+  remaining: boolean;
+}
+
+/**
+ * 保存期間を過ぎたメッセージを消す（1 回に limit 通まで。古い順）。
+ * 画像を持つメッセージ（media_path あり）は消さない（画像のファイルを先に消す必要がある。④-4 で対応）。
+ * メッセージが無くなり、最後のメッセージも保存期間より前の会話は、会話ごと消す。
+ * Supabase では DB 関数 chat_purge_expired が行う。local は同じ手順を JSON の中で行う（**直すときは両方**）
+ */
+export async function purgeExpiredChat(now: Date, limit: number = CHAT_RETENTION_BATCH): Promise<ChatPurgeResult> {
+  if (!isLocal()) {
+    const { data, error } = await client().rpc('chat_purge_expired', { p_now: now.toISOString(), p_limit: limit });
+    if (error) {
+      if (isMissingChatSchema(error)) return { messages: 0, threads: 0, remaining: false };
+      throw new Error(error.message || '自動削除のエラー');
+    }
+    const r = (data ?? {}) as Record<string, unknown>;
+    return { messages: Number(r.messages) || 0, threads: Number(r.threads) || 0, remaining: r.remaining === true };
+  }
+  const data = readLocal();
+  const cutoffByStore = new Map<string, string>();
+  for (const s of data.settings) cutoffByStore.set(s.store_id, chatRetentionCutoff(normalizeChatSettings(s).retention_years, now));
+  const expired = (m: ChatMessage) => {
+    const cutoff = cutoffByStore.get(m.store_id);
+    return !!cutoff && m.created_at < cutoff && !m.media_path;
+  };
+  const victims = data.messages
+    .filter(expired)
+    .sort((a, b) => (a.created_at < b.created_at ? -1 : 1))
+    .slice(0, Math.max(limit, 0));
+  const victimIds = new Set(victims.map((m) => m.id));
+  data.messages = data.messages.filter((m) => !victimIds.has(m.id));
+  const before = data.threads.length;
+  data.threads = data.threads.filter((t) => {
+    const cutoff = cutoffByStore.get(t.store_id);
+    return !(cutoff && t.last_message_at < cutoff && !data.messages.some((m) => m.thread_id === t.id));
+  });
+  const result = { messages: victims.length, threads: before - data.threads.length, remaining: data.messages.some(expired) };
+  if (result.messages > 0 || result.threads > 0) writeLocal(data);
+  return result;
 }

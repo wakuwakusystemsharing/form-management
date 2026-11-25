@@ -1039,6 +1039,49 @@ LINE Webhook の署名チェックの設定（チャネルシークレット）
 
 - `line_quota` は `quota=1` のときだけ。取得できなければ null
 
+### `GET / PUT /api/stores/{storeId}/chat/notifications`
+1 対 1 トークの新着の通知の設定（スタッフの LINE・メール・送らない時間帯）
+
+**認証**: `authorizeStoreAccess`（店舗管理者も変えられる）
+
+**PUT のリクエスト**:
+```json
+{ "line": true, "email": true, "emails": ["staff@example.com"], "quiet": { "enabled": true, "start": 22, "end": 8 } }
+```
+
+- `emails`: 5 件まで。`email` を true にするなら 1 件以上
+- `quiet`: 通知を送らない時間帯（日本時間の「時」。0〜23。日付またぎ可）
+- 形が正しくないときは `400`。マイグレーション未適用の環境は `409`
+
+**レスポンス**（2 つとも同じ。スタッフの LINE ユーザー ID は返さない）:
+```json
+{
+  "settings": { "line": true, "email": true, "emails": ["staff@example.com"], "quiet": { "enabled": true, "start": 22, "end": 8 } },
+  "chat_enabled": true,
+  "staff_count": 2,
+  "unavailable": false
+}
+```
+
+- `staff_count`: LINE で受け取るスタッフの人数（「今日の予約まとめ」と同じ登録）
+- `unavailable`: マイグレーション未適用で、設定を保存できない
+
+**通知の決まり**: メッセージの本文は載せない / 同じ会話については 10 分に 1 回まで / 夜間（`quiet`）は送らない / フォームの送信文・コマンドでは送らない
+
+### `POST /api/stores/{storeId}/chat/notifications/test`
+テストの通知を、保存済みの送り先へ送る（夜間・10 分に 1 回の制限は見ない）。LINE で送ると公式 LINE の通数を使う
+
+**認証**: `authorizeStoreAccess`
+
+**レスポンス**: `{ "line_sent": 2, "email_sent": 1, "failed": 0 }`（通知が OFF = `400` / 1 件も送れなかった = `502`）
+
+### `POST /api/cron/chat-retention`
+1 対 1 トークの、保存期間を過ぎた会話の自動削除（pg_cron から 1 日 1 回）
+
+**認証**: `Authorization: Bearer <Service Role Key>`（local は認証なし）
+
+**レスポンス**: `{ "messages": 120, "threads": 3, "remaining": false }`（消したメッセージの数・会話の数・まだ残っているか。1 回に 5000 通まで）
+
 ### `POST /api/stores/{storeId}/line-webhook/test`
 接続を確認（LINE に登録されている Webhook URL がこの店舗のものか + LINE からテストの通知を受け取れるか）。local では 400
 

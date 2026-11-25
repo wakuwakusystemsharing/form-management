@@ -310,7 +310,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - 優先順位: 一覧の ↑↓（`POST /api/stores/{storeId}/rich-menus/rule-order` に `{ ids }`）。保存では変えない（新しいお客様ごとのメニューは、いちばん下）。一覧には「出す相手」と「いま N 人に設定中」（`link_counts`）を出す
 - Vitest: `line-rich-menu.test.ts` / `line-rich-menu-layouts.test.ts` / `line-rich-menu-rules.test.ts` / `line-rich-menu-service.local.test.ts` / `line-rich-menu-rules-service.local.test.ts` / `store-admin-tabs.test.ts` / `admin-api-auth.test.ts`
 
-**1 対 1 トーク（設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 8 章。リリース手順: `docs/1対1トーク_リリース手順.md`。規約に追記する文の下書き: `docs/1対1トーク_規約追記の下書き.md`。④-1 = 受信と保存、④-2 = 画面と返信・未読バッジ は実装済み。④-3 = 通知と自動削除 / ④-4 = 画像と定型文 / ④-5 = 自動送信の表示と利用量 はこれから）:**
+**1 対 1 トーク（設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 8 章。リリース手順: `docs/1対1トーク_リリース手順.md`。規約に追記する文の下書き: `docs/1対1トーク_規約追記の下書き.md`。④-1 = 受信と保存、④-2 = 画面と返信・未読バッジ、④-3 = 通知と自動削除 は実装済み。④-4 = 画像と定型文 / ④-5 = 自動送信の表示と利用量 はこれから）:**
 - お客様が公式 LINE に送ったメッセージを保存し、管理画面で読んで返信する機能。**既定は OFF。運営（マスター管理者・システム管理者）が店舗ごとに ON にした店舗だけ保存する**（行が無い店舗 = OFF）。会話には体の悩みなど慎重に扱う内容が入るので、**プライバシーポリシーの公開とお客様への説明が済んだ店舗だけ ON にする**（それまでは本番のテスト用店舗だけ）
 - 設定: テナント側 店舗ページ → 設定タブ → 「1 対 1 トーク」（`ChatSettingsCard.tsx`。ON / OFF・会話の保存期間 1 / 2 / 3 年 = `CHAT_RETENTION_OPTIONS`・保存している会話の件数）。API `GET/PUT /api/stores/{storeId}/chat-settings`（**`authorizeUpperAdminStoreAccess` = 運営だけ**。店舗管理者は自分の店舗でも 403。会話の中身・LINE ユーザー ID は返さない）
 - **ON にできるのは、チャネルシークレットを登録した店舗だけ**（`chatEnableBlocker`。偽の通知を会話として保存しないため。local は制限なし）。確かめるのは OFF → ON のときだけ（保存期間の変更・OFF はいつでもできる）
@@ -320,7 +320,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - 保存は DB 関数 `chat_record_inbound` が 1 回で行う（会話が無ければ作る → 同じ `line_message_id` は 1 件だけ（LINE は応答が遅いと送り直す）→ 未読の加算・一覧の 1 行の更新）。local は `data/chat.json` で同じ手順（**直すときは両方**）
 - データ: `chat_settings`（店舗ごとの設定）/ `chat_threads`（店舗 × LINE ユーザー ID で 1 本。顧客 ID ではまとめない = 同じ人が顧客に 2 人いても会話は分かれない。`unread_count` / `status` = open / done / `last_message_preview`）/ `chat_messages`（`direction` = in / out / system、`kind`、`auto` / `auto_kind`、`line_message_id`、返信用の `client_key` / `send_status` は ④-2 で使う）。どれも RLS ポリシー無し = service_role のみ
 - 純粋ロジック `src/lib/chat.ts`、保存 `src/lib/chat-repository.ts`、業務ロジック `src/lib/chat-service.ts`
-- マイグレーション `20261127000000_add_chat.sql`。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも既存の機能は動く（OFF として動き、設定カードに理由を出して ON にできない）。**staging には LINE からの通知が届かないので、受信は本番のテスト用店舗で確かめる**
+- マイグレーション `20261127000000_add_chat.sql`（④-1。表と保存の DB 関数）と `20261128000000_add_chat_notifications.sql`（④-3。`chat_settings` の `notify_*` 列、DB 関数 `chat_claim_notification` / `chat_purge_expired`。未適用でも受信・画面・返信は動き、通知の設定を保存しようとすると「マイグレーションがまだ適用されていません」と出る。自動削除は何もしない）。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも既存の機能は動く（OFF として動き、設定カードに理由を出して ON にできない）。**staging には LINE からの通知が届かないので、受信は本番のテスト用店舗で確かめる**
 - **トーク画面（④-2）**: 店舗管理者ページ `/{storeId}/admin?tab=chat` とテナント側 店舗ページの「トーク」タブで、同じ部品 `src/components/chat/ChatPanel.tsx` を使う。左 = 会話の一覧（未読が上・新しい順 = `sortChatThreads`。名前で検索・「未読」だけ）/ 中 = 会話（お客様は左・店舗は右。`auto` の文は小さく薄く「自動」）/ 右 = 顧客の情報（パソコンの広い幅だけ。既存の `GET /customers/{id}` を読む）。スマホは 一覧 → 会話 の 2 画面
   - **表示**: `admin_visible_options.chat`（「店舗管理者に表示するメニュー」の「顧客管理」の下の「トークを表示」。**未設定は非表示** = `defaultHidden`）が ON、**かつ**運営がトーク機能を ON にした店舗だけ、店舗管理者のメニューに出す（`buildStoreAdminNav(visibleTabs, { calendar, richMenu, chat })`。項目 ID は `chat`、並びは顧客管理のすぐ後ろ）。ON かどうかは店舗管理者ページが `GET .../chat/unread` で確かめる（設定の API は運営だけなので使えない）。運営が開いたときは、トーク機能が ON なら出る。テナント側 店舗ページのタブは常に出し、OFF の店舗では理由を出す
   - **未読バッジ**: メニュー（サイドバー・スマホの下部ナビ）の「トーク」に未読の合計（`StoreAdminLayout` の `chatUnread` → `data-slot="nav-badge"`）。店舗管理者ページが 30 秒おき・画面が見えているときだけ `GET .../chat/unread` を呼ぶ。トークを開いているあいだは `ChatPanel` が 15 秒おき（新着が無い間は 30 秒まで延ばす = `nextChatPollDelay`）に一覧と開いている会話の新着（`?after={最後のメッセージ ID}`）を取り、`onUnreadChange` でバッジを合わせる
@@ -332,7 +332,18 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - 顧客詳細の LINE タブに「トークを開く」（`CustomerDetail` の `chatHref`。トークのタブが出ている店舗だけ）→ `?tab=chat&chatCustomer={顧客ID}` → `ChatPanel` の `initialCustomerId` がその顧客の会話を開く（会話が無ければ「まだありません」。こちらから先には送れない）
   - 文字は HTML として解釈せず、`http` / `https` で始まる所だけリンクにする（`LinkedText`）。画像・動画などは「画像が送られました」とだけ出す（画像の中身は ④-4）。スタンプは番号から LINE の公開の画像 URL を組み立てる（`stickerImageUrl`）
   - DB の変更なし（④-1 の表のまま）
-- Vitest: `chat.test.ts` / `chat-service.local.test.ts` / `chat-service.test.ts` / `line-webhook-signature-route.test.ts` / `admin-api-auth.test.ts` / `store-admin-tabs.test.ts` / `store-admin-guide.test.ts`
+- **新着の通知（④-3。任意・既定は OFF）**: 設定は「トークの新着の通知」（`src/components/chat/ChatNotificationSettings.tsx`。店舗管理者ページの設定タブ = トークのタブが出ている店舗だけ / テナント側 店舗ページの設定タブ）。`ChatNotifySettings { line, email, emails（5 件まで）, quiet: { enabled, start, end } }`（`chat_settings` の `notify_*` 列。**ON / OFF・保存期間と違い、店舗管理者も変えられる** = API は `authorizeStoreAccess`）。純粋ロジック `src/lib/chat-notify.ts`
+  - 送るのは `recordChatInboundEvents` の最後（保存のあと）の `notifyChatInbound(storeId, 新しく保存できたメッセージの ID, { origin })`。**例外を投げない**（通知に失敗しても保存の結果は変えない）。同じ通知が LINE から送り直されても、もう一度は知らせない（新しく保存できたぶんだけが対象）
+  - **通知しないもの**: `auto` の印が付いた文（フォームの送信文・コマンド・フォームに続く文）。印は保存のときに DB が付けることがあるので、保存したあとに `listChatThreadsToNotify` で読み直す
+  - **同じ会話については 10 分に 1 回まで**（`CHAT_NOTIFY_INTERVAL_MS`）: 送る前に `claimChatNotification`（DB 関数 `chat_claim_notification` = 前の通知から 10 分たっていて未読があるときだけ `chat_threads.notified_at` を書き換えて true）で確保する = 同時に届いても二重に送らない。会話を開いて既読にしても、間隔は同じ
+  - **夜間は送らない**（`isChatQuietTime`。既定 ON・22 時〜8 時。日本時間）: その時間帯は確保もしない（`notified_at` を変えない）ので、明けたあとの最初の新着のときに、たまった未読の数と一緒に知らせる。**明けた時刻に自動で送ることはしない**
+  - **通知にメッセージの本文を載せない**（`buildChatNotifyLineText` / `buildChatNotifyEmail` = 「〇〇 様から新しいメッセージが届きました（未読 N 件）」+ 管理画面のリンク `/{storeId}/admin?tab=chat`）。Vitest で本文が含まれないことを検査している
+  - スタッフの LINE: 「今日の予約まとめ」と同じ登録（`store_digest_staff`。合言葉で登録）の全員に、その店舗の公式 LINE から push（**通数を使う = 1 回 × スタッフの人数**）。メッセージを送ってきた本人がスタッフのときは、その人には送らない。メール: `sendEmail`（Resend。From 表示名 = 店舗名）
+  - 「テストの通知を送る」= `sendChatNotifyTest`（保存済みの送り先へ。夜間・10 分に 1 回の制限は見ない。staging・本番の確認用）
+- **保存期間を過ぎた会話の自動削除（④-3）**: pg_cron `run_chat_retention`（1 日 1 回。**本番のみ登録。マイグレーションに含めない**）→ `POST /api/cron/chat-retention`（Service Role Key の Bearer）→ `runChatRetention` → DB 関数 `chat_purge_expired(now, 5000)`: 店舗ごとの保存期間（`chat_settings.retention_years`。暦の年で引く = `chatRetentionCutoff`）より前のメッセージを古い順に 1 回 `CHAT_RETENTION_BATCH` = 5000 通まで消し、メッセージが無くなった古い会話は会話ごと消す。**トーク機能を OFF にした店舗の会話も、保存期間を過ぎたら消える**。local は同じ手順を JSON の中で行う（`purgeExpiredChat`。**直すときは両方**）
+  - **画像を持つメッセージ（`media_path` あり）は消さない**（画像のファイルを先に消す必要があるため。**④-4 で画像を保存するようにしたら、ここも直す**: 画像の場所を集める → 画像を消す → 行を消す の順）
+  - 保存期間を短くするとき（3 年 → 1 年など）は、設定カードが「◯ 年より前の会話は、次の自動削除で削除され、元に戻せません」と確認を出す。長くするときは確認なし
+- Vitest: `chat.test.ts` / `chat-notify.test.ts` / `chat-service.local.test.ts` / `chat-notify-service.local.test.ts` / `chat-service.test.ts` / `line-webhook-signature-route.test.ts` / `admin-api-auth.test.ts` / `store-admin-tabs.test.ts` / `store-admin-guide.test.ts`
 
 **全予約一覧の「集計ダウンロード」（`/tenant/{slug}/admin/reservations` → 予約一覧タブ。Excel = 予約数 / キャンセル数 / アンケート回答数 / 出力条件 の 4 シート。店舗 × 月）:**
 - 予約は `GET /api/reservations`、アンケート回答数は `GET /api/surveys/stats`。どちらも **ログイン必須 + 見てよい店舗だけ**（`src/lib/admin-store-scope.ts` の `getAccessibleStoreIds` = マスター: 全店舗 / システム管理者: 同じテナント / 店舗管理者: 自分の店舗。`resolveStoreScope` で `store_id` の指定を確認し、範囲外は 403。local は認証スキップ）、**`fetchAllRows` で 1000 件ずつ全件取得**（以前は 1 回の取得 = 1000 件までで、件数が欠けていた）
@@ -706,6 +717,9 @@ export async function GET(req, { params }) {
 - `GET /api/stores/{storeId}/chat/threads/{threadId}` - 会話 1 本とメッセージ（開くと既読。`before` / `after` = メッセージ ID、`read=0` = 既読にしない。他の店舗の会話は 404）
 - `POST /api/stores/{storeId}/chat/threads/{threadId}/messages` - 返信（`{ text, client_key }`。同じ `client_key` は 1 回だけ送る。公式 LINE の通数を 1 通使う）
 - `GET /api/stores/{storeId}/chat/unread` - トーク機能が ON か・未読の合計（`quota=1` で今月の通数も）
+- `GET/PUT /api/stores/{storeId}/chat/notifications` - 新着の通知の設定（`{ line, email, emails, quiet: { enabled, start, end } }`。店舗管理者も変えられる）
+- `POST /api/stores/{storeId}/chat/notifications/test` - テストの通知を送る
+- `POST /api/cron/chat-retention` - 保存期間を過ぎた会話の自動削除（pg_cron から。Service Role Key の Bearer）
 
 ### 予約カレンダー API:
 - `GET /api/stores/{storeId}/reservations/calendar` - 期間に掛かる予約と、予約以外の予定の時間（`from` / `to` = YYYY-MM-DD。最大 62 日。認証必須）
@@ -857,6 +871,7 @@ export async function GET(req, { params }) {
 - `20261125000000_add_line_rich_menus.sql` - リッチメニュー: line_rich_menus
 - `20261126000000_add_line_rich_menu_links.sql` - リッチメニューのお客様ごとの切り替え: line_rich_menu_links
 - `20261127000000_add_chat.sql` - 1 対 1 トーク: chat_settings / chat_threads / chat_messages、DB 関数 `chat_record_inbound`
+- `20261128000000_add_chat_notifications.sql` - 1 対 1 トークの通知と自動削除: chat_settings の notify_* 列、DB 関数 `chat_claim_notification` / `chat_purge_expired`
 - `20261009000000_add_wall.sql` - 寄せ書きウォールの 5 テーブル・RLS・DB 関数 `wall_insert_post_checked` / `wall_add_report`
 - `20261010000000_add_wall_daily_max.sql` - wall_boards.daily_max
 - `20261011000000_add_wall_engagement.sql` - 寄せ書きの追加機能（wall_topics / wall_empathies、wall_posts の reaction / topic_id / note_color / note_deco / empathy_count、wall_boards の empathy_* / customer_pick_enabled、DB 関数 `wall_toggle_empathy`）

@@ -29,6 +29,7 @@ import { buildStoreAdminNav, resolveAdminVisibleOptions, resolveVisibleTabs } fr
 import ReservationCalendar from '@/components/ReservationCalendar';
 import RichMenuPanel from '@/components/rich-menu/RichMenuPanel';
 import ChatPanel from '@/components/chat/ChatPanel';
+import ChatNotificationSettings from '@/components/chat/ChatNotificationSettings';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
 import WaitlistPanel from '@/components/WaitlistPanel';
 import CustomerList from '@/components/CustomerList';
@@ -1687,6 +1688,8 @@ export default function StoreAdminPage() {
             <StoreAdminGuide tab="settings" />
             <UiStyleSettings />
             {adminOptions.store_digest && <StoreDigestSettings storeId={storeId} />}
+            {/* トークの新着の通知（トークのタブが出ている店舗だけ） */}
+            {showChat && <ChatNotificationSettings storeId={storeId} />}
             <Card className="shadow-sm">
               <CardHeader className="pb-4">
                 <CardTitle className="text-base">店舗設定</CardTitle>

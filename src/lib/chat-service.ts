@@ -5,7 +5,7 @@
  * ④-1: 設定（ON / OFF・保存期間。運営だけ）と、Webhook で届いたメッセージの保存
  */
 import { after } from 'next/server';
-import { getAppEnvironment } from '@/lib/env';
+import { getAppEnvironment, getBaseUrl } from '@/lib/env';
 import {
   buildChatPreview,
   chatDisplayName,
@@ -29,6 +29,7 @@ import {
   type ChatThreadView,
 } from '@/lib/chat';
 import {
+  claimChatNotification,
   countChatUnread,
   findChatCustomers,
   getChatSettings,
@@ -37,15 +38,32 @@ import {
   insertChatOutbound,
   listChatMessages,
   listChatThreads,
+  listChatThreadsToNotify,
   markChatThreadRead,
+  purgeExpiredChat,
   recordChatInbound,
+  saveChatNotifySettings,
   saveChatSettings,
   setChatThreadCustomer,
   touchChatThreadAfterReply,
   updateChatOutboundStatus,
   type ChatCustomerBrief,
+  type ChatPurgeResult,
 } from '@/lib/chat-repository';
-import { LINE_PUSH_ENDPOINT } from '@/lib/line-push';
+import { LINE_PUSH_ENDPOINT, pushLineMessages } from '@/lib/line-push';
+import {
+  CHAT_NOTIFY_DEFAULTS,
+  CHAT_RETENTION_BATCH,
+  buildChatAdminUrl,
+  buildChatNotifyEmail,
+  buildChatNotifyLineText,
+  chatNotifySkipReason,
+  validateChatNotifySettings,
+  type ChatNotifyContent,
+  type ChatNotifySettings,
+} from '@/lib/chat-notify';
+import { sendEmail } from '@/lib/email-sender';
+import { getDigestStore, listDigestStaff } from '@/lib/store-digest-repository';
 import { getStoreLineSecret } from '@/lib/line-secret-repository';
 import { listEnabledLineFlexMessages } from '@/lib/line-flex-repository';
 import { getBroadcastSettings, getStoreLineToken } from '@/lib/broadcast-repository';
@@ -114,8 +132,10 @@ export interface ChatInboundSummary {
  * - 署名を確認できた通知だけ（偽の通知を会話として保存しない。local は確認なし）
  * - **例外を投げない**（保存に失敗しても、予約確認などの既存の応答を止めない）
  */
-export async function recordChatInboundEvents(storeId: string, events: ReadonlyArray<unknown>, opts: { verified: boolean }): Promise<ChatInboundSummary> {
+export async function recordChatInboundEvents(storeId: string, events: ReadonlyArray<unknown>, opts: { verified: boolean; origin?: string | null }, deps: ChatNotifyDeps = {}): Promise<ChatInboundSummary> {
   const summary: ChatInboundSummary = { saved: 0, duplicated: 0, failed: 0 };
+  // 新しく保存できたメッセージ（通知の対象を決めるのに使う。同じ通知の送り直しでは、もう一度知らせない）
+  const savedIds: string[] = [];
   try {
     const inbounds = events.map((ev) => toChatInbound(ev)).filter((m): m is ChatInbound => m !== null);
     if (inbounds.length === 0) return { ...summary, skipped: 'none' };
@@ -131,8 +151,10 @@ export async function recordChatInboundEvents(storeId: string, events: ReadonlyA
     for (const msg of ordered) {
       try {
         const autoKind = msg.kind === 'text' ? classifyAutoMessage(msg.text, ctx) : null;
-        if (await recordChatInbound(storeId, msg, autoKind)) summary.saved += 1;
-        else summary.duplicated += 1;
+        if (await recordChatInbound(storeId, msg, autoKind)) {
+          summary.saved += 1;
+          savedIds.push(msg.lineMessageId);
+        } else summary.duplicated += 1;
       } catch (e) {
         summary.failed += 1;
         console.error(`[chat] メッセージの保存エラー: storeId=${storeId}`, e instanceof Error ? e.message : e);
@@ -141,6 +163,8 @@ export async function recordChatInboundEvents(storeId: string, events: ReadonlyA
   } catch (e) {
     console.error(`[chat] 受信の処理エラー: storeId=${storeId}`, e instanceof Error ? e.message : e);
   }
+  // 新着の通知（スタッフの LINE・メール。任意）。通知に失敗しても、保存の結果は変えない
+  if (savedIds.length > 0) await notifyChatInbound(storeId, savedIds, { origin: opts.origin }, deps);
   return summary;
 }
 
@@ -148,7 +172,7 @@ export async function recordChatInboundEvents(storeId: string, events: ReadonlyA
  * Webhook から呼ぶ入口。LINE への応答を返したあとに保存する（既存の応答を遅くしない）。
  * 保存の対象（お客様からのメッセージ）が無い通知では、何も読まずに終わる
  */
-export function scheduleChatInbound(storeId: string, events: ReadonlyArray<unknown>, opts: { verified: boolean }): void {
+export function scheduleChatInbound(storeId: string, events: ReadonlyArray<unknown>, opts: { verified: boolean; origin?: string | null }): void {
   if (!events.some((ev) => toChatInbound(ev) !== null)) return;
   const run = async () => {
     await recordChatInboundEvents(storeId, events, opts);
@@ -331,4 +355,156 @@ export async function sendChatReply(
     console.error('[chat] 送信結果の保存エラー:', e instanceof Error ? e.message : e);
   }
   return { ok: true, message: toChatMessageView({ ...message, send_status: 'sent', send_error: null }) };
+}
+
+// ---------------------------------------------------------------------------
+// ④-3: 新着の通知（スタッフの LINE・メール）と、保存期間を過ぎた会話の自動削除
+// ---------------------------------------------------------------------------
+
+export interface ChatNotifyDeps {
+  /** スタッフの LINE に送る（差し替え用） */
+  pushLine?: (accessToken: string, to: string, text: string) => Promise<{ ok: boolean }>;
+  /** メールを送る（差し替え用） */
+  sendMail?: (params: { to: string; subject: string; body: string; fromName?: string }) => Promise<{ ok: boolean }>;
+  now?: Date;
+}
+
+export interface ChatNotifyResult {
+  line_sent: number;
+  email_sent: number;
+  failed: number;
+}
+
+const defaultPushLine: NonNullable<ChatNotifyDeps['pushLine']> = (token, to, text) => pushLineMessages(token, to, [{ type: 'text', text }]);
+const defaultSendMail: NonNullable<ChatNotifyDeps['sendMail']> = (params) => sendEmail(params);
+
+/** 通知を送る（スタッフの LINE・メール）。1 件ずつ送り、失敗しても残りは送る。例外は投げない */
+async function deliverChatNotification(storeId: string, settings: ChatNotifySettings, content: ChatNotifyContent, opts: { excludeLineUserId?: string | null }, deps: ChatNotifyDeps = {}): Promise<ChatNotifyResult> {
+  const result: ChatNotifyResult = { line_sent: 0, email_sent: 0, failed: 0 };
+  if (settings.line) {
+    try {
+      const [store, staff] = await Promise.all([getDigestStore(storeId), listDigestStaff(storeId)]);
+      // メッセージを送ってきた本人がスタッフのときは、その人には知らせない
+      const targets = staff.filter((s) => s.line_user_id && s.line_user_id !== opts.excludeLineUserId);
+      if (store?.line_channel_access_token) {
+        const text = buildChatNotifyLineText(content);
+        for (const s of targets) {
+          const res = await (deps.pushLine ?? defaultPushLine)(store.line_channel_access_token, s.line_user_id, text).catch(() => ({ ok: false }));
+          if (res.ok) result.line_sent += 1;
+          else result.failed += 1;
+        }
+      } else if (targets.length > 0) {
+        result.failed += targets.length;
+      }
+    } catch (e) {
+      console.error('[chat] スタッフの LINE への通知エラー:', e instanceof Error ? e.message : e);
+      result.failed += 1;
+    }
+  }
+  if (settings.email) {
+    const mail = buildChatNotifyEmail(content);
+    for (const to of settings.emails) {
+      const res = await (deps.sendMail ?? defaultSendMail)({ to, subject: mail.subject, body: mail.body, fromName: content.storeName }).catch(() => ({ ok: false }));
+      if (res.ok) result.email_sent += 1;
+      else result.failed += 1;
+    }
+  }
+  return result;
+}
+
+/**
+ * 新しく保存したメッセージについて、通知を送る。
+ * - 通知が OFF・夜間（送らない時間帯）なら何もしない（夜間に届いたぶんは、明けたあとの最初の新着と一緒に知らせる）
+ * - 自動の印が付いた文（フォームの送信文・コマンド）は知らせない
+ * - 同じ会話については 10 分に 1 回まで（先に通知の日時を書き換えて確保してから送る = 二重に送らない）
+ * **例外を投げない**
+ */
+export async function notifyChatInbound(storeId: string, lineMessageIds: string[], opts: { origin?: string | null }, deps: ChatNotifyDeps = {}): Promise<ChatNotifyResult & { threads: number; skipped?: 'off' | 'quiet' | 'none' }> {
+  const empty = { line_sent: 0, email_sent: 0, failed: 0, threads: 0 };
+  try {
+    if (lineMessageIds.length === 0) return { ...empty, skipped: 'none' };
+    const now = deps.now ?? new Date();
+    const state = await getChatSettings(storeId);
+    const settings = state.notify ?? CHAT_NOTIFY_DEFAULTS;
+    const skip = chatNotifySkipReason(settings, now);
+    if (skip) return { ...empty, skipped: skip };
+    const threadIds = await listChatThreadsToNotify(storeId, lineMessageIds);
+    if (threadIds.length === 0) return { ...empty, skipped: 'none' };
+    const store = await getDigestStore(storeId);
+    const total = { ...empty };
+    for (const threadId of threadIds) {
+      if (!(await claimChatNotification(storeId, threadId, now))) continue;
+      const thread = await getChatThread(storeId, threadId);
+      if (!thread) continue;
+      const customer = (await customersByLineUser(storeId, [thread])).get(thread.line_user_id);
+      const content: ChatNotifyContent = {
+        storeName: store?.name ?? '店舗',
+        customerName: customer?.name ?? '',
+        unread: thread.unread_count || 1,
+        url: buildChatAdminUrl(opts.origin || getBaseUrl(), storeId),
+      };
+      const r = await deliverChatNotification(storeId, settings, content, { excludeLineUserId: thread.line_user_id }, deps);
+      total.threads += 1;
+      total.line_sent += r.line_sent;
+      total.email_sent += r.email_sent;
+      total.failed += r.failed;
+    }
+    if (total.failed > 0) console.warn(`[chat] 通知の一部を送れませんでした: storeId=${storeId} 失敗=${total.failed}`);
+    return total;
+  } catch (e) {
+    console.error(`[chat] 通知の処理エラー: storeId=${storeId}`, e instanceof Error ? e.message : e);
+    return empty;
+  }
+}
+
+export interface ChatNotifyView {
+  settings: ChatNotifySettings;
+  /** トーク機能が ON か（OFF の店舗では、通知する新着が届かない） */
+  chat_enabled: boolean;
+  /** LINE で受け取るスタッフの人数（「今日の予約まとめ」と同じ登録） */
+  staff_count: number;
+  /** マイグレーションが未適用で、通知の設定を保存できない */
+  unavailable: boolean;
+}
+
+/** 通知の設定の画面に返す内容（スタッフの LINE ユーザー ID は返さない） */
+export async function getChatNotifyView(storeId: string): Promise<ChatNotifyView> {
+  const [state, staff] = await Promise.all([getChatSettings(storeId), listDigestStaff(storeId).catch(() => [])]);
+  return { settings: state.notify ?? CHAT_NOTIFY_DEFAULTS, chat_enabled: state.settings.enabled, staff_count: staff.length, unavailable: state.missing || state.notifyMissing === true };
+}
+
+export type ChatNotifyUpdateResult = { ok: true; view: ChatNotifyView } | { ok: false; status: number; error: string };
+
+/** 通知の設定を変える（店舗管理者も変えられる） */
+export async function updateChatNotifySettings(storeId: string, input: unknown): Promise<ChatNotifyUpdateResult> {
+  const v = validateChatNotifySettings(input);
+  if (!v.ok) return { ok: false, status: 400, error: v.error };
+  try {
+    await saveChatNotifySettings(storeId, v.value);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '通知の設定の保存に失敗しました';
+    return { ok: false, status: message.includes('マイグレーション') ? 409 : 500, error: message };
+  }
+  return { ok: true, view: await getChatNotifyView(storeId) };
+}
+
+/** テストの通知を送る（保存済みの設定の送り先へ。夜間・10 分に 1 回の制限は見ない） */
+export async function sendChatNotifyTest(storeId: string, origin: string | null, deps: ChatNotifyDeps = {}): Promise<({ ok: true } & ChatNotifyResult) | { ok: false; status: number; error: string }> {
+  const state = await getChatSettings(storeId);
+  const settings = state.notify ?? CHAT_NOTIFY_DEFAULTS;
+  if (!settings.line && !(settings.email && settings.emails.length > 0)) return { ok: false, status: 400, error: '通知が OFF です。送り先を選んで保存してから、テストを送ってください' };
+  const store = await getDigestStore(storeId);
+  const content: ChatNotifyContent = { storeName: store?.name ?? '店舗', customerName: 'テスト', unread: 1, url: buildChatAdminUrl(origin || getBaseUrl(), storeId) };
+  const result = await deliverChatNotification(storeId, settings, content, {}, deps);
+  if (result.line_sent + result.email_sent === 0) {
+    return { ok: false, status: 502, error: settings.line && !settings.email ? 'LINE で受け取るスタッフが登録されていないか、送信に失敗しました' : '通知を送れませんでした。送り先を確認してください' };
+  }
+  return { ok: true, ...result };
+}
+
+/** 保存期間を過ぎた会話の自動削除（1 日 1 回の cron から）。1 回に 5000 通まで。残りは次の日に回す */
+export async function runChatRetention(now: Date = new Date()): Promise<ChatPurgeResult> {
+  const result = await purgeExpiredChat(now, CHAT_RETENTION_BATCH);
+  if (result.messages > 0 || result.threads > 0) console.log(`[chat] 自動削除: メッセージ=${result.messages} 会話=${result.threads} 残り=${result.remaining ? 'あり' : 'なし'}`);
+  return result;
 }
