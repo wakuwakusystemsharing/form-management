@@ -109,6 +109,9 @@ const CASES: Case[] = [
   { name: 'トークの会話', load: () => import('@/app/api/stores/[storeId]/chat/threads/[threadId]/route'), method: 'GET', url: '/api/stores/storea/chat/threads/t1', params: { storeId: 'storea', threadId: 't1' } },
   { name: 'トークの返信', load: () => import('@/app/api/stores/[storeId]/chat/threads/[threadId]/messages/route'), method: 'POST', url: '/api/stores/storea/chat/threads/t1/messages', params: { storeId: 'storea', threadId: 't1' }, body: { text: 'x' } },
   { name: 'トークの未読の数', load: () => import('@/app/api/stores/[storeId]/chat/unread/route'), method: 'GET', url: '/api/stores/storea/chat/unread', params: { storeId: 'storea' } },
+  { name: 'トークの通知の設定の取得', load: () => import('@/app/api/stores/[storeId]/chat/notifications/route'), method: 'GET', url: '/api/stores/storea/chat/notifications', params: { storeId: 'storea' } },
+  { name: 'トークの通知の設定の変更', load: () => import('@/app/api/stores/[storeId]/chat/notifications/route'), method: 'PUT', url: '/api/stores/storea/chat/notifications', params: { storeId: 'storea' }, body: { line: true } },
+  { name: 'トークのテストの通知', load: () => import('@/app/api/stores/[storeId]/chat/notifications/test/route'), method: 'POST', url: '/api/stores/storea/chat/notifications/test', params: { storeId: 'storea' } },
   { name: 'トークの設定の取得', load: () => import('@/app/api/stores/[storeId]/chat-settings/route'), method: 'GET', url: '/api/stores/storea/chat-settings', params: { storeId: 'storea' }, upperOnly: true },
   { name: 'トークの設定の変更', load: () => import('@/app/api/stores/[storeId]/chat-settings/route'), method: 'PUT', url: '/api/stores/storea/chat-settings', params: { storeId: 'storea' }, body: { enabled: true }, upperOnly: true },
 ];

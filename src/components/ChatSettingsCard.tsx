@@ -40,6 +40,8 @@ export default function ChatSettingsCard({ storeId }: { storeId: string }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<'on' | 'off' | null>(null);
+  // 保存期間を短くするときの確認（選んだ年数）
+  const [shorten, setShorten] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -72,6 +74,7 @@ export default function ChatSettingsCard({ storeId }: { storeId: string }) {
       }
       setView(json);
       setConfirm(null);
+      setShorten(null);
       toast({ title: doneTitle, description: doneDescription });
     } catch {
       toast({ title: '保存できませんでした', description: 'もう一度お試しください', variant: 'destructive' });
@@ -166,9 +169,17 @@ export default function ChatSettingsCard({ storeId }: { storeId: string }) {
                 <select
                   id="chat_retention_years"
                   className="h-10 rounded-md border border-input bg-background px-3 text-base md:text-sm"
-                  value={view.retention_years}
+                  value={shorten ?? view.retention_years}
                   disabled={busy}
-                  onChange={(e) => save({ retention_years: Number(e.target.value) }, '保存期間を変更しました')}
+                  onChange={(e) => {
+                    const years = Number(e.target.value);
+                    // 短くすると、次の自動削除で古い会話が消える。確認してから保存する
+                    if (years < view.retention_years) setShorten(years);
+                    else {
+                      setShorten(null);
+                      if (years !== view.retention_years) void save({ retention_years: years }, '保存期間を変更しました');
+                    }
+                  }}
                 >
                   {CHAT_RETENTION_OPTIONS.map((y) => (
                     <option key={y} value={y}>
@@ -177,6 +188,21 @@ export default function ChatSettingsCard({ storeId }: { storeId: string }) {
                   ))}
                 </select>
               </div>
+              {shorten !== null && (
+                <div className="mt-2 space-y-2 rounded-md border border-red-200 bg-red-50 p-3" data-slot="chat-confirm-shorten">
+                  <p className="text-red-700">
+                    保存期間を {view.retention_years} 年から {shorten} 年に短くしますか？ {shorten} 年より前の会話は、次の自動削除（1 日 1 回）で削除され、元に戻せません。
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="destructive" size="sm" onClick={() => save({ retention_years: shorten }, '保存期間を変更しました', `${shorten} 年より前の会話は、次の自動削除で削除されます`)} disabled={busy}>
+                      {busy ? '保存中…' : `${shorten} 年にする`}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setShorten(null)} disabled={busy}>
+                      やめる
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="rounded-md border bg-muted/30 p-3 text-xs" data-slot="chat-stats">
