@@ -25,13 +25,16 @@ import {
   buildChatPreview,
   isFormFollowUp,
   normalizeChatSettings,
+  normalizeChatTemplates,
   type ChatAutoKind,
   type ChatInbound,
   type ChatMessage,
+  type ChatReplyTemplate,
   type ChatRetentionYears,
   type ChatSettings,
   type ChatStats,
   type ChatThread,
+  type ChatThreadStatus,
 } from '@/lib/chat';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -78,22 +81,22 @@ export function isMissingChatSchema(error: { code?: string; message?: string } |
  * - notify … 新着の通知の設定（④-3）
  * - notifyMissing … 通知の列が無い（④-3 のマイグレーション未適用。行がある店舗でだけ分かる）
  */
-export type ChatSettingsState = { settings: ChatSettings; missing: boolean; notify: ChatNotifySettings; notifyMissing?: boolean };
+export type ChatSettingsState = { settings: ChatSettings; missing: boolean; notify: ChatNotifySettings; notifyMissing?: boolean; /** 定型文（④-4） */ templates: ChatReplyTemplate[] };
 
 /** 設定を読む。行が無い店舗・表が未適用の環境は OFF。読み取りに失敗したときも OFF（保存しない側に倒す） */
 export async function getChatSettings(storeId: string): Promise<ChatSettingsState> {
   if (isLocal()) {
     const row = readLocal().settings.find((s) => s.store_id === storeId);
-    return { settings: row ? normalizeChatSettings(row) : { ...CHAT_DEFAULT_SETTINGS }, missing: false, notify: normalizeChatNotifySettings(row) };
+    return { settings: row ? normalizeChatSettings(row) : { ...CHAT_DEFAULT_SETTINGS }, missing: false, notify: normalizeChatNotifySettings(row), templates: normalizeChatTemplates((row as Record<string, unknown> | undefined)?.reply_templates) };
   }
-  const off = { settings: { ...CHAT_DEFAULT_SETTINGS }, notify: { ...CHAT_NOTIFY_DEFAULTS } };
+  const off = { settings: { ...CHAT_DEFAULT_SETTINGS }, notify: { ...CHAT_NOTIFY_DEFAULTS }, templates: [] as ChatReplyTemplate[] };
   try {
     const { data, error } = await client().from('chat_settings').select('*').eq('store_id', storeId).maybeSingle();
     if (error) {
       if (!isMissingChatSchema(error)) console.error('[chat] 設定の読み取りエラー:', error.message);
       return { ...off, missing: isMissingChatSchema(error) };
     }
-    return { settings: normalizeChatSettings(data), missing: false, notify: normalizeChatNotifySettings(data), notifyMissing: !!data && !('notify_line' in (data as Record<string, unknown>)) };
+    return { settings: normalizeChatSettings(data), missing: false, notify: normalizeChatNotifySettings(data), notifyMissing: !!data && !('notify_line' in (data as Record<string, unknown>)), templates: normalizeChatTemplates((data as Record<string, unknown> | null)?.reply_templates) };
   } catch (e) {
     console.error('[chat] 設定の読み取りエラー:', e);
     return { ...off, missing: false };
@@ -434,7 +437,10 @@ export async function findChatCustomers(storeId: string, lineUserIds: string[]):
 }
 
 export interface ChatOutboundInput {
+  /** 文字の返信の本文（画像の返信では空） */
   text: string;
+  /** 画像の返信: 送る画像の URL（公開）と、置き場の中のパス */
+  image?: { url: string; path: string } | null;
   clientKey: string;
   sentBy: string | null;
   sentByName: string | null;
@@ -447,7 +453,11 @@ export interface ChatOutboundInput {
  */
 export async function insertChatOutbound(storeId: string, threadId: string, input: ChatOutboundInput): Promise<{ message: ChatMessage; created: boolean }> {
   const at = (input.now ?? new Date()).toISOString();
-  const meta = input.sentByName ? { sent_by_name: input.sentByName } : null;
+  const metaBase: Record<string, string> = { ...(input.sentByName ? { sent_by_name: input.sentByName } : {}), ...(input.image ? { image_url: input.image.url } : {}) };
+  const meta = Object.keys(metaBase).length > 0 ? metaBase : null;
+  const kind = input.image ? 'image' : 'text';
+  const text = input.image ? null : input.text;
+  const mediaPath = input.image?.path ?? null;
   if (isLocal()) {
     const data = readLocal();
     const existing = data.messages.find((m) => m.store_id === storeId && m.client_key === input.clientKey);
@@ -458,10 +468,10 @@ export async function insertChatOutbound(storeId: string, threadId: string, inpu
       thread_id: threadId,
       store_id: storeId,
       direction: 'out',
-      kind: 'text',
-      text: input.text,
+      kind,
+      text,
       meta,
-      media_path: null,
+      media_path: mediaPath,
       auto: false,
       auto_kind: null,
       line_message_id: null,
@@ -475,7 +485,7 @@ export async function insertChatOutbound(storeId: string, threadId: string, inpu
     writeLocal(data);
     return { message, created: true };
   }
-  const row = { thread_id: threadId, store_id: storeId, direction: 'out', kind: 'text', text: input.text, meta, auto: false, client_key: input.clientKey, send_status: 'sending', sent_by: input.sentBy, created_at: at };
+  const row = { thread_id: threadId, store_id: storeId, direction: 'out', kind, text, meta, media_path: mediaPath, auto: false, client_key: input.clientKey, send_status: 'sending', sent_by: input.sentBy, created_at: at };
   const { data, error } = await client().from('chat_messages').insert(row).select(MESSAGE_COLUMNS).single();
   if (!error && data) return { message: normalizeMessageRow(data as ChatMessage), created: true };
   if (error?.code === '23505') {
@@ -638,4 +648,149 @@ export async function purgeExpiredChat(now: Date, limit: number = CHAT_RETENTION
   const result = { messages: victims.length, threads: before - data.threads.length, remaining: data.messages.some(expired) };
   if (result.messages > 0 || result.threads > 0) writeLocal(data);
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// ④-4: 画像・定型文・対応済みの切り替え
+// ---------------------------------------------------------------------------
+
+/** メッセージ 1 通。**必ず店舗 ID と一緒に確かめる** */
+export async function getChatMessage(storeId: string, messageId: string): Promise<ChatMessage | null> {
+  if (!/^\d+$/.test(messageId)) return null;
+  if (isLocal()) return readLocal().messages.find((m) => m.id === messageId && m.store_id === storeId) ?? null;
+  const { data, error } = await client().from('chat_messages').select(MESSAGE_COLUMNS).eq('id', Number(messageId)).eq('store_id', storeId).maybeSingle();
+  if (error) {
+    if (isMissingChatSchema(error)) return null;
+    throw new Error(error.message || 'メッセージの読み取りエラー');
+  }
+  return data ? normalizeMessageRow(data as ChatMessage) : null;
+}
+
+/** LINE 側の ID からメッセージを探す（届いた画像の中身を保存するとき） */
+export async function findChatMessageByLineId(storeId: string, lineMessageId: string): Promise<ChatMessage | null> {
+  if (isLocal()) return readLocal().messages.find((m) => m.store_id === storeId && m.line_message_id === lineMessageId) ?? null;
+  const { data, error } = await client().from('chat_messages').select(MESSAGE_COLUMNS).eq('store_id', storeId).eq('line_message_id', lineMessageId).maybeSingle();
+  if (error) throw new Error(error.message || 'メッセージの読み取りエラー');
+  return data ? normalizeMessageRow(data as ChatMessage) : null;
+}
+
+/** メッセージの画像の場所と、小さな情報（meta）を書き換える */
+export async function setChatMessageMedia(storeId: string, messageId: string, patch: { media_path: string | null; meta: Record<string, string> | null }): Promise<void> {
+  if (isLocal()) {
+    const data = readLocal();
+    const m = data.messages.find((x) => x.id === messageId && x.store_id === storeId);
+    if (m) {
+      m.media_path = patch.media_path;
+      m.meta = patch.meta;
+      writeLocal(data);
+    }
+    return;
+  }
+  const { error } = await client().from('chat_messages').update({ media_path: patch.media_path, meta: patch.meta }).eq('id', Number(messageId)).eq('store_id', storeId);
+  if (error) throw new Error(error.message || '画像の記録エラー');
+}
+
+/** 対応中 / 対応済み を切り替える。会話が無ければ false */
+export async function setChatThreadStatus(storeId: string, threadId: string, status: ChatThreadStatus): Promise<boolean> {
+  if (!THREAD_ID_PATTERN.test(threadId)) return false;
+  if (isLocal()) {
+    const data = readLocal();
+    const t = data.threads.find((x) => x.id === threadId && x.store_id === storeId);
+    if (!t) return false;
+    t.status = status;
+    t.updated_at = new Date().toISOString();
+    writeLocal(data);
+    return true;
+  }
+  const { data, error } = await client().from('chat_threads').update({ status, updated_at: new Date().toISOString() }).eq('id', threadId).eq('store_id', storeId).select('id');
+  if (error) throw new Error(error.message || '対応の状態の保存エラー');
+  return Array.isArray(data) && data.length > 0;
+}
+
+/** 定型文を保存する。失敗時はエラーメッセージ（日本語）を投げる */
+export async function saveChatTemplates(storeId: string, templates: ChatReplyTemplate[], now: Date = new Date()): Promise<ChatReplyTemplate[]> {
+  const row = { reply_templates: templates, updated_at: now.toISOString() };
+  if (isLocal()) {
+    const data = readLocal();
+    const existing = data.settings.find((s) => s.store_id === storeId);
+    const base = existing ?? { store_id: storeId, ...CHAT_DEFAULT_SETTINGS };
+    data.settings = [...data.settings.filter((s) => s.store_id !== storeId), { ...base, ...row } as LocalData['settings'][number]];
+    writeLocal(data);
+    return templates;
+  }
+  const { error } = await client()
+    .from('chat_settings')
+    .upsert({ store_id: storeId, ...row }, { onConflict: 'store_id' });
+  if (error) {
+    if (isMissingChatSchema(error) || error.code === '42703' || error.code === 'PGRST204' || (error.message || '').includes('reply_templates')) throw new Error('データベースの更新（マイグレーション）がまだ適用されていません');
+    console.error('[chat] 定型文の保存エラー:', error.message);
+    throw new Error('定型文の保存に失敗しました');
+  }
+  return templates;
+}
+
+export interface ChatExpiredMedia {
+  id: string;
+  store_id: string;
+  direction: 'in' | 'out' | 'system';
+  media_path: string;
+}
+
+/**
+ * 保存期間を過ぎたメッセージのうち、画像を持つもの（古い順に limit 通まで）。
+ * 自動削除は、先にこの画像のファイルを消してから、行を消す（行を先に消すと、画像の場所が分からなくなって画像だけ残る）
+ */
+export async function listExpiredChatMedia(now: Date, limit = 200): Promise<ChatExpiredMedia[]> {
+  if (isLocal()) {
+    const data = readLocal();
+    const cutoffByStore = new Map<string, string>();
+    for (const s of data.settings) cutoffByStore.set(s.store_id, chatRetentionCutoff(normalizeChatSettings(s).retention_years, now));
+    return data.messages
+      .filter((m) => !!m.media_path && !!cutoffByStore.get(m.store_id) && m.created_at < (cutoffByStore.get(m.store_id) as string))
+      .sort((a, b) => (a.created_at < b.created_at ? -1 : 1))
+      .slice(0, limit)
+      .map((m) => ({ id: m.id, store_id: m.store_id, direction: m.direction, media_path: m.media_path as string }));
+  }
+  const c = client();
+  const settings = await c.from('chat_settings').select('store_id, retention_years');
+  if (settings.error) {
+    if (isMissingChatSchema(settings.error)) return [];
+    throw new Error(settings.error.message || '設定の読み取りエラー');
+  }
+  const out: ChatExpiredMedia[] = [];
+  for (const s of (settings.data ?? []) as Array<{ store_id: string; retention_years: number }>) {
+    if (out.length >= limit) break;
+    const cutoff = chatRetentionCutoff(normalizeChatSettings(s).retention_years, now);
+    const { data, error } = await c
+      .from('chat_messages')
+      .select('id, store_id, direction, media_path')
+      .eq('store_id', s.store_id)
+      .lt('created_at', cutoff)
+      .not('media_path', 'is', null)
+      .order('created_at', { ascending: true })
+      .limit(limit - out.length);
+    if (error) throw new Error(error.message || 'メッセージの読み取りエラー');
+    for (const m of (data ?? []) as Array<Record<string, unknown>>) out.push({ id: String(m.id), store_id: String(m.store_id), direction: m.direction as ChatExpiredMedia['direction'], media_path: String(m.media_path) });
+  }
+  return out;
+}
+
+/** 画像のファイルを消したメッセージの、画像の場所を空にする（このあと行を消せるようになる） */
+export async function clearChatMessageMedia(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  if (isLocal()) {
+    const data = readLocal();
+    const set = new Set(ids);
+    for (const m of data.messages) if (set.has(m.id)) m.media_path = null;
+    writeLocal(data);
+    return;
+  }
+  const { error } = await client()
+    .from('chat_messages')
+    .update({ media_path: null })
+    .in(
+      'id',
+      ids.map((id) => Number(id)),
+    );
+  if (error) throw new Error(error.message || '画像の記録エラー');
 }

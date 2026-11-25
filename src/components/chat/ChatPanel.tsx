@@ -13,14 +13,16 @@
  * - 返信は公式 LINE の通数を 1 通使う。送信の ID（client_key）で二重送信を防ぐ
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, RefreshCw, Search, Send } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ImagePlus, RefreshCw, RotateCcw, Search, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { fetchWithAuth } from '@/lib/client-auth';
 import { cn } from '@/lib/utils';
-import { CHAT_POLL_MIN_MS, CHAT_TEXT_MAX, chatKindLabel, nextChatPollDelay, type ChatMessageView, type ChatThreadFilter, type ChatThreadView } from '@/lib/chat';
+import { CHAT_POLL_MIN_MS, CHAT_TEXT_MAX, chatKindLabel, nextChatPollDelay, type ChatMessageView, type ChatReplyTemplate, type ChatThreadFilter, type ChatThreadStatus, type ChatThreadView } from '@/lib/chat';
+import { compressChatImage } from '@/lib/chat-image-client';
+import ChatTemplatesDialog from '@/components/chat/ChatTemplatesDialog';
 
 interface Overview {
   enabled: boolean;
@@ -113,7 +115,13 @@ function newClientKey(): string {
 
 interface PendingSend {
   key: string;
+  /** 文字の返信の本文（画像の返信では空） */
   text: string;
+  /** 画像の返信: アップロードした画像の URL（アップロードの途中は null）と、選んだ画像（送り直すときに使う） */
+  imageUrl?: string | null;
+  file?: File;
+  /** 画面に出す、選んだ画像の仮の URL */
+  previewUrl?: string;
   status: 'sending' | 'failed';
   error: string | null;
   at: string;
@@ -136,6 +144,11 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
   const [quota, setQuota] = useState<Quota | null>(null);
   const [customer, setCustomer] = useState<{ customer: CustomerInfo; reservations: CustomerReservation[] } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [templates, setTemplates] = useState<ChatReplyTemplate[]>([]);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templatesEditing, setTemplatesEditing] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickToBottom = useRef(true);
@@ -203,6 +216,21 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
   useEffect(() => {
     void loadThreads();
   }, [loadThreads]);
+
+  // 定型文
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchWithAuth(`${base}/templates`, { credentials: 'include', cache: 'no-store' });
+        const json = res.ok ? await res.json() : null;
+        if (!cancelled && Array.isArray(json?.templates)) setTemplates(json.templates);
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [base]);
 
   // 今月の通数（入力欄の近くに出す）
   useEffect(() => {
@@ -356,25 +384,47 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
     }
   };
 
-  /** 送る（key を渡したときは、同じ ID で送り直す） */
-  const send = async (text: string, key: string = newClientKey()) => {
+  /**
+   * 送る（key を渡したときは、同じ ID で送り直す）。
+   * image を渡したときは画像の返信: ① 画面で縮める → ② アップロード → ③ その URL を送る（url があれば ①② は飛ばす）
+   */
+  const send = async (text: string, key: string = newClientKey(), image?: { file?: File; url?: string | null; previewUrl?: string }) => {
     const id = selectedId;
     const body = text.trim();
-    if (!id || !body || sendLock.current) return;
+    if (!id || (!body && !image) || sendLock.current) return;
     sendLock.current = true;
     stickToBottom.current = true;
-    setPending((prev) => [...prev.filter((p) => p.key !== key), { key, text: body, status: 'sending', error: null, at: new Date().toISOString() }]);
+    const previewUrl = image ? image.previewUrl ?? (image.file ? URL.createObjectURL(image.file) : undefined) : undefined;
+    const fail = (error: string, imageUrl?: string | null) => setPending((prev) => prev.map((p) => (p.key === key ? { ...p, status: 'failed', error, imageUrl: imageUrl ?? p.imageUrl } : p)));
+    setPending((prev) => [...prev.filter((p) => p.key !== key), { key, text: body, imageUrl: image ? image.url ?? null : undefined, file: image?.file, previewUrl, status: 'sending', error: null, at: new Date().toISOString() }]);
     try {
+      let imageUrl = image?.url ?? null;
+      if (image && !imageUrl) {
+        if (!image.file) return fail('画像を選び直してください');
+        let blob: Blob;
+        try {
+          blob = await compressChatImage(image.file);
+        } catch (e) {
+          return fail(e instanceof Error ? e.message : '画像を読み込めませんでした');
+        }
+        const form = new FormData();
+        form.append('file', blob, 'image.jpg');
+        const up = await fetchWithAuth(`${base}/images`, { method: 'POST', credentials: 'include', body: form });
+        const upJson = await up.json().catch(() => null);
+        if (!up.ok || !upJson?.url) return fail(upJson?.error || '画像のアップロードに失敗しました');
+        imageUrl = upJson.url as string;
+        setPending((prev) => prev.map((p) => (p.key === key ? { ...p, imageUrl } : p)));
+      }
       const res = await fetchWithAuth(`${base}/threads/${id}/messages`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body, client_key: key }),
+        body: JSON.stringify(imageUrl ? { image_url: imageUrl, client_key: key } : { text: body, client_key: key }),
       });
       const json = await res.json().catch(() => null);
       if (selectedRef.current !== id) return;
       if (!res.ok) {
-        setPending((prev) => prev.map((p) => (p.key === key ? { ...p, status: 'failed', error: json?.error || '送信できませんでした' } : p)));
+        fail(json?.error || '送信できませんでした', imageUrl);
         return;
       }
       const message = json.message as ChatMessageView;
@@ -384,10 +434,47 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
       setQuota((q) => (q ? { ...q, usage: q.usage + 1 } : q));
       void loadThreads();
     } catch {
-      setPending((prev) => prev.map((p) => (p.key === key ? { ...p, status: 'failed', error: '通信できませんでした。もう一度送ってください' } : p)));
+      fail('通信できませんでした。もう一度送ってください');
     } finally {
       sendLock.current = false;
     }
+  };
+
+  /** 画像を選んだとき */
+  const onPickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !overview?.enabled || sendLock.current) return;
+    void send('', newClientKey(), { file });
+  };
+
+  /** 対応中 / 対応済み を切り替える */
+  const changeStatus = async (status: ChatThreadStatus) => {
+    const id = selectedId;
+    if (!id || statusBusy) return;
+    setStatusBusy(true);
+    try {
+      const res = await fetchWithAuth(`${base}/threads/${id}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast({ title: '変更できませんでした', description: json?.error || 'もう一度お試しください', variant: 'destructive' });
+        return;
+      }
+      setDetail((prev) => (prev && prev.thread.id === id ? { ...prev, thread: { ...prev.thread, status } } : prev));
+      setOverview((prev) => (prev ? { ...prev, threads: prev.threads.map((t) => (t.id === id ? { ...t, status } : t)) } : prev));
+      toast({ title: status === 'done' ? '対応済みにしました' : '対応中に戻しました' });
+      void loadThreads();
+    } catch {
+      toast({ title: '変更できませんでした', description: 'もう一度お試しください', variant: 'destructive' });
+    } finally {
+      setStatusBusy(false);
+    }
+  };
+
+  /** 定型文を入力欄に入れる（書きかけの文があれば、その後ろに足す） */
+  const insertTemplate = (t: ChatReplyTemplate) => {
+    setDraft((d) => (d.trim() ? `${d.replace(/\s+$/, '')}\n${t.text}` : t.text));
+    setTemplatesOpen(false);
   };
 
   const submit = () => {
@@ -437,9 +524,29 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
       const mine = m.direction === 'out';
       bubble = (
         <div className={cn('flex max-w-[85%] flex-col gap-0.5', mine ? 'items-end' : 'items-start')}>
-          <div className={cn('rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words', mine ? 'bg-primary text-primary-foreground' : 'border bg-white text-foreground')}>
+          <div
+            className={cn(
+              'text-sm leading-relaxed whitespace-pre-wrap break-words',
+              m.kind === 'image' && m.image_url ? 'overflow-hidden rounded-2xl border bg-white' : cn('rounded-2xl px-3 py-2', mine ? 'bg-primary text-primary-foreground' : 'border bg-white text-foreground'),
+            )}
+          >
             {m.kind === 'text' ? (
               body
+            ) : m.kind === 'image' && m.image_url ? (
+              <a href={m.image_url} target="_blank" rel="noopener noreferrer" aria-label="画像を大きく表示">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={m.image_url} alt={mine ? '送った画像' : 'お客様から届いた画像'} className="block max-h-64 max-w-full object-contain" loading="lazy" data-slot="chat-image" />
+              </a>
+            ) : m.kind === 'image' && m.image_failed ? (
+              <span className="text-muted-foreground">
+                画像（読み込めませんでした）
+                <span className="block text-[11px]">内容は、公式 LINE のアプリで確認してください</span>
+              </span>
+            ) : m.kind === 'image' && !mine ? (
+              <span className="text-muted-foreground">
+                画像が送られました
+                <span className="block text-[11px]">画像を読み込んでいます。少し待ってから、一覧の更新ボタンを押してください</span>
+              </span>
             ) : m.kind === 'sticker' && m.sticker_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={m.sticker_url} alt="スタンプ" className="h-24 w-24 object-contain" loading="lazy" />
@@ -478,7 +585,7 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="名前で検索" className="pl-8" aria-label="名前で検索" />
         </div>
         <div className="flex items-center gap-2">
-          {(['all', 'unread'] as const).map((f) => (
+          {(['all', 'unread', 'open'] as const).map((f) => (
             <button
               key={f}
               type="button"
@@ -486,7 +593,7 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
               className={cn('rounded-full border px-3 py-1 text-xs', filter === f ? 'border-primary bg-primary text-primary-foreground' : 'bg-white text-muted-foreground')}
               aria-pressed={filter === f}
             >
-              {f === 'all' ? 'すべて' : `未読${overview && overview.unread_total > 0 ? `（${overview.unread_total}）` : ''}`}
+              {f === 'all' ? 'すべて' : f === 'open' ? '対応中' : `未読${overview && overview.unread_total > 0 ? `（${overview.unread_total}）` : ''}`}
             </button>
           ))}
           <Button type="button" variant="ghost" size="sm" className="ml-auto h-8 px-2" onClick={refresh} disabled={refreshing} aria-label="新着を確認">
@@ -515,6 +622,11 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
                 {t.blocked && (
                   <Badge variant="outline" className="shrink-0 text-[10px]">
                     ブロック中
+                  </Badge>
+                )}
+                {t.status === 'done' && (
+                  <Badge variant="outline" className="shrink-0 border-[rgb(55,114,58)]/20 bg-[rgb(209,241,209)] text-[10px] text-[rgb(55,114,58)]" data-slot="chat-done-badge">
+                    対応済み
                   </Badge>
                 )}
               </div>
@@ -553,6 +665,18 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
                 顧客詳細
               </a>
             )}
+            {detail &&
+              (detail.thread.status === 'done' ? (
+                <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => changeStatus('open')} disabled={statusBusy} data-slot="chat-status-toggle">
+                  <RotateCcw className="mr-1 h-4 w-4" aria-hidden="true" />
+                  対応中に戻す
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => changeStatus('done')} disabled={statusBusy} data-slot="chat-status-toggle">
+                  <CheckCircle2 className="mr-1 h-4 w-4" aria-hidden="true" />
+                  対応済みにする
+                </Button>
+              ))}
           </div>
 
           <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 py-3" data-slot="chat-messages">
@@ -568,13 +692,18 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
             {pending.map((p) => (
               <div key={p.key} className="flex justify-end" data-slot="chat-pending" data-status={p.status}>
                 <div className="flex max-w-[85%] flex-col items-end gap-0.5">
-                  <div className={cn('rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words', p.status === 'failed' ? 'border border-red-300 bg-red-50 text-red-900' : 'bg-primary/70 text-primary-foreground')}>{p.text}</div>
+                  {p.previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.previewUrl} alt="送る画像" className={cn('block max-h-48 max-w-full rounded-2xl border object-contain', p.status === 'failed' ? 'border-red-300' : 'opacity-60')} />
+                  ) : (
+                    <div className={cn('rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words', p.status === 'failed' ? 'border border-red-300 bg-red-50 text-red-900' : 'bg-primary/70 text-primary-foreground')}>{p.text}</div>
+                  )}
                   {p.status === 'sending' ? (
                     <span className="px-1 text-[10px] text-muted-foreground">送信中…</span>
                   ) : (
                     <span className="flex flex-wrap items-center justify-end gap-2 px-1 text-[11px] text-red-600">
                       {p.error}
-                      <button type="button" className="rounded border border-red-300 bg-white px-2 py-0.5 text-red-700" onClick={() => send(p.text, p.key)}>
+                      <button type="button" className="rounded border border-red-300 bg-white px-2 py-0.5 text-red-700" onClick={() => send(p.text, p.key, p.file || p.imageUrl ? { file: p.file, url: p.imageUrl, previewUrl: p.previewUrl } : undefined)}>
                         もう一度送る
                       </button>
                       <button type="button" className="text-muted-foreground underline" onClick={() => setPending((prev) => prev.filter((x) => x.key !== p.key))}>
@@ -592,6 +721,30 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
               <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">トーク機能が OFF のため、返信できません。保存済みの会話は読めます。</p>
             ) : (
               <>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setTemplatesOpen((v) => !v)} aria-expanded={templatesOpen} data-slot="chat-templates-toggle">
+                    定型文{templates.length > 0 ? `（${templates.length}）` : ''}
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={sendingNow || !detail} data-slot="chat-image-button">
+                    <ImagePlus className="mr-1 h-4 w-4" aria-hidden="true" />
+                    画像を送る
+                  </Button>
+                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={onPickImage} data-slot="chat-image-input" />
+                </div>
+                {templatesOpen && (
+                  <div className="mb-2 max-h-48 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2" data-slot="chat-templates">
+                    {templates.length === 0 && <p className="p-2 text-xs text-muted-foreground">まだ定型文がありません。「定型文を編集」から、よく使う返信を保存できます。</p>}
+                    {templates.map((t) => (
+                      <button key={t.id} type="button" className="block w-full rounded border bg-white px-3 py-2 text-left hover:bg-muted/50" onClick={() => insertTemplate(t)} data-slot="chat-template">
+                        <span className="block text-xs font-medium">{t.title}</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">{t.text}</span>
+                      </button>
+                    ))}
+                    <button type="button" className="px-2 py-1 text-xs text-primary underline" onClick={() => setTemplatesEditing(true)} data-slot="chat-templates-edit">
+                      定型文を編集
+                    </button>
+                  </div>
+                )}
                 <div className="flex items-end gap-2">
                   <textarea
                     value={draft}
@@ -616,7 +769,7 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
                 <p className={cn('mt-1 text-[11px]', tooLong ? 'text-red-600' : 'text-muted-foreground')} data-slot="chat-input-note">
                   {tooLong
                     ? `${CHAT_TEXT_MAX} 文字までです（いま ${draft.trim().length} 文字）`
-                    : `返信 1 通につき、公式 LINE の通数を 1 通使います${quota ? `（今月 ${quota.usage.toLocaleString()} 通${quota.limit !== null ? ` / 上限 ${quota.limit.toLocaleString()} 通` : ''}）` : ''}。Ctrl + Enter でも送信できます。`}
+                    : `返信 1 通につき、公式 LINE の通数を 1 通使います${quota ? `（今月 ${quota.usage.toLocaleString()} 通${quota.limit !== null ? ` / 上限 ${quota.limit.toLocaleString()} 通` : ''}）` : ''}。画像も 1 通です。Ctrl + Enter でも送信できます。`}
                 </p>
               </>
             )}
@@ -709,6 +862,7 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
         {conversationPane}
         {customerPane}
       </div>
+      <ChatTemplatesDialog storeId={storeId} open={templatesEditing} templates={templates} onClose={() => setTemplatesEditing(false)} onSaved={setTemplates} />
       <p className="text-xs text-muted-foreground">公式 LINE の管理画面やアプリから返信した内容は、ここには表示されません（LINE の仕様です）。返信は、この画面にまとめてください。</p>
     </div>
   );

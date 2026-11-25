@@ -34,7 +34,7 @@ vi.mock('@/lib/chat-repository', () => ({
     return true;
   }),
   getChatThread: vi.fn(async (storeId: string, threadId: string) => (state.thread && state.thread.id === threadId && state.thread.store_id === storeId ? state.thread : null)),
-  insertChatOutbound: vi.fn(async (storeId: string, threadId: string, input: { text: string; clientKey: string; sentByName: string | null; now?: Date }) => {
+  insertChatOutbound: vi.fn(async (storeId: string, threadId: string, input: { text: string; image?: { url: string; path: string } | null; clientKey: string; sentByName: string | null; now?: Date }) => {
     const existing = state.out.find((m) => m.client_key === input.clientKey);
     if (existing) return { message: existing, created: false };
     const message = {
@@ -42,10 +42,10 @@ vi.mock('@/lib/chat-repository', () => ({
       thread_id: threadId,
       store_id: storeId,
       direction: 'out',
-      kind: 'text',
-      text: input.text,
-      meta: input.sentByName ? { sent_by_name: input.sentByName } : null,
-      media_path: null,
+      kind: input.image ? 'image' : 'text',
+      text: input.image ? null : input.text,
+      meta: input.image ? { image_url: input.image.url } : input.sentByName ? { sent_by_name: input.sentByName } : null,
+      media_path: input.image?.path ?? null,
       auto: false,
       auto_kind: null,
       line_message_id: null,
@@ -263,5 +263,55 @@ describe('返信（LINE への送信）', () => {
     const p = pusher([OK]);
     expect(await service.sendChatReply('storea', THREAD, { text: 'こんにちは', client_key: KEY }, null, { push: p.push })).toMatchObject({ ok: false, status: 409 });
     expect(p.calls).toHaveLength(0);
+  });
+});
+
+describe('画像の返信（LINE への送信）', () => {
+  const NAME = 'a'.repeat(32);
+  const URL = `https://x.supabase.co/storage/v1/object/public/forms/chat_images/storea/${NAME}.jpg`;
+  const OK = { ok: true, status: 200, body: '{}' };
+
+  it('画像は、画像のメッセージとして送る（文字の送信は呼ばない）。送り直しも同じ画像を送る', async () => {
+    state.settings = { ...CHAT_DEFAULT_SETTINGS, enabled: true };
+    const texts: string[] = [];
+    const images: Array<{ to: string; url: string; key: string }> = [];
+    const results = [{ ok: false, status: 500, body: '' }, OK];
+    const deps = {
+      push: async (_t: string, _to: string, text: string) => {
+        texts.push(text);
+        return OK;
+      },
+      pushImage: async (_t: string, to: string, url: string, key: string) => {
+        images.push({ to, url, key });
+        return results[Math.min(images.length - 1, 1)];
+      },
+    };
+    const failed = await service.sendChatReply('storea', THREAD, { image_url: URL, client_key: KEY }, null, deps);
+    expect(failed).toMatchObject({ ok: false, status: 502, message: { kind: 'image', image_url: URL, send_status: 'failed' } });
+    const retried = await service.sendChatReply('storea', THREAD, { image_url: URL, client_key: KEY }, null, deps);
+    expect(retried).toMatchObject({ ok: true, message: { kind: 'image', image_url: URL, send_status: 'sent' } });
+    expect(images).toEqual([
+      { to: 'U1', url: URL, key: KEY },
+      { to: 'U1', url: URL, key: KEY },
+    ]);
+    expect(texts).toHaveLength(0);
+    expect(state.out).toHaveLength(1);
+    expect(state.out[0]).toMatchObject({ kind: 'image', media_path: `chat_images/storea/${NAME}.jpg` });
+  });
+
+  it('ほかの店舗の置き場の画像・外のサイトの画像は、保存も送信もしない', async () => {
+    state.settings = { ...CHAT_DEFAULT_SETTINGS, enabled: true };
+    const images: string[] = [];
+    const deps = {
+      pushImage: async (_t: string, _to: string, url: string) => {
+        images.push(url);
+        return OK;
+      },
+    };
+    for (const image_url of [URL.replace('/storea/', '/storeb/'), 'https://evil.example/a.jpg']) {
+      expect(await service.sendChatReply('storea', THREAD, { image_url, client_key: KEY }, null, deps)).toMatchObject({ ok: false, status: 400 });
+    }
+    expect(images).toHaveLength(0);
+    expect(state.out).toHaveLength(0);
   });
 });

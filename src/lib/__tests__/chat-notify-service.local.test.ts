@@ -240,13 +240,15 @@ describe('保存期間を過ぎた会話の自動削除', () => {
     expect(await repo.purgeExpiredChat(now, 3)).toEqual({ messages: 2, threads: 1, remaining: false });
   });
 
-  it('画像を持つメッセージは、ここでは消さない（画像のファイルを先に消す必要があるため）', async () => {
+  it('行だけを消す処理（purgeExpiredChat）は、画像を持つメッセージを消さない（画像のファイルを先に消す必要があるため）', async () => {
     await record([textEvent('古い', { at: ago(400), id: 'keep' })]);
     const file = dataFile('chat.json');
     const data = JSON.parse(fs.readFileSync(file, 'utf-8'));
     data.messages[0].media_path = 'chat/st0001/x.jpg';
     fs.writeFileSync(file, JSON.stringify(data));
-    expect(await service.runChatRetention(now)).toEqual({ messages: 0, threads: 0, remaining: false });
+    expect(await repo.purgeExpiredChat(now)).toEqual({ messages: 0, threads: 0, remaining: false });
     expect(repo.readLocalChatData().messages).toHaveLength(1);
+    // 1 日 1 回の自動削除（runChatRetention）は、先に画像を消してから行を消す
+    expect(await service.runChatRetention(now)).toEqual({ messages: 1, threads: 1, remaining: false });
   });
 });
