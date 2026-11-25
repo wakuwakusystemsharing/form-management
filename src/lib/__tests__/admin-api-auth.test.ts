@@ -112,6 +112,11 @@ const CASES: Case[] = [
   { name: 'トークの通知の設定の取得', load: () => import('@/app/api/stores/[storeId]/chat/notifications/route'), method: 'GET', url: '/api/stores/storea/chat/notifications', params: { storeId: 'storea' } },
   { name: 'トークの通知の設定の変更', load: () => import('@/app/api/stores/[storeId]/chat/notifications/route'), method: 'PUT', url: '/api/stores/storea/chat/notifications', params: { storeId: 'storea' }, body: { line: true } },
   { name: 'トークのテストの通知', load: () => import('@/app/api/stores/[storeId]/chat/notifications/test/route'), method: 'POST', url: '/api/stores/storea/chat/notifications/test', params: { storeId: 'storea' } },
+  { name: 'トークの画像', load: () => import('@/app/api/stores/[storeId]/chat/media/[messageId]/route'), method: 'GET', url: '/api/stores/storea/chat/media/1', params: { storeId: 'storea', messageId: '1' } },
+  { name: 'トークの対応の状態', load: () => import('@/app/api/stores/[storeId]/chat/threads/[threadId]/route'), method: 'PATCH', url: '/api/stores/storea/chat/threads/t1', params: { storeId: 'storea', threadId: 't1' }, body: { status: 'done' } },
+  { name: 'トークの定型文の一覧', load: () => import('@/app/api/stores/[storeId]/chat/templates/route'), method: 'GET', url: '/api/stores/storea/chat/templates', params: { storeId: 'storea' } },
+  { name: 'トークの定型文の保存', load: () => import('@/app/api/stores/[storeId]/chat/templates/route'), method: 'PUT', url: '/api/stores/storea/chat/templates', params: { storeId: 'storea' }, body: { templates: [] } },
+  { name: 'トークの画像のアップロード', load: () => import('@/app/api/stores/[storeId]/chat/images/route'), method: 'POST', url: '/api/stores/storea/chat/images', params: { storeId: 'storea' }, body: {} },
   { name: 'トークの設定の取得', load: () => import('@/app/api/stores/[storeId]/chat-settings/route'), method: 'GET', url: '/api/stores/storea/chat-settings', params: { storeId: 'storea' }, upperOnly: true },
   { name: 'トークの設定の変更', load: () => import('@/app/api/stores/[storeId]/chat-settings/route'), method: 'PUT', url: '/api/stores/storea/chat-settings', params: { storeId: 'storea' }, body: { enabled: true }, upperOnly: true },
 ];

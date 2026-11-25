@@ -894,6 +894,7 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
             <AlertDialogDescription>
               {customer ? `「${customer.name}」さんのデータを削除します。` : ''}
               この操作は取り消せません。来店履歴も併せて削除されます。過去の予約レコードは残りますが、顧客とのひも付けは外れます。
+              {chatHref && customer?.line_user_id ? 'トークの会話は残ります（一覧の名前は「（お名前不明）」になります）。' : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">

@@ -9,6 +9,12 @@ import {
   CHAT_UNKNOWN_NAME,
   buildChatPreview,
   chatDisplayName,
+  chatImageExt,
+  chatInboundImagePath,
+  chatOutboundImagePathFromUrl,
+  isChatOutboundImageUrl,
+  normalizeChatTemplates,
+  validateChatTemplates,
   chatEnableBlocker,
   decideResend,
   describeChatSendError,
@@ -180,7 +186,7 @@ describe('返信', () => {
   const KEY = '3f2b8c1e-6a4d-4f7b-9c2a-1d5e8f0a7b3c';
 
   it('空の文・5000 文字を超える文・形のおかしい送信の ID は断る', () => {
-    expect(validateChatReply({ text: '  ありがとうございます\r\nまたお待ちしています ', client_key: KEY })).toEqual({ ok: true, text: 'ありがとうございます\nまたお待ちしています', clientKey: KEY });
+    expect(validateChatReply({ text: '  ありがとうございます\r\nまたお待ちしています ', client_key: KEY })).toEqual({ ok: true, text: 'ありがとうございます\nまたお待ちしています', imageUrl: null, clientKey: KEY });
     expect(validateChatReply({ text: '   ', client_key: KEY }).ok).toBe(false);
     expect(validateChatReply({ text: 'あ'.repeat(5001), client_key: KEY }).ok).toBe(false);
     expect(validateChatReply({ text: 'あ'.repeat(5000), client_key: KEY }).ok).toBe(true);
@@ -188,6 +194,54 @@ describe('返信', () => {
     expect(validateChatReply({ text: 'こんにちは' }).ok).toBe(false);
     expect(validateChatReply(null).ok).toBe(false);
     expect(normalizeClientKey(KEY.toUpperCase())).toBe(KEY);
+  });
+
+  it('画像の返信: その店舗が「画像を送る」でアップロードした画像の URL だけを通す', () => {
+    const name = 'a'.repeat(32);
+    const url = `https://x.supabase.co/storage/v1/object/public/forms/chat_images/storea/${name}.jpg`;
+    expect(validateChatReply({ image_url: url, client_key: KEY }, { storeId: 'storea' })).toEqual({ ok: true, text: '', imageUrl: url, clientKey: KEY });
+    // ほかの店舗の画像・外のサイト・http・名前の形が違う・店舗が分からない
+    expect(validateChatReply({ image_url: url, client_key: KEY }, { storeId: 'storeb' }).ok).toBe(false);
+    expect(validateChatReply({ image_url: 'https://evil.example/x.jpg', client_key: KEY }, { storeId: 'storea' }).ok).toBe(false);
+    expect(validateChatReply({ image_url: url.replace('https://', 'http://'), client_key: KEY }, { storeId: 'storea' }).ok).toBe(false);
+    expect(validateChatReply({ image_url: url.replace(name, 'short'), client_key: KEY }, { storeId: 'storea' }).ok).toBe(false);
+    expect(validateChatReply({ image_url: url, client_key: KEY }).ok).toBe(false);
+    expect(validateChatReply({ image_url: url, client_key: 'x' }, { storeId: 'storea' }).ok).toBe(false);
+    expect(isChatOutboundImageUrl(`/chat_images/storea/${name}.png`, 'storea')).toBe(true);
+    expect(chatOutboundImagePathFromUrl(`${url}?v=1`, 'storea')).toBe(`chat_images/storea/${name}.jpg`);
+  });
+
+  it('定型文: 名前と文が要る。30 個・名前 30 文字・文 1000 文字まで', () => {
+    const ok = validateChatTemplates([
+      { title: ' 営業時間 ', text: ' 10 時から\r\n19 時まで ' },
+      { id: 'a', title: 'お礼', text: 'ありがとうございます' },
+    ]);
+    expect(ok).toEqual({
+      ok: true,
+      value: [
+        { id: 't1', title: '営業時間', text: '10 時から\n19 時まで' },
+        { id: 'a', title: 'お礼', text: 'ありがとうございます' },
+      ],
+    });
+    expect(validateChatTemplates([{ title: '', text: 'x' }]).ok).toBe(false);
+    expect(validateChatTemplates([{ title: 'x', text: '' }]).ok).toBe(false);
+    expect(validateChatTemplates({}).ok).toBe(false);
+    // 同じ ID が 2 つあっても、別の ID にして両方残す
+    expect(
+      normalizeChatTemplates([
+        { id: 'a', title: '1', text: 'x' },
+        { id: 'a', title: '2', text: 'y' },
+      ]).map((t) => t.id),
+    ).toEqual(['a', 'a_']);
+    expect(normalizeChatTemplates('x')).toEqual([]);
+  });
+
+  it('画像の種類と保存先', () => {
+    expect(chatImageExt('image/jpeg; charset=binary')).toBe('jpg');
+    expect(chatImageExt('IMAGE/PNG')).toBe('png');
+    expect(chatImageExt('text/html')).toBeNull();
+    expect(chatImageExt(null)).toBeNull();
+    expect(chatInboundImagePath('storea', 'thread-1', '12', 'jpg')).toBe('storea/thread-1/12.jpg');
   });
 
   it('同じ送信の ID が届いたとき: 送信済みは送らない / 送信中は待つ / 失敗・止まったものは送り直す', () => {
