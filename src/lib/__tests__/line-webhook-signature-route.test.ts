@@ -14,10 +14,13 @@ vi.mock('@/lib/line-secret-repository', () => ({
   getStoreLineSecret: vi.fn(async () => secretState.current),
 }));
 
-const chatCalls = vi.hoisted(() => ({ list: [] as Array<{ storeId: string; count: number; verified: boolean }> }));
+const chatCalls = vi.hoisted(() => ({ list: [] as Array<{ storeId: string; count: number; verified: boolean }>, replies: [] as Array<{ storeId: string | null; lineUserId: string | null; count: number }> }));
 vi.mock('@/lib/chat-service', () => ({
   scheduleChatInbound: vi.fn((storeId: string, events: unknown[], opts: { verified: boolean }) => {
     chatCalls.list.push({ storeId, count: events.length, verified: opts.verified });
+  }),
+  scheduleChatAutoReplyEvents: vi.fn((storeId: string | null, lineUserId: string | null, replies: unknown[]) => {
+    chatCalls.replies.push({ storeId, lineUserId, count: replies.length });
   }),
 }));
 
@@ -50,6 +53,7 @@ describe('LINE Webhook の署名チェック', () => {
   beforeEach(() => {
     secretState.current = { status: 'none' };
     chatCalls.list = [];
+    chatCalls.replies = [];
   });
 
   it('1 対 1 トークの保存には、署名を確認できたかどうかを渡す（断った通知は渡さない）', async () => {
@@ -60,6 +64,12 @@ describe('LINE Webhook の署名チェック', () => {
     expect(chatCalls.list[1]).toEqual({ storeId: 'abc123', count: 0, verified: true });
     await post(EMPTY, 'detarame');
     expect(chatCalls.list).toHaveLength(2);
+    // 返信の無い通知（LINE の「検証」など）では、自動の返信の記録は空のまま渡る（会話には何も残らない）
+    expect(chatCalls.replies).toEqual([
+      { storeId: null, lineUserId: null, count: 0 },
+      { storeId: null, lineUserId: null, count: 0 },
+      { storeId: null, lineUserId: null, count: 0 },
+    ]);
   }, 120000);
 
   it('シークレット未登録の店舗は、署名が無くても今までどおり受け付ける', async () => {

@@ -310,7 +310,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - 優先順位: 一覧の ↑↓（`POST /api/stores/{storeId}/rich-menus/rule-order` に `{ ids }`）。保存では変えない（新しいお客様ごとのメニューは、いちばん下）。一覧には「出す相手」と「いま N 人に設定中」（`link_counts`）を出す
 - Vitest: `line-rich-menu.test.ts` / `line-rich-menu-layouts.test.ts` / `line-rich-menu-rules.test.ts` / `line-rich-menu-service.local.test.ts` / `line-rich-menu-rules-service.local.test.ts` / `store-admin-tabs.test.ts` / `admin-api-auth.test.ts`
 
-**1 対 1 トーク（設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 8 章。リリース手順: `docs/1対1トーク_リリース手順.md`。規約に追記する文の下書き: `docs/1対1トーク_規約追記の下書き.md`。④-1 = 受信と保存、④-2 = 画面と返信・未読バッジ、④-3 = 通知と自動削除、④-4 = 画像・定型文・対応済み は実装済み。④-5 = 自動送信の表示と利用量 はこれから）:**
+**1 対 1 トーク（設計: `docs/店舗管理者ページ_追加4機能_実装設計.md` の 8 章。リリース手順: `docs/1対1トーク_リリース手順.md`。規約に追記する文の下書き: `docs/1対1トーク_規約追記の下書き.md`。④-1 = 受信と保存、④-2 = 画面と返信・未読バッジ、④-3 = 通知と自動削除、④-4 = 画像・定型文・対応済み、④-5 = 自動送信の表示と利用量。すべて実装済み）:**
 - お客様が公式 LINE に送ったメッセージを保存し、管理画面で読んで返信する機能。**既定は OFF。運営（マスター管理者・システム管理者）が店舗ごとに ON にした店舗だけ保存する**（行が無い店舗 = OFF）。会話には体の悩みなど慎重に扱う内容が入るので、**プライバシーポリシーの公開とお客様への説明が済んだ店舗だけ ON にする**（それまでは本番のテスト用店舗だけ）
 - 設定: テナント側 店舗ページ → 設定タブ → 「1 対 1 トーク」（`ChatSettingsCard.tsx`。ON / OFF・会話の保存期間 1 / 2 / 3 年 = `CHAT_RETENTION_OPTIONS`・保存している会話の件数）。API `GET/PUT /api/stores/{storeId}/chat-settings`（**`authorizeUpperAdminStoreAccess` = 運営だけ**。店舗管理者は自分の店舗でも 403。会話の中身・LINE ユーザー ID は返さない）
 - **ON にできるのは、チャネルシークレットを登録した店舗だけ**（`chatEnableBlocker`。偽の通知を会話として保存しないため。local は制限なし）。確かめるのは OFF → ON のときだけ（保存期間の変更・OFF はいつでもできる）
@@ -320,7 +320,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - 保存は DB 関数 `chat_record_inbound` が 1 回で行う（会話が無ければ作る → 同じ `line_message_id` は 1 件だけ（LINE は応答が遅いと送り直す）→ 未読の加算・一覧の 1 行の更新）。local は `data/chat.json` で同じ手順（**直すときは両方**）
 - データ: `chat_settings`（店舗ごとの設定）/ `chat_threads`（店舗 × LINE ユーザー ID で 1 本。顧客 ID ではまとめない = 同じ人が顧客に 2 人いても会話は分かれない。`unread_count` / `status` = open / done / `last_message_preview`）/ `chat_messages`（`direction` = in / out / system、`kind`、`auto` / `auto_kind`、`line_message_id`、返信用の `client_key` / `send_status` は ④-2 で使う）。どれも RLS ポリシー無し = service_role のみ
 - 純粋ロジック `src/lib/chat.ts`、保存 `src/lib/chat-repository.ts`、業務ロジック `src/lib/chat-service.ts`
-- マイグレーション `20261127000000_add_chat.sql`（④-1。表と保存の DB 関数）と `20261128000000_add_chat_notifications.sql`（④-3。`chat_settings` の `notify_*` 列、DB 関数 `chat_claim_notification` / `chat_purge_expired`。未適用でも受信・画面・返信は動き、通知の設定を保存しようとすると「マイグレーションがまだ適用されていません」と出る。自動削除は何もしない）と `20261129000000_add_chat_media.sql`（④-4。`chat_settings.reply_templates` 列と、公開しないバケツ `chat-media`。未適用でも、バケツは最初の画像を保存するときに自動で作る。定型文は保存できない）。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも既存の機能は動く（OFF として動き、設定カードに理由を出して ON にできない）。**staging には LINE からの通知が届かないので、受信は本番のテスト用店舗で確かめる**
+- マイグレーション `20261127000000_add_chat.sql`（④-1。表と保存の DB 関数）と `20261128000000_add_chat_notifications.sql`（④-3。`chat_settings` の `notify_*` 列、DB 関数 `chat_claim_notification` / `chat_purge_expired`。未適用でも受信・画面・返信は動き、通知の設定を保存しようとすると「マイグレーションがまだ適用されていません」と出る。自動削除は何もしない）と `20261129000000_add_chat_media.sql`（④-4。`chat_settings.reply_templates` 列と、公開しないバケツ `chat-media`。未適用でも、バケツは最初の画像を保存するときに自動で作る。定型文は保存できない）と `20261130000000_add_chat_events_usage.sql`（④-5。`chat_usage_monthly`、DB 関数 `chat_add_usage` / `chat_record_system_events`、`chat_record_inbound` の差し替え。未適用でも送信・受信は今までどおり動き、自動の記録が会話に出ない・利用量が数えられないだけ）。**staging / production へは Dashboard の SQL Editor で手動適用**。未適用でも既存の機能は動く（OFF として動き、設定カードに理由を出して ON にできない）。**staging には LINE からの通知が届かないので、受信は本番のテスト用店舗で確かめる**
 - **トーク画面（④-2）**: 店舗管理者ページ `/{storeId}/admin?tab=chat` とテナント側 店舗ページの「トーク」タブで、同じ部品 `src/components/chat/ChatPanel.tsx` を使う。左 = 会話の一覧（未読が上・新しい順 = `sortChatThreads`。名前で検索・「未読」だけ）/ 中 = 会話（お客様は左・店舗は右。`auto` の文は小さく薄く「自動」）/ 右 = 顧客の情報（パソコンの広い幅だけ。既存の `GET /customers/{id}` を読む）。スマホは 一覧 → 会話 の 2 画面
   - **表示**: `admin_visible_options.chat`（「店舗管理者に表示するメニュー」の「顧客管理」の下の「トークを表示」。**未設定は非表示** = `defaultHidden`）が ON、**かつ**運営がトーク機能を ON にした店舗だけ、店舗管理者のメニューに出す（`buildStoreAdminNav(visibleTabs, { calendar, richMenu, chat })`。項目 ID は `chat`、並びは顧客管理のすぐ後ろ）。ON かどうかは店舗管理者ページが `GET .../chat/unread` で確かめる（設定の API は運営だけなので使えない）。運営が開いたときは、トーク機能が ON なら出る。テナント側 店舗ページのタブは常に出し、OFF の店舗では理由を出す
   - **未読バッジ**: メニュー（サイドバー・スマホの下部ナビ）の「トーク」に未読の合計（`StoreAdminLayout` の `chatUnread` → `data-slot="nav-badge"`）。店舗管理者ページが 30 秒おき・画面が見えているときだけ `GET .../chat/unread` を呼ぶ。トークを開いているあいだは `ChatPanel` が 15 秒おき（新着が無い間は 30 秒まで延ばす = `nextChatPollDelay`）に一覧と開いている会話の新着（`?after={最後のメッセージ ID}`）を取り、`onUnreadChange` でバッジを合わせる
@@ -349,9 +349,17 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - **店舗が送る画像**: LINE が取りに来るので公開の URL が要る。画面（`src/lib/chat-image-client.ts` の `compressChatImage` = canvas で長いほうの辺 1600px まで・1MB 以下の JPEG に縮める。LINE のプレビュー画像の上限が 1MB で、プレビューにも同じ画像を使うため）→ `POST /api/stores/{storeId}/chat/images`（`uploadChatReplyImage` = **ファイルの中身の先頭を見て** JPEG / PNG か確かめる（`readImageInfo`）・1MB まで。公開のバケツ `forms` の `chat_images/{storeId}/{推測できない 32 桁}.jpg`）→ 返信の API に `{ image_url, client_key }`
   - **返信の API は、その店舗の置き場の画像だけを送る**（`isChatOutboundImageUrl` = `chat_images/{storeId}/{32 桁}.jpg|png` の https。画面から渡された URL をそのまま LINE に送ると、どんな URL でも送れてしまうため）。送るのは `pushChatImage`（`originalContentUrl` = `previewImageUrl`）。記録は `kind: 'image'` + `media_path`（置き場の中のパス）+ `meta.image_url`。送り直しは、保存してある画像を送る
   - アップロードしただけで送らなかった画像は、置き場に残る（消す処理は無い。名前が推測できないので、外からは見つけられない）
+- **自動で送ったメッセージを会話に出す（④-5）**: リマインダー・フォロー・配信・Webhook の自動の返信・空き待ちのお知らせを、**「何を送ったか」の 1 行**（`direction: 'system'`・`auto_kind: 'system'`・`meta.event` = 種類）で会話に並べる。**送った本文そのものは保存しない**。純粋ロジック `src/lib/chat-events.ts`（文の組み立て `reminderEventText` / `followEventText` / `broadcastEventText` / `waitlistEventText` / `autoReplyEventText`、`normalizeChatSystemEvent`）
+  - 記録は DB 関数 `chat_record_system_events(p_store_id, p_events)`（`p_events` = `[{ line_user_id, kind, text, source_key, at }]`。配信は 500 人ぶんを 1 回で渡す）が判断する: **トーク機能が ON の店舗**で、**すでに会話のあるお客様だけ**（会話の無いお客様の会話は作らない = 配信のたびに数千人ぶんの空の会話ができないように）。**未読・一覧の 1 行・並び順・対応の状態・利用量は変えない**。同じ送信は 1 回だけ（`source_key` を `chat_messages.client_key` に入れ、返信の二重送信防止と同じ一意制約で捨てる）。local は `recordChatSystemEvents` が同じ手順を JSON の中で行う（**直すときは両方**）
+  - **呼ぶ場所**（どれも送信が終わったあと。**記録に失敗しても送信の結果は変えない**）: Edge Function `send-reminders`（`reminder:{reminder_logs.id}`）/ `send-follow-messages`（`follow:{follow_messages.id}`）/ `send-broadcasts`（`broadcast:{broadcast_recipients.id}`）= 各ファイルの `recordChatEvents` が DB 関数を直接呼ぶ（**文は `chat-events.ts` と同じ形を Deno 側でも組み立てている。直すときは両方。変更したら Edge Function 3 本の再デプロイが必要**）/ 空き待ち = `waitlist-service.ts` の `sendAndLog` → `recordChatSystemEventsSafe` / Webhook の自動の返信 = 下
+  - **Webhook の自動の返信**（予約確認・キャンセル・予約変更・キーワード自動応答・あいさつメッセージ・分岐の返信など）: 返信する共通の関数（`replyLineMessage` / `replyRawMessages`）が、送れた返信を `src/lib/chat-reply-log.ts`（`AsyncLocalStorage`。同時に届いた別の通知と混ざらない）に書き留め、`POST`（中身は `handleLineWebhook`）が処理の終わりに `scheduleChatAutoReplyEvents`（`after()`）で 1 回の返信 = 1 行を記録する。1 行は 1 通目の見出し（カード = `altText` / 文字 = 1 行目）+ 「を自動で返信しました」。鍵は `reply:{replyToken}:{番号}`。**Webhook に新しい返信の場所を足すときは、この 2 つの関数を通す**（直接 `fetch` すると会話に残らない）
+  - 新着の通知・未読には関係しない（`direction: 'in'` だけが対象）。保存期間を過ぎれば、ほかのメッセージと一緒に消える
+- **利用量の記録（④-5。有料オプションの料金を決める・請求するときの材料）**: `chat_usage_monthly`（店舗 × 月 = 日本時間の YYYY-MM で 1 行。`inbound_count` / `outbound_count` / `image_bytes`。RLS ポリシー無し）。足すのは DB 関数 `chat_add_usage`（同時に届いても数がずれない）
+  - **受信** = お客様が手で書いた文・画像など（`auto` の文は数えない）。保存の DB 関数 `chat_record_inbound`（④-5 のマイグレーションで、利用量の加算を足したものに差し替え）の中で数えるので、同じ通知の送り直しでは増えない / **返信** = LINE に送れたものだけ（`sendChatReply` の成功のあと。失敗・送り直しの途中は数えない）/ **画像** = その月に保存した容量（届いた画像を保存したとき + 送る画像をアップロードしたとき）。自動で送ったメッセージの記録は数えない。**いま保存している合計の容量ではない**（自動削除で消しても減らさない）
+  - 一覧: マスター管理者のページ（`/master-admin`）→「トーク利用状況」タブ（`src/components/chat/ChatUsagePanel.tsx`。月の切り替え・合計・店舗ごとの今月と前の月・CSV）。API `GET /api/master-admin/chat-usage?month=YYYY-MM&format=csv`（**マスター管理者だけ**。システム管理者・店舗管理者は 403。件数だけを返す）。出すのは、トークを一度でも ON にした店舗と、利用のある店舗（`getChatUsageReport`）。**料金の計算・請求は作っていない**
 - **定型文（④-4）**: `chat_settings.reply_templates`（`[{ id, title, text }]`。30 個・名前 30 文字・文 1000 文字まで = `validateChatTemplates`）。API `GET/PUT /api/stores/{storeId}/chat/templates`（一覧をまるごと差し替える。店舗管理者も変えられる）。画面は入力欄の上の「定型文」→ 選ぶと入力欄に入る（書きかけの文があれば、その後ろに足す）。編集は `ChatTemplatesDialog.tsx`
 - **対応済みの切り替え（④-4）**: `PATCH /api/stores/{storeId}/chat/threads/{threadId}` に `{ status: 'open' | 'done' }`。一覧に「対応済み」のバッジ、絞り込みに「対応中」（`ChatThreadFilter` の `open`）。**お客様から自動でない新しいメッセージが届くと、保存の DB 関数が対応中に戻す**（返信しただけでは変わらない）
-- Vitest: `chat.test.ts` / `chat-notify.test.ts` / `chat-service.local.test.ts` / `chat-notify-service.local.test.ts` / `chat-media-service.local.test.ts` / `chat-service.test.ts` / `line-webhook-signature-route.test.ts` / `admin-api-auth.test.ts` / `store-admin-tabs.test.ts` / `store-admin-guide.test.ts`
+- Vitest: `chat.test.ts` / `chat-notify.test.ts` / `chat-service.local.test.ts` / `chat-notify-service.local.test.ts` / `chat-media-service.local.test.ts` / `chat-events.test.ts` / `chat-events-service.local.test.ts` / `chat-usage-api.test.ts` / `chat-service.test.ts` / `line-webhook-signature-route.test.ts` / `admin-api-auth.test.ts` / `store-admin-tabs.test.ts` / `store-admin-guide.test.ts`
 
 **全予約一覧の「集計ダウンロード」（`/tenant/{slug}/admin/reservations` → 予約一覧タブ。Excel = 予約数 / キャンセル数 / アンケート回答数 / 出力条件 の 4 シート。店舗 × 月）:**
 - 予約は `GET /api/reservations`、アンケート回答数は `GET /api/surveys/stats`。どちらも **ログイン必須 + 見てよい店舗だけ**（`src/lib/admin-store-scope.ts` の `getAccessibleStoreIds` = マスター: 全店舗 / システム管理者: 同じテナント / 店舗管理者: 自分の店舗。`resolveStoreScope` で `store_id` の指定を確認し、範囲外は 403。local は認証スキップ）、**`fetchAllRows` で 1000 件ずつ全件取得**（以前は 1 回の取得 = 1000 件までで、件数が欠けていた）
@@ -729,6 +737,7 @@ export async function GET(req, { params }) {
 - `GET /api/stores/{storeId}/chat/media/{messageId}` - お客様から届いた画像（公開していない置き場から、ログインと店舗を確かめて返す）
 - `POST /api/stores/{storeId}/chat/images` - 返信で送る画像のアップロード（FormData の `file`。JPEG / PNG・1MB まで）
 - `GET/PUT /api/stores/{storeId}/chat/templates` - 定型文（`{ templates: [{ id?, title, text }] }`）
+- `GET /api/master-admin/chat-usage` - 全店舗のトークの利用状況（`month` = YYYY-MM、`format=csv`。マスター管理者だけ）
 - `GET/PUT /api/stores/{storeId}/chat/notifications` - 新着の通知の設定（`{ line, email, emails, quiet: { enabled, start, end } }`。店舗管理者も変えられる）
 - `POST /api/stores/{storeId}/chat/notifications/test` - テストの通知を送る
 - `POST /api/cron/chat-retention` - 保存期間を過ぎた会話の自動削除（pg_cron から。Service Role Key の Bearer）
@@ -847,7 +856,7 @@ export async function GET(req, { params }) {
 - `reminder_logs` - LINE 予約リマインダーの送信記録（1 予約 × 対象日 = 1 行。二重送信防止・後追い確認）
 - `waitlist_entries` / `waitlist_notifications` - 空き待ち（キャンセル待ち）の登録と通知の記録
 - `store_digest_settings` / `store_digest_staff` / `store_digest_logs` - 朝の「今日の予約まとめ」・月次レポートの設定（合言葉つき）/ LINE で受け取るスタッフ / 送信の記録
-- `chat_settings` / `chat_threads` / `chat_messages` - 1 対 1 トーク（店舗ごとの設定 = 行なしは OFF / 会話 = 店舗 × LINE ユーザーで 1 本 / メッセージ）
+- `chat_settings` / `chat_threads` / `chat_messages` / `chat_usage_monthly` - 1 対 1 トーク（店舗ごとの設定 = 行なしは OFF / 会話 = 店舗 × LINE ユーザーで 1 本 / メッセージ / 店舗 × 月の利用量）
 - `wall_boards` / `wall_posts` / `wall_reports` / `wall_consents` / `wall_moderation_logs` / `wall_topics` / `wall_empathies` - 寄せ書きウォール（ボード設定 / 付箋 / 通報 / 同意 / 公開操作の記録 / お題 / 共感。投稿者・共感した人は hash のみ）
 
 **RLS（Row Level Security）:**
@@ -885,6 +894,7 @@ export async function GET(req, { params }) {
 - `20261127000000_add_chat.sql` - 1 対 1 トーク: chat_settings / chat_threads / chat_messages、DB 関数 `chat_record_inbound`
 - `20261128000000_add_chat_notifications.sql` - 1 対 1 トークの通知と自動削除: chat_settings の notify_* 列、DB 関数 `chat_claim_notification` / `chat_purge_expired`
 - `20261129000000_add_chat_media.sql` - 1 対 1 トークの画像と定型文: chat_settings.reply_templates、公開しない Storage バケツ `chat-media`
+- `20261130000000_add_chat_events_usage.sql` - 1 対 1 トークの自動の記録と利用量: chat_usage_monthly、DB 関数 `chat_add_usage` / `chat_record_system_events`、`chat_record_inbound` の差し替え
 - `20261009000000_add_wall.sql` - 寄せ書きウォールの 5 テーブル・RLS・DB 関数 `wall_insert_post_checked` / `wall_add_report`
 - `20261010000000_add_wall_daily_max.sql` - wall_boards.daily_max
 - `20261011000000_add_wall_engagement.sql` - 寄せ書きの追加機能（wall_topics / wall_empathies、wall_posts の reaction / topic_id / note_color / note_deco / empathy_count、wall_boards の empathy_* / customer_pick_enabled、DB 関数 `wall_toggle_empathy`）

@@ -1123,6 +1123,41 @@ LINE Webhook の署名チェックの設定（チャネルシークレット）
 
 **レスポンス**: `{ "line_sent": 2, "email_sent": 1, "failed": 0 }`（通知が OFF = `400` / 1 件も送れなかった = `502`）
 
+### `GET /api/master-admin/chat-usage`
+1 対 1 トークの、全店舗の利用状況（有料オプションの料金を決める・請求するときの材料）
+
+**認証**: **マスター管理者だけ**（未ログイン = 401、システム管理者・店舗管理者 = 403。local は認証スキップ）
+
+**クエリ**: `month` = YYYY-MM（日本時間。省略 = 今月）、`format=csv` で CSV（UTF-8 BOM つき）をダウンロード
+
+**レスポンス**（件数だけ。会話の中身・お客様の情報は返さない）:
+```json
+{
+  "month": "2026-11",
+  "previous_month": "2026-10",
+  "rows": [
+    {
+      "store_id": "abc123",
+      "store_name": "テスト店",
+      "enabled": true,
+      "enabled_at": "2026-11-05T00:00:00.000Z",
+      "current": { "inbound": 42, "outbound": 31, "image_bytes": 13107200 },
+      "previous": { "inbound": 18, "outbound": 12, "image_bytes": 3145728 }
+    }
+  ],
+  "totals": { "inbound": 42, "outbound": 31, "image_bytes": 13107200 },
+  "unavailable": false
+}
+```
+
+- `inbound`: お客様が手で書いて送った通数（予約フォームの送信文・コマンドなど、自動の文は数えない）
+- `outbound`: 店舗がトークの画面から送って、LINE に送れた通数（自動で送ったメッセージは数えない）
+- `image_bytes`: その月に保存した画像の容量（届いた画像 + 送った画像。いま保存している合計ではない）
+- `rows`: トークを一度でも ON にした店舗と、利用のある店舗。ON の店舗が上、その中は合計の多い順
+- `unavailable`: マイグレーション未適用で、利用量を数えられていない
+
+**会話の中の「自動で送ったメッセージ」**: リマインダー・フォロー・配信・自動の返信・空き待ちのお知らせは、会話の API（`GET .../chat/threads/{threadId}`）のメッセージに `direction: "system"`・`auto: true`・`auto_kind: "system"` の 1 行として入る（`text` = 「リマインダーを送信しました（11月26日（木） 14:00 のご予約）」など。送った本文は入らない）
+
 ### `POST /api/cron/chat-retention`
 1 対 1 トークの、保存期間を過ぎた会話の自動削除（pg_cron から 1 日 1 回）
 

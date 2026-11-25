@@ -16,7 +16,8 @@ import { scheduleCancelOpeningBroadcast } from '@/lib/broadcast-automation-servi
 import { ensureFriendCustomer } from '@/lib/line-friend-customers';
 import { LINE_SIGNATURE_HEADER, decideWebhookSignature } from '@/lib/line-signature';
 import { getStoreLineSecret } from '@/lib/line-secret-repository';
-import { scheduleChatInbound } from '@/lib/chat-service';
+import { scheduleChatAutoReplyEvents, scheduleChatInbound } from '@/lib/chat-service';
+import { noteChatReply, runWithChatReplyLog, setChatReplyTarget } from '@/lib/chat-reply-log';
 import { CHANGE_KEYWORD, MENU_CHANGE_MESSAGE_HEAD, isChangePostback } from '@/lib/reservation-change';
 import { buildChangeMenuReply, buildMenuChangeDoneReply, handleChangePostback } from '@/lib/reservation-change-service';
 import { WAITLIST_KEYWORD, WAITLIST_MESSAGE_HEAD, isWaitlistPostback } from '@/lib/waitlist';
@@ -233,7 +234,7 @@ function parseReservationForm(text: string) {
 }
 
 async function replyLineMessage(replyToken: string, accessToken: string, messages: Array<{ type: string; text: string }>) {
-  await fetch('https://api.line.me/v2/bot/message/reply', {
+  const res = await fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=UTF-8',
@@ -241,12 +242,14 @@ async function replyLineMessage(replyToken: string, accessToken: string, message
     },
     body: JSON.stringify({ replyToken, messages }),
   });
+  // 1 対 1 トーク: 自動で返信した内容を書き留める（通知の処理が終わったところで、会話に 1 行で残す）
+  if (res?.ok) noteChatReply(replyToken, messages);
 }
 
 /** 店舗が作った Flex Message（line_flex_messages.payload）など、組み立て済みのメッセージをそのまま返信する（最大 5 通） */
 async function replyRawMessages(replyToken: string, accessToken: string, messages: Array<Record<string, unknown>>) {
   if (messages.length === 0) return;
-  await fetch('https://api.line.me/v2/bot/message/reply', {
+  const res = await fetch('https://api.line.me/v2/bot/message/reply', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=UTF-8',
@@ -254,6 +257,7 @@ async function replyRawMessages(replyToken: string, accessToken: string, message
     },
     body: JSON.stringify({ replyToken, messages: messages.slice(0, 5) }),
   });
+  if (res?.ok) noteChatReply(replyToken, messages.slice(0, 5));
 }
 
 async function replyFlexMessage(replyToken: string, accessToken: string, altText: string, bubbles: object[], extraMessages: Array<Record<string, unknown>> = []) {
@@ -460,7 +464,23 @@ async function countActiveReservationsForUserInWebhook(
   }).length;
 }
 
+/**
+ * LINE の Webhook の入口。
+ * 中身は handleLineWebhook。ここでは、その処理の中で自動で返信した内容を書き留めておき、
+ * 処理が終わったところで 1 対 1 トークの会話に 1 行で残す（トーク機能が ON の店舗・会話のあるお客様だけ）。
+ * 記録は応答を返したあとに行い、失敗しても Webhook の結果は変えない
+ */
 export async function POST(req: NextRequest) {
+  const { result, log } = await runWithChatReplyLog(() => handleLineWebhook(req));
+  try {
+    scheduleChatAutoReplyEvents(log.storeId, log.lineUserId, log.replies);
+  } catch (e) {
+    console.error('[LINE Webhook] 自動の返信の記録エラー:', e);
+  }
+  return result;
+}
+
+async function handleLineWebhook(req: NextRequest): Promise<NextResponse> {
   const url = new URL(req.url);
   const storeId = url.searchParams.get('storeId');
   if (!storeId) {
@@ -561,6 +581,8 @@ export async function POST(req: NextRequest) {
   if (!replyToken || !userId) {
     return NextResponse.json({ success: true });
   }
+  // 1 対 1 トーク: このあとの自動の返信を、この店舗・このお客様の会話に残す
+  setChatReplyTarget(storeId, userId);
 
   // あいさつメッセージ: 友だち追加（ブロック解除を含む）されたら、LINE メッセージの「友だち追加されたときに送る」が ON のものを返す
   if (event.type === 'follow') {

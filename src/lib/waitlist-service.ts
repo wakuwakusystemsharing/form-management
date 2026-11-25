@@ -16,6 +16,8 @@ import { createAdminClient } from '@/lib/supabase';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { listCalendarEventsAll } from '@/lib/google-calendar';
 import { pushLineMessages } from '@/lib/line-push';
+import { waitlistEventText } from '@/lib/chat-events';
+import { recordChatSystemEventsSafe } from '@/lib/chat-service';
 import { mergeStaffSchedule } from '@/lib/staff-schedule';
 import { isNoPreferenceAssignable, isSlotBookableForSettings } from '@/lib/staff-slot-rules';
 import { resolveMaxConcurrentEvents, type CalendarEventLike } from '@/lib/staff-availability';
@@ -420,6 +422,10 @@ async function sendAndLog(store: WaitlistStore, entry: WaitlistEntry, type: 'slo
     result: result.ok ? 'success' : 'failed',
     error_message: result.ok ? null : `${result.status} ${result.body}`.slice(0, 500),
   });
+  // 1 対 1 トーク: 送れたお知らせを、会話に 1 行で残す（トーク機能が ON の店舗・会話のあるお客様だけ。失敗しても送信の結果は変えない）
+  if (result.ok) {
+    await recordChatSystemEventsSafe(entry.store_id, [{ line_user_id: entry.line_user_id, kind: 'waitlist', text: waitlistEventText(type), source_key: `waitlist:${entry.id}:${type}:${Number.isNaN(startMs) ? 0 : startMs}:${Date.now()}`, at: new Date() }]);
+  }
   return result.ok;
 }
 

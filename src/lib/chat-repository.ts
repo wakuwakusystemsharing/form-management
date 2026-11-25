@@ -10,6 +10,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { getAppEnvironment } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase';
+import { chatUsageMonth, type ChatSystemEvent, type ChatUsageCounts } from '@/lib/chat-events';
 import {
   CHAT_NOTIFY_DEFAULTS,
   CHAT_NOTIFY_INTERVAL_MS,
@@ -41,17 +42,27 @@ const DATA_DIR = path.join(process.cwd(), 'data');
 const localFile = () => path.join(DATA_DIR, 'chat.json');
 const isLocal = () => getAppEnvironment() === 'local';
 
+interface LocalUsageRow {
+  store_id: string;
+  month: string;
+  inbound_count: number;
+  outbound_count: number;
+  image_bytes: number;
+}
+
 interface LocalData {
   settings: Array<ChatSettings & { store_id: string }>;
   threads: ChatThread[];
   messages: ChatMessage[];
+  /** 利用量（④-5） */
+  usage?: LocalUsageRow[];
 }
 
 function readLocal(): LocalData {
   try {
     if (!fs.existsSync(localFile())) return { settings: [], threads: [], messages: [] };
     const d = JSON.parse(fs.readFileSync(localFile(), 'utf-8')) as Partial<LocalData>;
-    return { settings: Array.isArray(d.settings) ? d.settings : [], threads: Array.isArray(d.threads) ? d.threads : [], messages: Array.isArray(d.messages) ? d.messages : [] };
+    return { settings: Array.isArray(d.settings) ? d.settings : [], threads: Array.isArray(d.threads) ? d.threads : [], messages: Array.isArray(d.messages) ? d.messages : [], usage: Array.isArray(d.usage) ? d.usage : [] };
   } catch {
     return { settings: [], threads: [], messages: [] };
   }
@@ -213,6 +224,15 @@ export async function recordChatInbound(storeId: string, msg: ChatInbound, autoK
   if (auto === null) {
     thread.unread_count += 1;
     thread.status = 'open';
+    // 利用量: お客様が手で書いた文・画像などだけを数える（DB 関数 chat_record_inbound と同じ）
+    const usage = (data.usage ??= []);
+    const month = chatUsageMonth(msg.at);
+    let row = usage.find((u) => u.store_id === storeId && u.month === month);
+    if (!row) {
+      row = { store_id: storeId, month, inbound_count: 0, outbound_count: 0, image_bytes: 0 };
+      usage.push(row);
+    }
+    row.inbound_count += 1;
   }
   if (msg.at >= thread.last_message_at || thread.last_message_preview === null) thread.last_message_preview = preview;
   if (msg.at > thread.last_message_at) thread.last_message_at = msg.at;
@@ -793,4 +813,138 @@ export async function clearChatMessageMedia(ids: string[]): Promise<void> {
       ids.map((id) => Number(id)),
     );
   if (error) throw new Error(error.message || '画像の記録エラー');
+}
+
+// ---------------------------------------------------------------------------
+// ④-5: 自動で送ったメッセージを会話に出す・利用量の記録
+// ---------------------------------------------------------------------------
+
+/**
+ * 自動で送ったメッセージを、会話に 1 行で残す。戻り値 = 記録した件数。
+ * - トーク機能が ON の店舗・すでに会話のあるお客様だけ（無ければ何もしない。会話は作らない）
+ * - 同じ送信（source_key）は 1 回だけ
+ * - 未読・一覧の 1 行・並び順は変えない
+ * Supabase では DB 関数 chat_record_system_events が行う。local は同じ手順を JSON の中で行う（**直すときは両方**）。
+ * 関数が無い（マイグレーション未適用）ときは 0
+ */
+export async function recordChatSystemEvents(storeId: string, events: ChatSystemEvent[]): Promise<number> {
+  if (events.length === 0) return 0;
+  if (!isLocal()) {
+    const { data, error } = await client().rpc('chat_record_system_events', { p_store_id: storeId, p_events: events });
+    if (error) {
+      if (isMissingChatSchema(error)) return 0;
+      throw new Error(error.message || '自動の記録エラー');
+    }
+    return Number(data) || 0;
+  }
+  const data = readLocal();
+  if (!data.settings.some((s) => s.store_id === storeId && normalizeChatSettings(s).enabled)) return 0;
+  let added = 0;
+  for (const e of events) {
+    const thread = data.threads.find((t) => t.store_id === storeId && t.line_user_id === e.line_user_id);
+    if (!thread || !e.text || !e.source_key) continue;
+    if (data.messages.some((m) => m.store_id === storeId && m.client_key === e.source_key)) continue;
+    const nextId = data.messages.reduce((max, m) => Math.max(max, Number(m.id) || 0), 0) + 1;
+    data.messages.push({
+      id: String(nextId),
+      thread_id: thread.id,
+      store_id: storeId,
+      direction: 'system',
+      kind: 'text',
+      text: e.text.slice(0, 300),
+      meta: { event: e.kind },
+      media_path: null,
+      auto: true,
+      auto_kind: 'system',
+      line_message_id: null,
+      client_key: e.source_key,
+      send_status: null,
+      send_error: null,
+      sent_by: null,
+      created_at: e.at,
+    });
+    added += 1;
+  }
+  if (added > 0) writeLocal(data);
+  return added;
+}
+
+/** 利用量を足す（月 = 日本時間の YYYY-MM）。表・関数が無い（マイグレーション未適用）ときは何もしない */
+export async function addChatUsage(storeId: string, month: string, delta: Partial<ChatUsageCounts>): Promise<void> {
+  const inbound = Math.max(0, Math.round(delta.inbound ?? 0));
+  const outbound = Math.max(0, Math.round(delta.outbound ?? 0));
+  const imageBytes = Math.max(0, Math.round(delta.image_bytes ?? 0));
+  if (inbound + outbound + imageBytes === 0) return;
+  if (isLocal()) {
+    const data = readLocal();
+    const usage = (data.usage ??= []);
+    let row = usage.find((u) => u.store_id === storeId && u.month === month);
+    if (!row) {
+      row = { store_id: storeId, month, inbound_count: 0, outbound_count: 0, image_bytes: 0 };
+      usage.push(row);
+    }
+    row.inbound_count += inbound;
+    row.outbound_count += outbound;
+    row.image_bytes += imageBytes;
+    writeLocal(data);
+    return;
+  }
+  const { error } = await client().rpc('chat_add_usage', { p_store_id: storeId, p_month: month, p_inbound: inbound, p_outbound: outbound, p_image_bytes: imageBytes });
+  if (error && !isMissingChatSchema(error)) throw new Error(error.message || '利用量の記録エラー');
+}
+
+export interface ChatUsageSource {
+  /** トークの設定がある店舗（一度でも ON にした・通知や定型文を保存した店舗） */
+  settings: Array<{ store_id: string; enabled: boolean; enabled_at: string | null }>;
+  /** 指定した月の利用量 */
+  usage: Array<{ store_id: string; month: string } & ChatUsageCounts>;
+  /** 店舗 ID → 店舗名 */
+  storeNames: Record<string, string>;
+  /** 利用量の表が無い（④-5 のマイグレーション未適用） */
+  missing: boolean;
+}
+
+/** 全店舗の利用状況のもとになるデータ（運営の一覧用）。months = 読む月（YYYY-MM） */
+export async function loadChatUsageSource(months: string[]): Promise<ChatUsageSource> {
+  if (isLocal()) {
+    const data = readLocal();
+    let stores: Array<{ id?: string; name?: string }> = [];
+    try {
+      const file = path.join(DATA_DIR, 'stores.json');
+      if (fs.existsSync(file)) stores = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    } catch {}
+    return {
+      settings: data.settings.map((s) => ({ store_id: s.store_id, enabled: normalizeChatSettings(s).enabled, enabled_at: normalizeChatSettings(s).enabled_at })),
+      usage: (data.usage ?? []).filter((u) => months.includes(u.month)).map((u) => ({ store_id: u.store_id, month: u.month, inbound: u.inbound_count, outbound: u.outbound_count, image_bytes: u.image_bytes })),
+      storeNames: Object.fromEntries((Array.isArray(stores) ? stores : []).filter((s) => s.id).map((s) => [String(s.id), s.name || String(s.id)])),
+      missing: false,
+    };
+  }
+  const c = client();
+  const settingsRes = await c.from('chat_settings').select('store_id, enabled, enabled_at').limit(5000);
+  if (settingsRes.error) {
+    if (isMissingChatSchema(settingsRes.error)) return { settings: [], usage: [], storeNames: {}, missing: true };
+    throw new Error(settingsRes.error.message || '設定の読み取りエラー');
+  }
+  const usageRes = await c.from('chat_usage_monthly').select('store_id, month, inbound_count, outbound_count, image_bytes').in('month', months).limit(10000);
+  const missing = !!usageRes.error && isMissingChatSchema(usageRes.error);
+  if (usageRes.error && !missing) throw new Error(usageRes.error.message || '利用量の読み取りエラー');
+  const settings = ((settingsRes.data ?? []) as Array<Record<string, unknown>>).map((s) => ({ store_id: String(s.store_id), enabled: s.enabled === true, enabled_at: typeof s.enabled_at === 'string' ? s.enabled_at : null }));
+  const usage = ((usageRes.data ?? []) as Array<Record<string, unknown>>).map((u) => ({
+    store_id: String(u.store_id),
+    month: String(u.month),
+    inbound: Number(u.inbound_count) || 0,
+    outbound: Number(u.outbound_count) || 0,
+    image_bytes: Number(u.image_bytes) || 0,
+  }));
+  const ids = [...new Set([...settings.map((s) => s.store_id), ...usage.map((u) => u.store_id)])];
+  const storeNames: Record<string, string> = {};
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await c
+      .from('stores')
+      .select('id, name')
+      .in('id', ids.slice(i, i + 200));
+    for (const s of (data ?? []) as Array<{ id: string; name: string | null }>) storeNames[s.id] = s.name || s.id;
+  }
+  return { settings, usage, storeNames, missing };
 }
