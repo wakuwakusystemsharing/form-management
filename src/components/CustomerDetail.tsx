@@ -59,6 +59,8 @@ interface CustomerDetailProps {
   onOpenReservation?: (reservation: any) => void;
   /** 予約履歴・来店履歴・統計情報を表示するか（店舗設定「店舗管理者に表示するメニュー」に連動。既定 true） */
   showReservationHistory?: boolean;
+  /** トークを開く URL（トークのタブが出ている店舗だけ渡す。LINE タブに「トークを開く」を出す） */
+  chatHref?: string;
   /** 抽選履歴を表示するか（同上。既定 true） */
   showLotteryHistory?: boolean;
   /** アンケートの回答を表示するか（同上。既定 true） */
@@ -186,7 +188,7 @@ function visitMenus(visit: CustomerVisit): string {
   return (visit.treatment_menus as Array<{ name?: string; menu_name?: string }>).map((m) => m.menu_name || m.name || '').filter(Boolean).join(', ') || '-';
 }
 
-export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated, onDeleted, onOpenReservation, showReservationHistory = true, showLotteryHistory = true, showSurveyHistory = true, onTagClick, initialTab }: CustomerDetailProps) {
+export default function CustomerDetail({ storeId, customerId, open, onClose, onUpdated, onDeleted, onOpenReservation, showReservationHistory = true, showLotteryHistory = true, showSurveyHistory = true, onTagClick, initialTab, chatHref }: CustomerDetailProps) {
   const [data, setData] = useState<CustomerDetailData | null>(null);
   const [lotteryEntries, setLotteryEntries] = useState<LotteryEntryView[]>([]);
   // アンケートの回答（取得した顧客の LINE ユーザー ID と一緒に持ち、別の顧客の分を一瞬でも見せない）
@@ -870,6 +872,11 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                     <p className="col-span-2 text-xs text-muted-foreground">LINE 未連携の顧客です（電話番号などで手動登録）</p>
                   )}
                 </dl>
+                {customer.line_user_id && chatHref && (
+                  <a href={chatHref} className="mt-3 inline-block text-sm text-primary underline" data-slot="open-chat">
+                    トークを開く
+                  </a>
+                )}
                 {customer.line_user_id && <CustomerLineAnswers storeId={storeId} lineUserId={customer.line_user_id} />}
               </TabsContent>
             </Tabs>

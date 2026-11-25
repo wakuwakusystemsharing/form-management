@@ -2,7 +2,7 @@
  * 空き待ち（キャンセル待ち）のサーバー側処理。
  * Supabase / Google カレンダー / LINE 送信は偽物に差し替えて、登録 → 空きのお知らせ → おわび → 再通知 → 終了 の流れを確かめる
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WaitlistEntry, WaitlistStatus } from '../waitlist';
 
 type Event = { start: { dateTime: string }; end: { dateTime: string }; summary?: string };
@@ -126,6 +126,16 @@ const input = (user: string, time = '14:00', over: Record<string, unknown> = {})
 });
 
 const statusOf = (id: string) => (h.entries.find((e) => e.id === id) as WaitlistEntry).status;
+
+// 「いま」を指定しない呼び出し（予約直後の見回りなど）は、実際の時計を使う。
+// 実際の日付が DATE を過ぎると空き待ちが「日時を過ぎた」扱いになってテストが失敗するので、時計を NOW に固定する（タイマーは本物のまま）
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 beforeEach(() => {
   h.entries = [];

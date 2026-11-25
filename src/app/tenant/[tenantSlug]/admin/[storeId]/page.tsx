@@ -33,6 +33,7 @@ import LineFlexPanel from '@/components/line-flex/LineFlexPanel';
 import BroadcastPanel from '@/components/broadcast/BroadcastPanel';
 import ReservationCalendar from '@/components/ReservationCalendar';
 import RichMenuPanel from '@/components/rich-menu/RichMenuPanel';
+import ChatPanel from '@/components/chat/ChatPanel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { getBaseUrl } from '@/lib/env';
@@ -1556,7 +1557,7 @@ export default function StoreDetailPage() {
 
         {/* ── タブナビゲーション ── */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="h-auto lg:h-10 bg-card border border-border p-1 w-full lg:w-auto grid grid-cols-4 sm:grid-cols-5 lg:inline-flex">
+          <TabsList className="h-auto lg:h-10 bg-card border border-border p-1 w-full lg:w-auto grid grid-cols-4 sm:grid-cols-6 lg:inline-flex">
             <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">概要</TabsTrigger>
             <TabsTrigger value="calendar" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">カレンダー</TabsTrigger>
             <TabsTrigger value="forms" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">予約フォーム</TabsTrigger>
@@ -1566,6 +1567,7 @@ export default function StoreDetailPage() {
             <TabsTrigger value="line_messages" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">LINE メッセージ</TabsTrigger>
             <TabsTrigger value="broadcasts" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">配信</TabsTrigger>
             <TabsTrigger value="richmenu" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">リッチメニュー</TabsTrigger>
+            <TabsTrigger value="chat" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">トーク</TabsTrigger>
             <TabsTrigger value="settings" className="text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-none">設定</TabsTrigger>
           </TabsList>
 
@@ -2512,6 +2514,11 @@ export default function StoreDetailPage() {
           {/* リッチメニュー（公式 LINE のトーク画面の下に出るメニュー） */}
           <TabsContent value="richmenu" className="space-y-6">
             <RichMenuPanel storeId={storeId} />
+          </TabsContent>
+
+          {/* トーク（お客様が公式 LINE に送ったメッセージを読んで返信する） */}
+          <TabsContent value="chat" className="space-y-6">
+            <ChatPanel storeId={storeId} />
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">

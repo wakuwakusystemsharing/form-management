@@ -49,6 +49,7 @@ export const STORE_ADMIN_OPTION_KEYS = [
   'store_digest',
   'calendar',
   'rich_menu',
+  'chat',
 ] as const;
 export type StoreAdminOptionKey = (typeof STORE_ADMIN_OPTION_KEYS)[number];
 
@@ -81,6 +82,7 @@ export const STORE_ADMIN_OPTIONS: StoreAdminOptionDef[] = [
   { key: 'customer_survey_history', tab: 'customers', label: '顧客詳細にアンケートの回答を表示', description: '未設定のときは「アンケート管理」の表示に連動します', followsTab: 'surveys' },
   { key: 'calendar', tab: 'reservations', label: 'カレンダーを表示', description: '予約を 日 / 週 / 月 のカレンダーで見るタブ。予約管理を非表示にしていても、ここだけ表示にできます', followsTab: 'reservations', independent: true },
   { key: 'rich_menu', tab: 'broadcasts', label: 'リッチメニューを表示', description: '公式 LINE のトーク画面の下に出るメニューを、店舗管理者が作って反映できるタブ。チェックを入れた店舗だけに出ます', followsTab: 'broadcasts', independent: true, defaultHidden: true },
+  { key: 'chat', tab: 'customers', label: 'トークを表示', description: 'お客様が公式 LINE に送ったメッセージを読んで返信するタブ。運営がトーク機能を ON にした店舗で、チェックを入れたときだけ出ます', followsTab: 'customers', independent: true, defaultHidden: true },
   { key: 'store_digest', tab: 'settings', label: '今日の予約まとめ・月次レポートを表示', description: '朝の「今日の予約まとめ」と月次レポートを、メールや LINE で受け取る設定の欄', followsTab: 'settings' },
 ];
 
@@ -134,11 +136,14 @@ export function resolveAdminVisibleOptions(
  * （未設定は「予約管理」に連動。admin_visible_tabs に足すと、タブを絞り込んでいる既存の店舗で
  *  「予約管理は出ているのにカレンダーだけ出ない」になるため、タブの一覧には入れない）
  */
-export type StoreAdminNavId = StoreAdminTabId | 'calendar' | 'richmenu';
+export type StoreAdminNavId = StoreAdminTabId | 'calendar' | 'richmenu' | 'chat';
 
-const STORE_ADMIN_NAV_ORDER: StoreAdminNavId[] = ['dashboard', 'reservations', 'calendar', 'customers', 'surveys', 'lotteries', 'walls', 'broadcasts', 'richmenu', 'settings'];
+const STORE_ADMIN_NAV_ORDER: StoreAdminNavId[] = ['dashboard', 'reservations', 'calendar', 'customers', 'chat', 'surveys', 'lotteries', 'walls', 'broadcasts', 'richmenu', 'settings'];
 
-/** 表示するタブ + カレンダー・リッチメニュー（表示するとき）を、メニューの並び順で返す */
-export function buildStoreAdminNav(visibleTabs: StoreAdminTabId[], show: { calendar: boolean; richMenu?: boolean }): StoreAdminNavId[] {
-  return STORE_ADMIN_NAV_ORDER.filter((id) => (id === 'calendar' ? show.calendar : id === 'richmenu' ? !!show.richMenu : visibleTabs.includes(id)));
+/**
+ * 表示するタブ + カレンダー・リッチメニュー・トーク（表示するとき）を、メニューの並び順で返す。
+ * トークは「表示の設定（admin_visible_options.chat）が ON」かつ「運営がトーク機能を ON にした店舗」のときだけ、呼び出し側が chat = true を渡す
+ */
+export function buildStoreAdminNav(visibleTabs: StoreAdminTabId[], show: { calendar: boolean; richMenu?: boolean; chat?: boolean }): StoreAdminNavId[] {
+  return STORE_ADMIN_NAV_ORDER.filter((id) => (id === 'calendar' ? show.calendar : id === 'richmenu' ? !!show.richMenu : id === 'chat' ? !!show.chat : visibleTabs.includes(id)));
 }

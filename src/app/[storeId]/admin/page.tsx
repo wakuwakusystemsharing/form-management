@@ -28,6 +28,7 @@ import MonthlyReportView from '@/components/MonthlyReportView';
 import { buildStoreAdminNav, resolveAdminVisibleOptions, resolveVisibleTabs } from '@/lib/store-admin-tabs';
 import ReservationCalendar from '@/components/ReservationCalendar';
 import RichMenuPanel from '@/components/rich-menu/RichMenuPanel';
+import ChatPanel from '@/components/chat/ChatPanel';
 import ReservationAnalytics from '@/components/ReservationAnalytics';
 import WaitlistPanel from '@/components/WaitlistPanel';
 import CustomerList from '@/components/CustomerList';
@@ -192,7 +193,35 @@ export default function StoreAdminPage() {
   // タブ内の項目単位の表示（フォーム管理 / 顧客詳細の履歴）。上位管理者はすべて表示
   const adminOptions = resolveAdminVisibleOptions(visibleTabsForUser, store?.admin_visible_options ?? null, !applyStoreSettings);
   // メニューに出す項目（タブ + カレンダー。カレンダーは未設定なら「予約管理」に連動）
-  const navIds = buildStoreAdminNav(visibleTabIds, { calendar: adminOptions.calendar, richMenu: adminOptions.rich_menu });
+  // トーク: 表示の設定（admin_visible_options.chat。未設定は非表示）が ON で、運営がトーク機能を ON にした店舗だけ出す
+  const [chatState, setChatState] = useState<{ enabled: boolean; unread: number }>({ enabled: false, unread: 0 });
+  const chatOptionOn = adminOptions.chat;
+  useEffect(() => {
+    if (!storeId || !user || !chatOptionOn) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const check = async () => {
+      if (stopped) return;
+      // 画面が見えているときだけ確かめる（30 秒おき。トークを開いているあいだは、トークの画面が 15 秒おきに更新する）
+      if (document.visibilityState === 'visible') {
+        try {
+          const res = await fetchWithAuth(`/api/stores/${storeId}/chat/unread`, { credentials: 'include', cache: 'no-store' });
+          if (res.ok) {
+            const json = await res.json();
+            if (!stopped) setChatState({ enabled: json.enabled === true, unread: Number(json.unread) || 0 });
+          }
+        } catch {}
+      }
+      if (!stopped) timer = setTimeout(check, 30000);
+    };
+    void check();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [storeId, user, chatOptionOn]);
+  const showChat = chatOptionOn && chatState.enabled;
+  const navIds = buildStoreAdminNav(visibleTabIds, { calendar: adminOptions.calendar, richMenu: adminOptions.rich_menu, chat: showChat });
   const activeTab = navIds.includes(requestedTab as (typeof navIds)[number]) ? requestedTab : navIds[0];
   const wallTabVisible = visibleTabIds.includes('walls');
 
@@ -1608,6 +1637,19 @@ export default function StoreAdminPage() {
           </div>
         );
 
+      case 'chat':
+        return (
+          <div className="space-y-4 p-4 lg:p-6">
+            <StoreAdminGuide tab="chat" />
+            <ChatPanel
+              storeId={storeId}
+              initialCustomerId={searchParams.get('chatCustomer')}
+              customerHref={visibleTabIds.includes('customers') ? (customerId) => `/${storeId}/admin?tab=customers&customerId=${encodeURIComponent(customerId)}` : undefined}
+              onUnreadChange={(unread) => setChatState((prev) => (prev.unread === unread ? prev : { ...prev, unread }))}
+            />
+          </div>
+        );
+
       case 'richmenu':
         return (
           <div className="space-y-5 p-4 lg:p-6">
@@ -1786,6 +1828,8 @@ export default function StoreAdminPage() {
         visibleTabs={visibleTabsForUser}
         showCalendar={adminOptions.calendar}
         showRichMenu={adminOptions.rich_menu}
+        showChat={showChat}
+        chatUnread={chatState.unread}
       >
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
@@ -1809,6 +1853,8 @@ export default function StoreAdminPage() {
         visibleTabs={visibleTabsForUser}
         showCalendar={adminOptions.calendar}
         showRichMenu={adminOptions.rich_menu}
+        showChat={showChat}
+        chatUnread={chatState.unread}
       >
         <div className="flex items-center justify-center h-full p-4">
           <Card className="w-full max-w-md">
@@ -1833,6 +1879,8 @@ export default function StoreAdminPage() {
       visibleTabs={visibleTabsForUser}
       showCalendar={adminOptions.calendar}
       showRichMenu={adminOptions.rich_menu}
+      showChat={showChat}
+      chatUnread={chatState.unread}
     >
       {isUpperAdminUser && (
         <div className={`px-4 lg:px-6 pt-3 ${previewAsStoreAdmin ? '' : ''}`}>
@@ -2165,6 +2213,7 @@ export default function StoreAdminPage() {
         showReservationHistory={adminOptions.customer_reservation_history}
         showLotteryHistory={adminOptions.customer_lottery_history}
         showSurveyHistory={adminOptions.customer_survey_history}
+        chatHref={showChat ? `/${storeId}/admin?tab=chat&chatCustomer=${encodeURIComponent(selectedCustomerId ?? '')}` : undefined}
         onTagClick={(tag) => {
           setCustomersTagFilter(tag);
           const params = new URLSearchParams(searchParams.toString());

@@ -33,11 +33,13 @@ describe('resolveAdminVisibleOptions', () => {
       store_digest: true,                  // 設定 ON に連動
       calendar: false,                     // 予約管理 OFF に連動
       rich_menu: false,                    // 未設定は非表示
+      chat: false,                         // 未設定は非表示
     });
-    // 何も設定していない店舗: リッチメニュー以外はすべて表示
+    // 何も設定していない店舗: リッチメニュー・トーク以外はすべて表示
     const all = resolveAdminVisibleOptions(null, null);
     expect(all.rich_menu).toBe(false);
-    expect(Object.entries(all).filter(([k]) => k !== 'rich_menu').every(([, v]) => v)).toBe(true);
+    expect(all.chat).toBe(false);
+    expect(Object.entries(all).filter(([k]) => k !== 'rich_menu' && k !== 'chat').every(([, v]) => v)).toBe(true);
   });
   it('今日の予約まとめ・月次レポートは「設定」に連動し、個別に隠せる', () => {
     expect(resolveAdminVisibleOptions(['dashboard', 'settings'], null).store_digest).toBe(true);
@@ -69,6 +71,17 @@ describe('resolveAdminVisibleOptions', () => {
     // 運営が開いたときは常に表示
     expect(resolveAdminVisibleOptions(null, null, true).rich_menu).toBe(true);
     expect(normalizeAdminVisibleOptions({ rich_menu: true })).toEqual({ rich_menu: true });
+  });
+  it('トークは、チェックを入れた店舗だけに出る（未設定は非表示）。並びは顧客管理のすぐ後ろ', () => {
+    expect(resolveAdminVisibleOptions(null, null).chat).toBe(false);
+    expect(resolveAdminVisibleOptions(['dashboard', 'customers'], null).chat).toBe(false);
+    expect(resolveAdminVisibleOptions(['dashboard'], { chat: true }).chat).toBe(true);
+    // 運営が開いたときは表示（トーク機能が ON の店舗かどうかは、画面側で確かめる）
+    expect(resolveAdminVisibleOptions(null, null, true).chat).toBe(true);
+    expect(normalizeAdminVisibleOptions({ chat: true })).toEqual({ chat: true });
+    expect(buildStoreAdminNav(resolveVisibleTabs(null), { calendar: false, chat: true })).toEqual(['dashboard', 'reservations', 'customers', 'chat', 'surveys', 'lotteries', 'walls', 'broadcasts', 'settings']);
+    expect(buildStoreAdminNav(['dashboard'], { calendar: false, chat: true })).toEqual(['dashboard', 'chat']);
+    expect(buildStoreAdminNav(resolveVisibleTabs(null), { calendar: true, richMenu: true })).not.toContain('chat');
   });
   it('メニューの並び: リッチメニューは配信のすぐ後ろ', () => {
     expect(buildStoreAdminNav(resolveVisibleTabs(null), { calendar: false, richMenu: true })).toEqual(['dashboard', 'reservations', 'customers', 'surveys', 'lotteries', 'walls', 'broadcasts', 'richmenu', 'settings']);
