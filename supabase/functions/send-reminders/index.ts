@@ -251,6 +251,26 @@ async function loadFlexAttachments(storeIds: string[], column: "attach_reminder"
   }
   return map;
 }
+/**
+ * 1 対 1 トーク: 自動で送ったことを、会話に 1 行で残す（設計: docs/店舗管理者ページ_追加4機能_実装設計.md の 8 章）。
+ * - 記録するかどうかは DB 関数 chat_record_system_events が決める（トーク機能が ON の店舗・すでに会話のあるお客様だけ）
+ * - **送信が終わったあとに呼び、失敗しても送信の結果は変えない**（ログに残すだけ）
+ * - 同じ送信は 1 回だけ記録される（source_key = 元の送信の ID）
+ * - 文は Next.js 側の src/lib/chat-events.ts と同じ形にする（直すときは両方）
+ * - 関数が無い（マイグレーション未適用）環境では、何もせずに戻る
+ */
+async function recordChatEvents(storeId: string, events: Array<{ line_user_id: string; kind: string; text: string; source_key: string; at: string }>) {
+  if (!storeId || events.length === 0) return;
+  try {
+    const { error } = await supabase.rpc("chat_record_system_events", { p_store_id: storeId, p_events: events });
+    if (error && !/chat_record_system_events|does not exist|schema cache|PGRST202/i.test(`${error.code ?? ""} ${error.message ?? ""}`)) {
+      console.warn(`トークへの記録エラー: store=${storeId} ${error.message}`);
+    }
+  } catch (e) {
+    console.warn(`トークへの記録エラー: store=${storeId}`, e);
+  }
+}
+
 async function countFlexAttachmentSends(ids: string[]) {
   if (ids.length === 0) return;
   try {
@@ -527,6 +547,13 @@ Deno.serve(async () => {
         if (error) console.error(`送信済み更新エラー: id=${claim.id} ${error.message}`);
         console.log(`送信成功: reservation=${reservation.id} kind=${job.kind}`);
         sent++;
+        await recordChatEvents(reservation.store_id, [{
+          line_user_id: reservation.line_user_id,
+          kind: "reminder",
+          text: `リマインダーを送信しました（${`${dateOnly} ${timeOnly}`.trim()} のご予約）`,
+          source_key: `reminder:${claim.id}`,
+          at: new Date().toISOString(),
+        }]);
       } else {
         const lastError = `HTTP ${result.status}: ${result.body}`.slice(0, 500);
         const { error } = await supabase.from("reminder_logs")
