@@ -96,7 +96,27 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold mb-3">第9条（準拠法・管轄裁判所）</h2>
+          <h2 className="text-xl font-semibold mb-3">第9条（1 対 1 トーク機能の利用）</h2>
+          <ol className="list-decimal pl-5 text-sm text-muted-foreground space-y-1">
+            <li>1 対 1 トーク機能は、当社が利用を認めた店舗に限り提供します。</li>
+            <li>
+              本機能を利用する店舗は、自らの LINE 公式アカウントのプロフィール、あいさつメッセージその他お客様が容易に確認できる方法により、
+              お客様から送信されたメッセージが本サービスに保存され、店舗の担当者が閲覧することを、あらかじめお客様に明示するものとします。
+            </li>
+            <li>
+              店舗は、本機能を通じて知り得たお客様の情報を、お問い合わせへの対応および自店舗のサービス提供の目的にのみ利用し、
+              適切に管理するものとします。
+            </li>
+            <li>店舗は、お客様からトーク内容の削除を求められたときは、遅滞なく当社に連絡するものとします。</li>
+            <li>
+              本機能による返信は、当該店舗の LINE 公式アカウントのメッセージ通数を消費します。
+              通数の上限および追加料金は、店舗と LINEヤフー株式会社との契約に従います。
+            </li>
+          </ol>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold mb-3">第10条（準拠法・管轄裁判所）</h2>
           <ol className="list-decimal pl-5 text-sm text-muted-foreground space-y-1">
             <li>本規約の解釈は、日本法に準拠します。</li>
             <li>本サービスに関する紛争については、東京地方裁判所を第一審の専属的合意管轄裁判所とします。</li>
@@ -106,6 +126,9 @@ export default function TermsPage() {
         <section>
           <p className="text-sm text-muted-foreground">
             制定日: 2026年3月19日
+          </p>
+          <p className="text-sm text-muted-foreground">
+            最終改定日: 2026年11月25日
           </p>
         </section>
 
