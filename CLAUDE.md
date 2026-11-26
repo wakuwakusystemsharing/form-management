@@ -943,6 +943,10 @@ export async function GET(req, { params }) {
 - 編集 UI はメニュー構成 → 「カテゴリー・メニュー」見出しの右の「見出しの文言を変更」ボタン（`MenuStructureEditor` の `headingsOpen` パネル。2 つの入力 + フォーム上の表示プレビュー）。「更新して他のフォームにも反映」ではメニュー構成セクションに含まれる。Vitest: `menu-headings.test.ts`
 - **見出しの下のテキスト / 画像（`display_options.menu_heading_text` / `menu_heading_image` / `menu_heading_order`、`options_heading_*`）**: 見出しの直下に任意のテキスト（「画像orテキスト設置」と同じ `[color=#rrggbb]` の色タグ。1000 文字まで）と画像（https のみ。`/api/upload/menu-image`、`menuId = heading_menu` / `heading_options`）を表示。両方あるときの並び順は `text_image`（既定）/ `image_text`。オプション欄の設定はメニュー直下・カテゴリー共通オプションの両方に同じ内容が出る。正規化は `resolveMenuHeadingContents(config)`、生成は `renderHeadingContentHtml()`（`.heading-content` > `.heading-content-text` / `.heading-content-image`）。編集 UI は同じパネルの各見出し入力の下（`HeadingContentEditor`）。Vitest: `menu-heading-content.test.ts`
 
+**現在のメニュー情報コピー（メニュー構成 → 「カテゴリー・メニュー」見出しの右。「見出しの文言を変更」の左）:**
+- 押すと、そのフォームのメニュー・サブメニュー・オプション・カテゴリー共通オプション・オプションのオプションの 名前 / 料金 / 所要時間 を、LINE のチャットにそのまま貼れる文章でクリップボードにコピーする（店舗に「いまこのフォームはこの設定です」と送る用）。純粋ロジック `src/lib/menu-info-text.ts` の `buildMenuInfoText({ formName, categories })`（メニューは「4,400円 / 60分」、オプションは「+1,100円 / +10分」= `formatPriceDuration`。所要時間 0 は出さない。料金 / 所要時間をフォームで非表示にしている項目は値のあとに「※フォームでは非表示」。メニューもオプションも無いカテゴリーは出さない）
+- **画面のいまの内容（保存していない変更を含む）** から作る。結果はボタンの文言で 2.5 秒知らせる（コピーしました / メニューがありません / コピーできませんでした）。クリップボードの API が使えない環境では見えない入力欄 + `execCommand` でコピーする。サーバー・DB の変更なし。Vitest: `menu-info-text.test.ts`
+
 **カテゴリーごとのテキスト・画像ブロック（`MenuCategory.content_blocks`。純粋ロジック `src/lib/category-content-blocks.ts`）:**
 - メニュー構成 → 各カテゴリーの「メニュー」一覧の下と「カテゴリー共通オプション」一覧の下にある「＋ テキスト・画像を追加」。中身は詳細設定の「画像orテキスト設置」と同じ（1 ブロック = テキスト（`[color=#rrggbb]` 可・1000 文字まで）か画像（https のみ）。複数追加・上下並び替え）
 - 型 `CategoryContentBlock { id, type, text?, image_url?, target: 'menus' | 'options', position: 'top' | 'bottom' | 'after', after_id? }`。表示位置は「メニュー（オプション）一覧の一番上 / 一番下 / 「◯◯」のすぐ下」（`categoryBlockPositionOptions` / キー `top` `bottom` `after:{id}`）。参照先のメニューが削除された `after` は一番下として扱う（`resolveCategoryBlockPosition`）
