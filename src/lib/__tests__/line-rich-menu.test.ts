@@ -139,7 +139,7 @@ describe('validateRichMenu', () => {
   });
 
   it('予約語は Webhook が受け取る言葉と同じ', () => {
-    expect(RICH_MENU_KEYWORDS.map((k) => k.text)).toEqual(['予約確認', '予約を変更', 'キャンセル', '空き待ち確認']);
+    expect(RICH_MENU_KEYWORDS.map((k) => k.text)).toEqual(['予約確認', '予約を変更', '予約をキャンセル', '空き待ち確認']);
   });
 });
 

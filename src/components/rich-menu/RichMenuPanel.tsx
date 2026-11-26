@@ -17,6 +17,7 @@ import { RICH_MENU_SIZES, RICH_MENU_STATUS_LABELS, describeRichMenuAction, type 
 import type { RichMenuFormOption, RichMenuOverview } from '@/lib/line-rich-menu-service';
 import RichMenuAreaCanvas from './RichMenuAreaCanvas';
 import RichMenuEditorDialog from './RichMenuEditorDialog';
+import RichMenuTabSetDialog from './RichMenuTabSetDialog';
 import type { AudienceOptions } from '@/components/broadcast/AudienceEditor';
 import { describeAudience } from '@/lib/broadcast-audience';
 import { formOptionsFromForms, menuNamesFromForms, surveyChoicesFromForms } from '@/lib/broadcast-options';
@@ -43,6 +44,8 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
   // 「条件に合うお客様だけ」の条件に使う選択肢
   const [audienceOptions, setAudienceOptions] = useState<AudienceOptions>({ tags: [], menus: [], forms: [], surveys: [] });
   const [syncing, setSyncing] = useState(false);
+  // 「タブ付きメニューを作る」のダイアログ
+  const [tabSetOpen, setTabSetOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -97,6 +100,7 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
   const menus = overview?.menus || [];
   const formName = (id: string) => forms.find((f) => f.id === id)?.name ?? null;
   const menuName = (id: string) => menus.find((m) => m.id === id)?.name ?? null;
+  const messageName = (id: string) => (overview?.messages || []).find((m) => m.id === id)?.name ?? null;
   // 全員向けに出しているメニュー（切り替え先のメニューは、このメニューと一緒に出ている）
   const mainMenu = menus.find((m) => m.is_default) ?? null;
   // お客様ごとのメニュー（優先順位の順）と、それ以外（全員向け・切り替え先）
@@ -174,10 +178,16 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
           <h2 className="text-lg font-semibold">リッチメニュー</h2>
           <p className="text-sm text-muted-foreground">公式 LINE のトーク画面の下に出るメニュー（画像とボタン）を作って、公式 LINE に反映します。</p>
         </div>
-        <Button type="button" onClick={() => setEditing({ menu: null })} disabled={loading || reachedMax}>
-          <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
-          新しく作る
-        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="outline" onClick={() => setTabSetOpen(true)} disabled={loading || !overview || overview.max - menus.length < 2} data-slot-name="rich-menu-tab-set-open">
+            <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
+            タブ付きメニューを作る
+          </Button>
+          <Button type="button" onClick={() => setEditing({ menu: null })} disabled={loading || reachedMax}>
+            <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
+            新しく作る
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-md border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
@@ -260,7 +270,7 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
                     <ol className="space-y-0.5 text-xs text-muted-foreground">
                       {menu.areas.map((a, i) => (
                         <li key={a.id} className="truncate">
-                          {i + 1}. {describeRichMenuAction(a.action, formName, menuName)}
+                          {i + 1}. {describeRichMenuAction(a.action, formName, menuName, messageName)}
                         </li>
                       ))}
                     </ol>
@@ -319,11 +329,24 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
       )}
       {reachedMax && <p className="text-xs text-muted-foreground">リッチメニューは {overview?.max} 個までです。使っていないものを削除すると、新しく作れます。</p>}
 
+      <RichMenuTabSetDialog
+        open={tabSetOpen}
+        storeId={storeId}
+        remaining={overview ? Math.max(0, overview.max - menus.length) : 0}
+        onClose={() => setTabSetOpen(false)}
+        onCreated={(created) => {
+          setTabSetOpen(false);
+          toast({ title: `${created.length} 個の下書きを作りました`, description: '「編集」で 1 つずつ開いて、画像とボタンを入れてください。入れ終わったら、いちばん左のタブのメニューで「反映する」を押します' });
+          void load();
+        }}
+      />
+
       <RichMenuEditorDialog
         open={!!editing}
         storeId={storeId}
         menu={editing?.menu ?? null}
         forms={forms}
+        messages={overview?.messages || []}
         menus={menus}
         audienceOptions={audienceOptions}
         ruleUnavailable={overview?.rule_unavailable ?? null}

@@ -32,6 +32,8 @@ export const RICH_MENU_LIMITS = {
   imageMaxBytes: 1024 * 1024,
   /** 「文字を送る」の文字数（LINE の上限は 300。誤って長文を入れないように短くしている） */
   messageTextMax: 100,
+  /** 「応答メッセージを返す」で、この画面に書ける文章の長さ */
+  replyTextMax: 1000,
   uriMax: 1000,
   /** ボタンの最小の大きさ（画像全体に対する割合）。小さすぎると指で押せない */
   minAreaRatio: 0.05,
@@ -48,15 +50,27 @@ export const DEFAULT_CHAT_BAR_TEXT = 'メニュー';
 export const RICH_MENU_KEYWORDS: Array<{ text: string; label: string; description: string }> = [
   { text: '予約確認', label: '予約確認', description: 'これからの予約を一覧で返します' },
   { text: '予約を変更', label: '予約を変更', description: '日時・メニューの変更の案内を返します' },
-  { text: 'キャンセル', label: 'キャンセル', description: '予約のキャンセルの案内を返します' },
+  { text: '予約をキャンセル', label: '予約をキャンセル', description: '予約のキャンセルの案内を返します' },
   { text: '空き待ち確認', label: '空き待ち確認', description: '登録中の空き待ちを一覧で返します' },
 ];
+
+/**
+ * 前は「キャンセル」を一覧に出していたが、Webhook が受け取る言葉は「予約をキャンセル」。
+ * 保存済みのメニューを読むときに、新しい言葉に直す
+ */
+export const LEGACY_RICH_MENU_KEYWORDS: Record<string, string> = { キャンセル: '予約をキャンセル' };
+
+/** 「応答メッセージを返す」の返し方（text = この画面で書いた文章 / message = 「LINE メッセージ」で作ったもの） */
+export type RichMenuReplyMode = 'text' | 'message';
 
 /** ボタンを押したときの動き */
 export type RichMenuAction =
   | { type: 'form'; form_id: string } // 予約フォームを開く（反映のときに URL にする）
   | { type: 'uri'; uri: string } // 任意の URL を開く
-  | { type: 'message'; text: string } // 文字を送る
+  // 文字を送る。silent = true のときは、お客様のトークに文字を出さずに、送られたのと同じ動きをする（LINE には postback として出す）
+  | { type: 'message'; text: string; silent?: boolean }
+  // 応答メッセージを返す（お客様のトークには何も出さない。返す内容は、押されたときにこのシステムが保存済みのメニューから読む）
+  | { type: 'reply'; mode: RichMenuReplyMode; text: string; message_id: string }
   | { type: 'switch'; menu_id: string } // 別のメニューに切り替える（タブのように行き来する。反映のときに LINE の名札にする）
   | { type: 'none' }; // 何もしない（飾りの部分。LINE には送らない）
 
@@ -64,6 +78,7 @@ export const RICH_MENU_ACTION_LABELS: Record<RichMenuAction['type'], string> = {
   form: '予約フォームを開く',
   uri: 'URL を開く',
   message: '文字を送る',
+  reply: '応答メッセージを返す（トークに文字を出さない）',
   switch: '別のメニューに切り替える',
   none: '何もしない',
 };
@@ -151,7 +166,13 @@ export function normalizeRichMenuAction(value: unknown): RichMenuAction {
   const rec = asRecord(value);
   if (rec.type === 'form') return { type: 'form', form_id: typeof rec.form_id === 'string' ? rec.form_id.trim() : '' };
   if (rec.type === 'uri') return { type: 'uri', uri: typeof rec.uri === 'string' ? rec.uri.trim() : '' };
-  if (rec.type === 'message') return { type: 'message', text: typeof rec.text === 'string' ? rec.text.trim() : '' };
+  if (rec.type === 'message') {
+    const text = typeof rec.text === 'string' ? rec.text.trim() : '';
+    return { type: 'message', text: LEGACY_RICH_MENU_KEYWORDS[text] ?? text, ...(rec.silent === true ? { silent: true } : {}) };
+  }
+  if (rec.type === 'reply') {
+    return { type: 'reply', mode: rec.mode === 'message' ? 'message' : 'text', text: typeof rec.text === 'string' ? rec.text.trim() : '', message_id: typeof rec.message_id === 'string' ? rec.message_id.trim() : '' };
+  }
   if (rec.type === 'switch') return { type: 'switch', menu_id: typeof rec.menu_id === 'string' ? rec.menu_id.trim() : '' };
   return { type: 'none' };
 }
@@ -210,7 +231,17 @@ export function isRichMenuUri(value: string): boolean {
   return /^tel:[0-9+\-]{3,20}$/.test(value) || /^https:\/\/line\.me\/[^\s]+$/i.test(value);
 }
 
-function actionError(action: RichMenuAction, label: string, formIds: Set<string> | null, menuIds: Set<string> | null = null, selfId: string | null = null): string | null {
+function actionError(action: RichMenuAction, label: string, formIds: Set<string> | null, menuIds: Set<string> | null = null, selfId: string | null = null, messageIds: Set<string> | null = null): string | null {
+  if (action.type === 'reply') {
+    if (action.mode === 'message') {
+      if (!action.message_id) return `${label}: 返す LINE メッセージを選んでください`;
+      if (messageIds && !messageIds.has(action.message_id)) return `${label}: 選んだ LINE メッセージが見つかりません（削除された可能性があります）。選び直してください`;
+      return null;
+    }
+    if (!action.text) return `${label}: 返す文章を入力してください`;
+    if (action.text.length > RICH_MENU_LIMITS.replyTextMax) return `${label}: 返す文章が長すぎます（${RICH_MENU_LIMITS.replyTextMax} 文字まで）`;
+    return null;
+  }
   if (action.type === 'switch') {
     if (!action.menu_id) return `${label}: 切り替え先のメニューを選んでください`;
     if (selfId && action.menu_id === selfId) return `${label}: 切り替え先に、このメニュー自身は選べません`;
@@ -241,7 +272,7 @@ function actionError(action: RichMenuAction, label: string, formIds: Set<string>
  * - 下書きの保存: 名前・バーの文言・ボタンの数と重なりだけ（作りかけでも保存できる）
  * - forPublish: 画像と、ボタンの動き（URL・フォーム・文字）も確かめる
  */
-export function validateRichMenu(input: RichMenuInput, opts: { forPublish?: boolean; formIds?: Iterable<string> | null; menuIds?: Iterable<string> | null; selfId?: string | null } = {}): string[] {
+export function validateRichMenu(input: RichMenuInput, opts: { forPublish?: boolean; formIds?: Iterable<string> | null; menuIds?: Iterable<string> | null; selfId?: string | null; messageIds?: Iterable<string> | null } = {}): string[] {
   const errors: string[] = [];
   if (!input.name) errors.push('名前を入力してください');
   else if (input.name.length > RICH_MENU_LIMITS.nameMax) errors.push(`名前は ${RICH_MENU_LIMITS.nameMax} 文字までにしてください`);
@@ -261,6 +292,7 @@ export function validateRichMenu(input: RichMenuInput, opts: { forPublish?: bool
     if (!input.image_url) errors.push('画像を選んでください');
     const formIds = opts.formIds ? new Set(opts.formIds) : null;
     const menuIds = opts.menuIds ? new Set(opts.menuIds) : null;
+    const messageIds = opts.messageIds ? new Set(opts.messageIds) : null;
     const active = input.areas.filter((a) => a.action.type !== 'none');
     if (active.length === 0) errors.push('押したときの動きを設定したボタンを 1 つ以上作ってください');
     if (input.rule) {
@@ -269,7 +301,7 @@ export function validateRichMenu(input: RichMenuInput, opts: { forPublish?: bool
       if (input.areas.some((a) => a.action.type === 'switch')) errors.push('お客様ごとのメニューでは、「別のメニューに切り替える」は使えません。ほかの動きに変えてください');
     }
     input.areas.forEach((area, i) => {
-      const e = actionError(area.action, `ボタン ${i + 1}`, formIds, menuIds, opts.selfId ?? null);
+      const e = actionError(area.action, `ボタン ${i + 1}`, formIds, menuIds, opts.selfId ?? null, messageIds);
       if (e) errors.push(e);
     });
   }
@@ -302,21 +334,60 @@ export function areaToBounds(area: Pick<RichMenuArea, 'x' | 'y' | 'w' | 'h'>, si
 
 export type RichMenuObjectResult = { ok: true; object: Record<string, unknown> } | { ok: false; error: string };
 
+// ---------------------------------------------------------------------------
+// 文字を出さずに動くボタン（postback）
+// ---------------------------------------------------------------------------
+
+/** 文字を出さずに「送られたのと同じ動き」をするボタンの data の先頭（続きは、送ったことにする文字） */
+export const RICH_MENU_COMMAND_PREFIX = 'rmc:';
+/** 応答メッセージを返すボタンの data の先頭（続きは メニュー ID:ボタン ID） */
+export const RICH_MENU_REPLY_PREFIX = 'rma:';
+
+export type RichMenuPostback = { kind: 'command'; text: string } | { kind: 'reply'; menuId: string; areaId: string };
+
+export function buildRichMenuCommandData(text: string): string {
+  return `${RICH_MENU_COMMAND_PREFIX}${text}`;
+}
+
+export function buildRichMenuReplyData(menuId: string, areaId: string): string {
+  return `${RICH_MENU_REPLY_PREFIX}${menuId}:${areaId}`;
+}
+
+/** リッチメニューのボタン（postback）の data を読む。ほかの data（切り替え = rm:switch:… など）は null */
+export function parseRichMenuPostback(data: unknown): RichMenuPostback | null {
+  if (typeof data !== 'string') return null;
+  if (data.startsWith(RICH_MENU_COMMAND_PREFIX)) {
+    const text = data.slice(RICH_MENU_COMMAND_PREFIX.length).trim();
+    return text ? { kind: 'command', text } : null;
+  }
+  if (data.startsWith(RICH_MENU_REPLY_PREFIX)) {
+    const m = /^([A-Za-z0-9_-]{1,64}):([A-Za-z0-9_-]{1,40})$/.exec(data.slice(RICH_MENU_REPLY_PREFIX.length));
+    return m ? { kind: 'reply', menuId: m[1], areaId: m[2] } : null;
+  }
+  return null;
+}
+
 /**
  * LINE の「リッチメニューを作る」に送る内容を組み立てる。
+ * - 「文字を送る」で文字を出さない設定のボタン・「応答メッセージを返す」は postback にする（displayText を付けない = トークに何も出ない）
+ *   「応答メッセージを返す」は、どのメニューのどのボタンかを data に入れるので menuId が要る
  * - 「何もしない」のボタンは送らない
  * - 「予約フォームを開く」は resolveFormUrl で URL にする（開けないフォームがあれば失敗）
  * - 「別のメニューに切り替える」は resolveAlias で LINE の名札にする（名札が無ければ失敗）
  */
-export function buildRichMenuObject(input: RichMenuInput, resolveFormUrl: (formId: string) => string | null, resolveAlias: (menuId: string) => string | null = () => null): RichMenuObjectResult {
+export function buildRichMenuObject(input: RichMenuInput, resolveFormUrl: (formId: string) => string | null, resolveAlias: (menuId: string) => string | null = () => null, opts: { menuId?: string | null } = {}): RichMenuObjectResult {
   const areas: Array<Record<string, unknown>> = [];
   for (let i = 0; i < input.areas.length; i++) {
     const area = input.areas[i];
     const bounds = areaToBounds(area, input.size);
     const label = `ボタン ${i + 1}`;
     if (area.action.type === 'none') continue;
-    if (area.action.type === 'message') {
-      areas.push({ bounds, action: { type: 'message', label: area.action.text.slice(0, 20), text: area.action.text } });
+    if (area.action.type === 'reply') {
+      if (!opts.menuId) return { ok: false, error: `${label}: 応答メッセージのボタンは、メニューを保存してから反映してください` };
+      areas.push({ bounds, action: { type: 'postback', label, data: buildRichMenuReplyData(opts.menuId, area.id) } });
+    } else if (area.action.type === 'message') {
+      if (area.action.silent) areas.push({ bounds, action: { type: 'postback', label: area.action.text.slice(0, 20), data: buildRichMenuCommandData(area.action.text) } });
+      else areas.push({ bounds, action: { type: 'message', label: area.action.text.slice(0, 20), text: area.action.text } });
     } else if (area.action.type === 'uri') {
       areas.push({ bounds, action: { type: 'uri', label, uri: area.action.uri } });
     } else if (area.action.type === 'switch') {
@@ -511,11 +582,15 @@ export function nextAreaId(areas: Array<Pick<RichMenuArea, 'id'>>): string {
 }
 
 /** ボタンの動きを 1 行で（一覧に出す） */
-export function describeRichMenuAction(action: RichMenuAction, formName: (id: string) => string | null, menuName: (id: string) => string | null = () => null): string {
+export function describeRichMenuAction(action: RichMenuAction, formName: (id: string) => string | null, menuName: (id: string) => string | null = () => null, messageName: (id: string) => string | null = () => null): string {
   if (action.type === 'switch') return action.menu_id ? `メニューを切り替える: ${menuName(action.menu_id) || '（削除されたメニュー）'}` : 'メニューを切り替える（未選択）';
   if (action.type === 'form') return action.form_id ? `予約フォームを開く: ${formName(action.form_id) || '（削除されたフォーム）'}` : '予約フォームを開く（未選択）';
   if (action.type === 'uri') return action.uri ? `URL を開く: ${action.uri}` : 'URL を開く（未入力）';
-  if (action.type === 'message') return action.text ? `「${action.text}」と送る` : '文字を送る（未入力）';
+  if (action.type === 'message') return action.text ? (action.silent ? `「${action.text}」の返事を返す（トークに文字を出さない）` : `「${action.text}」と送る`) : '文字を送る（未入力）';
+  if (action.type === 'reply') {
+    if (action.mode === 'message') return action.message_id ? `応答メッセージを返す: ${messageName(action.message_id) || '（削除された LINE メッセージ）'}` : '応答メッセージを返す（未選択）';
+    return action.text ? `応答メッセージを返す: ${action.text.length > 30 ? `${action.text.slice(0, 30)}…` : action.text}` : '応答メッセージを返す（未入力）';
+  }
   return '何もしない';
 }
 
@@ -625,4 +700,64 @@ export function collectSwitchGroup<M extends Pick<LineRichMenu, 'id' | 'name' | 
 /** そのメニューを切り替え先にしているメニュー（一覧で「◯◯ から切り替え」と出す・削除の前に知らせる） */
 export function menusSwitchingTo<M extends Pick<LineRichMenu, 'id' | 'areas'>>(menuId: string, menus: M[]): M[] {
   return menus.filter((m) => m.id !== menuId && switchTargetsOf(m).includes(menuId));
+}
+
+// ---------------------------------------------------------------------------
+// タブ付きメニューをまとめて作る
+// ---------------------------------------------------------------------------
+//
+// タブで切り替わるメニューは、LINE の上では「メニューを枚数ぶん作り、それぞれの画像の上の帯に
+// タブの絵を描いて、帯の各ボタンに『別のメニューに切り替える』を付ける」ことで作る。
+// これを手で組むのは手間（メニューを 1 つずつ作る → 全部ができてから、たがいに切り替え先を選ぶ）なので、
+// タブの名前を入れるだけで、つながった下書きを枚数ぶん作る。
+
+/** 画像の上の、タブの帯の高さ（画像全体に対する割合） */
+export const TAB_SET_STRIP_RATIO: Record<RichMenuSize, number> = { large: 0.15, small: 0.25 };
+export const TAB_SET_MIN = 2;
+
+export interface RichMenuTabSetInput {
+  size: RichMenuSize;
+  /** タブの名前（= 作るメニューの名前）。左から順 */
+  tabs: string[];
+  chat_bar_text: string;
+}
+
+export function normalizeRichMenuTabSetInput(value: unknown): RichMenuTabSetInput {
+  const rec = asRecord(value);
+  const tabs = Array.isArray(rec.tabs) ? rec.tabs.map((t) => (typeof t === 'string' ? t.trim() : '')) : [];
+  const bar = typeof rec.chat_bar_text === 'string' ? rec.chat_bar_text.trim() : '';
+  return { size: isRichMenuSize(rec.size) ? rec.size : 'large', tabs, chat_bar_text: bar || DEFAULT_CHAT_BAR_TEXT };
+}
+
+export function validateRichMenuTabSetInput(input: RichMenuTabSetInput): string[] {
+  const errors: string[] = [];
+  if (input.tabs.length < TAB_SET_MIN) errors.push(`タブは ${TAB_SET_MIN} 個以上にしてください`);
+  if (input.tabs.length > SWITCH_GROUP_MAX) errors.push(`タブは ${SWITCH_GROUP_MAX} 個までにしてください`);
+  input.tabs.forEach((name, i) => {
+    if (!name) errors.push(`タブ ${i + 1} の名前を入力してください`);
+    else if (name.length > RICH_MENU_LIMITS.nameMax) errors.push(`タブ ${i + 1} の名前は ${RICH_MENU_LIMITS.nameMax} 文字までにしてください`);
+  });
+  if (new Set(input.tabs.filter(Boolean)).size !== input.tabs.filter(Boolean).length) errors.push('同じ名前のタブがあります。別の名前にしてください');
+  if ([...input.chat_bar_text].length > RICH_MENU_LIMITS.chatBarTextMax) errors.push(`メニューバーの文言は ${RICH_MENU_LIMITS.chatBarTextMax} 文字までにしてください`);
+  return errors;
+}
+
+/**
+ * タブ付きメニューの 1 枚ぶんのボタン。
+ * 上の帯を枚数で等分し、ほかのタブには「別のメニューに切り替える」、自分のタブには「何もしない」を入れる。
+ * 帯の下は、あとで自由に分けられるよう、「何もしない」の大きなボタンを 1 つ置く
+ * @param index このメニューが左から何番目か（0 始まり）
+ * @param menuIds 全部のメニューの ID（左から順）
+ */
+export function buildTabSetAreas(size: RichMenuSize, index: number, menuIds: string[]): RichMenuArea[] {
+  const strip = TAB_SET_STRIP_RATIO[size];
+  const count = menuIds.length;
+  const areas: RichMenuArea[] = menuIds.map((menuId, i) => {
+    // 右端を先に丸めてから引くので、となりのタブとのあいだにすき間も重なりもできない
+    const left = round4(i / count);
+    const right = i === count - 1 ? 1 : round4((i + 1) / count);
+    return { id: `tab${i + 1}`, x: left, y: 0, w: round4(right - left), h: strip, action: i === index ? { type: 'none' } : { type: 'switch', menu_id: menuId } };
+  });
+  areas.push({ id: 'body1', x: 0, y: strip, w: 1, h: round4(1 - strip), action: { type: 'none' } });
+  return areas;
 }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase';
+import { parseRichMenuPostback } from '@/lib/line-rich-menu';
+import { resolveRichMenuReply } from '@/lib/line-rich-menu-service';
 import { createReservationEvent, deleteCalendarEvent, listCalendarEvents } from '@/lib/google-calendar';
 import { normalizeForm } from '@/lib/form-normalizer';
 import { flexText } from '@/lib/flex-colored-text';
@@ -574,7 +576,9 @@ async function handleLineWebhook(req: NextRequest): Promise<NextResponse> {
   const event = (events.find((e) => e.replyToken) || ({} as LineEvent));
   const replyToken = event.replyToken;
   const userId = event.source?.userId;
-  const messageText = event.message?.text || '';
+  // リッチメニューのボタン（postback）: 「文字を出さずに送る」のボタンは、その文字が送られてきたのと同じに扱う
+  const richMenuPostback = event.type === 'postback' ? parseRichMenuPostback(event.postback?.data) : null;
+  const messageText = richMenuPostback?.kind === 'command' ? richMenuPostback.text : event.message?.text || '';
 
   console.log(`[LINE Webhook] storeId=${storeId} eventCount=${events.length} type=${event.type || 'unknown'} userId=${userId ? 'yes' : 'no'} message=${messageText ? messageText.substring(0, 30) : '(empty)'}`);
 
@@ -592,7 +596,13 @@ async function handleLineWebhook(req: NextRequest): Promise<NextResponse> {
   }
 
   // LINE メッセージの分岐ボタン（postback。data = `lf:{メッセージID}:{キー}`）: 回答を記録・タグ付けして、次のメッセージを返す
-  if (event.type === 'postback') {
+  if (event.type === 'postback' && richMenuPostback?.kind === 'reply') {
+    // リッチメニューの「応答メッセージを返す」ボタン（data = rma:{メニューID}:{ボタンID}）
+    const richReply = await resolveRichMenuReply(storeId, richMenuPostback.menuId, richMenuPostback.areaId);
+    if (richReply) await replyRawMessages(replyToken, accessToken, richReply);
+    return NextResponse.json({ success: true });
+  }
+  if (event.type === 'postback' && richMenuPostback?.kind !== 'command') {
     // 「予約を変更」のボタン（data = rc:...）: 日付 → 時間 → 確認 → 変更
     if (isChangePostback(event.postback?.data)) {
       try {
@@ -749,7 +759,7 @@ async function handleLineWebhook(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ success: true });
   }
 
-  if (messageText === '予約をキャンセル') {
+  if (messageText === '予約をキャンセル' || messageText === 'キャンセル') {
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
     const { data: reservations } = await (adminClient as any)
