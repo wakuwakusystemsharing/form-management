@@ -60,6 +60,7 @@ import {
 } from 'lucide-react';
 import { getStoreSetupStatus } from '@/lib/store-setup-status';
 import ReservationInfoRows from '@/components/ReservationInfoRows';
+import SurveyAnalytics from '@/components/SurveyAnalytics';
 import { formatShortDateJa, formatStayRangeShort, isStayReservation, stayCheckoutDate } from '@/lib/stay-display';
 import { createDefaultStaySettings } from '@/lib/stay-pricing';
 import type { AdminReservationInput } from '@/lib/reservation-detail-items';
@@ -2289,6 +2290,16 @@ export default function StoreDetailPage() {
           </div>
               </CardContent>
             </Card>
+
+          {/* アンケートの分析 */}
+          <Card>
+            <CardHeader>
+              <CardTitle>分析</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SurveyAnalytics storeId={storeId} />
+            </CardContent>
+          </Card>
 
           {/* アンケート回答一覧 */}
           <Card>

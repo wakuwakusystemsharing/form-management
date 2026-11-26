@@ -419,7 +419,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
 - マスター管理者・システム管理者が開いた場合は常に全表示（`/api/auth/role` の判定を `isUpperAdminUser` に保持）。**同じブラウザにテナント管理者のセッションが残っていると店舗管理者ページは自動的にそのセッションで開く**ため、全表示になる。ページ上部に「〜として閲覧中」のバナーを出し、「店舗管理者の見え方で確認」（`previewAsStoreAdmin`、sessionStorage `store_admin_preview_{storeId}`）で店舗設定を適用した表示に切り替えられる
 - 定義・正規化は `src/lib/store-admin-tabs.ts`（`STORE_ADMIN_TABS` / `resolveVisibleTabs()`）
 - マイグレーション: `20260902000000_add_admin_visible_tabs.sql`
-- **項目単位の表示**: `stores.admin_visible_options` JSONB（`reservation_forms` / `survey_forms` / `lottery_forms` = 各タブの「フォーム管理」、`customer_reservation_history` = 顧客詳細の予約履歴・来店履歴・統計情報、`customer_lottery_history` = 顧客詳細の抽選履歴、`customer_survey_history` = 顧客詳細のアンケートの回答、`calendar` = 「カレンダー」タブ（「予約管理」に連動。予約管理が非表示でも個別に表示できる）、`rich_menu` = 「リッチメニュー」タブ（**未設定は非表示**。チェックを入れた店舗だけ）、`chat` = 「トーク」タブ（**未設定は非表示**。チェックを入れ、かつ運営がトーク機能を ON にした店舗だけ）、`store_digest` = 設定タブの「今日の予約まとめ・月次レポート」の欄（「設定」に連動。隠すのは設定の欄だけで、すでに ON の送信は止めない。ダッシュボードの「月次レポートを見る」はそのまま））。**未設定キーは親タブに連動**（予約管理 OFF → 顧客詳細の予約・来店・統計も非表示、抽選管理 OFF → 抽選履歴も非表示）。明示的に true/false を保存すると連動より優先。判定は `resolveAdminVisibleOptions(tabs, options, upperAdmin)`。設定 UI は `StoreAdminMenuSettings.tsx` の各タブ配下のチェック（「連動に戻す」で未設定へ）。マイグレーション: `20260904000000_add_admin_visible_options.sql`
+- **項目単位の表示**: `stores.admin_visible_options` JSONB（`reservation_forms` / `survey_forms` / `lottery_forms` = 各タブの「フォーム管理」、`customer_reservation_history` = 顧客詳細の予約履歴・来店履歴・統計情報、`customer_lottery_history` = 顧客詳細の抽選履歴、`customer_survey_history` = 顧客詳細のアンケートの回答、`survey_analytics` = アンケート管理の「分析」（「アンケート管理」に連動）、`calendar` = 「カレンダー」タブ（「予約管理」に連動。予約管理が非表示でも個別に表示できる）、`rich_menu` = 「リッチメニュー」タブ（**未設定は非表示**。チェックを入れた店舗だけ）、`chat` = 「トーク」タブ（**未設定は非表示**。チェックを入れ、かつ運営がトーク機能を ON にした店舗だけ）、`store_digest` = 設定タブの「今日の予約まとめ・月次レポート」の欄（「設定」に連動。隠すのは設定の欄だけで、すでに ON の送信は止めない。ダッシュボードの「月次レポートを見る」はそのまま））。**未設定キーは親タブに連動**（予約管理 OFF → 顧客詳細の予約・来店・統計も非表示、抽選管理 OFF → 抽選履歴も非表示）。明示的に true/false を保存すると連動より優先。判定は `resolveAdminVisibleOptions(tabs, options, upperAdmin)`。設定 UI は `StoreAdminMenuSettings.tsx` の各タブ配下のチェック（「連動に戻す」で未設定へ）。マイグレーション: `20260904000000_add_admin_visible_options.sql`
 
 **公式 LINE 向け Flex Message（テナント側 店舗ページ → 「LINE メッセージ」タブ。設計: `docs/LINE Flexメッセージ_実装設計.md`）:**
 - 公式 LINE 管理画面では作れない Flex Message をテンプレート（予約導線カード / メニュー・料金カルーセル / 料金表（リスト）/ 店舗紹介カード / クーポン・キャンペーン / お知らせ・営業案内 / スタッフ紹介カルーセル / ご利用の流れ。上級者は JSON 直接編集・`custom` = プルダウンの一番上）から作り、**キーワード自動応答**（Webhook。完全一致。「予約確認」「キャンセル」は予約不可、同店舗で重複不可）/ **【ご予約確認】・リマインダー・フォローへの差し込み** / **テスト送信**（LINE 連携済み顧客へ push）に使う。ボタンの URL は計測リンク `/go/{id}/{key}` に置き換えてタップ数を数える（`track_taps`）
@@ -750,6 +750,10 @@ export async function GET(req, { params }) {
 ### 予約分析 API:
 - `GET /api/stores/{storeId}/reservations/analytics` - 予約統計（`date_from` / `date_to` = 予約日 YYYY-MM-DD、`form_id` = フォーム絞り込み。認証必須）
 
+### アンケートの分析 API:
+- `GET /api/stores/{storeId}/surveys/analytics` - アンケートの回答の集計（`date_from` / `date_to` = 回答した日 YYYY-MM-DD、`form_id` = フォーム絞り込み + 質問ごとの集計。認証必須）
+- `GET /api/stores/{storeId}/customers/survey-analytics` - 顧客のうちアンケートに答えた人の数・セグメントごとの回答率など（認証必須）
+
 ### 流入経路 API:
 - `GET/POST /api/stores/{storeId}/reservation-sources` - 経路の一覧（+ 選べる予約フォーム）/ 作成（`{ name, form_id }`）
 - `PUT /api/stores/{storeId}/reservation-sources/{id}` - 名前 / 開くフォーム / 有効・停止（`{ name?, form_id?, active? }`。削除は無い）
@@ -974,6 +978,17 @@ export async function GET(req, { params }) {
 - 質問項目の各選択肢の「タグ」ボタン（追加質問の左）で、その選択肢を選んで送信した回答者に付ける顧客タグを設定（`TagInput`。店舗で使用中のタグを候補表示）
 - `POST /api/surveys/submit` が回答保存後に `applySurveyTagsToCustomer()`（`src/lib/survey-tags-apply.ts`）を呼び、`line_user_id` で店舗内の顧客を検索してタグをマージ（顧客が無ければ何もしない。失敗しても送信は成功扱い）。回答 → タグの集計は `src/lib/survey-tags.ts` の `collectSurveyOptionTags()`（radio / select はラベル一致、checkbox は ", " 区切り）
 - 顧客一覧はセグメントの隣に「タグで絞り込み」プルダウン（`GET /customers/tags` の一覧。将来の配信機能の絞り込みにも流用予定）
+
+**アンケートの分析（アンケート管理 → 「回答一覧 / 分析」の切り替え。顧客管理 → 分析 → 「アンケート」タブ）:**
+- `GET /api/stores/{storeId}/surveys/analytics?date_from&date_to&form_id`（`authorizeStoreAccess`。回答・フォームは `fetchAllRows` で全件。**LINE のユーザー ID・お客様の名前は返さない**）。集計は純粋ロジック `src/lib/survey-analytics.ts` の `computeSurveyAnalytics(responses, forms, { dateFrom, dateTo, formId, customerLineIds })`、読み込みは `src/lib/survey-analytics-service.ts`（local は `data/surveys_{storeId}.json` / `data/survey_responses.json`）
+  - **期間は回答した日（日本時間）**。期間チップは予約分析と同じ（`ANALYTICS_PERIOD_OPTIONS`。既定は過去12か月）
+  - `summary`: 回答数 / 回答した人数（LINE のユーザーごと。**LINE の外からの回答は 1 件 = 1 人**として数える）/ 2 回以上答えた人 / 回答者のうち顧客として登録されている人数 / 最後の回答
+  - `by_form`: アンケートごとの回答数（**フォームで絞り込んでも全フォームぶん**。回答 0 件のフォームも出す。消えたフォームは「削除されたアンケート」）。`monthly` / `daily` / `weekday` / `hourly`（回答のタイミング）
+  - `questions`（**フォームを 1 つ選んだときだけ**。フォームが違えば質問も違うため）: 選択式（単一 / 複数 / ドロップダウン）= 選択肢ごとの数と割合（**分母はその質問に答えた回答数**。選ばれなかった選択肢も 0 件で出す。「その他（理由）」は「その他」にまとめる。複数選択は ", " で分ける = `splitChoiceAnswer`）/ 自由記述 = 回答数と最近の 5 件（200 文字まで）/ 誕生日 = 年代と平均年齢 / 住所 = 都道府県 / それ以外 = 回答数だけ。**質問の一覧に無い回答（選択肢の追加質問・前に使っていた質問）は `extra: true`** = 「そのほかの回答項目」
+- 画面 `src/components/SurveyAnalytics.tsx`（店舗管理者ページのアンケート管理と、テナント側 店舗ページのアンケートのタブで共用。タブ = 概要 / 質問ごとの回答 / 回答のタイミング。フォーム別の一覧の行を押すと、そのアンケートに絞り込む）
+- **表示設定**: `admin_visible_options.survey_analytics`（「店舗管理者に表示するメニュー」の「アンケート管理」の下の「分析を表示」。未設定は「アンケート管理」に連動）
+- **顧客分析の「アンケート」タブ**（`CustomerSurveyAnalytics.tsx`。`CustomerAnalytics` の `showSurvey` = `admin_visible_options.customer_survey_history`）: `GET /api/stores/{storeId}/customers/survey-analytics` → `computeCustomerSurveyStats`。**分母は LINE と連携している顧客**（回答と顧客は LINE のユーザー ID で結び付けるため。友だちだけの顧客は除く）。回答した顧客の人数と回答率 / 顧客として登録されていない回答者の数 / アンケートごとの回答した顧客 / セグメントごとの回答率（`segmentOf`）/ 回答した人・していない人の 平均の来店回数・平均の利用額（因果ではない旨を画面に書いている）
+- DB の変更なし。Vitest: `survey-analytics.test.ts` / `survey-analytics-api.local.test.ts`
 
 **アンケートの回答を顧客情報に入れる（`SurveyQuestion.customer_field`。純粋ロジック `src/lib/survey-customer-fields.ts`）:**
 - 質問ごとの「顧客情報に反映」（`SurveyCustomerFieldSettings.tsx`。`SurveyQuestionEditor` の表示設定の下。`storeId` があるとき = アンケートのみ。抽選の事前質問では出さない）で、回答を顧客のどの項目に入れるかを選ぶ。`customer_field: { target, overwrite? }`。入れ先 = お名前 / フリガナ / 電話番号 / メール / 誕生日 / 性別 / 住所 / アレルギー / 既往歴 / メモ（`SURVEY_CUSTOMER_FIELD_OPTIONS`。回答タイプごとに選べるものが違う = `customerFieldTargetsFor`）
