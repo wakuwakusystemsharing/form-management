@@ -533,7 +533,7 @@ export default function RichMenuEditorDialog({ open, storeId, menu, forms, messa
             {mode === 'edit' ? (
               <>
                 <div className="space-y-1.5" data-slot="rich-menu-layouts">
-                  <p className="text-xs font-medium">型から作る（押すと、ボタンの範囲がきれいに並びます）</p>
+                  <p className="text-xs font-medium">型から作る（{layouts.length} 種類。押すと、ボタンの範囲がきれいに並びます。下の数字はボタンの数）</p>
                   <div className="flex flex-wrap gap-1.5">
                     {layouts.map((layout) => (
                       <button

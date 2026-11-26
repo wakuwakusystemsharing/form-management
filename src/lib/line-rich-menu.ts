@@ -609,8 +609,16 @@ export interface RichMenuLayout {
 
 const T = 1 / 3;
 const cols = (n: number, y: number, h: number) => Array.from({ length: n }, (_, i) => ({ x: i / n, y, w: 1 / n, h }));
+/** 横の一部（x から幅 w）を n 個に等分する */
+const colsIn = (n: number, x: number, w: number, y: number, h: number) => Array.from({ length: n }, (_, i) => ({ x: x + (w * i) / n, y, w: w / n, h }));
+/** 縦に n 個並べる（x から幅 w） */
+const rowsIn = (n: number, x: number, w: number) => Array.from({ length: n }, (_, i) => ({ x, y: i / n, w, h: 1 / n }));
 
-/** 公式 LINE の管理画面にある型と同じ並び */
+/**
+ * 型の一覧。前半は公式 LINE の管理画面にある型、後半はよく使う並びを足したもの。
+ * 画面には、ボタンの数の少ない順に出す（`layoutsForSize`）。
+ * 型の id は保存しない（保存するのは範囲だけ）ので、あとから足したり並べ替えたりしてよい
+ */
 export const RICH_MENU_LAYOUTS: RichMenuLayout[] = [
   { id: 'l6', label: '6 分割（3 × 2）', sizes: ['large'], rects: [...cols(3, 0, 0.5), ...cols(3, 0.5, 0.5)] },
   { id: 'l4', label: '4 分割（2 × 2）', sizes: ['large'], rects: [...cols(2, 0, 0.5), ...cols(2, 0.5, 0.5)] },
@@ -623,10 +631,39 @@ export const RICH_MENU_LAYOUTS: RichMenuLayout[] = [
   { id: 'c2-1', label: '左 2/3 + 右 1/3', sizes: ['small'], rects: [{ x: 0, y: 0, w: 2 * T, h: 1 }, { x: 2 * T, y: 0, w: T, h: 1 }] },
   { id: 'c2', label: '2 分割（左右）', sizes: ['large', 'small'], rects: cols(2, 0, 1) },
   { id: 'c1', label: '全体で 1 つ', sizes: ['large', 'small'], rects: [{ x: 0, y: 0, w: 1, h: 1 }] },
+  // ---- 大（2500 × 1686）に足した型 ----
+  { id: 'l3rows', label: '上・中・下 3 つ', sizes: ['large'], rects: rowsIn(3, 0, 1) },
+  { id: 'l2-1', label: '上 2 つ + 下 1 つ', sizes: ['large'], rects: [...cols(2, 0, 0.5), { x: 0, y: 0.5, w: 1, h: 0.5 }] },
+  { id: 'lside-r', label: '左に 2 つ + 右に大きく 1 つ', sizes: ['large'], rects: [{ x: 0, y: 0, w: T, h: 0.5 }, { x: T, y: 0, w: 2 * T, h: 1 }, { x: 0, y: 0.5, w: T, h: 0.5 }] },
+  { id: 'l3-1', label: '上 3 つ + 下 1 つ', sizes: ['large'], rects: [...cols(3, 0, 0.5), { x: 0, y: 0.5, w: 1, h: 0.5 }] },
+  { id: 'lhero-3', label: '上に大きく 1 つ + 下に小さく 3 つ', sizes: ['large'], rects: [{ x: 0, y: 0, w: 1, h: 2 * T }, ...cols(3, 2 * T, T)] },
+  { id: 'lside-3', label: '左に大きく 1 つ + 右に 3 つ', sizes: ['large'], rects: [{ x: 0, y: 0, w: 2 * T, h: 1 }, ...rowsIn(3, 2 * T, T)] },
+  { id: 'l2-3', label: '上 2 つ + 下 3 つ', sizes: ['large'], rects: [...cols(2, 0, 0.5), ...cols(3, 0.5, 0.5)] },
+  { id: 'l3-2', label: '上 3 つ + 下 2 つ', sizes: ['large'], rects: [...cols(3, 0, 0.5), ...cols(2, 0.5, 0.5)] },
+  { id: 'l1-4', label: '上 1 つ + 下 4 つ', sizes: ['large'], rects: [{ x: 0, y: 0, w: 1, h: 0.5 }, ...cols(4, 0.5, 0.5)] },
+  { id: 'lhero-4', label: '上に大きく 1 つ + 下に小さく 4 つ', sizes: ['large'], rects: [{ x: 0, y: 0, w: 1, h: 2 * T }, ...cols(4, 2 * T, T)] },
+  { id: 'l3-4', label: '上 3 つ + 下 4 つ', sizes: ['large'], rects: [...cols(3, 0, 0.5), ...cols(4, 0.5, 0.5)] },
+  { id: 'l8', label: '8 分割（4 × 2）', sizes: ['large'], rects: [...cols(4, 0, 0.5), ...cols(4, 0.5, 0.5)] },
+  { id: 'l9', label: '9 分割（3 × 3）', sizes: ['large'], rects: [...cols(3, 0, T), ...cols(3, T, T), ...cols(3, 2 * T, T)] },
+  { id: 'l10', label: '10 分割（5 × 2）', sizes: ['large'], rects: [...cols(5, 0, 0.5), ...cols(5, 0.5, 0.5)] },
+  // ---- 小（2500 × 843）に足した型 ----
+  { id: 's1-2-1', label: '左右に小さく 1 つずつ + 真ん中に大きく 1 つ', sizes: ['small'], rects: [{ x: 0, y: 0, w: 0.25, h: 1 }, { x: 0.25, y: 0, w: 0.5, h: 1 }, { x: 0.75, y: 0, w: 0.25, h: 1 }] },
+  { id: 'sbig-2', label: '左に大きく 1 つ + 右に上下 2 つ', sizes: ['small'], rects: [{ x: 0, y: 0, w: 0.5, h: 1 }, ...rowsIn(2, 0.5, 0.5)] },
+  { id: 's2-big', label: '左に上下 2 つ + 右に大きく 1 つ', sizes: ['small'], rects: [{ x: 0, y: 0, w: 0.5, h: 0.5 }, { x: 0.5, y: 0, w: 0.5, h: 1 }, { x: 0, y: 0.5, w: 0.5, h: 0.5 }] },
+  { id: 's4', label: '4 分割（横に 4 つ）', sizes: ['small'], rects: cols(4, 0, 1) },
+  { id: 's2x2', label: '4 分割（2 × 2）', sizes: ['small'], rects: [...cols(2, 0, 0.5), ...cols(2, 0.5, 0.5)] },
+  { id: 'sbig-3', label: '左に大きく 1 つ + 右に横 3 つ', sizes: ['small'], rects: [{ x: 0, y: 0, w: 0.4, h: 1 }, ...colsIn(3, 0.4, 0.6, 0, 1)] },
+  { id: 's5', label: '5 分割（横に 5 つ）', sizes: ['small'], rects: cols(5, 0, 1) },
+  { id: 's2-3', label: '上 2 つ + 下 3 つ', sizes: ['small'], rects: [...cols(2, 0, 0.5), ...cols(3, 0.5, 0.5)] },
+  { id: 'sbig-4', label: '左に大きく 1 つ + 右に 4 つ（2 × 2）', sizes: ['small'], rects: [{ x: 0, y: 0, w: 0.5, h: 1 }, ...colsIn(2, 0.5, 0.5, 0, 0.5), ...colsIn(2, 0.5, 0.5, 0.5, 0.5)] },
+  { id: 's6', label: '6 分割（横に 6 つ）', sizes: ['small'], rects: cols(6, 0, 1) },
+  { id: 's3x2', label: '6 分割（3 × 2）', sizes: ['small'], rects: [...cols(3, 0, 0.5), ...cols(3, 0.5, 0.5)] },
+  { id: 's8', label: '8 分割（4 × 2）', sizes: ['small'], rects: [...cols(4, 0, 0.5), ...cols(4, 0.5, 0.5)] },
 ];
 
 export function layoutsForSize(size: RichMenuSize): RichMenuLayout[] {
-  return RICH_MENU_LAYOUTS.filter((l) => l.sizes.includes(size));
+  // ボタンの数の少ない順（同じ数なら、一覧に書いた順）
+  return RICH_MENU_LAYOUTS.filter((l) => l.sizes.includes(size)).sort((a, b) => a.rects.length - b.rects.length);
 }
 
 /**
@@ -636,7 +673,16 @@ export function layoutsForSize(size: RichMenuSize): RichMenuLayout[] {
 export function applyRichMenuLayout(layoutId: string, size: RichMenuSize, current: RichMenuArea[]): RichMenuArea[] | null {
   const layout = RICH_MENU_LAYOUTS.find((l) => l.id === layoutId && l.sizes.includes(size));
   if (!layout) return null;
-  return normalizeRichMenuAreas(layout.rects.map((rect, i) => ({ id: `a${i + 1}`, ...rect, action: current[i]?.action ?? { type: 'none' } })));
+  // 辺（左・右・上・下）を先に丸めてから大きさを出す。位置と大きさを別々に丸めると、
+  // 6 等分・5 等分などで、となりのボタンと 1px 重なったり、すき間ができたりする
+  const edge = (v: number) => (v >= 0.99995 ? 1 : round4(v));
+  return normalizeRichMenuAreas(
+    layout.rects.map((rect, i) => {
+      const x = edge(rect.x);
+      const y = edge(rect.y);
+      return { id: `a${i + 1}`, x, y, w: round4(edge(rect.x + rect.w) - x), h: round4(edge(rect.y + rect.h) - y), action: current[i]?.action ?? { type: 'none' } };
+    })
+  );
 }
 
 /** 型を当てはめると、動きの入ったボタンが消えるか（確認を出すため） */
