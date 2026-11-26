@@ -761,3 +761,130 @@ export function buildTabSetAreas(size: RichMenuSize, index: number, menuIds: str
   areas.push({ id: 'body1', x: 0, y: strip, w: 1, h: round4(1 - strip), action: { type: 'none' } });
   return areas;
 }
+
+// ---------------------------------------------------------------------------
+// ボタンを自由に置く（足す・8 方向から大きさを変える・となりに寄せる・数字で合わせる・マス目で作る）
+// ---------------------------------------------------------------------------
+
+/** 大きさを変えるつまみの位置（n = 上 / s = 下 / w = 左 / e = 右） */
+export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+export const RESIZE_HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+
+/** つまみを引いて大きさを変える（引いていない側の辺は動かない。最小の大きさより小さくならず、画像の外には出ない） */
+export function resizeRectBy(rect: Rect, handle: ResizeHandle, dx: number, dy: number): Rect {
+  const min = RICH_MENU_LIMITS.minAreaRatio;
+  let left = rect.x;
+  let top = rect.y;
+  let right = round4(rect.x + rect.w);
+  let bottom = round4(rect.y + rect.h);
+  if (handle.includes('w')) left = snap(Math.max(0, Math.min(right - min, rect.x + dx)));
+  if (handle.includes('e')) right = snap(Math.max(left + min, Math.min(1, right + dx)));
+  if (handle.includes('n')) top = snap(Math.max(0, Math.min(bottom - min, rect.y + dy)));
+  if (handle.includes('s')) bottom = snap(Math.max(top + min, Math.min(1, bottom + dy)));
+  return { x: round4(left), y: round4(top), w: round4(right - left), h: round4(bottom - top) };
+}
+
+/** となりのボタンの辺・画像の端に、これより近づいたら吸い付く（画像全体に対する割合） */
+export const AREA_MAGNET = 0.015;
+
+function nearest(value: number, candidates: number[]): number | null {
+  let best: number | null = null;
+  for (const c of candidates) {
+    const d = Math.abs(c - value);
+    if (d <= AREA_MAGNET && (best === null || d < Math.abs(best - value))) best = c;
+  }
+  return best;
+}
+
+/**
+ * 動かしている / 大きさを変えている範囲を、ほかのボタンの辺と画像の端に吸い付ける
+ * （ぴったり並べるのを手でやるのは難しいため。すき間のない並びを作りやすくする）
+ * @param handle 'move' = 動かしている（大きさは変えない）/ つまみ = その辺だけを寄せる
+ */
+export function magnetRect(rect: Rect, others: Rect[], handle: ResizeHandle | 'move'): Rect {
+  const xs = [0, 1, ...others.flatMap((o) => [o.x, round4(o.x + o.w)])];
+  const ys = [0, 1, ...others.flatMap((o) => [o.y, round4(o.y + o.h)])];
+  let left = rect.x;
+  let top = rect.y;
+  let right = round4(rect.x + rect.w);
+  let bottom = round4(rect.y + rect.h);
+  if (handle === 'move') {
+    // 左右どちらかの辺が寄れば、範囲ごと動かす（近いほうを優先）
+    const l = nearest(left, xs);
+    const r = nearest(right, xs);
+    const dx = l !== null && (r === null || Math.abs(l - left) <= Math.abs(r - right)) ? l - left : r !== null ? r - right : 0;
+    const t = nearest(top, ys);
+    const b = nearest(bottom, ys);
+    const dy = t !== null && (b === null || Math.abs(t - top) <= Math.abs(b - bottom)) ? t - top : b !== null ? b - bottom : 0;
+    const x = Math.max(0, Math.min(round4(1 - rect.w), round4(left + dx)));
+    const y = Math.max(0, Math.min(round4(1 - rect.h), round4(top + dy)));
+    return { x, y, w: rect.w, h: rect.h };
+  }
+  const min = RICH_MENU_LIMITS.minAreaRatio;
+  if (handle.includes('w')) left = nearest(left, xs.filter((v) => v <= right - min)) ?? left;
+  if (handle.includes('e')) right = nearest(right, xs.filter((v) => v >= left + min)) ?? right;
+  if (handle.includes('n')) top = nearest(top, ys.filter((v) => v <= bottom - min)) ?? top;
+  if (handle.includes('s')) bottom = nearest(bottom, ys.filter((v) => v >= top + min)) ?? bottom;
+  return { x: round4(left), y: round4(top), w: round4(right - left), h: round4(bottom - top) };
+}
+
+/**
+ * 新しいボタンを置ける、空いている場所を探す（「ボタンを足す」用）。
+ * 画像の 1/4 の大きさから始め、入らなければ小さくして探す。どこにも入らなければ null
+ */
+export function findFreeRect(areas: Rect[]): Rect | null {
+  for (const size of [0.25, 0.2, 0.15, 0.1, RICH_MENU_LIMITS.minAreaRatio]) {
+    const step = 0.05;
+    for (let y = 0; y <= 1 - size + 1e-9; y = round4(y + step)) {
+      for (let x = 0; x <= 1 - size + 1e-9; x = round4(x + step)) {
+        const rect = { x: round4(x), y: round4(y), w: size, h: size };
+        if (!areas.some((a) => areasOverlap(a, rect))) return rect;
+      }
+    }
+  }
+  return null;
+}
+
+export const GRID_COLS_MAX = 6;
+export const GRID_ROWS_MAX = 4;
+
+/**
+ * マス目で作る: 横 cols × 縦 rows に等分したボタンを作る（左上から右へ、上から下へ）。
+ * いまのボタンの動きは、上から順に引き継ぐ。数が合わない・多すぎるときは null
+ */
+export function buildGridAreas(cols: number, rows: number, current: RichMenuArea[] = []): RichMenuArea[] | null {
+  if (!Number.isInteger(cols) || !Number.isInteger(rows) || cols < 1 || rows < 1 || cols > GRID_COLS_MAX || rows > GRID_ROWS_MAX) return null;
+  if (cols * rows > RICH_MENU_LIMITS.areasMax) return null;
+  const edge = (i: number, n: number) => (i === n ? 1 : round4(i / n));
+  const areas: RichMenuArea[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      const x = edge(c, cols);
+      const y = edge(r, rows);
+      areas.push({ id: `a${i + 1}`, x, y, w: round4(edge(c + 1, cols) - x), h: round4(edge(r + 1, rows) - y), action: current[i]?.action ?? { type: 'none' } });
+    }
+  }
+  return areas;
+}
+
+export type RectField = 'x' | 'y' | 'w' | 'h';
+
+/**
+ * 位置・大きさを数字（%）で直す。画像の中に収め、最小の大きさより小さくしない。
+ * 位置を変えても大きさは変えない（はみ出すぶんだけ位置を戻す）
+ */
+export function setRectField(rect: Rect, field: RectField, percent: number): Rect {
+  if (!Number.isFinite(percent)) return rect;
+  const v = Math.round(percent * 10) / 1000;
+  const min = RICH_MENU_LIMITS.minAreaRatio;
+  if (field === 'x') return { ...rect, x: round4(Math.max(0, Math.min(1 - rect.w, v))) };
+  if (field === 'y') return { ...rect, y: round4(Math.max(0, Math.min(1 - rect.h, v))) };
+  if (field === 'w') return { ...rect, w: round4(Math.max(min, Math.min(1 - rect.x, v))) };
+  return { ...rect, h: round4(Math.max(min, Math.min(1 - rect.y, v))) };
+}
+
+/** 割合 → 画面に出す %（小数 1 桁まで） */
+export function rectPercent(n: number): number {
+  return Math.round(n * 1000) / 10;
+}
