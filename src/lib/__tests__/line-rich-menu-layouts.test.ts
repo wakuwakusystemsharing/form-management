@@ -30,9 +30,9 @@ const sw = (menuId: string): RichMenuArea['action'] => ({ type: 'switch', menu_i
 describe('分割の型', () => {
   it('どの型も、範囲が重ならず、画像をすき間なく埋める', () => {
     for (const layout of RICH_MENU_LAYOUTS) {
-      const areas = normalizeRichMenuAreas(layout.rects.map((r) => ({ ...r, action: { type: 'none' } })));
-      for (let i = 0; i < areas.length; i++) for (let j = i + 1; j < areas.length; j++) expect(areasOverlap(areas[i], areas[j]), `${layout.id} ${i}/${j}`).toBe(false);
       for (const size of layout.sizes) {
+        const areas = applyRichMenuLayout(layout.id, size, []) as RichMenuArea[];
+        for (let i = 0; i < areas.length; i++) for (let j = i + 1; j < areas.length; j++) expect(areasOverlap(areas[i], areas[j]), `${layout.id} ${i}/${j}`).toBe(false);
         // 実寸の面積の合計が、画像全体と同じ（すき間も重なりも無い）
         const total = areas.map((a) => areaToBounds(a, size)).reduce((sum, b) => sum + b.width * b.height, 0);
         expect(total, `${layout.id} ${size}`).toBe(size === 'large' ? 2500 * 1686 : 2500 * 843);
@@ -52,10 +52,57 @@ describe('分割の型', () => {
   });
 
   it('大きさごとに使える型が違う', () => {
-    expect(layoutsForSize('large').map((l) => l.id)).toEqual(['l6', 'l4', 'l1-3', 'l1-2', 'lside', 'lrows', 'c2', 'c1']);
-    expect(layoutsForSize('small').map((l) => l.id)).toEqual(['c3', 'c1-2', 'c2-1', 'c2', 'c1']);
+    const large = layoutsForSize('large');
+    const small = layoutsForSize('small');
+    // 前からある型は、そのまま使える
+    for (const id of ['l6', 'l4', 'l1-3', 'l1-2', 'lside', 'lrows', 'c2', 'c1']) expect(large.map((l) => l.id)).toContain(id);
+    for (const id of ['c3', 'c1-2', 'c2-1', 'c2', 'c1']) expect(small.map((l) => l.id)).toContain(id);
+    expect(small.map((l) => l.id)).not.toContain('l6');
+    expect(large.map((l) => l.id)).not.toContain('s6');
     expect(applyRichMenuLayout('l6', 'small', [])).toBeNull();
     expect(applyRichMenuLayout('nope', 'large', [])).toBeNull();
+  });
+
+  it('大・小それぞれに、足した型が 10 個以上ある（4 個・5 個・8 個のボタンの型を含む）', () => {
+    for (const size of ['large', 'small'] as const) {
+      const layouts = layoutsForSize(size);
+      expect(layouts.length, size).toBeGreaterThanOrEqual(15);
+      const counts = layouts.map((l) => l.rects.length);
+      for (const n of [1, 2, 3, 4, 5, 6, 8]) expect(counts, `${size} ${n} 個`).toContain(n);
+      // ボタンの数の少ない順に並ぶ
+      expect(counts).toEqual([...counts].sort((a, b) => a - b));
+    }
+  });
+
+  it('型の id と名前は重複しない（同じ大きさの中で、同じ並びの型も無い）', () => {
+    expect(new Set(RICH_MENU_LAYOUTS.map((l) => l.id)).size).toBe(RICH_MENU_LAYOUTS.length);
+    for (const size of ['large', 'small'] as const) {
+      const layouts = layoutsForSize(size);
+      expect(new Set(layouts.map((l) => l.label)).size, size).toBe(layouts.length);
+      const shape = (l: (typeof layouts)[number]) =>
+        l.rects
+          .map((r) => [r.x, r.y, r.w, r.h].map((v) => Math.round(v * 1000)).join(','))
+          .sort()
+          .join('|');
+      expect(new Set(layouts.map(shape)).size, size).toBe(layouts.length);
+    }
+  });
+
+  it('どの型も、実寸で 1px のすき間も重なりも無い（となりのボタンと辺がぴったり合う）', () => {
+    for (const layout of RICH_MENU_LAYOUTS) {
+      for (const size of layout.sizes) {
+        const areas = applyRichMenuLayout(layout.id, size, []) as RichMenuArea[];
+        const bounds = areas.map((a) => areaToBounds(a, size));
+        for (let i = 0; i < bounds.length; i++)
+          for (let j = i + 1; j < bounds.length; j++) {
+            const a = bounds[i];
+            const b = bounds[j];
+            const overlap = a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+            expect(overlap, `${layout.id} ${size} ${i}/${j}`).toBe(false);
+          }
+        expect(bounds.reduce((sum, b) => sum + b.width * b.height, 0), `${layout.id} ${size}`).toBe(size === 'large' ? 2500 * 1686 : 2500 * 843);
+      }
+    }
   });
 
   it('6 分割: 左上から右下の順に 6 つ', () => {
