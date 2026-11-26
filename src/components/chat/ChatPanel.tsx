@@ -13,10 +13,11 @@
  * - 返信は公式 LINE の通数を 1 通使う。送信の ID（client_key）で二重送信を防ぐ
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, CheckCircle2, ImagePlus, RefreshCw, RotateCcw, Search, Send } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ImagePlus, RefreshCw, RotateCcw, Search, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { fetchWithAuth } from '@/lib/client-auth';
 import { cn } from '@/lib/utils';
@@ -71,6 +72,8 @@ export interface ChatPanelProps {
   initialCustomerId?: string | null;
   /** 未読の合計が変わったとき（タブのバッジを更新する） */
   onUnreadChange?: (unread: number) => void;
+  /** 「会話を削除」を出すか（運営だけ。API も運営だけが呼べる） */
+  canDelete?: boolean;
 }
 
 const JST = 'Asia/Tokyo';
@@ -127,7 +130,7 @@ interface PendingSend {
   at: string;
 }
 
-export default function ChatPanel({ storeId, customerHref, initialCustomerId, onUnreadChange }: ChatPanelProps) {
+export default function ChatPanel({ storeId, customerHref, initialCustomerId, onUnreadChange, canDelete = false }: ChatPanelProps) {
   const { toast } = useToast();
   const base = `/api/stores/${encodeURIComponent(storeId)}/chat`;
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -148,6 +151,8 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [templatesEditing, setTemplatesEditing] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -471,6 +476,32 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
     }
   };
 
+  /** 会話を、メッセージ・画像ごと消す（運営だけ。元に戻せない） */
+  const deleteThread = async () => {
+    const id = selectedId;
+    if (!id || deleting) return;
+    setDeleting(true);
+    try {
+      const res = await fetchWithAuth(`${base}/threads/${id}`, { method: 'DELETE', credentials: 'include' });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast({ title: '削除できませんでした', description: json?.error || 'もう一度お試しください', variant: 'destructive' });
+        return;
+      }
+      setConfirmDelete(false);
+      setSelectedId(null);
+      setDetail(null);
+      setCustomer(null);
+      setPending([]);
+      toast({ title: '会話を削除しました', description: `メッセージ ${json?.messages ?? 0} 通${json?.images ? `・画像 ${json.images} 枚` : ''}を削除しました` });
+      void loadThreads();
+    } catch {
+      toast({ title: '削除できませんでした', description: 'もう一度お試しください', variant: 'destructive' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   /** 定型文を入力欄に入れる（書きかけの文があれば、その後ろに足す） */
   const insertTemplate = (t: ChatReplyTemplate) => {
     setDraft((d) => (d.trim() ? `${d.replace(/\s+$/, '')}\n${t.text}` : t.text));
@@ -683,6 +714,11 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
                   対応済みにする
                 </Button>
               ))}
+            {canDelete && detail && (
+              <Button type="button" variant="ghost" size="icon" className="shrink-0 text-red-600" onClick={() => setConfirmDelete(true)} aria-label="会話を削除" title="会話を削除" data-slot="chat-delete">
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            )}
           </div>
 
           <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 py-3" data-slot="chat-messages">
@@ -868,6 +904,31 @@ export default function ChatPanel({ storeId, customerHref, initialCustomerId, on
         {conversationPane}
         {customerPane}
       </div>
+      <AlertDialog open={confirmDelete} onOpenChange={(v) => !v && !deleting && setConfirmDelete(false)}>
+        <AlertDialogContent data-slot="chat-delete-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>この会話を削除しますか？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{selectedThread?.name ?? ''}」さんとの会話を、メッセージと画像ごと、このシステムからすべて削除します。この操作は取り消せません。
+              <span className="mt-2 block">お客様や店舗の LINE アプリに残っているトークは消えません。顧客の情報（予約・来店履歴など）も消えません。このあとお客様から新しいメッセージが届くと、新しい会話として保存されます。</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel disabled={deleting}>やめる</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void deleteThread();
+              }}
+              disabled={deleting}
+              className="bg-red-600 text-white hover:bg-red-700"
+              data-slot="chat-delete-run"
+            >
+              {deleting ? '削除中…' : '削除する'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <ChatTemplatesDialog storeId={storeId} open={templatesEditing} templates={templates} onClose={() => setTemplatesEditing(false)} onSaved={setTemplates} />
       <p className="text-xs text-muted-foreground">公式 LINE の管理画面やアプリから返信した内容は、ここには表示されません（LINE の仕様です）。返信は、この画面にまとめてください。</p>
     </div>

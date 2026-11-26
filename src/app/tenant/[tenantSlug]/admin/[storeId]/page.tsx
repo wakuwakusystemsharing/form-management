@@ -2519,7 +2519,7 @@ export default function StoreDetailPage() {
 
           {/* トーク（お客様が公式 LINE に送ったメッセージを読んで返信する） */}
           <TabsContent value="chat" className="space-y-6">
-            <ChatPanel storeId={storeId} />
+            <ChatPanel storeId={storeId} canDelete />
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">

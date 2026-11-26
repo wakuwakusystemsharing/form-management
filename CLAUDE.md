@@ -358,6 +358,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - **受信** = お客様が手で書いた文・画像など（`auto` の文は数えない）。保存の DB 関数 `chat_record_inbound`（④-5 のマイグレーションで、利用量の加算を足したものに差し替え）の中で数えるので、同じ通知の送り直しでは増えない / **返信** = LINE に送れたものだけ（`sendChatReply` の成功のあと。失敗・送り直しの途中は数えない）/ **画像** = その月に保存した容量（届いた画像を保存したとき + 送る画像をアップロードしたとき）。自動で送ったメッセージの記録は数えない。**いま保存している合計の容量ではない**（自動削除で消しても減らさない）
   - 一覧: マスター管理者のページ（`/master-admin`）→「トーク利用状況」タブ（`src/components/chat/ChatUsagePanel.tsx`。月の切り替え・合計・店舗ごとの今月と前の月・CSV）。API `GET /api/master-admin/chat-usage?month=YYYY-MM&format=csv`（**マスター管理者だけ**。システム管理者・店舗管理者は 403。件数だけを返す）。出すのは、トークを一度でも ON にした店舗と、利用のある店舗（`getChatUsageReport`）。**料金の計算・請求は作っていない**
 - **定型文（④-4）**: `chat_settings.reply_templates`（`[{ id, title, text }]`。30 個・名前 30 文字・文 1000 文字まで = `validateChatTemplates`）。API `GET/PUT /api/stores/{storeId}/chat/templates`（一覧をまるごと差し替える。店舗管理者も変えられる）。画面は入力欄の上の「定型文」→ 選ぶと入力欄に入る（書きかけの文があれば、その後ろに足す）。編集は `ChatTemplatesDialog.tsx`
+- **会話を消す（お客様から削除を求められたとき）**: `DELETE /api/stores/{storeId}/chat/threads/{threadId}`（**`authorizeUpperAdminStoreAccess` = 運営だけ**。店舗管理者は自分の店舗でも 403）→ `deleteChatThread`: ① その会話の画像のファイルを消す（届いた画像 = 公開しないバケツ / 送った画像 = 公開のバケツ。**その店舗の置き場にあるものだけ**）→ ② 会話とメッセージの行を消す（メッセージは外部キーの CASCADE で消える）。画像を消せなかったときは、行を消さずに失敗で返す。**消すのはこのシステムに保存した分だけ**（LINE のアプリに残っているトーク・顧客の情報・利用量の数は消えない）。消したあとに同じお客様から届いたメッセージは、新しい会話として保存される。だれが・どの会話を消したかはサーバーのログに残す（中身は残さない）。画面は会話の右上のごみ箱のボタン（`ChatPanel` の `canDelete`。テナント側 店舗ページは常に出す / 店舗管理者ページは運営が開いていて「店舗管理者の見え方で確認」でないときだけ）→ 確認のダイアログ。**店舗ごとの「会話をすべて削除」は作っていない**。Vitest: `chat-delete-service.local.test.ts`
 - **対応済みの切り替え（④-4）**: `PATCH /api/stores/{storeId}/chat/threads/{threadId}` に `{ status: 'open' | 'done' }`。一覧に「対応済み」のバッジ、絞り込みに「対応中」（`ChatThreadFilter` の `open`）。**お客様から自動でない新しいメッセージが届くと、保存の DB 関数が対応中に戻す**（返信しただけでは変わらない）
 - Vitest: `chat.test.ts` / `chat-notify.test.ts` / `chat-service.local.test.ts` / `chat-notify-service.local.test.ts` / `chat-media-service.local.test.ts` / `chat-events.test.ts` / `chat-events-service.local.test.ts` / `chat-usage-api.test.ts` / `chat-service.test.ts` / `line-webhook-signature-route.test.ts` / `admin-api-auth.test.ts` / `store-admin-tabs.test.ts` / `store-admin-guide.test.ts`
 
@@ -733,6 +734,7 @@ export async function GET(req, { params }) {
 - `GET /api/stores/{storeId}/chat/threads/{threadId}` - 会話 1 本とメッセージ（開くと既読。`before` / `after` = メッセージ ID、`read=0` = 既読にしない。他の店舗の会話は 404）
 - `POST /api/stores/{storeId}/chat/threads/{threadId}/messages` - 返信（`{ text, client_key }`。同じ `client_key` は 1 回だけ送る。公式 LINE の通数を 1 通使う）
 - `GET /api/stores/{storeId}/chat/unread` - トーク機能が ON か・未読の合計（`quota=1` で今月の通数も）
+- `DELETE /api/stores/{storeId}/chat/threads/{threadId}` - 会話 1 本を、メッセージ・画像ごと消す（運営だけ。元に戻せない）
 - `PATCH /api/stores/{storeId}/chat/threads/{threadId}` - 対応中 / 対応済み の切り替え（`{ status }`）
 - `GET /api/stores/{storeId}/chat/media/{messageId}` - お客様から届いた画像（公開していない置き場から、ログインと店舗を確かめて返す）
 - `POST /api/stores/{storeId}/chat/images` - 返信で送る画像のアップロード（FormData の `file`。JPEG / PNG・1MB まで）
