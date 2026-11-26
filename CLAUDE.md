@@ -982,6 +982,7 @@ export async function GET(req, { params }) {
 - 回答 → 値は `convertAnswerForCustomerField`（誕生日 = 1990-04-05 / 1990年4月5日 / 全角 を YYYY-MM-DD に。ありえない日・未来の日は入れない / 性別 = 男性・女性・その他 だけ / 電話番号 = 数字 10〜13 桁 / メール = 形を確認）。入れられない回答は黙って飛ばす
 - **対象は、いちばん上の質問だけ**（選択肢の追加質問は対象外）。同じ入れ先の質問が複数あるときは、上にある質問の入れられる回答を使う
 - 送信 `POST /api/surveys/submit` が回答保存のあと、**タグ付与より先に** `applySurveyCustomerFields()`（`src/lib/survey-customer-fields-apply.ts`）を呼ぶ。顧客は LINE ユーザー ID で探し、**居なければ、入れる回答があるときだけ顧客を作る**（`buildCustomerRowFromSurvey`。通常の顧客 = 顧客一覧・顧客分析に出る。お名前は 回答 → LINE の表示名 → 「LINE 友だち」）。友だちだけの顧客（`line_friend_only`）は、回答が入ると通常の顧客にする。LINE ユーザー ID の無い回答（LINE の外で開いたフォーム）では何もしない。ほかの顧客が使っている電話番号は入れない。**失敗しても回答の保存は成功扱い**（ログのみ）
+- **LINE のアイコン画像**: アンケートのフォームはプロフィール画像を送ってこないので、顧客を作るとき・アイコン画像（`line_picture_url`）がまだ無い顧客のときに、サーバーが店舗の公式 LINE からプロフィールを取って入れる（`loadSurveyLineProfile`。`SURVEY_PROFILE_TIMEOUT_MS` = 3 秒で打ち切り。友だちでない人は取れない = 空のまま。取れなくても回答は入る。local は通信しない）。Vitest: `survey-customer-line-profile.local.test.ts`
 - サーバーが送信のたびにアンケートの設定を読むので、**変更したあとは「更新」で保存するだけでよい**（フォーム側の HTML は変わらない）
 - **顧客の住所** `customers.address`（`20261201000000_add_customer_address.sql`。**staging / production へは Dashboard の SQL Editor で手動適用**）。顧客の編集フォームに「住所」、顧客詳細の連絡先の並びに表示。未適用の環境では `createCustomer` / `updateCustomer` が住所だけを外して保存し直す（`isMissingAddressColumn`。ほかの項目は入る）
 - Vitest: `survey-customer-fields.test.ts` / `survey-customer-fields-apply.local.test.ts`
