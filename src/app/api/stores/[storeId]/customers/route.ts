@@ -339,6 +339,7 @@ export async function POST(
       preferred_contact_method: isContactMethod(body.preferred_contact_method) ? body.preferred_contact_method : null,
       allergies: body.allergies || null,
       medical_history: body.medical_history || null,
+      ...(typeof body.address === 'string' && body.address.trim() ? { address: body.address.trim().slice(0, 300) } : {}),
       notes: body.notes || null,
       tags: normalizeTags(body.tags),
     };
