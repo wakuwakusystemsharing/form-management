@@ -19,6 +19,7 @@ export interface CustomerFormData {
   email: string;
   birthday: string;
   gender: string;
+  address: string;
   customer_type: string;
   notes: string;
   // カルテ（安全のための情報・タグ）
@@ -52,6 +53,7 @@ function toFormData(customer?: Partial<CustomerFormData>): CustomerFormData {
     email: customer?.email || '',
     birthday: customer?.birthday || '',
     gender: customer?.gender || '',
+    address: customer?.address || '',
     customer_type: customer?.customer_type || 'new',
     notes: customer?.notes || '',
     allergies: customer?.allergies || '',
@@ -69,6 +71,7 @@ export function customerToFormData(customer: Customer): CustomerFormData {
     email: customer.email ?? '',
     birthday: customer.birthday ?? '',
     gender: customer.gender ?? '',
+    address: customer.address ?? '',
     customer_type: customer.customer_type ?? 'new',
     notes: customer.notes ?? '',
     allergies: customer.allergies ?? '',
@@ -177,6 +180,11 @@ export default function CustomerForm({
           </Select>
           <p className="text-[11px] leading-4 text-muted-foreground">一覧のバッジは来店履歴から自動判定。これは手動の区分です</p>
         </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="customer-address">住所</Label>
+        <Input id="customer-address" value={form.address} onChange={(e) => updateField('address', e.target.value)} placeholder="例: 〒150-0001 東京都渋谷区神宮前1-2-3" maxLength={300} />
       </div>
 
       {/* タグ・希望連絡手段 */}

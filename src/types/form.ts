@@ -903,6 +903,7 @@ export interface Database {
           preferred_contact_method: string | null;
           allergies: string | null;
           medical_history: string | null;
+          address?: string | null; // 住所（20261201000000_add_customer_address.sql。未適用の環境では列が無い）
           notes: string | null;
           tags: string[] | null;
           // 統計情報
@@ -943,6 +944,7 @@ export interface Database {
           preferred_contact_method?: string | null;
           allergies?: string | null;
           medical_history?: string | null;
+          address?: string | null;
           notes?: string | null;
           tags?: string[] | null;
           // 統計情報
@@ -983,6 +985,7 @@ export interface Database {
           preferred_contact_method?: string | null;
           allergies?: string | null;
           medical_history?: string | null;
+          address?: string | null;
           notes?: string | null;
           tags?: string[] | null;
           // 統計情報

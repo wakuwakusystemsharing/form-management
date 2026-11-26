@@ -5,6 +5,7 @@ import { SurveyQuestion, SurveyQuestionType, SurveyQuestionOption, SurveyContent
 import OptionFollowUpsEditor, { followUpButtonLabel } from './SurveyFollowUpEditor';
 import OptionExtraMessageEditor, { optionSettingsButtonLabel } from '../OptionExtraMessageEditor';
 import SurveyQuestionDisplaySettings from './SurveyQuestionDisplaySettings';
+import SurveyCustomerFieldSettings from './SurveyCustomerFieldSettings';
 import { countFollowUpsDeep, createFollowUp, getOptionFollowUps, setOptionFollowUps } from '@/lib/survey-follow-ups';
 import {
   AddContentBlockButton,
@@ -336,6 +337,9 @@ export default function SurveyQuestionEditor({ questions, onChange, contentBlock
                     onChange={(patch) => updateQuestion(index, patch)}
                   />
                 )}
+
+                {/* 回答を顧客情報のどこに入れるか（アンケートのみ。抽選の事前質問では出さない） */}
+                {storeId && <SurveyCustomerFieldSettings question={q} index={index} onChange={(patch) => updateQuestion(index, patch)} />}
 
                 {/* 説明文（同意項目などで使用） */}
                 <div className="space-y-2">

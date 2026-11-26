@@ -29,7 +29,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Phone, Mail, Pencil, Trash2, MoreHorizontal, ChevronRight, Cake, User, AlertTriangle, StickyNote, Tag, MessageCircle, Check } from 'lucide-react';
+import { Phone, Mail, Pencil, Trash2, MoreHorizontal, ChevronRight, Cake, User, MapPin, AlertTriangle, StickyNote, Tag, MessageCircle, Check } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -548,6 +548,12 @@ export default function CustomerDetail({ storeId, customerId, open, onClose, onU
                     <span className="inline-flex items-center gap-1.5 min-h-8 text-muted-foreground">
                       <User className="h-4 w-4 shrink-0" aria-hidden="true" />
                       {customer.gender === 'male' ? '男性' : customer.gender === 'female' ? '女性' : 'その他'}
+                    </span>
+                  )}
+                  {customer.address && (
+                    <span className="inline-flex items-start gap-1.5 min-h-8 text-muted-foreground min-w-0 basis-full" data-slot="customer-address">
+                      <MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span className="break-words min-w-0">{customer.address}</span>
                     </span>
                   )}
                 </div>

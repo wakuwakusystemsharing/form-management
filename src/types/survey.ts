@@ -1,6 +1,7 @@
 import { StaticDeploy, MultipleDatesSettings, OptionExtraMessage } from './form';
 import type { SelectSearchSettings } from '@/lib/searchable-select';
 import type { ChoiceSize, ChoiceStyle } from '@/lib/choice-style';
+import type { SurveyCustomerFieldLink } from '@/lib/survey-customer-fields';
 
 // multiple_dates = 第三希望日時選択（予約フォームの日時選択モードと同じ設定・同じ選択 UI。第一〜第三希望の日付 + 時間）
 // birthday = 誕生日選択（年 / 月 / 日を別々のプルダウンで選択。値は "YYYY-MM-DD"）
@@ -62,6 +63,8 @@ export interface SurveyQuestion {
   choice_style?: ChoiceStyle;
   choice_size?: ChoiceSize;
   restore_enabled?: boolean; // 回答内容を端末の localStorage に保存し、再訪時に復元する（他ユーザーには共有されない）
+  // この質問の回答を、顧客情報のどの項目に入れるか（未設定 = 誕生日選択・住所入力だけ自動で入れる。target: 'none' = 入れない）。純粋ロジック: src/lib/survey-customer-fields.ts
+  customer_field?: SurveyCustomerFieldLink;
   // type = 'select' のとき: 名前検索 + 五十音ボタンで絞り込み、「不明」を独立したボタンで表示する（選択肢が多いとき用）
   select_search?: SelectSearchSettings;
   // type = 'multiple_dates' の設定（予約フォームの multiple_dates_settings と同じ形。未設定は既定値で補完）。

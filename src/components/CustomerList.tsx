@@ -14,6 +14,7 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { fetchWithAuth } from '@/lib/client-auth';
 import { UserPlus, ChevronRight, Plus, Tag, X } from 'lucide-react';
 import { summarizeTags } from '@/lib/customer-chart';
+import { readShowFriends, writeShowFriends } from '@/lib/customer-list-prefs';
 import CustomerForm, { CustomerFormData } from '@/components/CustomerForm';
 import MobileSheet from '@/components/customers/MobileSheet';
 import { ChipFilter } from '@/components/customers/ChipTabs';
@@ -112,7 +113,12 @@ export default function CustomerList({ storeId, onCustomerClick, onTotalChange, 
   };
   const [total, setTotal] = useState(0);
   // 予約なしの LINE 友だち（友だち登録だけで自動登録された顧客）は既定で隠す。切り替えで一覧に含める
-  const [showFriends, setShowFriends] = useState(false);
+  // チェックの状態は端末ごと・店舗ごとに覚える（ページを更新しても同じ状態で開く）
+  const [showFriends, setShowFriendsState] = useState(() => readShowFriends(storeId));
+  const setShowFriends = (value: boolean) => {
+    setShowFriendsState(value);
+    writeShowFriends(storeId, value);
+  };
   const [friendOnlyCount, setFriendOnlyCount] = useState(0);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
