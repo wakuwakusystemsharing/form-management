@@ -701,3 +701,63 @@ export function collectSwitchGroup<M extends Pick<LineRichMenu, 'id' | 'name' | 
 export function menusSwitchingTo<M extends Pick<LineRichMenu, 'id' | 'areas'>>(menuId: string, menus: M[]): M[] {
   return menus.filter((m) => m.id !== menuId && switchTargetsOf(m).includes(menuId));
 }
+
+// ---------------------------------------------------------------------------
+// タブ付きメニューをまとめて作る
+// ---------------------------------------------------------------------------
+//
+// タブで切り替わるメニューは、LINE の上では「メニューを枚数ぶん作り、それぞれの画像の上の帯に
+// タブの絵を描いて、帯の各ボタンに『別のメニューに切り替える』を付ける」ことで作る。
+// これを手で組むのは手間（メニューを 1 つずつ作る → 全部ができてから、たがいに切り替え先を選ぶ）なので、
+// タブの名前を入れるだけで、つながった下書きを枚数ぶん作る。
+
+/** 画像の上の、タブの帯の高さ（画像全体に対する割合） */
+export const TAB_SET_STRIP_RATIO: Record<RichMenuSize, number> = { large: 0.15, small: 0.25 };
+export const TAB_SET_MIN = 2;
+
+export interface RichMenuTabSetInput {
+  size: RichMenuSize;
+  /** タブの名前（= 作るメニューの名前）。左から順 */
+  tabs: string[];
+  chat_bar_text: string;
+}
+
+export function normalizeRichMenuTabSetInput(value: unknown): RichMenuTabSetInput {
+  const rec = asRecord(value);
+  const tabs = Array.isArray(rec.tabs) ? rec.tabs.map((t) => (typeof t === 'string' ? t.trim() : '')) : [];
+  const bar = typeof rec.chat_bar_text === 'string' ? rec.chat_bar_text.trim() : '';
+  return { size: isRichMenuSize(rec.size) ? rec.size : 'large', tabs, chat_bar_text: bar || DEFAULT_CHAT_BAR_TEXT };
+}
+
+export function validateRichMenuTabSetInput(input: RichMenuTabSetInput): string[] {
+  const errors: string[] = [];
+  if (input.tabs.length < TAB_SET_MIN) errors.push(`タブは ${TAB_SET_MIN} 個以上にしてください`);
+  if (input.tabs.length > SWITCH_GROUP_MAX) errors.push(`タブは ${SWITCH_GROUP_MAX} 個までにしてください`);
+  input.tabs.forEach((name, i) => {
+    if (!name) errors.push(`タブ ${i + 1} の名前を入力してください`);
+    else if (name.length > RICH_MENU_LIMITS.nameMax) errors.push(`タブ ${i + 1} の名前は ${RICH_MENU_LIMITS.nameMax} 文字までにしてください`);
+  });
+  if (new Set(input.tabs.filter(Boolean)).size !== input.tabs.filter(Boolean).length) errors.push('同じ名前のタブがあります。別の名前にしてください');
+  if ([...input.chat_bar_text].length > RICH_MENU_LIMITS.chatBarTextMax) errors.push(`メニューバーの文言は ${RICH_MENU_LIMITS.chatBarTextMax} 文字までにしてください`);
+  return errors;
+}
+
+/**
+ * タブ付きメニューの 1 枚ぶんのボタン。
+ * 上の帯を枚数で等分し、ほかのタブには「別のメニューに切り替える」、自分のタブには「何もしない」を入れる。
+ * 帯の下は、あとで自由に分けられるよう、「何もしない」の大きなボタンを 1 つ置く
+ * @param index このメニューが左から何番目か（0 始まり）
+ * @param menuIds 全部のメニューの ID（左から順）
+ */
+export function buildTabSetAreas(size: RichMenuSize, index: number, menuIds: string[]): RichMenuArea[] {
+  const strip = TAB_SET_STRIP_RATIO[size];
+  const count = menuIds.length;
+  const areas: RichMenuArea[] = menuIds.map((menuId, i) => {
+    // 右端を先に丸めてから引くので、となりのタブとのあいだにすき間も重なりもできない
+    const left = round4(i / count);
+    const right = i === count - 1 ? 1 : round4((i + 1) / count);
+    return { id: `tab${i + 1}`, x: left, y: 0, w: round4(right - left), h: strip, action: i === index ? { type: 'none' } : { type: 'switch', menu_id: menuId } };
+  });
+  areas.push({ id: 'body1', x: 0, y: strip, w: 1, h: round4(1 - strip), action: { type: 'none' } });
+  return areas;
+}

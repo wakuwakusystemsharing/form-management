@@ -29,6 +29,9 @@ import {
   RICH_MENU_LIMITS,
   buildRichMenuAliasId,
   buildRichMenuObject,
+  buildTabSetAreas,
+  normalizeRichMenuTabSetInput,
+  validateRichMenuTabSetInput,
   canStartPublish,
   checkRichMenuImage,
   collectSwitchGroup,
@@ -193,6 +196,43 @@ export async function createRichMenu(storeId: string, body: unknown): Promise<Se
   const res = await insertRichMenu(storeId, input);
   if (res.error !== undefined) return fail(500, res.error);
   return { ok: true, data: res.data };
+}
+
+/**
+ * タブ付きメニューをまとめて作る: タブの名前の数だけ下書きを作り、上の帯のボタンでたがいに切り替わるようにつなぐ。
+ * 画像と、帯の下のボタンは、できた下書きを 1 つずつ開いて入れる。途中で失敗したら、作ったぶんを消して終わる
+ */
+export async function createRichMenuTabSet(storeId: string, body: unknown): Promise<ServiceResult<LineRichMenu[]>> {
+  const input = normalizeRichMenuTabSetInput(body);
+  const errors = validateRichMenuTabSetInput(input);
+  if (errors.length > 0) return fail(400, errors[0]);
+  const existing = await listRichMenus(storeId);
+  if (existing.length + input.tabs.length > RICH_MENU_LIMITS.menusMax) {
+    return fail(400, `リッチメニューは ${RICH_MENU_LIMITS.menusMax} 個までです（いま ${existing.length} 個）。使っていないものを削除してください`);
+  }
+  const created: LineRichMenu[] = [];
+  const rollback = async () => {
+    for (const m of created) await deleteRichMenuRow(storeId, m.id).catch(() => undefined);
+  };
+  for (const name of input.tabs) {
+    const res = await insertRichMenu(storeId, { name, size: input.size, image_url: '', areas: [], chat_bar_text: input.chat_bar_text, open_by_default: true, rule: null });
+    if (res.error !== undefined) {
+      await rollback();
+      return fail(500, res.error);
+    }
+    created.push(res.data);
+  }
+  const ids = created.map((m) => m.id);
+  const linked: LineRichMenu[] = [];
+  for (let i = 0; i < created.length; i++) {
+    const res = await updateRichMenu(storeId, created[i].id, { areas: buildTabSetAreas(input.size, i, ids) });
+    if (res.error !== undefined || !res.data) {
+      await rollback();
+      return fail(500, res.error ?? '保存に失敗しました');
+    }
+    linked.push(res.data);
+  }
+  return { ok: true, data: linked };
 }
 
 function nextRuleOrder(menus: LineRichMenu[]): number {

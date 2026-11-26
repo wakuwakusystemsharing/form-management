@@ -305,6 +305,7 @@ EMAIL_FROM_ADDRESS=                     # 例: 予約通知 <noreply@send.your-d
   - 削除: 反映中は不可。ほかのメニューの切り替え先になっている下書きも不可（`menusSwitchingTo`。先にそのボタンの動きを変える）
   - 検証（反映のとき）: 切り替え先が 未選択 / 自分自身 / 消えたメニュー は不可。複数のメニューを出すとき、エラーの先頭に「「メニュー名」— 」を付けて、どのメニューが原因かを知らせる
   - **実機で確かめていないこと**: お客様が切り替え先のメニューを見ている最中に反映し直すと、そのお客様は古いメニュー（消されたもの）に個別にひも付いている。LINE の文書には「消したメニューは、次にトークを開いたとき表示されなくなる」とだけあり、全員向けのメニューに戻るかは書かれていない（戻る想定で作ってある）
+- **タブ付きメニューをまとめて作る**（一覧の「タブ付きメニューを作る」→ `RichMenuTabSetDialog.tsx`）: タブ切り替えを手で組むと「メニューを 1 つずつ作る → 全部ができてから、たがいに切り替え先を選ぶ」と手間なので、タブの名前（2〜`SWITCH_GROUP_MAX` = 5 個）・大きさ・バーの文言を入れるだけで、**たがいに切り替わる下書きをタブの数だけ作る**。`POST /api/stores/{storeId}/rich-menus/tab-set`（`authorizeStoreAccess`）→ `createRichMenuTabSet`（空の下書きを枚数ぶん作る → 全部の ID がそろってからボタンを入れる。途中で失敗したら作ったぶんを消す。上限 20 個を超えるときは 1 つも作らない）。ボタンは `buildTabSetAreas(size, index, menuIds)` = 画像の上の帯（`TAB_SET_STRIP_RATIO` = 大 15% / 小 25%）を枚数で等分し、ほかのタブに「別のメニューに切り替える」、自分のタブに「何もしない」、帯の下に「何もしない」の大きなボタンを 1 つ（あとで型や手で分ける）。**作るのは下書きとボタンだけ**。画像（帯にタブの絵を入れたものをメニューごとに 1 枚）と帯の下のボタンは、できた下書きを 1 つずつ開いて入れ、いちばん左のタブのメニューで「反映する」を押す（既存のタブ切り替えの反映がそのまま動く）。DB の変更なし。Vitest: `line-rich-menu-tab-set.local.test.ts`
 - **お客様ごとの切り替え（③-3）**: メニューに「だれに出すか」の条件を付けると、条件に合うお客様にだけ、全員向けのメニューの代わりにそのメニューを出す。条件は配信の「配信先の条件」と同じ形（`BroadcastAudience`）で、編集画面の「だれに出すか」→「条件に合うお客様だけ」に `AudienceEditor` を出す。保存先は `line_rich_menus.rule` = `RichMenuRule { audience, order }`（null = 全員向け / 切り替え先）
   - **LINE には「この人にはこのメニュー」と 1 人ずつ設定する**（`POST /v2/bot/richmenu/bulk/link` / `bulk/unlink`。500 人ずつ。202 = 受け付けだけで、LINE があとから反映する）。メニューは条件ごとに 1 個（人数ぶんは作らない。`RICH_MENU_RULES_MAX` = 5 個まで）。表示の優先順位は お客様ごと > 全員向け なので、全員向けのメニューと両方出しておける
   - 純粋ロジック `src/lib/line-rich-menu-rules.ts`: `planRichMenuAssignments({ menus, customers, facts, now })`（優先順位の順に `matchAudience` で見て、**最初に合ったメニュー**。LINE 未連携・ブロックされている人は対象外。**配信停止の人には出す**（メニューは配信ではない）。どの条件にも合わない人は入らない = 全員向けを見る）/ `diffRichMenuAssignments(いまの記録, あるべき設定)` → 設定する人（メニューごと）・外す人・変わらない人 / `sortRuleMenus` / `reorderRuleMenus` / `isRuleEmpty`（条件が 1 つも無いと出せない = 全員に出すなら全員向けにする）
@@ -730,6 +731,7 @@ export async function GET(req, { params }) {
 - `GET/POST /api/stores/{storeId}/rich-menus` - 一覧（+ 選べる予約フォーム・LINE のいまの設定との食い違い）/ 下書きを作る
 - `PUT/DELETE /api/stores/{storeId}/rich-menus/{id}` - 内容を保存 / 削除（反映中は不可）
 - `POST /api/stores/{storeId}/rich-menus/{id}/publish` / `.../unpublish` - 全員向けのメニューとして公式 LINE に反映 / 反映をやめる（お客様ごとのメニューは、条件に合うお客様に出す / 出すのをやめる）
+- `POST /api/stores/{storeId}/rich-menus/tab-set` - タブ付きメニューをまとめて作る（`{ size, tabs: string[], chat_bar_text? }`。タブの数だけ、たがいに切り替わる下書きを作る）
 - `POST /api/stores/{storeId}/rich-menus/sync` - お客様ごとのメニューの設定を、いまの条件に合わせて見直す
 - `POST /api/stores/{storeId}/rich-menus/rule-order` - お客様ごとのメニューの優先順位（`{ ids }`）
 - `POST /api/cron/rich-menu-sync` - 1 日 1 回の見直し（pg_cron から。Service Role Key の Bearer）
