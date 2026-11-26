@@ -35,6 +35,8 @@ import WaitlistPanel from '@/components/WaitlistPanel';
 import CustomerList from '@/components/CustomerList';
 import CustomerDetail from '@/components/CustomerDetail';
 import CustomerAnalytics from '@/components/CustomerAnalytics';
+import SurveyAnalytics from '@/components/SurveyAnalytics';
+import { ChipFilter } from '@/components/customers/ChipTabs';
 import ReservationEditForm from '@/components/ReservationEditForm';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -163,6 +165,8 @@ export default function StoreAdminPage() {
   const [customersTotal, setCustomersTotal] = useState<number | null>(null);
   // 顧客一覧のタグ絞り込み（顧客詳細のタグをタップしたときに設定）
   const [customersTagFilter, setCustomersTagFilter] = useState<string | null>(null);
+  // アンケート管理: 回答一覧 / 分析 の切り替え
+  const [surveyView, setSurveyView] = useState<'list' | 'analytics'>('list');
   // ディープリンク: ?tab=customers&customerId=... で顧客詳細を直接開く（抽選履歴の「顧客情報を見る」など）
   const customerIdParam = searchParams.get('customerId');
   useEffect(() => {
@@ -1379,8 +1383,26 @@ export default function StoreAdminPage() {
                 </div>
               )}
 
+                {/* 回答一覧 / 分析 の切り替え（分析を表示する店舗だけ） */}
+                {adminOptions.survey_analytics && (
+                  <div className="border-t pt-5 space-y-4" data-slot-name="survey-view">
+                    <ChipFilter
+                      ariaLabel="アンケートの表示"
+                      items={[{ value: 'list', label: '回答一覧' }, { value: 'analytics', label: '分析' }]}
+                      value={surveyView}
+                      onChange={setSurveyView}
+                    />
+                    {surveyView === 'analytics' && (
+                      <>
+                        <GuideHint text={STORE_ADMIN_HINTS.surveyAnalytics} />
+                        <SurveyAnalytics storeId={storeId} />
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {/* 回答一覧セクション */}
-                <div className="border-t pt-5">
+                <div className={adminOptions.survey_analytics ? (surveyView === 'analytics' ? 'hidden' : '') : 'border-t pt-5'}>
                   <Card className="shadow-sm border-border/60">
                     <CardHeader className="pb-4">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -1532,7 +1554,7 @@ export default function StoreAdminPage() {
             </TabsContent>
 
             <TabsContent value="analytics" className="mt-0 md:mt-2">
-              <CustomerAnalytics storeId={storeId} onCustomerClick={openCustomer} />
+              <CustomerAnalytics storeId={storeId} onCustomerClick={openCustomer} showSurvey={adminOptions.customer_survey_history} />
             </TabsContent>
           </Tabs>
         );
@@ -1723,7 +1745,7 @@ export default function StoreAdminPage() {
       default:
         return null;
     }
-  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, customersView, customersRefreshKey, customersTotal, customersTagFilter, lotteryForms, lotteryTodayCount, adminOptions, wallStats, wallTabVisible]);
+  }, [activeTab, stats, filteredForms, filteredReservations, reservations, surveyForms, storeId, store, user, formSearchQuery, reservationFilterStatus, reservationSearchQuery, debouncedReservationSearch, surveyResponseSearchQuery, debouncedSurveyResponseSearch, dashboardReservationSearch, debouncedDashboardReservationSearch, reservationView, router, searchParams, copyToClipboard, getFormName, selectedSurveyFormId, surveyResponses, surveyView, customersView, customersRefreshKey, customersTotal, customersTagFilter, lotteryForms, lotteryTodayCount, adminOptions, wallStats, wallTabVisible]);
 
   // 認証チェック中
   if (checkingAuth) {
