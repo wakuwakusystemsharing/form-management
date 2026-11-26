@@ -26,6 +26,7 @@ describe('resolveAdminVisibleOptions', () => {
     expect(r).toEqual({
       reservation_forms: false,
       survey_forms: false,
+      survey_analytics: false,             // アンケート管理 OFF に連動
       lottery_forms: false,
       customer_reservation_history: false, // 予約管理 OFF に連動
       customer_lottery_history: false,     // 抽選管理 OFF に連動

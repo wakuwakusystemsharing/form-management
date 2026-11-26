@@ -42,6 +42,7 @@ export function resolveVisibleTabs(value: unknown): StoreAdminTabId[] {
 export const STORE_ADMIN_OPTION_KEYS = [
   'reservation_forms',
   'survey_forms',
+  'survey_analytics',
   'lottery_forms',
   'customer_reservation_history',
   'customer_lottery_history',
@@ -76,6 +77,7 @@ export interface StoreAdminOptionDef {
 export const STORE_ADMIN_OPTIONS: StoreAdminOptionDef[] = [
   { key: 'reservation_forms', tab: 'reservations', label: 'フォーム管理を表示', description: '予約フォームの一覧（編集・プレビュー・URL）', followsTab: 'reservations' },
   { key: 'survey_forms', tab: 'surveys', label: 'フォーム管理を表示', description: 'アンケートフォームの一覧（編集・プレビュー・URL）', followsTab: 'surveys' },
+  { key: 'survey_analytics', tab: 'surveys', label: '分析を表示', description: 'アンケートの回答数・質問ごとの集計・回答のタイミング', followsTab: 'surveys' },
   { key: 'lottery_forms', tab: 'lotteries', label: 'フォーム管理を表示', description: '抽選フォームの一覧（編集・プレビュー・URL）', followsTab: 'lotteries' },
   { key: 'customer_reservation_history', tab: 'customers', label: '顧客詳細に予約履歴・来店履歴・統計情報を表示', description: '未設定のときは「予約管理」の表示に連動します', followsTab: 'reservations' },
   { key: 'customer_lottery_history', tab: 'customers', label: '顧客詳細に抽選履歴を表示', description: '未設定のときは「抽選管理」の表示に連動します', followsTab: 'lotteries' },

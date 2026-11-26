@@ -8,11 +8,14 @@ import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { ChevronRight } from 'lucide-react';
 import { ChipTabsList } from '@/components/customers/ChipTabs';
 import { StatGrid, StatTile } from '@/components/customers/StatTile';
+import CustomerSurveyAnalytics from '@/components/CustomerSurveyAnalytics';
 
 interface CustomerAnalyticsProps {
   storeId: string;
   /** 売上ランキングの行をタップしたときに顧客詳細を開く（未指定なら通常の行） */
   onCustomerClick?: (customerId: string) => void;
+  /** 「アンケート」タブを出すか（未指定 = 出す。顧客詳細の「アンケートの回答」を隠している店舗では出さない） */
+  showSurvey?: boolean;
 }
 
 interface AnalyticsData {
@@ -81,7 +84,7 @@ function Section({ title, description, children }: { title: string; description?
   );
 }
 
-export default function CustomerAnalytics({ storeId, onCustomerClick }: CustomerAnalyticsProps) {
+export default function CustomerAnalytics({ storeId, onCustomerClick, showSurvey = true }: CustomerAnalyticsProps) {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('overview');
@@ -130,6 +133,7 @@ export default function CustomerAnalytics({ storeId, onCustomerClick }: Customer
           { value: 'attributes', label: '顧客属性' },
           { value: 'behavior', label: '来店パターン' },
           { value: 'revenue', label: '売上' },
+          ...(showSurvey ? [{ value: 'survey', label: 'アンケート' }] : []),
         ]}
       />
 
@@ -245,6 +249,13 @@ export default function CustomerAnalytics({ storeId, onCustomerClick }: Customer
           </Section>
         </div>
       </TabsContent>
+
+      {/* アンケート（開いたときに読み込む） */}
+      {showSurvey && (
+        <TabsContent value="survey" className="mt-3">
+          {tab === 'survey' && <CustomerSurveyAnalytics storeId={storeId} />}
+        </TabsContent>
+      )}
     </Tabs>
   );
 }
