@@ -97,6 +97,7 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
   const menus = overview?.menus || [];
   const formName = (id: string) => forms.find((f) => f.id === id)?.name ?? null;
   const menuName = (id: string) => menus.find((m) => m.id === id)?.name ?? null;
+  const messageName = (id: string) => (overview?.messages || []).find((m) => m.id === id)?.name ?? null;
   // 全員向けに出しているメニュー（切り替え先のメニューは、このメニューと一緒に出ている）
   const mainMenu = menus.find((m) => m.is_default) ?? null;
   // お客様ごとのメニュー（優先順位の順）と、それ以外（全員向け・切り替え先）
@@ -260,7 +261,7 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
                     <ol className="space-y-0.5 text-xs text-muted-foreground">
                       {menu.areas.map((a, i) => (
                         <li key={a.id} className="truncate">
-                          {i + 1}. {describeRichMenuAction(a.action, formName, menuName)}
+                          {i + 1}. {describeRichMenuAction(a.action, formName, menuName, messageName)}
                         </li>
                       ))}
                     </ol>
@@ -324,6 +325,7 @@ export default function RichMenuPanel({ storeId }: { storeId: string }) {
         storeId={storeId}
         menu={editing?.menu ?? null}
         forms={forms}
+        messages={overview?.messages || []}
         menus={menus}
         audienceOptions={audienceOptions}
         ruleUnavailable={overview?.rule_unavailable ?? null}

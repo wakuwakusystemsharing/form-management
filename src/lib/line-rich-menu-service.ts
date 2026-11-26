@@ -21,6 +21,7 @@ import { getStoreLineToken, loadAudienceSource } from '@/lib/broadcast-repositor
 import { buildCustomerFacts, jstDateOf } from '@/lib/broadcast-audience';
 import { getStoreLineSecret } from '@/lib/line-secret-repository';
 import { listStoreForms } from '@/lib/reservation-source-repository';
+import { getLineFlexMessage, incrementLineFlexReply, lineFlexSendMessages, listLineFlexMessages } from '@/lib/line-flex-repository';
 import { resolveFormBaseUrl } from '@/lib/reservation-sources';
 import {
   EXTERNAL_CHANGE_MESSAGES,
@@ -84,9 +85,27 @@ export interface RichMenuFormOption {
   openable: boolean;
 }
 
+export interface RichMenuMessageOption {
+  id: string;
+  name: string;
+  /** 無効にしているメッセージは、押されても返さない */
+  enabled: boolean;
+}
+
+/** 「応答メッセージを返す」で選べる LINE メッセージ（読めなければ空 = マイグレーション未適用でも一覧は出す） */
+async function messageOptions(storeId: string): Promise<RichMenuMessageOption[]> {
+  try {
+    return (await listLineFlexMessages(storeId)).map((r) => ({ id: r.id, name: r.name, enabled: r.enabled !== false }));
+  } catch {
+    return [];
+  }
+}
+
 export interface RichMenuOverview {
   menus: LineRichMenu[];
   forms: RichMenuFormOption[];
+  /** 「応答メッセージを返す」で選べる、保存済みの LINE メッセージ */
+  messages: RichMenuMessageOption[];
   max: number;
   /** LINE のチャネルアクセストークンが登録されているか */
   has_token: boolean;
@@ -110,8 +129,32 @@ async function formOptions(storeId: string, origin: string): Promise<{ options: 
 
 const inputOf = (menu: LineRichMenu): RichMenuInput => ({ name: menu.name, size: menu.size, image_url: menu.image_url, areas: menu.areas, chat_bar_text: menu.chat_bar_text, open_by_default: menu.open_by_default, rule: menu.rule });
 
+/**
+ * 「応答メッセージを返す」のボタンが押された（postback）。返すメッセージ（最大 5 通）を返す。
+ * 返す内容は、押されたときに保存済みのメニューから読む（文章を直したら、保存するだけで変わる）。
+ * メニュー・ボタンが無い / 動きが変わっている / LINE メッセージが無効・削除済み のときは null（何も返さない）。例外を投げない
+ */
+export async function resolveRichMenuReply(storeId: string, menuId: string, areaId: string): Promise<Record<string, unknown>[] | null> {
+  try {
+    const menu = await getRichMenu(storeId, menuId);
+    const action = menu?.areas.find((a) => a.id === areaId)?.action;
+    if (!action || action.type !== 'reply') return null;
+    if (action.mode === 'text') return action.text ? [{ type: 'text', text: action.text.slice(0, RICH_MENU_LIMITS.replyTextMax) }] : null;
+    if (!action.message_id) return null;
+    const row = await getLineFlexMessage(storeId, action.message_id);
+    if (!row || row.enabled === false) return null;
+    const messages = lineFlexSendMessages(row).slice(0, 5);
+    if (messages.length === 0) return null;
+    await incrementLineFlexReply([row.id]).catch(() => undefined);
+    return messages;
+  } catch (e) {
+    console.error('[rich-menu] 応答メッセージの読み込みエラー:', e);
+    return null;
+  }
+}
+
 export async function getRichMenuOverview(storeId: string, origin: string, deps: { api?: RichMenuLineApi } = {}): Promise<RichMenuOverview> {
-  const [menus, forms, token] = await Promise.all([listRichMenus(storeId), formOptions(storeId, origin), getStoreLineToken(storeId).catch(() => null)]);
+  const [menus, forms, token, messages] = await Promise.all([listRichMenus(storeId), formOptions(storeId, origin), getStoreLineToken(storeId).catch(() => null), messageOptions(storeId)]);
   let externalNotice: string | null = null;
   // LINE のいまの設定を読み、このシステムの記録と違えば知らせる（local は通信しない。読めなかったときは何も出さない）
   if (!isLocal() && token) {
@@ -136,7 +179,7 @@ export async function getRichMenuOverview(storeId: string, origin: string, deps:
     }
   }
   const ruleUnavailable = await ruleUnavailableReason(storeId).catch(() => null);
-  return { menus, forms: forms.options, max: RICH_MENU_LIMITS.menusMax, has_token: !!token, local: isLocal(), external_notice: externalNotice, rule_unavailable: ruleUnavailable, rules_max: RICH_MENU_RULES_MAX, link_counts: linkCounts };
+  return { menus, forms: forms.options, messages, max: RICH_MENU_LIMITS.menusMax, has_token: !!token, local: isLocal(), external_notice: externalNotice, rule_unavailable: ruleUnavailable, rules_max: RICH_MENU_RULES_MAX, link_counts: linkCounts };
 }
 
 export async function createRichMenu(storeId: string, body: unknown): Promise<ServiceResult<LineRichMenu>> {
@@ -334,13 +377,14 @@ export async function publishRichMenu(storeId: string, id: string, origin: strin
   const forms = await formOptions(storeId, origin);
   const formIds = forms.options.map((f) => f.id);
   const menuIds = all.map((m) => m.id);
+  const messageIds = (await messageOptions(storeId)).map((o) => o.id);
   const objects: Array<{ menu: LineRichMenu; object: Record<string, unknown> }> = [];
   for (const m of group) {
     const input = inputOf(m);
     const prefix = many ? `「${m.name}」— ` : '';
-    const errors = validateRichMenu(input, { forPublish: true, formIds, menuIds, selfId: m.id });
+    const errors = validateRichMenu(input, { forPublish: true, formIds, menuIds, selfId: m.id, messageIds });
     if (errors.length > 0) return fail(400, `${prefix}${errors[0]}`);
-    const built = buildRichMenuObject({ ...input, name: `${LINE_MENU_NAME_PREFIX}${input.name}` }, forms.urlOf, (menuId) => aliasOf.get(menuId) ?? null);
+    const built = buildRichMenuObject({ ...input, name: `${LINE_MENU_NAME_PREFIX}${input.name}` }, forms.urlOf, (menuId) => aliasOf.get(menuId) ?? null, { menuId: m.id });
     if (!built.ok) return fail(400, `${prefix}${built.error}`);
     objects.push({ menu: m, object: built.object });
   }
@@ -602,9 +646,9 @@ async function publishRuleMenu(storeId: string, menu: LineRichMenu, all: LineRic
 
   const forms = await formOptions(storeId, origin);
   const input = inputOf(menu);
-  const errors = validateRichMenu(input, { forPublish: true, formIds: forms.options.map((f) => f.id), menuIds: all.map((m) => m.id), selfId: menu.id });
+  const errors = validateRichMenu(input, { forPublish: true, formIds: forms.options.map((f) => f.id), menuIds: all.map((m) => m.id), selfId: menu.id, messageIds: (await messageOptions(storeId)).map((o) => o.id) });
   if (errors.length > 0) return fail(400, errors[0]);
-  const built = buildRichMenuObject({ ...input, name: `${LINE_MENU_NAME_PREFIX}${input.name}` }, forms.urlOf);
+  const built = buildRichMenuObject({ ...input, name: `${LINE_MENU_NAME_PREFIX}${input.name}` }, forms.urlOf, undefined, { menuId: menu.id });
   if (!built.ok) return fail(400, built.error);
 
   const now = deps.now ?? new Date();
