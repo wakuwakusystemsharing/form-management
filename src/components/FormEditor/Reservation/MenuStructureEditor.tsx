@@ -20,6 +20,8 @@ import { countStaffScheduleOverrides } from '@/lib/staff-schedule';
 import { formatNominationFee, sanitizeNominationFee, NOMINATION_FEE_MAX } from '@/lib/nomination-fee';
 import { GOOGLE_EVENT_COLORS } from '@/lib/google-event-colors';
 import { fetchWithAuth } from '@/lib/client-auth';
+import { buildMenuInfoText } from '@/lib/menu-info-text';
+import { getReservationFormName } from '@/lib/form-display-name';
 
 // テキストブロックの文字色プリセット
 const CONTENT_TEXT_COLORS: Array<{ label: string; hex: string }> = [
@@ -1787,6 +1789,9 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
 const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdate, theme = 'dark' }) => {
   const themeClasses = getThemeClasses(theme);
 
+  // 「現在のメニュー情報コピー」: 押したあと少しのあいだ、ボタンの文言で結果を知らせる
+  const [menuInfoCopyState, setMenuInfoCopyState] = useState<'idle' | 'copied' | 'empty' | 'failed'>('idle');
+
   // カテゴリー管理
   const [categories, setCategories] = useState<MenuCategory[]>(() => {
     const cats = form.config?.menu_structure?.categories;
@@ -1849,6 +1854,34 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
   };
 
   // カテゴリーCRUD
+  // いまの画面の内容（保存していない変更を含む）から、メニューの一覧の文章を作ってコピーする
+  const handleCopyMenuInfo = async () => {
+    const text = buildMenuInfoText({ formName: getReservationFormName(form, ''), categories });
+    let result: 'copied' | 'empty' | 'failed' = text ? 'copied' : 'empty';
+    if (text) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // クリップボードの API が使えない環境（http・古いブラウザ）では、見えない入力欄を使ってコピーする
+        try {
+          const area = document.createElement('textarea');
+          area.value = text;
+          area.style.position = 'fixed';
+          area.style.opacity = '0';
+          document.body.appendChild(area);
+          area.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(area);
+          if (!ok) result = 'failed';
+        } catch {
+          result = 'failed';
+        }
+      }
+    }
+    setMenuInfoCopyState(result);
+    window.setTimeout(() => setMenuInfoCopyState('idle'), 2500);
+  };
+
   const handleOpenAddCategory = () => {
     setEditingCategory(null);
     setCatName('');
@@ -4742,7 +4775,21 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
             <span className={`text-sm font-semibold ${themeClasses.text.primary}`}>カテゴリー・メニュー</span>
             <span className={`text-xs ${themeClasses.text.tertiary}`}>{categories.length}カテゴリー</span>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleCopyMenuInfo}
+              data-slot-name="menu-info-copy"
+              title="このフォームのメニュー・オプションの名前と料金・所要時間を、文章でコピーします（LINE などにそのまま貼れます）。保存していない変更も含みます"
+              className={`px-3 py-1.5 text-sm rounded-md flex items-center space-x-1 ${menuInfoCopyState === 'copied' ? themeClasses.button.primary : themeClasses.button.secondary}`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              <span>
+                {menuInfoCopyState === 'copied' ? 'コピーしました' : menuInfoCopyState === 'empty' ? 'メニューがありません' : menuInfoCopyState === 'failed' ? 'コピーできませんでした' : '現在のメニュー情報コピー'}
+              </span>
+            </button>
             <button
               type="button"
               onClick={() => setHeadingsOpen(v => !v)}
