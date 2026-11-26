@@ -896,6 +896,7 @@ export async function GET(req, { params }) {
 - `20261127000000_add_chat.sql` - 1 対 1 トーク: chat_settings / chat_threads / chat_messages、DB 関数 `chat_record_inbound`
 - `20261128000000_add_chat_notifications.sql` - 1 対 1 トークの通知と自動削除: chat_settings の notify_* 列、DB 関数 `chat_claim_notification` / `chat_purge_expired`
 - `20261129000000_add_chat_media.sql` - 1 対 1 トークの画像と定型文: chat_settings.reply_templates、公開しない Storage バケツ `chat-media`
+- `20261201000000_add_customer_address.sql` - customers.address（顧客の住所。アンケートの回答を顧客情報に入れる機能で使う）
 - `20261130000000_add_chat_events_usage.sql` - 1 対 1 トークの自動の記録と利用量: chat_usage_monthly、DB 関数 `chat_add_usage` / `chat_record_system_events`、`chat_record_inbound` の差し替え
 - `20261009000000_add_wall.sql` - 寄せ書きウォールの 5 テーブル・RLS・DB 関数 `wall_insert_post_checked` / `wall_add_report`
 - `20261010000000_add_wall_daily_max.sql` - wall_boards.daily_max
@@ -973,6 +974,17 @@ export async function GET(req, { params }) {
 - 質問項目の各選択肢の「タグ」ボタン（追加質問の左）で、その選択肢を選んで送信した回答者に付ける顧客タグを設定（`TagInput`。店舗で使用中のタグを候補表示）
 - `POST /api/surveys/submit` が回答保存後に `applySurveyTagsToCustomer()`（`src/lib/survey-tags-apply.ts`）を呼び、`line_user_id` で店舗内の顧客を検索してタグをマージ（顧客が無ければ何もしない。失敗しても送信は成功扱い）。回答 → タグの集計は `src/lib/survey-tags.ts` の `collectSurveyOptionTags()`（radio / select はラベル一致、checkbox は ", " 区切り）
 - 顧客一覧はセグメントの隣に「タグで絞り込み」プルダウン（`GET /customers/tags` の一覧。将来の配信機能の絞り込みにも流用予定）
+
+**アンケートの回答を顧客情報に入れる（`SurveyQuestion.customer_field`。純粋ロジック `src/lib/survey-customer-fields.ts`）:**
+- 質問ごとの「顧客情報に反映」（`SurveyCustomerFieldSettings.tsx`。`SurveyQuestionEditor` の表示設定の下。`storeId` があるとき = アンケートのみ。抽選の事前質問では出さない）で、回答を顧客のどの項目に入れるかを選ぶ。`customer_field: { target, overwrite? }`。入れ先 = お名前 / フリガナ / 電話番号 / メール / 誕生日 / 性別 / 住所 / アレルギー / 既往歴 / メモ（`SURVEY_CUSTOMER_FIELD_OPTIONS`。回答タイプごとに選べるものが違う = `customerFieldTargetsFor`）
+- **回答タイプが「誕生日選択」「住所入力」の質問は、何も設定しなくても自動で 誕生日 / 住所 に入れる**（`autoCustomerFieldTarget`）。止めるときは「反映しない」（`target: 'none'`。お子様の誕生日を聞く質問など）
+- **既定は「顧客の項目が空のときだけ入れる」**。質問ごとに「回答のたびに上書きする」（`overwrite`）も選べる。**メモだけは上書きせず「質問名: 回答」を 1 行足す**（同じ行は 2 回足さない。5000 文字まで）。お名前は 未記入・「LINE 友だち」・LINE の表示名のまま・友だちだけの顧客 を空として扱う（`isPlaceholderCustomerName`）。性別の unknown も空
+- 回答 → 値は `convertAnswerForCustomerField`（誕生日 = 1990-04-05 / 1990年4月5日 / 全角 を YYYY-MM-DD に。ありえない日・未来の日は入れない / 性別 = 男性・女性・その他 だけ / 電話番号 = 数字 10〜13 桁 / メール = 形を確認）。入れられない回答は黙って飛ばす
+- **対象は、いちばん上の質問だけ**（選択肢の追加質問は対象外）。同じ入れ先の質問が複数あるときは、上にある質問の入れられる回答を使う
+- 送信 `POST /api/surveys/submit` が回答保存のあと、**タグ付与より先に** `applySurveyCustomerFields()`（`src/lib/survey-customer-fields-apply.ts`）を呼ぶ。顧客は LINE ユーザー ID で探し、**居なければ、入れる回答があるときだけ顧客を作る**（`buildCustomerRowFromSurvey`。通常の顧客 = 顧客一覧・顧客分析に出る。お名前は 回答 → LINE の表示名 → 「LINE 友だち」）。友だちだけの顧客（`line_friend_only`）は、回答が入ると通常の顧客にする。LINE ユーザー ID の無い回答（LINE の外で開いたフォーム）では何もしない。ほかの顧客が使っている電話番号は入れない。**失敗しても回答の保存は成功扱い**（ログのみ）
+- サーバーが送信のたびにアンケートの設定を読むので、**変更したあとは「更新」で保存するだけでよい**（フォーム側の HTML は変わらない）
+- **顧客の住所** `customers.address`（`20261201000000_add_customer_address.sql`。**staging / production へは Dashboard の SQL Editor で手動適用**）。顧客の編集フォームに「住所」、顧客詳細の連絡先の並びに表示。未適用の環境では `createCustomer` / `updateCustomer` が住所だけを外して保存し直す（`isMissingAddressColumn`。ほかの項目は入る）
+- Vitest: `survey-customer-fields.test.ts` / `survey-customer-fields-apply.local.test.ts`
 
 **アンケートフォームの送信ボタン連打対策（`static-generator-survey.ts`）:**
 - `submitForm()` は送信中フラグ `svSubmitting` で 2 回目以降のタップを無視し、ボタンを `disabled` + 「送信中…」にする。本体は `submitFormInner()`（戻り値 true = 回答の保存・LINE 送信まで進んだ。false = 入力エラーで中断）。入力エラーのときだけボタンを元に戻し、送信まで進んだら戻さない（成功時はページが閉じる。保存済みの回答を再送させないため）。連打で回答と LINE メッセージが重複した事例への対策。Vitest: `survey-submit-double-click.test.ts`

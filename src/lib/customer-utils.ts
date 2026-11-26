@@ -121,6 +121,19 @@ export async function findCustomerByLineOrPhone(
   return null;
 }
 
+/** customers.address 列が無い（20261201000000_add_customer_address.sql が未適用）ときのエラーか */
+export function isMissingAddressColumn(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  const message = String(error.message ?? '');
+  return /address/.test(message) && (error.code === '42703' || error.code === 'PGRST204' || /column|schema cache/i.test(message));
+}
+
+function withoutAddress<T extends object>(data: T): T {
+  const rest = { ...(data as Record<string, unknown>) };
+  delete rest.address;
+  return rest as T;
+}
+
 /**
  * 新規顧客を作成
  *
@@ -162,6 +175,7 @@ export async function createCustomer(data: CustomerInsert): Promise<Customer> {
       preferred_contact_method: data.preferred_contact_method || null,
       allergies: data.allergies || null,
       medical_history: data.medical_history || null,
+      address: data.address || null,
       notes: data.notes || null,
       tags: data.tags || null,
       // 統計情報
@@ -187,11 +201,16 @@ export async function createCustomer(data: CustomerInsert): Promise<Customer> {
     throw new Error('Supabase connection error');
   }
 
-  const { data: customer, error } = await (adminClient as any)
+  let { data: customer, error } = await (adminClient as any)
     .from('customers')
     .insert([data])
     .select()
     .single();
+
+  // 住所の列が無い（マイグレーション未適用）環境では、住所なしで保存する
+  if (error && isMissingAddressColumn(error) && 'address' in (data as Record<string, unknown>)) {
+    ({ data: customer, error } = await (adminClient as any).from('customers').insert([withoutAddress(data)]).select().single());
+  }
 
   if (error || !customer) {
     throw new Error(`Failed to create customer: ${error?.message}`);
@@ -242,12 +261,22 @@ export async function updateCustomer(
     throw new Error('Supabase connection error');
   }
 
-  const { data: customer, error } = await (adminClient as any)
+  let { data: customer, error } = await (adminClient as any)
     .from('customers')
     .update(data)
     .eq('id', customerId)
     .select()
     .single();
+
+  // 住所の列が無い（マイグレーション未適用）環境では、住所以外を保存する
+  if (error && isMissingAddressColumn(error) && 'address' in (data as Record<string, unknown>)) {
+    const rest = withoutAddress(data);
+    if (Object.keys(rest).length === 0) {
+      ({ data: customer, error } = await (adminClient as any).from('customers').select('*').eq('id', customerId).single());
+    } else {
+      ({ data: customer, error } = await (adminClient as any).from('customers').update(rest).eq('id', customerId).select().single());
+    }
+  }
 
   if (error || !customer) {
     throw new Error(`Failed to update customer: ${error?.message}`);

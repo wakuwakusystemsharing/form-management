@@ -260,6 +260,7 @@ export async function PATCH(
       'preferred_contact_method',
       'allergies',
       'medical_history',
+      'address',
       'notes',
       'tags',
     ];
@@ -277,6 +278,7 @@ export async function PATCH(
       'preferred_contact_method',
       'allergies',
       'medical_history',
+      'address',
       'notes',
     ]);
 

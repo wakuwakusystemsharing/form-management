@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase';
 import fs from 'fs';
 import path from 'path';
 import { applySurveyTagsToCustomer } from '@/lib/survey-tags-apply';
+import { applySurveyCustomerFields } from '@/lib/survey-customer-fields-apply';
 import { syncSurveyResponseToSheet } from '@/lib/survey-sheets-service';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -26,6 +27,20 @@ async function applyTagsSafely(storeId: string, surveyFormId: string, responses:
     }
   } catch (e) {
     console.error('[Survey] タグ付与エラー:', e);
+  }
+}
+
+/**
+ * 回答を、回答者の顧客情報に入れる（質問ごとの「顧客情報に反映」の設定と、誕生日選択・住所入力の自動）。
+ * 顧客がまだ居なければ作る。タグ付与より先に呼ぶ（作った顧客にタグを付けるため）。
+ * 回答の保存は済んでいるため、失敗してもログだけ残して送信自体は成功として返す。
+ */
+async function applyCustomerFieldsSafely(storeId: string, surveyFormId: string, responses: Record<string, unknown>, lineUserId: string | null, lineDisplayName: string | null, lineFriend: boolean) {
+  try {
+    const result = await applySurveyCustomerFields({ storeId, surveyFormId, responses, lineUserId, lineDisplayName, lineFriend });
+    if (result.error) console.warn('[Survey] 顧客情報への反映に失敗:', result.error, { storeId, surveyFormId });
+  } catch (e) {
+    console.error('[Survey] 顧客情報への反映エラー:', e);
   }
 }
 
@@ -99,6 +114,7 @@ export async function POST(request: Request) {
       existing.push(newResponse);
       fs.writeFileSync(SURVEY_RESPONSES_FILE, JSON.stringify(existing, null, 2));
 
+      await applyCustomerFieldsSafely(store_id, survey_form_id, parsedResponses, lineUserId, lineDisplayName, body.line_friend_flag === true);
       await applyTagsSafely(store_id, survey_form_id, parsedResponses, body.line_user_id);
       await syncToSheetSafely(store_id, survey_form_id, {
         id: newResponse.id,
@@ -148,6 +164,7 @@ export async function POST(request: Request) {
       );
     }
 
+    await applyCustomerFieldsSafely(store_id, survey_form_id, parsedResponses, lineUserId, lineDisplayName, body.line_friend_flag === true);
     await applyTagsSafely(store_id, survey_form_id, parsedResponses, body.line_user_id);
     await syncToSheetSafely(store_id, survey_form_id, {
       id: String(survey?.id ?? ''),
