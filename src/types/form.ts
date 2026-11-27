@@ -49,6 +49,8 @@ export interface MenuSubOption {
   description?: string;
   hide_price?: boolean;
   hide_duration?: boolean;
+  price_max?: number;        // 料金の上限（price より大きいときだけ「¥5,000〜¥7,000」と出す。src/lib/price-range.ts）
+  price_label?: string;      // 料金の表示を自由に書く（あればこちらを出す。計算には使わない）
 }
 
 export interface MenuOption {
@@ -58,7 +60,10 @@ export interface MenuOption {
   duration: number;          // 分単位
   description?: string;
   is_default?: boolean;      // デフォルトで選択されるか
+  required?: boolean;        // このメニューを選んだら、このオプションを必ず選ぶ（src/lib/required-options.ts）
   hide_price?: boolean;      // 料金を非表示にするか
+  price_max?: number;        // 料金の上限（price より大きいときだけ「¥5,000〜¥7,000」と出す。src/lib/price-range.ts）
+  price_label?: string;      // 料金の表示を自由に書く（あればこちらを出す。計算には使わない）
   hide_duration?: boolean;   // 所要時間を非表示にするか
   // 対応時間設定: ON なら選択時に指定時間帯のみ予約カレンダーで〇になる（時間帯外は✕）
   time_window_enabled?: boolean;
@@ -82,6 +87,8 @@ export interface SubMenuItem {
   description?: string;
   image?: string;            // 画像URL
   hide_price?: boolean;      // 料金を非表示にするか
+  price_max?: number;        // 料金の上限（price より大きいときだけ「¥5,000〜¥7,000」と出す。src/lib/price-range.ts）
+  price_label?: string;      // 料金の表示を自由に書く（あればこちらを出す。計算には使わない）
   hide_duration?: boolean;   // 所要時間を非表示にするか
   extra_message?: OptionExtraMessage;  // 選択した状態で送信されたときに LINE トークへ追加で送るメッセージ
 }
@@ -100,9 +107,12 @@ export interface MenuItem {
   image_name?: string;       // 画像ファイル名（旧）
   gender_filter?: 'male' | 'female' | 'both';  // 性別フィルター
   options?: MenuOption[];    // メニューオプション
+  options_required?: boolean; // このメニューを選んだら、メニューオプションを 1 つ以上選ぶ（src/lib/required-options.ts）
   has_submenu?: boolean;     // サブメニューを使用するかどうか
   sub_menu_items?: SubMenuItem[];  // サブメニュー項目
   hide_price?: boolean;      // 料金を非表示にするか
+  price_max?: number;        // 料金の上限（price より大きいときだけ「¥5,000〜¥7,000」と出す。src/lib/price-range.ts）
+  price_label?: string;      // 料金の表示を自由に書く（あればこちらを出す。計算には使わない）
   hide_duration?: boolean;   // 所要時間を非表示にするか
   // 対応時間設定: ON なら選択時に指定時間帯のみ予約カレンダーで〇になる（時間帯外は✕）
   time_window_enabled?: boolean;
