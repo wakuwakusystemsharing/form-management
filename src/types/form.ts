@@ -76,6 +76,8 @@ export interface MenuOption {
   sub_options_mode?: 'multiple' | 'single';  // multiple = 複数選べる（既定）/ single = 1 つだけ
   sub_options_required?: boolean;             // true = 親を選んだら 1 つ以上選ぶ必要がある
   sub_options_label?: string;                 // 追加のオプション欄の見出し（空 = 追加オプション）
+  sub_options_hint?: string;                  // 見出しの横の補足（空 = 「複数選べます」/「1つ選べます」）
+  sub_options_hint_hidden?: boolean;          // true = 補足を出さない
 }
 
 // サブメニューの型定義
@@ -108,6 +110,7 @@ export interface MenuItem {
   gender_filter?: 'male' | 'female' | 'both';  // 性別フィルター
   options?: MenuOption[];    // メニューオプション
   options_required?: boolean; // このメニューを選んだら、メニューオプションを 1 つ以上選ぶ（src/lib/required-options.ts）
+  options_heading?: string;   // このメニューのオプション欄の見出し（空 = 全体の見出し。src/lib/menu-headings.ts）
   has_submenu?: boolean;     // サブメニューを使用するかどうか
   sub_menu_items?: SubMenuItem[];  // サブメニュー項目
   hide_price?: boolean;      // 料金を非表示にするか
@@ -126,6 +129,8 @@ export interface MenuItem {
   sub_options_mode?: 'multiple' | 'single';  // multiple = 複数選べる（既定）/ single = 1 つだけ
   sub_options_required?: boolean;             // true = 親を選んだら 1 つ以上選ぶ必要がある
   sub_options_label?: string;                 // 追加のオプション欄の見出し（空 = 追加オプション）
+  sub_options_hint?: string;                  // 見出しの横の補足（空 = 「複数選べます」/「1つ選べます」）
+  sub_options_hint_hidden?: boolean;          // true = 補足を出さない
 }
 
 export interface MenuCategory {
@@ -135,6 +140,7 @@ export interface MenuCategory {
   image?: string;            // カテゴリー画像URL（予約フォームのカテゴリー見出し下に表示）
   menus: MenuItem[];
   options: MenuItem[];       // オプションメニュー
+  options_heading?: string;  // このカテゴリーの共通オプション欄の見出し（空 = 全体の見出し。src/lib/menu-headings.ts）
   selection_mode: 'single' | 'multiple';
   gender_condition?: 'male' | 'female' | 'all';  // 性別による表示条件
   // このカテゴリーのメニュー欄 / 共通オプション欄に置くテキスト・画像ブロック（src/lib/category-content-blocks.ts）

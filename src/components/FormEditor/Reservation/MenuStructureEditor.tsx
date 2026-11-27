@@ -3,7 +3,7 @@
 import { SELECT_SEARCH_DEFAULT_UNKNOWN_LABEL, SELECT_SEARCH_UNKNOWN_LABEL_MAX } from '@/lib/searchable-select';
 import { CHOICE_SIZE_OPTIONS, CHOICE_TYPE_SELECT_OPTIONS, choiceTypeKey, isCheckboxStyle, parseChoiceTypeKey, resolveChoiceSize } from '@/lib/choice-style';
 import type { ChoiceSize } from '@/lib/choice-style';
-import { DEFAULT_MENU_HEADING, DEFAULT_OPTIONS_HEADING, HEADING_CONTENT_ORDER_OPTIONS, HEADING_CONTENT_TEXT_MAX, MENU_HEADING_MAX, resolveMenuHeadings } from '@/lib/menu-headings';
+import { DEFAULT_MENU_HEADING, DEFAULT_OPTIONS_HEADING, HEADING_CONTENT_ORDER_OPTIONS, HEADING_CONTENT_TEXT_MAX, MENU_HEADING_MAX, normalizeOwnOptionsHeading, resolveMenuHeadings } from '@/lib/menu-headings';
 import type { HeadingContentOrder } from '@/lib/menu-headings';
 import { ColoredTextToolbar } from '@/components/FormEditor/Survey/SurveyContentBlockEditor';
 import React, { useState } from 'react';
@@ -1165,6 +1165,9 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   const [options, setOptions] = useState<MenuOption[]>([]);
   // このメニューを選んだら、メニューオプションを 1 つ以上選ぶ（src/lib/required-options.ts）
   const [optionsRequired, setOptionsRequired] = useState(false);
+  // このメニューのオプション欄の見出し（空 = 全体の見出し。src/lib/menu-headings.ts）
+  const [optionsHeading, setOptionsHeading] = useState('');
+  const [optionsHeadingOpen, setOptionsHeadingOpen] = useState(false);
   const [optionModalOpen, setOptionModalOpen] = useState(false);
   const [selectedOption, setSelectedOption] = useState<MenuOption | undefined>();
   const [hasSubmenu, setHasSubmenu] = useState(false);
@@ -1196,6 +1199,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setGenderFilter(menuItem.gender_filter || 'both');
         setOptions(menuItem.options || []);
         setOptionsRequired(menuItem.options_required === true);
+        setOptionsHeading(menuItem.options_heading || '');
+        setOptionsHeadingOpen(!!(menuItem.options_heading || '').trim());
         setHasSubmenu(menuItem.has_submenu || false);
         setSubMenuItems(menuItem.sub_menu_items || []);
         setHidePrice(menuItem.hide_price || false);
@@ -1218,6 +1223,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setGenderFilter('both');
         setOptions([]);
         setOptionsRequired(false);
+        setOptionsHeading('');
+        setOptionsHeadingOpen(false);
         setHasSubmenu(false);
         setSubMenuItems([]);
         setHidePrice(false);
@@ -1245,6 +1252,7 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       gender_filter: genderEnabled ? genderFilter : undefined,
       options: hasSubmenu ? undefined : (options.length > 0 ? options : undefined),
       options_required: !hasSubmenu && options.length > 0 && optionsRequired ? true : undefined,
+      options_heading: !hasSubmenu && options.length > 0 ? normalizeOwnOptionsHeading(optionsHeading) : undefined,
       has_submenu: hasSubmenu,
       sub_menu_items: hasSubmenu ? subMenuItems : undefined,
       hide_price: hidePrice || undefined,
@@ -1702,12 +1710,39 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                     メニューオプション
                   </h4>
                   <button
+                    type="button"
+                    onClick={() => setOptionsHeadingOpen(v => !v)}
+                    className={`mr-2 px-3 py-1 text-sm rounded-md ${optionsHeadingOpen ? themeClasses.button.primary : themeClasses.button.secondary}`}
+                    data-slot="menu-options-heading-button"
+                  >
+                    見出しを変更
+                  </button>
+                  <button
                     onClick={handleAddOption}
                     className={`px-3 py-1 text-sm rounded-md ${themeClasses.button.primary}`}
                   >
                     オプション追加
                   </button>
                 </div>
+
+                {optionsHeadingOpen && (
+                  <div className={`rounded-md p-3 ${themeClasses.card}`} data-slot="menu-options-heading">
+                    <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>
+                      このメニューのオプション欄の見出し（予約フォームで、オプションの一覧の上に出る文言）
+                    </label>
+                    <input
+                      type="text"
+                      value={optionsHeading}
+                      maxLength={MENU_HEADING_MAX}
+                      onChange={(e) => setOptionsHeading(e.target.value)}
+                      placeholder="例: オプションをつけたい場合はお選びください"
+                      className={`w-full px-3 py-2 rounded-md ${themeClasses.input}`}
+                    />
+                    <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                      空のときは、フォーム全体の見出し（「見出しの文言を変更」で決めた文言。既定は「{DEFAULT_OPTIONS_HEADING}」）を使います。{MENU_HEADING_MAX} 文字まで。
+                    </p>
+                  </div>
+                )}
 
                 {options.length === 0 ? (
                   <p className={`text-sm py-4 text-center rounded-md ${themeClasses.emptyState}`}>
@@ -1943,6 +1978,12 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
   };
 
   // カテゴリーごとのテキスト・画像ブロック（メニュー欄 / 共通オプション欄）
+  // カテゴリー共通オプション欄の見出し（カテゴリーごと。空 = 全体の見出し）
+  const [catHeadingOpenIds, setCatHeadingOpenIds] = useState<string[]>([]);
+  const updateCategoryOptionsHeading = (categoryId: string, value: string) => {
+    updateCategories(categories.map((c) => (c.id === categoryId ? { ...c, options_heading: value.slice(0, MENU_HEADING_MAX) || undefined } : c)));
+  };
+
   const updateCategoryContentBlocks = (categoryId: string, blocks: CategoryContentBlock[]) => {
     updateCategories(categories.map((c) => (c.id === categoryId ? { ...c, content_blocks: blocks } : c)));
   };
@@ -5172,6 +5213,14 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                       </div>
                       <div className="flex items-center space-x-2">
                         <button
+                          type="button"
+                          onClick={() => setCatHeadingOpenIds(prev => prev.includes(category.id) ? prev.filter(id => id !== category.id) : [...prev, category.id])}
+                          className={`px-2 py-1 text-xs rounded-md ${(catHeadingOpenIds.includes(category.id) || (category.options_heading || '').trim()) ? themeClasses.button.primary : themeClasses.button.secondary}`}
+                          data-slot="category-options-heading-button"
+                        >
+                          見出しを変更
+                        </button>
+                        <button
                           onClick={() => handleOpenCopyOpts(category.id)}
                           disabled={categories.length <= 1 || (category.options || []).length === 0}
                           title={
@@ -5199,6 +5248,24 @@ const MenuStructureEditor: React.FC<MenuStructureEditorProps> = ({ form, onUpdat
                         </button>
                       </div>
                     </div>
+                    {(catHeadingOpenIds.includes(category.id) || (category.options_heading || '').trim()) && (
+                      <div className={`mb-3 rounded-md p-3 ${themeClasses.card}`} data-slot="category-options-heading">
+                        <label className={`block text-xs ${themeClasses.text.secondary} mb-1`}>
+                          このカテゴリーの共通オプション欄の見出し（予約フォームで、オプションの一覧の上に出る文言）
+                        </label>
+                        <input
+                          type="text"
+                          value={category.options_heading || ''}
+                          maxLength={MENU_HEADING_MAX}
+                          onChange={(e) => updateCategoryOptionsHeading(category.id, e.target.value)}
+                          placeholder="例: オプションをつけたい場合はお選びください"
+                          className={`w-full px-3 py-2 rounded-md text-sm ${themeClasses.input}`}
+                        />
+                        <p className={`text-xs ${themeClasses.text.tertiary} mt-1`}>
+                          空のときは、フォーム全体の見出し（いまは「{resolveMenuHeadings(form.config).options_heading}」）を使います。{MENU_HEADING_MAX} 文字まで。
+                        </p>
+                      </div>
+                    )}
                     {(category.options || []).length === 0 ? (
                       <p className={`text-xs text-center py-3 rounded ${themeClasses.emptyState}`}>カテゴリー共通オプションなし</p>
                     ) : (

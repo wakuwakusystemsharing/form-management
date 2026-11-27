@@ -8,7 +8,7 @@ import { ADDRESS_CSS, ADDRESS_RUNTIME_JS, renderAddressFieldHtml } from './addre
 import { BIRTHDAY_CSS, BIRTHDAY_RUNTIME_JS, HOLIDAY_RUNTIME_JS, MD_TIME_SELECT_DISABLED_CSS, MULTIPLE_DATES_RUNTIME_JS, renderBirthdayFieldHtml } from './multiple-dates-runtime-js';
 import { SEARCHABLE_SELECT_CSS, SEARCHABLE_SELECT_RUNTIME_JS, renderSearchableSelectHtml } from './searchable-select-runtime-js';
 import { CHOICE_CHECK_CSS, choiceGroupClass } from './choice-style';
-import { resolveMenuHeadings, resolveMenuHeadingContents } from './menu-headings';
+import { resolveMenuHeadings, resolveMenuHeadingContents, resolveOptionsHeading } from './menu-headings';
 import type { HeadingContent } from './menu-headings';
 import { renderCategoryBlocksAt } from './category-content-blocks';
 import { FormConfig } from '@/types/form';
@@ -21,7 +21,7 @@ import { isWaitlistActive, resolveWaitlistSettings } from './waitlist';
 import { WAITLIST_CSS, WAITLIST_RUNTIME_JS, renderWaitlistBarHtml, renderWaitlistHintHtml, renderWaitlistModalHtml } from './waitlist-runtime-js';
 import { buildCancelPolicyText } from './cancel-rules';
 import { EXTRA_MESSAGE_RUNTIME_JS } from './extra-messages';
-import { flattenConfigSubOptions, normalizeSubOptions, resolveSubOptionsLabel, resolveSubOptionsMode, SUB_OPTIONS_RUNTIME_JS } from './sub-options';
+import { flattenConfigSubOptions, normalizeSubOptions, resolveSubOptionsHint, resolveSubOptionsLabel, SUB_OPTIONS_RUNTIME_JS } from './sub-options';
 import type { FlatMenuOption, SubOptionHost } from './sub-options';
 import { PRICE_RANGE_RUNTIME_JS, itemPriceText } from './price-range';
 import { REQUIRED_OPTIONS_RUNTIME_JS } from './required-options';
@@ -2780,6 +2780,19 @@ class BookingForm {
         });
     }
     
+    // 選択中のメニューがあるカテゴリーを開く（カテゴリーは最初すべて閉じているので、
+    // 前回のメニューの復元・メニュー変更フォーム・空き待ちからの入力のあとに呼ぶ）
+    openSelectedCategories() {
+        document.querySelectorAll('.menu-item.selected').forEach(item => {
+            const section = item.closest('.category-section');
+            if (!section) return;
+            const header = document.querySelector('.category-header[data-category-id="' + (item.dataset.categoryId || '') + '"]');
+            if (!header || header.style.display === 'none') return;
+            section.style.display = 'block';
+            header.classList.add('open');
+        });
+    }
+
     // カテゴリーアコーディオン切り替え
     toggleCategory(categoryId) {
         const allowCross = this.config.menu_structure?.allow_cross_category_selection || false;
@@ -2890,6 +2903,7 @@ class BookingForm {
                             }
                         });
                     });
+                    this.openSelectedCategories();
                     this.toggleCalendarVisibility();
                     this.updateSummary();
                     return;
@@ -2991,6 +3005,7 @@ class BookingForm {
                         this.updateSummary();
                         this.toggleCalendarVisibility();
                         
+                        this.openSelectedCategories();
                         // カレンダーセクションにスクロール
                         setTimeout(() => {
                             const calendarField = document.getElementById('datetime-field');
@@ -4915,7 +4930,8 @@ if (document.readyState === 'loading') {
     const menuItemClass = imageDisplay === 'thumbnail' ? 'menu-item menu-item--thumb' : 'menu-item';
     // 見出し文言（メニュー構成 → 「見出しの文言を変更」。未設定は既定）
     const headings = resolveMenuHeadings(config);
-    const optionsHeadingHtml = this.escapeHtml(headings.options_heading);
+    // オプション欄の見出しは、メニュー / カテゴリーごとの個別の文言 → 全体の文言 → 既定 の順
+    const optionsHeadingHtmlFor = (own: unknown) => this.escapeHtml(resolveOptionsHeading(config, own));
     // 見出しの下に表示するテキスト / 画像（メニュー欄 / オプション欄。未設定なら空文字）
     const headingContents = resolveMenuHeadingContents(config);
     const menuHeadingContentHtml = this.renderHeadingContentHtml(headingContents.menu);
@@ -4937,7 +4953,7 @@ if (document.readyState === 'loading') {
                                     </button>
                                     ${!menu.has_submenu && menu.options && menu.options.length > 0 ? `
                                         <div id="options-${menu.id}" class="menu-options-container" style="display:none;margin-left:1.5rem;padding-left:1rem;border-left:2px solid #bbf7d0;margin-top:0.75rem;margin-bottom:0.75rem;">
-                                            <div style="font-size:0.875rem;font-weight:500;color:#374151;margin-bottom:0.75rem;">${optionsHeadingHtml}${menu.options_required === true ? '<span class="options-required-note" style="color:#dc2626;margin-left:0.25rem;font-size:0.75rem;">（1つ以上必須）</span>' : ''}</div>
+                                            <div style="font-size:0.875rem;font-weight:500;color:#374151;margin-bottom:0.75rem;">${optionsHeadingHtmlFor(menu.options_heading)}${menu.options_required === true ? '<span class="options-required-note" style="color:#dc2626;margin-left:0.25rem;font-size:0.75rem;">（1つ以上必須）</span>' : ''}</div>
                                             ${optionsHeadingContentHtml}
                                             ${menu.options.filter((option) => !(option as FlatMenuOption).parent_option_id).map((option, optionIndex) => `
                                                 <button type="button" class="menu-option-item" data-menu-id="${menu.id}" data-option-id="${option.id || `option-${optionIndex}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
@@ -4972,13 +4988,13 @@ if (document.readyState === 'loading') {
     const renderSubOptions = (scope: 'menu' | 'category', ownerId: string, parent: SubOptionHost): string => {
       const subs = normalizeSubOptions(parent.sub_options);
       if (subs.length === 0) return '';
-      const single = resolveSubOptionsMode(parent.sub_options_mode) === 'single';
+      const hint = resolveSubOptionsHint(parent);
       const itemClass = scope === 'menu' ? 'menu-option-item' : 'category-option-item';
       const ownerAttr = scope === 'menu' ? `data-menu-id="${ownerId}"` : `data-category-id="${ownerId}"`;
       const showDesc = config.menu_structure?.display_options?.show_description !== false;
       return `
                                                 <div class="sub-options-container" data-scope="${scope}" data-owner-id="${ownerId}" data-parent-option-id="${parent.id}" style="display:none;margin:0 0 0.75rem 1rem;padding-left:0.75rem;border-left:2px solid #e5e7eb;">
-                                                    <div style="font-size:0.75rem;font-weight:500;color:#6b7280;margin-bottom:0.375rem;">${this.escapeHtml(resolveSubOptionsLabel(parent.sub_options_label))}${parent.sub_options_required === true ? '<span style="color:#dc2626;margin-left:0.25rem;">（必須）</span>' : ''}<span style="margin-left:0.25rem;font-weight:400;">${single ? '1つ選べます' : '複数選べます'}</span></div>
+                                                    <div style="font-size:0.75rem;font-weight:500;color:#6b7280;margin-bottom:0.375rem;">${this.escapeHtml(resolveSubOptionsLabel(parent.sub_options_label))}${parent.sub_options_required === true ? '<span style="color:#dc2626;margin-left:0.25rem;">（必須）</span>' : ''}${hint ? `<span class="sub-options-hint" style="margin-left:0.25rem;font-weight:400;">${this.escapeHtml(hint)}</span>` : ''}</div>
                                                     ${subs.map((sub) => `
                                                     <button type="button" class="${itemClass} sub-option-item" ${ownerAttr} data-option-id="${sub.id}" data-parent-option-id="${parent.id}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0.5rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.375rem;transition:all 0.15s;text-align:left;">
                                                         <div>
@@ -4997,7 +5013,7 @@ if (document.readyState === 'loading') {
       if (!category.options || category.options.length === 0) return '';
       return `
                             <div class="category-options-section" style="margin-top:1rem;padding-top:1rem;border-top:1px solid #e5e7eb;">
-                                <div style="font-size:0.875rem;font-weight:600;color:#374151;margin-bottom:0.75rem;">${optionsHeadingHtml}</div>
+                                <div style="font-size:0.875rem;font-weight:600;color:#374151;margin-bottom:0.75rem;">${optionsHeadingHtmlFor(category.options_heading)}</div>
                                 ${optionsHeadingContentHtml}
                                 ${renderCategoryBlocksAt(category, 'options', 'top')}
                                 <div class="category-options-list">
@@ -5026,14 +5042,14 @@ if (document.readyState === 'loading') {
             <div class="field" id="menu-field"${hiddenUntilVisit ? ' style="display:none;"' : ''}>
                 <label class="field-label">${this.escapeHtml(headings.menu_heading)}</label>
                 ${menuHeadingContentHtml}
-                ${config.menu_structure.categories.map((category, idx) => `
+                ${config.menu_structure.categories.map((category) => `
                     ${multiCat ? `
-                    <button type="button" class="category-header${idx === 0 ? ' open' : ''}" data-category-id="${category.id}" onclick="window.bookingForm.toggleCategory('${category.id}')">
+                    <button type="button" class="category-header" data-category-id="${category.id}" onclick="window.bookingForm.toggleCategory('${category.id}')">
                         <span class="category-header-name">${this.escapeHtml(category.display_name || category.name)}</span>
                         <span class="category-header-chevron"></span>
                     </button>
                     ` : ''}
-                    <div id="category-section-${category.id}" class="category-section" style="${multiCat && idx > 0 ? 'display:none;' : ''}">
+                    <div id="category-section-${category.id}" class="category-section" style="${multiCat ? 'display:none;' : ''}">
                         ${category.image && /^https?:/i.test(category.image.trim()) ? `
                         <div class="category-image"><img src="${this.escapeHtml(category.image.trim())}" alt="${this.escapeHtml(category.display_name || category.name)}" loading="lazy"></div>` : ''}
                         ${renderCategoryBlocksAt(category, 'menus', 'top')}

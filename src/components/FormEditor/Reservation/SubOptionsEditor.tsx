@@ -9,7 +9,7 @@ import React from 'react';
 import type { MenuSubOption } from '@/types/form';
 import { getThemeClasses, ThemeType } from '../FormEditorTheme';
 import PriceRangeFields from './PriceRangeFields';
-import { DEFAULT_SUB_OPTIONS_LABEL, newSubOption, SUB_OPTION_NAME_MAX, SUB_OPTIONS_LABEL_MAX, SUB_OPTIONS_MAX, type SubOptionsEditorValue } from '@/lib/sub-options';
+import { DEFAULT_SUB_OPTIONS_LABEL, defaultSubOptionsHint, newSubOption, resolveSubOptionsHint, resolveSubOptionsLabel, SUB_OPTION_NAME_MAX, SUB_OPTIONS_HINT_MAX, SUB_OPTIONS_LABEL_MAX, SUB_OPTIONS_MAX, type SubOptionsEditorValue } from '@/lib/sub-options';
 
 export type SubOptionsValue = SubOptionsEditorValue;
 
@@ -135,6 +135,27 @@ export default function SubOptionsEditor({ value, onChange, theme = 'dark' }: Pr
               見出し（任意。空なら「{DEFAULT_SUB_OPTIONS_LABEL}」）
               <input type="text" value={value.sub_options_label} maxLength={SUB_OPTIONS_LABEL_MAX} onChange={(e) => set({ sub_options_label: e.target.value })} placeholder={`例: コースの長さ`} className={`mt-0.5 w-full ${input}`} />
             </label>
+            <div data-slot="sub-options-hint">
+              <label className={`block text-xs ${themeClasses.text.secondary}`}>
+                見出しの横の補足（任意。空なら「{defaultSubOptionsHint(value.sub_options_mode)}」）
+                <input
+                  type="text"
+                  value={value.sub_options_hint}
+                  maxLength={SUB_OPTIONS_HINT_MAX}
+                  disabled={value.sub_options_hint_hidden}
+                  onChange={(e) => set({ sub_options_hint: e.target.value })}
+                  placeholder="例: つけたい場合はお選びください"
+                  className={`mt-0.5 w-full ${input} disabled:opacity-50`}
+                />
+              </label>
+              <label className={`mt-1 flex items-center gap-1 text-xs ${themeClasses.text.secondary}`}>
+                <input type="checkbox" checked={value.sub_options_hint_hidden} onChange={(e) => set({ sub_options_hint_hidden: e.target.checked })} />
+                補足を表示しない
+              </label>
+            </div>
+            <p className={`text-xs ${themeClasses.text.secondary}`}>
+              フォームでの表示：{resolveSubOptionsLabel(value.sub_options_label)}{value.sub_options_required ? '（必須）' : ''} {resolveSubOptionsHint(value)}
+            </p>
           </div>
         </>
       )}
