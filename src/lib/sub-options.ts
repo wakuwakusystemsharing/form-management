@@ -23,9 +23,12 @@ export interface SubOptionHost {
   sub_options_mode?: 'multiple' | 'single';
   sub_options_required?: boolean;
   sub_options_label?: string;
+  sub_options_hint?: string;
+  sub_options_hint_hidden?: boolean;
 }
 
 export const SUB_OPTIONS_MAX = 20;
+export const SUB_OPTIONS_HINT_MAX = 40;
 export const SUB_OPTION_NAME_MAX = 60;
 export const SUB_OPTIONS_LABEL_MAX = 40;
 export const DEFAULT_SUB_OPTIONS_LABEL = '追加オプション';
@@ -76,6 +79,17 @@ export function resolveSubOptionsMode(v: unknown): SubOptionsMode {
 /** 追加のオプション欄の見出し（空なら既定） */
 export function resolveSubOptionsLabel(v: unknown): string {
   return str(v).trim().slice(0, SUB_OPTIONS_LABEL_MAX) || DEFAULT_SUB_OPTIONS_LABEL;
+}
+
+/** 見出しの横の補足（既定: 複数選べます / 1つ選べます） */
+export function defaultSubOptionsHint(mode: unknown): string {
+  return resolveSubOptionsMode(mode) === 'single' ? '1つ選べます' : '複数選べます';
+}
+
+/** 見出しの横の補足の文言（表示しない設定なら空。自由に書いた文言があればそれ、無ければ既定） */
+export function resolveSubOptionsHint(host: Pick<SubOptionHost, 'sub_options_mode' | 'sub_options_hint' | 'sub_options_hint_hidden'> | null | undefined): string {
+  if (host?.sub_options_hint_hidden === true) return '';
+  return str(host?.sub_options_hint).trim().slice(0, SUB_OPTIONS_HINT_MAX) || defaultSubOptionsHint(host?.sub_options_mode);
 }
 
 /** ご予約内容・LINE メッセージ・予約データに出る名前 */
@@ -320,6 +334,8 @@ export interface SubOptionsEditorValue {
   sub_options_mode: SubOptionsMode;
   sub_options_required: boolean;
   sub_options_label: string;
+  sub_options_hint: string;
+  sub_options_hint_hidden: boolean;
 }
 
 /** 保存済みのオプションから、編集欄の値を作る */
@@ -329,18 +345,23 @@ export function toSubOptionsEditorValue(host: SubOptionHost | null | undefined):
     sub_options_mode: resolveSubOptionsMode(host?.sub_options_mode),
     sub_options_required: host?.sub_options_required === true,
     sub_options_label: typeof host?.sub_options_label === 'string' ? host.sub_options_label : '',
+    sub_options_hint: typeof host?.sub_options_hint === 'string' ? host.sub_options_hint : '',
+    sub_options_hint_hidden: host?.sub_options_hint_hidden === true,
   };
 }
 
 /** 編集欄の値から、オプションに保存する項目を作る（追加のオプションが無ければすべて undefined = 項目を持たない） */
-export function subOptionsFieldsToSave(value: SubOptionsEditorValue): Pick<SubOptionHost, 'sub_options' | 'sub_options_mode' | 'sub_options_required' | 'sub_options_label'> {
+export function subOptionsFieldsToSave(value: SubOptionsEditorValue): Pick<SubOptionHost, 'sub_options' | 'sub_options_mode' | 'sub_options_required' | 'sub_options_label' | 'sub_options_hint' | 'sub_options_hint_hidden'> {
   const list = normalizeSubOptions(value.sub_options);
-  if (list.length === 0) return { sub_options: undefined, sub_options_mode: undefined, sub_options_required: undefined, sub_options_label: undefined };
+  if (list.length === 0) return { sub_options: undefined, sub_options_mode: undefined, sub_options_required: undefined, sub_options_label: undefined, sub_options_hint: undefined, sub_options_hint_hidden: undefined };
   const label = value.sub_options_label.trim().slice(0, SUB_OPTIONS_LABEL_MAX);
+  const hint = (value.sub_options_hint || '').trim().slice(0, SUB_OPTIONS_HINT_MAX);
   return {
     sub_options: list,
     sub_options_mode: value.sub_options_mode === 'single' ? 'single' : undefined,
     sub_options_required: value.sub_options_required ? true : undefined,
     sub_options_label: label || undefined,
+    sub_options_hint: hint || undefined,
+    sub_options_hint_hidden: value.sub_options_hint_hidden ? true : undefined,
   };
 }

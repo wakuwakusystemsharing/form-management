@@ -54,6 +54,19 @@ export function resolveMenuHeadings(config: Pick<FormConfig, 'menu_structure'> |
   };
 }
 
+/**
+ * メニューごと / カテゴリーごとのオプション欄の見出し。
+ * そのメニュー（カテゴリー）に個別の見出しがあればそれ、無ければ全体の見出し（「見出しの文言を変更」）、それも無ければ既定。
+ */
+export function resolveOptionsHeading(config: Pick<FormConfig, 'menu_structure'> | undefined | null, own: unknown): string {
+  return clean(own) || resolveMenuHeadings(config).options_heading;
+}
+
+/** 個別の見出しを保存する形にする（空 = 項目を持たない = 全体の見出しを使う） */
+export function normalizeOwnOptionsHeading(value: unknown): string | undefined {
+  return clean(value) || undefined;
+}
+
 function cleanContentText(value: unknown): string {
   return typeof value === 'string' ? value.trim().slice(0, HEADING_CONTENT_TEXT_MAX) : '';
 }
