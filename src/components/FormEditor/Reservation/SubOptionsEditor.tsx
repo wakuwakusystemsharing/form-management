@@ -8,6 +8,7 @@
 import React from 'react';
 import type { MenuSubOption } from '@/types/form';
 import { getThemeClasses, ThemeType } from '../FormEditorTheme';
+import PriceRangeFields from './PriceRangeFields';
 import { DEFAULT_SUB_OPTIONS_LABEL, newSubOption, SUB_OPTION_NAME_MAX, SUB_OPTIONS_LABEL_MAX, SUB_OPTIONS_MAX, type SubOptionsEditorValue } from '@/lib/sub-options';
 
 export type SubOptionsValue = SubOptionsEditorValue;
@@ -86,6 +87,21 @@ export default function SubOptionsEditor({ value, onChange, theme = 'dark' }: Pr
                     <input type="text" inputMode="numeric" value={sub.duration ? String(sub.duration) : ''} onChange={(e) => update(sub.id, { duration: digits(e.target.value) })} placeholder="0" className={`mt-0.5 w-full ${input}`} />
                   </label>
                 </div>
+                <PriceRangeFields
+                  price={sub.price || 0}
+                  priceMax={sub.price_max ? String(sub.price_max) : ''}
+                  priceLabel={sub.price_label || ''}
+                  onChange={(patch) =>
+                    update(sub.id, {
+                      ...(patch.priceMax !== undefined ? { price_max: digits(patch.priceMax) || undefined } : {}),
+                      ...(patch.priceLabel !== undefined ? { price_label: patch.priceLabel || undefined } : {}),
+                    })
+                  }
+                  plus
+                  hidePrice={sub.hide_price === true}
+                  theme={theme}
+                  compact
+                />
                 <div className="flex flex-wrap gap-x-4 gap-y-1">
                   <label className={`flex items-center gap-1 text-xs ${themeClasses.text.secondary}`}>
                     <input type="checkbox" checked={sub.hide_price === true} onChange={(e) => update(sub.id, { hide_price: e.target.checked || undefined })} />

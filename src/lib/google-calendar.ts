@@ -3,6 +3,7 @@ import { busyCalendarIdsFromEvents, countEventsOverlappingSlot, type CalendarEve
 import { createAdminClient } from './supabase';
 import { decryptRefreshToken } from './google-calendar-token';
 import { getServiceAccountCredentials } from './google-service-account';
+import { formatTotalPrice, formatYenRange, priceSpread } from './price-range';
 
 const GOOGLE_CALENDAR_SCOPES = [
   'https://www.googleapis.com/auth/calendar',
@@ -459,7 +460,7 @@ function buildReservationEventBody(params: ReservationEventParams) {
   if (params.selectedOptions && params.selectedOptions.length > 0) {
     const optionLines = params.selectedOptions.map((opt: any) => {
       const name = opt.option_name || '';
-      const priceText = (opt.price || 0) > 0 ? ` ¥${Number(opt.price).toLocaleString()}` : '';
+      const priceText = Math.max(opt.price || 0, opt.price_max || 0) > 0 ? ` ${formatYenRange(opt.price, opt.price_max)}` : '';
       const durationText = (opt.duration || 0) > 0 ? ` (${opt.duration}分)` : '';
       return `・${name}${priceText}${durationText}`;
     }).join('\n');
@@ -467,7 +468,7 @@ function buildReservationEventBody(params: ReservationEventParams) {
   }
 
   const totalLines: string[] = [];
-  if (totalPrice > 0) totalLines.push(`≪合計金額≫ ¥${totalPrice.toLocaleString()}`);
+  if (totalPrice > 0) totalLines.push(`≪合計金額≫ ${formatTotalPrice(totalPrice, priceSpread(params.selectedMenus, params.selectedOptions))}`);
   if (durationMinutes > 0) totalLines.push(`≪合計時間≫ ${durationMinutes}分`);
   if (totalLines.length > 0) sections.push(totalLines.join('\n'));
 

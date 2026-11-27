@@ -11,6 +11,7 @@
  *   `soSync`（親を外したら子も外す / 1 つだけのときは他を外す）、`soMissingRequired`（必須の確認）だけ
  */
 import type { FormConfig, MenuItem, MenuSubOption } from '@/types/form';
+import { normalizePriceLabel, sanitizePriceMax } from './price-range';
 
 /** 追加のオプションを持てるもの（メニューオプション / カテゴリー共通オプション） */
 export interface SubOptionHost {
@@ -50,12 +51,16 @@ export function normalizeSubOptions(raw: unknown): MenuSubOption[] {
     if (!name || !id || seen.has(id)) continue;
     seen.add(id);
     const description = str(o.description).trim();
+    const priceMax = sanitizePriceMax(o.price, o.price_max);
+    const priceLabel = normalizePriceLabel(o.price_label);
     out.push({
       id,
       name,
       price: num(o.price),
       duration: num(o.duration),
       ...(description ? { description } : {}),
+      ...(priceMax ? { price_max: priceMax } : {}),
+      ...(priceLabel ? { price_label: priceLabel } : {}),
       ...(o.hide_price === true ? { hide_price: true } : {}),
       ...(o.hide_duration === true ? { hide_duration: true } : {}),
     });
@@ -106,6 +111,8 @@ export function flattenSubOptions<T extends SubOptionHost>(options: ReadonlyArra
         price: sub.price,
         duration: sub.duration,
         ...(sub.description ? { description: sub.description } : {}),
+        ...(sub.price_max ? { price_max: sub.price_max } : {}),
+        ...(sub.price_label ? { price_label: sub.price_label } : {}),
         ...(sub.hide_price ? { hide_price: true } : {}),
         ...(sub.hide_duration ? { hide_duration: true } : {}),
       } as unknown as T & FlatMenuOption);

@@ -1,6 +1,7 @@
 'use client';
 
 import { flattenSubOptions } from '@/lib/sub-options';
+import { resolvePriceMax } from '@/lib/price-range';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,9 +31,10 @@ interface MenuChoice {
   menuId: string;
   menuName: string;
   price: number;
+  priceMax: number;       // 料金の上限（幅が無ければ price と同じ）
   duration: number;
-  subMenus: Array<{ id: string; name: string; price: number; duration: number }>;
-  options: Array<{ id: string; name: string; price: number; duration: number }>;
+  subMenus: Array<{ id: string; name: string; price: number; priceMax: number; duration: number }>;
+  options: Array<{ id: string; name: string; price: number; priceMax: number; duration: number }>;
 }
 
 function toMin(hhmm: string): number {
@@ -61,26 +63,26 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
       (cat.menus || []).forEach((m) => {
         out.push({
           key: m.id, categoryId: cat.id, categoryName: cat.display_name || cat.name,
-          menuId: m.id, menuName: m.name, price: m.price || 0, duration: m.duration || 0,
-          subMenus: (m.sub_menu_items || []).map((s) => ({ id: s.id, name: s.name, price: s.price || 0, duration: s.duration || 0 })),
-          options: flattenSubOptions(m.options || []).map((o) => ({ id: o.id, name: o.name, price: o.price || 0, duration: o.duration || 0 })),
+          menuId: m.id, menuName: m.name, price: m.price || 0, priceMax: resolvePriceMax(m), duration: m.duration || 0,
+          subMenus: (m.sub_menu_items || []).map((s) => ({ id: s.id, name: s.name, price: s.price || 0, priceMax: resolvePriceMax(s), duration: s.duration || 0 })),
+          options: flattenSubOptions(m.options || []).map((o) => ({ id: o.id, name: o.name, price: o.price || 0, priceMax: resolvePriceMax(o), duration: o.duration || 0 })),
         });
       });
     });
     (formConfig?.menu_structure?.menus || []).forEach((m) => {
       out.push({
-        key: m.id, categoryId: '', categoryName: '', menuId: m.id, menuName: m.name, price: m.price || 0, duration: m.duration || 0,
-        subMenus: (m.sub_menu_items || []).map((s) => ({ id: s.id, name: s.name, price: s.price || 0, duration: s.duration || 0 })),
-        options: flattenSubOptions(m.options || []).map((o) => ({ id: o.id, name: o.name, price: o.price || 0, duration: o.duration || 0 })),
+        key: m.id, categoryId: '', categoryName: '', menuId: m.id, menuName: m.name, price: m.price || 0, priceMax: resolvePriceMax(m), duration: m.duration || 0,
+        subMenus: (m.sub_menu_items || []).map((s) => ({ id: s.id, name: s.name, price: s.price || 0, priceMax: resolvePriceMax(s), duration: s.duration || 0 })),
+        options: flattenSubOptions(m.options || []).map((o) => ({ id: o.id, name: o.name, price: o.price || 0, priceMax: resolvePriceMax(o), duration: o.duration || 0 })),
       });
     });
     return out;
   }, [formConfig]);
   const categoryOptions = useMemo(() => {
-    const out: Array<{ categoryId: string; categoryName: string; id: string; name: string; price: number; duration: number }> = [];
+    const out: Array<{ categoryId: string; categoryName: string; id: string; name: string; price: number; priceMax: number; duration: number }> = [];
     (formConfig?.menu_structure?.categories || []).forEach((cat) => {
       // オプションのオプションも、通常のオプションと同じ並びで選べるようにする（予約データには「親（追加）」の名前で入っている）
-      flattenSubOptions(cat.options || []).forEach((o) => out.push({ categoryId: cat.id, categoryName: cat.display_name || cat.name, id: o.id, name: o.name, price: o.price || 0, duration: o.duration || 0 }));
+      flattenSubOptions(cat.options || []).forEach((o) => out.push({ categoryId: cat.id, categoryName: cat.display_name || cat.name, id: o.id, name: o.name, price: o.price || 0, priceMax: resolvePriceMax(o), duration: o.duration || 0 }));
     });
     return out;
   }, [formConfig]);
@@ -151,14 +153,17 @@ export default function ReservationEditForm({ reservation, formConfig, onSaved, 
       if (!selectedMenuIds.has(c.menuId)) return;
       const sub = c.subMenus.find((s) => s.id === subMenuSel[c.menuId]);
       const price = sub ? sub.price : c.price;
+      const priceMax = sub ? sub.priceMax : c.priceMax;
       const duration = sub ? sub.duration : c.duration;
-      menus.push({ menu_id: c.menuId, menu_name: c.menuName, category_name: c.categoryName, price, duration, ...(sub ? { submenu_id: sub.id, submenu_name: sub.name } : {}) });
+      // 幅のある料金（¥5,000〜¥7,000）は、上限も予約に残す（合計金額を幅で出すため）
+      const range = (min: number, max: number) => (max > min ? { price_max: max } : {});
+      menus.push({ menu_id: c.menuId, menu_name: c.menuName, category_name: c.categoryName, price, ...range(price, priceMax), duration, ...(sub ? { submenu_id: sub.id, submenu_name: sub.name } : {}) });
       c.options.forEach((o) => {
-        if (selectedOptionIds.has(o.id)) options.push({ option_id: o.id, option_name: o.name, menu_id: c.menuId, price: o.price, duration: o.duration });
+        if (selectedOptionIds.has(o.id)) options.push({ option_id: o.id, option_name: o.name, menu_id: c.menuId, price: o.price, ...range(o.price, o.priceMax), duration: o.duration });
       });
     });
     categoryOptions.forEach((o) => {
-      if (selectedOptionIds.has(o.id)) options.push({ option_id: o.id, option_name: o.name, category_id: o.categoryId, price: o.price, duration: o.duration });
+      if (selectedOptionIds.has(o.id)) options.push({ option_id: o.id, option_name: o.name, category_id: o.categoryId, price: o.price, ...(o.priceMax > o.price ? { price_max: o.priceMax } : {}), duration: o.duration });
     });
     const duration = menus.reduce((s, m) => s + (m.duration || 0), 0) + options.reduce((s, o) => s + (o.duration || 0), 0);
     const price = menus.reduce((s, m) => s + (m.price || 0), 0) + options.reduce((s, o) => s + (o.price || 0), 0);

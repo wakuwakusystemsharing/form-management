@@ -8,6 +8,7 @@
 
 import type { Form } from '@/types/form';
 import { sanitizeNominationFee } from './nomination-fee';
+import { formatTotalPrice, formatYenRange, priceSpread } from './price-range';
 import { buildStayDetailRows, formatCancelFeeText, isStayReservation } from './stay-display';
 
 export interface DetailReservationInput {
@@ -28,12 +29,15 @@ export interface DetailReservationInput {
     menu_name?: string;
     submenu_name?: string;
     category_name?: string;
+    price?: number;
+    price_max?: number;
   }> | null;
   selected_options?: Array<{
     option_name?: string;
     menu_id?: string;
     category_id?: string;
     price?: number;
+    price_max?: number;
     duration?: number;
   }> | null;
   customer_info?: {
@@ -94,8 +98,9 @@ export function formatJpDateTime(dateStr: string | null | undefined, timeStr: st
   return `${m[1]}年${m[2]}月${m[3]}日${dow} ${time}`;
 }
 
-function formatOptionLine(o: { option_name?: string; price?: number; duration?: number }, showDuration: boolean): string {
-  const price = (o.price || 0) > 0 ? ` ¥${Number(o.price).toLocaleString()}` : '';
+// 幅のある料金（¥5,000〜¥7,000）: src/lib/price-range.ts
+function formatOptionLine(o: { option_name?: string; price?: number; price_max?: number; duration?: number }, showDuration: boolean): string {
+  const price = Math.max(o.price || 0, o.price_max || 0) > 0 ? ` ${formatYenRange(o.price, o.price_max)}` : '';
   const duration = showDuration && (o.duration || 0) > 0 ? ` (${o.duration}分)` : '';
   return `　└ ${o.option_name || ''}${price}${duration}`;
 }
@@ -216,7 +221,7 @@ export function buildReservationDetailItems(config: FormConfigLike, reservation:
   }
   const totalPrice = Number(info.total_price || 0);
   if (show('total_price') && totalPrice > 0) {
-    out.push({ label: '合計金額', value: `¥${totalPrice.toLocaleString()}` });
+    out.push({ label: '合計金額', value: formatTotalPrice(totalPrice, priceSpread(reservation.selected_menus, reservation.selected_options)) });
   }
   const totalDuration = Number(info.total_duration || 0);
   if (show('total_duration') && totalDuration > 0) {
@@ -358,7 +363,7 @@ export function buildAdminReservationRows(config: FormConfigLike, reservation: A
   }
 
   const totalPrice = Number(info.total_price || 0);
-  if (totalPrice > 0) rows.push({ label: '合計金額', value: `¥${totalPrice.toLocaleString()}` });
+  if (totalPrice > 0) rows.push({ label: '合計金額', value: formatTotalPrice(totalPrice, priceSpread(reservation.selected_menus, reservation.selected_options)) });
   const totalDuration = Number(info.total_duration || 0);
   if (totalDuration > 0) rows.push({ label: '合計時間', value: `${totalDuration}分` });
   const second = formatJpDateTime(info.preferred_date2, info.preferred_time2);
