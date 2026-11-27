@@ -14,6 +14,8 @@ interface Priced {
   duration?: number | null;
   hide_price?: boolean;
   hide_duration?: boolean;
+  price_max?: number | null;
+  price_label?: string | null;
 }
 
 const yen = (n: number) => `${Math.round(n).toLocaleString('ja-JP')}円`;
@@ -33,7 +35,10 @@ export function formatPriceDuration(item: Priced, plus = false): string {
   const parts: string[] = [];
   const hidden: string[] = [];
   if (isNumber(item.price)) {
-    parts.push(`${plus && item.price > 0 ? '+' : ''}${yen(item.price)}`);
+    // 幅のある料金は「5,000円〜7,000円」。自由に書いた表示があれば（表示: …）と添える
+    const max = isNumber(item.price_max) && item.price_max > item.price ? item.price_max : 0;
+    const label = typeof item.price_label === 'string' ? item.price_label.trim() : '';
+    parts.push(`${plus && (item.price > 0 || max > 0) ? '+' : ''}${yen(item.price)}${max > 0 ? `〜${yen(max)}` : ''}${label ? `（表示: ${label}）` : ''}`);
     if (item.hide_price) hidden.push('料金');
   }
   if (isNumber(item.duration) && item.duration > 0) {
@@ -60,7 +65,8 @@ function optionLines(indent: string, options: Array<MenuOption | MenuItem> | und
   const list = Array.isArray(options) ? options.filter(Boolean) : [];
   const out: string[] = [];
   for (const o of list) {
-    out.push(line(indent, '＋ ', o.name, formatPriceDuration(o, true)));
+    const required = (o as MenuOption).required === true ? '【このメニューを選んだら必須】' : '';
+    out.push(line(indent, '＋ ', o.name, [formatPriceDuration(o, true), required].filter(Boolean).join(' ')));
     out.push(...subOptionLines(`${indent}　`, o));
   }
   return out;
@@ -76,7 +82,7 @@ function menuLines(menu: MenuItem): string[] {
     out.push(line('', '・', menu.name, formatPriceDuration(menu)));
   }
   const options = optionLines('　　', menu.options);
-  if (options.length > 0) out.push('　〔オプション〕', ...options);
+  if (options.length > 0) out.push(menu.options_required === true ? '　〔オプション：1 つ以上必須〕' : '　〔オプション〕', ...options);
   return out;
 }
 

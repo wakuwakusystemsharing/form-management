@@ -23,6 +23,8 @@ import { buildCancelPolicyText } from './cancel-rules';
 import { EXTRA_MESSAGE_RUNTIME_JS } from './extra-messages';
 import { flattenConfigSubOptions, normalizeSubOptions, resolveSubOptionsLabel, resolveSubOptionsMode, SUB_OPTIONS_RUNTIME_JS } from './sub-options';
 import type { FlatMenuOption, SubOptionHost } from './sub-options';
+import { PRICE_RANGE_RUNTIME_JS, itemPriceText } from './price-range';
+import { REQUIRED_OPTIONS_RUNTIME_JS } from './required-options';
 import { ADDITIONAL_QUESTION_MAX_DEPTH, flattenAdditionalQuestions } from './additional-question-tree';
 
 export class StaticReservationGenerator {
@@ -310,6 +312,8 @@ ${SLOT_MARK_RUNTIME_JS}
 ${STAY_RUNTIME_JS}
 ${EXTRA_MESSAGE_RUNTIME_JS}
 ${SUB_OPTIONS_RUNTIME_JS}
+${PRICE_RANGE_RUNTIME_JS}
+${REQUIRED_OPTIONS_RUNTIME_JS}
 ${WAITLIST_RUNTIME_JS}
 function formatDateTimeForDisplay(value) {
     // "2026-04-30T15:08[:00]" → "2026年04月30日 15:08"
@@ -672,7 +676,7 @@ class BookingForm {
         items.push(row('変更後のメニュー', payload.selectedMenus.length > 0 ? payload.summaryHtml : '<span style="color:#dc2626;">メニューを選んでください</span>'));
         if (payload.selectedMenus.length > 0) {
             const parts = [];
-            if (this.config.reservation_summary?.show_total_price === true && payload.totalPrice > 0) parts.push('合計金額: ¥' + payload.totalPrice.toLocaleString());
+            if (this.config.reservation_summary?.show_total_price === true && payload.totalPrice > 0) parts.push('合計金額: ' + prRange(payload.totalPrice, payload.totalPriceMax));
             if (this.config.reservation_summary?.show_total_duration === true && payload.totalDuration > 0) parts.push('合計時間: ' + payload.totalDuration + '分');
             if (parts.length > 0) items.push('<div class="summary-item"><span>' + parts.join('　') + '</span></div>');
         }
@@ -783,6 +787,8 @@ class BookingForm {
             const payload = this.buildSelectionPayload();
             if (payload.selectedMenus.length === 0) return stop('メニューを選択してください', 'menu-field');
             const missingSubOptions = soMissingRequired(this.config, this.state);
+            const missingRequiredOptions = this.getMissingRequiredOptions();
+            if (missingRequiredOptions.length > 0) return stop(roMessage(missingRequiredOptions[0]), 'menu-field');
             if (missingSubOptions.length > 0) return stop('「' + missingSubOptions[0] + '」の追加オプションを選択してください', 'menu-field');
             // メニュー / オプションの追加質問（表示中のものだけ）
             const aqEntries = this.getAdditionalQuestionEntries();
@@ -2053,8 +2059,9 @@ class BookingForm {
         if ((item.duration || 0) > 0 && !item.hide_duration) {
             parts.push('<div class="t-time-row"><i class="fas fa-clock t-icon"></i> 所要時間：' + item.duration + '分</div>');
         }
-        if ((item.price || 0) > 0 && !item.hide_price) {
-            parts.push('<div class="t-price-row"><div><div class="t-price-label">料金</div><div class="t-price-val">¥' + Number(item.price).toLocaleString() + '</div></div></div>');
+        const detailPriceText = prItemText(item, false, '');
+        if (detailPriceText) {
+            parts.push('<div class="t-price-row"><div><div class="t-price-label">料金</div><div class="t-price-val">' + this.escapeHtmlText(detailPriceText) + '</div></div></div>');
         }
         if (desc) parts.push('<div class="t-detail"><i class="fas fa-list-ul t-icon"></i>' + this.escapeHtmlText(desc).replace(/\\n/g, '<br>') + '</div>');
         parts.push('<button type="button" class="t-close-bottom" onclick="window.bookingForm.closeDetailPopup()">閉じる</button>');
@@ -2120,6 +2127,8 @@ class BookingForm {
         const selectedMenus = [];
         const selectedOptions = [];
         let totalPrice = 0;
+        // 幅のある料金（¥5,000〜¥7,000）を選んだときの、合計の上限（幅が無ければ totalPrice と同じ。src/lib/price-range.ts）
+        let totalPriceMax = 0;
         let totalDuration = 0;
         const summaryLines = [];
         // 《メニュー》テキスト用: カテゴリーごとのグループ { category, items:[{label, options:[]}], catOptions:[] }
@@ -2132,8 +2141,10 @@ class BookingForm {
         const allowCross = this.config.menu_structure?.allow_cross_category_selection || false;
         const processMenu = (category, menu, submenu, menuId) => {
             const price = submenu ? (submenu.price || 0) : (menu.price || 0);
+            const priceMax = Math.max(price, prMax(submenu || menu));
             const duration = submenu ? (submenu.duration || 0) : (menu.duration || 0);
             totalPrice += price;
+            totalPriceMax += priceMax;
             totalDuration += duration;
             // 名称の改行は表示専用。送信内容では1行にする
             const menuName = oneLine(menu.name);
@@ -2144,6 +2155,7 @@ class BookingForm {
                 menu_name: menuName,
                 category_name: oneLine(category?.display_name || category?.name),
                 price,
+                ...(priceMax > price ? { price_max: priceMax } : {}),
                 duration,
                 ...(submenu ? { submenu_id: submenu.id, submenu_name: subName } : {})
             });
@@ -2157,11 +2169,13 @@ class BookingForm {
                     const op = option.price || 0;
                     const od = option.duration || 0;
                     const optionName = oneLine(option.name);
+                    const opMax = Math.max(op, prMax(option));
                     totalPrice += op;
+                    totalPriceMax += opMax;
                     totalDuration += od;
-                    selectedOptions.push({ option_id: option.id, option_name: optionName, menu_id: menuId, price: op, duration: od });
+                    selectedOptions.push({ option_id: option.id, option_name: optionName, menu_id: menuId, price: op, ...(opMax > op ? { price_max: opMax } : {}), duration: od });
                     summaryLines.push('+ ' + optionName);
-                    optObjs.push({ name: optionName, price: op, duration: od });
+                    optObjs.push({ name: optionName, price: op, priceMax: opMax, duration: od });
                 }
             });
             getMenuGroup(categoryName).items.push({ label: submenu ? menuName + ' > ' + subName : menuName, options: optObjs });
@@ -2192,12 +2206,14 @@ class BookingForm {
                     const op = opt.price || 0;
                     const od = opt.duration || 0;
                     const catOptName = oneLine(opt.name);
+                    const opMax = Math.max(op, prMax(opt));
                     totalPrice += op;
+                    totalPriceMax += opMax;
                     totalDuration += od;
-                    selectedOptions.push({ option_id: opt.id, option_name: catOptName, category_id: categoryId, price: op, duration: od });
+                    selectedOptions.push({ option_id: opt.id, option_name: catOptName, category_id: categoryId, price: op, ...(opMax > op ? { price_max: opMax } : {}), duration: od });
                     summaryLines.push('+ ' + catOptName);
                     // カテゴリー共通オプションはそのカテゴリーブロックの末尾に「└」でぶら下げる
-                    getMenuGroup(oneLine(category?.name)).catOptions.push({ name: catOptName, price: op, duration: od });
+                    getMenuGroup(oneLine(category?.name)).catOptions.push({ name: catOptName, price: op, priceMax: opMax, duration: od });
                 });
             });
         }
@@ -2209,7 +2225,7 @@ class BookingForm {
         const showOptionLines = lineItemsCfg.options !== false;
         const showOptDuration = lineItemsCfg.option_duration === true;
         const formatOptionLine = (o) => '　└ ' + o.name
-            + ((o.price || 0) > 0 ? ' ¥' + Number(o.price).toLocaleString() : '')
+            + (Math.max(o.price || 0, o.priceMax || 0) > 0 ? ' ' + prRange(o.price, o.priceMax) : '')
             + ((showOptDuration && (o.duration || 0) > 0) ? ' (' + o.duration + '分)' : '');
         const menuMessageText = menuGroups.map(g => {
             const lines = [];
@@ -2232,7 +2248,8 @@ class BookingForm {
         // 指名料（スタッフを指名したときだけ、予約 1 件につき 1 回。合計金額に含める）
         const nominationFee = this.getNominationFee();
         totalPrice += nominationFee;
-        return { selectedMenus, selectedOptions, totalPrice, totalDuration, summaryHtml, menuMessageText, nominationFee };
+        totalPriceMax += nominationFee;
+        return { selectedMenus, selectedOptions, totalPrice, totalPriceMax, totalDuration, summaryHtml, menuMessageText, nominationFee };
     }
 
     // 指名料（円）。「指名なし」・未選択・設定なしは 0。src/lib/nomination-fee.ts の staffNominationFee と同じ規則
@@ -2270,7 +2287,7 @@ class BookingForm {
                         </div>
                     </div>
                     <div style="text-align:right;margin-left:0.5rem;">
-                        \${!sub.hide_price ? \`<div style="font-weight:500;font-size:0.875rem;">¥\${sub.price.toLocaleString()}</div>\` : ''}
+                        \${prItemText(sub, false, '¥0') ? '<div style="font-weight:500;font-size:0.875rem;">' + this.escapeHtmlText(prItemText(sub, false, '¥0')) + '</div>' : ''}
                         \${!sub.hide_duration ? \`<div style="font-size:0.75rem;opacity:0.7;">\${sub.duration}分</div>\` : ''}
                     </div>
                 </button>
@@ -3097,7 +3114,7 @@ class BookingForm {
             const showTotalDuration = this.config.reservation_summary?.show_total_duration === true;
             if ((showTotalPrice && payload.totalPrice > 0) || (showTotalDuration && payload.totalDuration > 0)) {
                 let totalText = '';
-                if (showTotalPrice && payload.totalPrice > 0) totalText += \`<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #e5e7eb;"><strong style="font-size:1rem;">合計金額: ¥\${payload.totalPrice.toLocaleString()}</strong></div>\`;
+                if (showTotalPrice && payload.totalPrice > 0) totalText += \`<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #e5e7eb;"><strong style="font-size:1rem;">合計金額: \${prRange(payload.totalPrice, payload.totalPriceMax)}</strong></div>\`;
                 if (showTotalDuration && payload.totalDuration > 0) totalText += \`<div style="margin-top:0.25rem;"><strong style="font-size:1rem;">合計時間: \${payload.totalDuration}分</strong></div>\`;
                 if (totalText) items.push(\`<div class="summary-item" style="align-items:flex-start;"><div>\${totalText}</div></div>\`);
             }
@@ -3244,6 +3261,15 @@ class BookingForm {
                 resetSubmitState();
                 return;
             }
+        }
+        // このメニューを選んだらオプション必須（メニュー編集 → メニューオプション。src/lib/required-options.ts）
+        const missingRequiredOptions = this.getMissingRequiredOptions();
+        if (missingRequiredOptions.length > 0) {
+            alert(roMessage(missingRequiredOptions[0]));
+            const requiredOptBox = document.getElementById('options-' + missingRequiredOptions[0].menuId);
+            try { if (requiredOptBox) requiredOptBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+            resetSubmitState();
+            return;
         }
         // オプションのオプション: 必須なのに選ばれていないものがあれば案内する
         const missingSubOptions = soMissingRequired(this.config, this.state);
@@ -3680,7 +3706,7 @@ class BookingForm {
                 addMsgSegment('menu', '《メニュー》\\n' + (menuMessageText || ''), true);
             }
 
-            if (totalPrice > 0 && showLineItem('total_price')) addMsgSegment('menu', '《合計金額》\\n¥' + totalPrice.toLocaleString(), true);
+            if (totalPrice > 0 && showLineItem('total_price')) addMsgSegment('menu', '《合計金額》\\n' + prRange(totalPrice, payload.totalPriceMax), true);
             if (totalDuration > 0 && showLineItem('total_duration')) addMsgSegment('menu', '《合計時間》\\n' + totalDuration + '分', true);
 
             // メニュー/オプションの追加質問（フォーム上はメニュー欄の直後に表示される）
@@ -3994,6 +4020,33 @@ class BookingForm {
     // 互換用（ご来店回数の選択時に呼ばれる）
     applyVisitCustomFieldVisibility() {
         this.applyCustomFieldVisibility();
+    }
+
+    // いま隠れているオプションの ID（スタッフ / ご来店回数の「メニューオプション設定」。applyStaffMenuVisibility と同じ規則）
+    getHiddenOptionIds() {
+        const hidden = [];
+        const ss = this.config.staff_selection;
+        if (ss && ss.enabled === true) {
+            const member = (ss.staff || []).find(m => m && m.id === this.state.selectedStaffId);
+            if (member && Array.isArray(member.hidden_option_ids)) member.hidden_option_ids.forEach(id => hidden.push(id));
+        }
+        if (this.config.visit_count_selection?.enabled === true && this.state.visitCount) {
+            const visitOpt = (this.config.visit_count_selection.options || []).find(o => o.value === this.state.visitCount);
+            if (visitOpt && Array.isArray(visitOpt.hidden_option_ids)) visitOpt.hidden_option_ids.forEach(id => hidden.push(id));
+        }
+        return hidden;
+    }
+
+    // 「このメニューを選んだらオプション必須」なのに選ばれていないもの（選択中のメニューだけ。隠れているオプションは対象外）
+    getMissingRequiredOptions() {
+        const allowCross = this.config.menu_structure?.allow_cross_category_selection || false;
+        let menuIds = [];
+        if (allowCross && this.state.selectedMenus && Object.keys(this.state.selectedMenus).length > 0) {
+            menuIds = Object.values(this.state.selectedMenus).flat();
+        } else if (this.state.selectedMenu) {
+            menuIds = [this.state.selectedMenu.id];
+        }
+        return roMissing(this.config, menuIds, this.state.selectedOptions || {}, this.getHiddenOptionIds());
     }
 
     applyStaffMenuVisibility() {
@@ -4877,14 +4930,14 @@ if (document.readyState === 'loading') {
                                         </div>
                                         ${!menu.has_submenu && (menu.price !== undefined || menu.duration) ? `
                                             <div class="menu-item-info">
-                                                ${(menu.price || 0) > 0 && !menu.hide_price ? `<div class="menu-item-price">¥${(menu.price || 0).toLocaleString()}</div>` : ''}
+                                                ${itemPriceText(menu) ? `<div class="menu-item-price">${this.escapeHtml(itemPriceText(menu))}</div>` : ''}
                                                 ${menu.duration && !menu.hide_duration ? `<div class="menu-item-duration">${menu.duration}分</div>` : ''}
                                             </div>
                                         ` : `<div class="menu-item-info"><div class="menu-item-desc">サブメニューを選択</div></div>`}
                                     </button>
                                     ${!menu.has_submenu && menu.options && menu.options.length > 0 ? `
                                         <div id="options-${menu.id}" class="menu-options-container" style="display:none;margin-left:1.5rem;padding-left:1rem;border-left:2px solid #bbf7d0;margin-top:0.75rem;margin-bottom:0.75rem;">
-                                            <div style="font-size:0.875rem;font-weight:500;color:#374151;margin-bottom:0.75rem;">${optionsHeadingHtml}</div>
+                                            <div style="font-size:0.875rem;font-weight:500;color:#374151;margin-bottom:0.75rem;">${optionsHeadingHtml}${menu.options_required === true ? '<span class="options-required-note" style="color:#dc2626;margin-left:0.25rem;font-size:0.75rem;">（1つ以上必須）</span>' : ''}</div>
                                             ${optionsHeadingContentHtml}
                                             ${menu.options.filter((option) => !(option as FlatMenuOption).parent_option_id).map((option, optionIndex) => `
                                                 <button type="button" class="menu-option-item" data-menu-id="${menu.id}" data-option-id="${option.id || `option-${optionIndex}`}" style="width:100%;display:flex;justify-content:space-between;align-items:center;padding:0.5rem;border:2px solid #d1d5db;border-radius:0.375rem;background:white;cursor:pointer;margin-bottom:0.5rem;transition:all 0.15s;text-align:left;">
@@ -4893,12 +4946,13 @@ if (document.readyState === 'loading') {
                                                             <div style="text-align:left;font-size:0.875rem;font-weight:500;">
                                                                 ${this.escapeHtmlWithBreaks(option.name)}
                                                                 ${option.is_default ? '<span style="margin-left:0.5rem;padding:0.25rem 0.5rem;font-size:0.75rem;background:#fed7aa;color:#9a3412;border-radius:0.25rem;">おすすめ</span>' : ''}
+                                                                ${option.required === true ? '<span class="option-required-badge" style="margin-left:0.5rem;padding:0.25rem 0.5rem;font-size:0.75rem;background:#fee2e2;color:#b91c1c;border-radius:0.25rem;">必須</span>' : ''}
                                                             </div>
                                                             ${option.description && config.menu_structure?.display_options?.show_description !== false ? `<div class="menu-item-desc" style="text-align:left;">${this.escapeHtmlWithBreaks(option.description)}</div>` : ''}
                                                         </div>
                                                     </div>
                                                     <div style="text-align:right;margin-left:0.5rem;">
-                                                        ${!option.hide_price ? `<div style="font-weight:500;font-size:0.875rem;">${option.price > 0 ? `+¥${option.price.toLocaleString()}` : '無料'}</div>` : ''}
+                                                        ${itemPriceText(option, { plus: true, zeroText: '無料' }) ? `<div style="font-weight:500;font-size:0.875rem;">${this.escapeHtml(itemPriceText(option, { plus: true, zeroText: '無料' }))}</div>` : ''}
                                                         ${option.duration > 0 && !option.hide_duration ? `<div style="font-size:0.75rem;opacity:0.7;">+${option.duration}分</div>` : ''}
                                                     </div>
                                                 </button>
@@ -4932,7 +4986,7 @@ if (document.readyState === 'loading') {
                                                             ${sub.description && showDesc ? `<div class="menu-item-desc" style="text-align:left;">${this.escapeHtmlWithBreaks(sub.description)}</div>` : ''}
                                                         </div>
                                                         <div style="text-align:right;margin-left:0.5rem;">
-                                                            ${sub.price > 0 && !sub.hide_price ? `<div style="font-weight:500;font-size:0.8125rem;">+¥${sub.price.toLocaleString()}</div>` : ''}
+                                                            ${itemPriceText(sub, { plus: true }) ? `<div style="font-weight:500;font-size:0.8125rem;">${this.escapeHtml(itemPriceText(sub, { plus: true }))}</div>` : ''}
                                                             ${sub.duration > 0 && !sub.hide_duration ? `<div style="font-size:0.75rem;opacity:0.7;">+${sub.duration}分</div>` : ''}
                                                         </div>
                                                     </button>`).join('')}
@@ -4954,7 +5008,7 @@ if (document.readyState === 'loading') {
                                                 ${opt.description && config.menu_structure?.display_options?.show_description !== false ? `<div class="menu-item-desc">${this.escapeHtmlWithBreaks(opt.description)}</div>` : ''}
                                             </div>
                                             <div style="text-align:right;margin-left:0.5rem;">
-                                                ${(opt.price || 0) > 0 && !opt.hide_price ? `<div style="font-weight:500;font-size:0.875rem;">+¥${(opt.price || 0).toLocaleString()}</div>` : ''}
+                                                ${itemPriceText(opt, { plus: true }) ? `<div style="font-weight:500;font-size:0.875rem;">${this.escapeHtml(itemPriceText(opt, { plus: true }))}</div>` : ''}
                                                 ${(opt.duration || 0) > 0 && !opt.hide_duration ? `<div style="font-size:0.75rem;opacity:0.7;">+${opt.duration}分</div>` : ''}
                                             </div>
                                         </button>

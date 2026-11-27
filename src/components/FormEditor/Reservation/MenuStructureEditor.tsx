@@ -14,6 +14,8 @@ import TagInput from '@/components/customers/TagInput';
 import StaffScheduleEditor from './StaffScheduleEditor';
 import CategoryContentBlocksEditor from './CategoryContentBlocksEditor';
 import SubOptionsEditor from './SubOptionsEditor';
+import PriceRangeFields from './PriceRangeFields';
+import { itemPriceText, normalizePriceLabel, sanitizePriceMax } from '@/lib/price-range';
 import { subOptionsFieldsToSave, toSubOptionsEditorValue, type SubOptionsEditorValue } from '@/lib/sub-options';
 import type { CategoryContentBlock } from '@/lib/category-content-blocks';
 import { countStaffScheduleOverrides } from '@/lib/staff-schedule';
@@ -546,6 +548,9 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
   const [cropperOpen, setCropperOpen] = useState(false);
   const [hidePrice, setHidePrice] = useState(false);
   const [hideDuration, setHideDuration] = useState(false);
+  // 料金の幅（上限）と、料金の表示の自由入力（src/lib/price-range.ts）
+  const [priceMax, setPriceMax] = useState('');
+  const [priceLabel, setPriceLabel] = useState('');
   const [extraMessage, setExtraMessage] = useState<OptionExtraMessage | undefined>(undefined);
 
   React.useEffect(() => {
@@ -556,6 +561,8 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
       setDescription(subMenuItem.description || '');
       setImage(subMenuItem.image || '');
       setHidePrice(subMenuItem.hide_price || false);
+      setPriceMax(subMenuItem.price_max ? String(subMenuItem.price_max) : '');
+      setPriceLabel(subMenuItem.price_label || '');
       setHideDuration(subMenuItem.hide_duration || false);
       setExtraMessage(subMenuItem.extra_message);
     } else {
@@ -565,6 +572,8 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
       setDescription('');
       setImage('');
       setHidePrice(false);
+      setPriceMax('');
+      setPriceLabel('');
       setHideDuration(false);
       setExtraMessage(undefined);
     }
@@ -579,6 +588,8 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
       description: description || undefined,
       image: image || undefined,
       hide_price: hidePrice || undefined,
+      price_max: sanitizePriceMax(parsePrice(price), priceMax),
+      price_label: normalizePriceLabel(priceLabel),
       hide_duration: hideDuration || undefined,
       extra_message: extraMessage
     };
@@ -669,6 +680,19 @@ const SubMenuItemModal: React.FC<SubMenuItemModalProps> = ({
               </div>
             </div>
           </div>
+
+          <PriceRangeFields
+            price={price}
+            priceMax={priceMax}
+            priceLabel={priceLabel}
+            onChange={(patch) => {
+              if (patch.priceMax !== undefined) setPriceMax(patch.priceMax);
+              if (patch.priceLabel !== undefined) setPriceLabel(patch.priceLabel);
+            }}
+            zeroText="¥0"
+            hidePrice={hidePrice}
+            theme={theme}
+          />
 
           <OptionExtraMessageEditor
             targetLabel={name || 'このサブメニュー'}
@@ -834,6 +858,9 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
   const [isDefault, setIsDefault] = useState(false);
   const [hidePrice, setHidePrice] = useState(false);
   const [hideDuration, setHideDuration] = useState(false);
+  // 料金の幅（上限）と、料金の表示の自由入力（src/lib/price-range.ts）
+  const [priceMax, setPriceMax] = useState('');
+  const [priceLabel, setPriceLabel] = useState('');
   const [timeWindowEnabled, setTimeWindowEnabled] = useState(false);
   const [timeWindowStart, setTimeWindowStart] = useState('09:00');
   const [timeWindowEnd, setTimeWindowEnd] = useState('18:00');
@@ -851,6 +878,8 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       setDescription(option.description || '');
       setIsDefault(option.is_default || false);
       setHidePrice(option.hide_price || false);
+      setPriceMax(option.price_max ? String(option.price_max) : '');
+      setPriceLabel(option.price_label || '');
       setHideDuration(option.hide_duration || false);
       setTimeWindowEnabled(option.time_window_enabled === true);
       setTimeWindowStart(option.time_window_start || '09:00');
@@ -864,6 +893,8 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       setDescription('');
       setIsDefault(false);
       setHidePrice(false);
+      setPriceMax('');
+      setPriceLabel('');
       setHideDuration(false);
       setTimeWindowEnabled(false);
       setTimeWindowStart('09:00');
@@ -881,7 +912,11 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
       duration: parseInt(duration) || 0,
       description: description || undefined,
       is_default: isDefault,
+      // 「このメニューを選んだら必須」はメニュー編集のオプション一覧で切り替える（ここでは変えない）
+      required: option?.required || undefined,
       hide_price: hidePrice || undefined,
+      price_max: sanitizePriceMax(parsePrice(price), priceMax),
+      price_label: normalizePriceLabel(priceLabel),
       hide_duration: hideDuration || undefined,
       time_window_enabled: timeWindowEnabled || undefined,
       time_window_start: timeWindowEnabled ? timeWindowStart : undefined,
@@ -987,6 +1022,20 @@ const MenuOptionModal: React.FC<MenuOptionModalProps> = ({
                 </div>
               </div>
             </div>
+
+            <PriceRangeFields
+              price={price}
+              priceMax={priceMax}
+              priceLabel={priceLabel}
+              onChange={(patch) => {
+                if (patch.priceMax !== undefined) setPriceMax(patch.priceMax);
+                if (patch.priceLabel !== undefined) setPriceLabel(patch.priceLabel);
+              }}
+              plus
+              zeroText="無料"
+              hidePrice={hidePrice}
+              theme={theme}
+            />
 
             <div>
               <label className={`block text-sm ${themeClasses.label} mb-1`}>
@@ -1114,6 +1163,8 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   const [image, setImage] = useState('');
   const [genderFilter, setGenderFilter] = useState<'male' | 'female' | 'both'>('both');
   const [options, setOptions] = useState<MenuOption[]>([]);
+  // このメニューを選んだら、メニューオプションを 1 つ以上選ぶ（src/lib/required-options.ts）
+  const [optionsRequired, setOptionsRequired] = useState(false);
   const [optionModalOpen, setOptionModalOpen] = useState(false);
   const [selectedOption, setSelectedOption] = useState<MenuOption | undefined>();
   const [hasSubmenu, setHasSubmenu] = useState(false);
@@ -1125,6 +1176,9 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
   const [cropperOpen, setCropperOpen] = useState(false);
   const [hidePrice, setHidePrice] = useState(false);
   const [hideDuration, setHideDuration] = useState(false);
+  // 料金の幅（上限）と、料金の表示の自由入力（src/lib/price-range.ts）
+  const [priceMax, setPriceMax] = useState('');
+  const [priceLabel, setPriceLabel] = useState('');
   const [timeWindowEnabled, setTimeWindowEnabled] = useState(false);
   const [timeWindowStart, setTimeWindowStart] = useState('09:00');
   const [timeWindowEnd, setTimeWindowEnd] = useState('18:00');
@@ -1141,9 +1195,12 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setImage(menuItem.image || '');
         setGenderFilter(menuItem.gender_filter || 'both');
         setOptions(menuItem.options || []);
+        setOptionsRequired(menuItem.options_required === true);
         setHasSubmenu(menuItem.has_submenu || false);
         setSubMenuItems(menuItem.sub_menu_items || []);
         setHidePrice(menuItem.hide_price || false);
+        setPriceMax(menuItem.price_max ? String(menuItem.price_max) : '');
+        setPriceLabel(menuItem.price_label || '');
         setHideDuration(menuItem.hide_duration || false);
         setTimeWindowEnabled(menuItem.time_window_enabled === true);
         setTimeWindowStart(menuItem.time_window_start || '09:00');
@@ -1160,9 +1217,12 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
         setImage('');
         setGenderFilter('both');
         setOptions([]);
+        setOptionsRequired(false);
         setHasSubmenu(false);
         setSubMenuItems([]);
         setHidePrice(false);
+      setPriceMax('');
+      setPriceLabel('');
         setHideDuration(false);
         setTimeWindowEnabled(false);
         setTimeWindowStart('09:00');
@@ -1184,9 +1244,12 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
       category_id: categoryId,
       gender_filter: genderEnabled ? genderFilter : undefined,
       options: hasSubmenu ? undefined : (options.length > 0 ? options : undefined),
+      options_required: !hasSubmenu && options.length > 0 && optionsRequired ? true : undefined,
       has_submenu: hasSubmenu,
       sub_menu_items: hasSubmenu ? subMenuItems : undefined,
       hide_price: hidePrice || undefined,
+      price_max: sanitizePriceMax(parsePrice(price), priceMax),
+      price_label: normalizePriceLabel(priceLabel),
       hide_duration: hideDuration || undefined,
       time_window_enabled: timeWindowEnabled || undefined,
       time_window_start: timeWindowEnabled ? timeWindowStart : undefined,
@@ -1393,6 +1456,19 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                         </div>
                       </div>
                     </div>
+
+                    <PriceRangeFields
+                      price={price}
+                      priceMax={priceMax}
+                      priceLabel={priceLabel}
+                      onChange={(patch) => {
+                        if (patch.priceMax !== undefined) setPriceMax(patch.priceMax);
+                        if (patch.priceLabel !== undefined) setPriceLabel(patch.priceLabel);
+                      }}
+                      plus={asCategoryOption}
+                      hidePrice={hidePrice}
+                      theme={theme}
+                    />
                   </>
                 )}
 
@@ -1639,6 +1715,20 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                   </p>
                 ) : (
                   <div className="space-y-2">
+                    <label className={`flex items-start gap-2 rounded-md p-3 text-sm ${themeClasses.card} ${themeClasses.label}`} data-slot="options-required">
+                      <input
+                        type="checkbox"
+                        checked={optionsRequired}
+                        onChange={(e) => setOptionsRequired(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded"
+                      />
+                      <span>
+                        このメニューが選択されているときは、オプションを 1 つ以上選ぶ（必須）
+                        <span className={`block text-xs ${themeClasses.text.tertiary}`}>
+                          どのオプションも選ばずに送信すると、案内を出して止めます。特定のオプションを必ず選ばせたいときは、下の各オプションのチェックを使います。
+                        </span>
+                      </span>
+                    </label>
                     {options.map((option, optionIndex) => (
                       <div key={option.id} className={`flex items-center justify-between p-3 rounded-md ${themeClasses.card}`}>
                         <div className="flex-1">
@@ -1649,10 +1739,22 @@ const MenuItemModal: React.FC<MenuItemModalProps> = ({
                                 デフォルト
                               </span>
                             )}
+                            {option.required === true && (
+                              <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">必須</span>
+                            )}
                           </div>
                           <p className={`text-sm ${themeClasses.text.secondary}`}>
-                            +¥{option.price.toLocaleString()} • +{option.duration}分
+                            {itemPriceText({ ...option, hide_price: false }, { plus: true, zeroText: '+¥0' })} • +{option.duration}分
                           </p>
+                          <label className={`mt-1 flex items-center gap-2 text-xs ${themeClasses.text.secondary}`} data-slot="option-required">
+                            <input
+                              type="checkbox"
+                              checked={option.required === true}
+                              onChange={(e) => setOptions(prev => prev.map(o => o.id === option.id ? { ...o, required: e.target.checked || undefined } : o))}
+                              className="h-4 w-4 rounded"
+                            />
+                            このメニューが選択されているときは、このオプション必須
+                          </label>
                         </div>
                         <div className="flex space-x-2">
                           <button
